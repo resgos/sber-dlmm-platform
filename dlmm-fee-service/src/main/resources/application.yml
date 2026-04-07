@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: dlmm-fee-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/dlmm
+    username: ${DB_USER:dlmm}
+    password: ${DB_PASS:dlmm_secret}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+    consumer:
+      group-id: dlmm-fee-service
+      auto-offset-reset: earliest
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  liquibase:
+    change-log: classpath:db/changelog/master.xml
+
+server:
+  port: 8084
+
+dlmm:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-256-bit-minimum}
+  token-service:
+    url: ${TOKEN_SERVICE_URL:http://dlmm-token-service:8082}
+
+logging:
+  level:
+    com.sber.dlmm: DEBUG
+    org.springframework: INFO

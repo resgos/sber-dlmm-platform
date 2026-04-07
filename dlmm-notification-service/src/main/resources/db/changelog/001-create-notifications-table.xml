@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <changeSet id="001-create-notifications-table" author="dlmm-platform">
+        <createTable tableName="notifications">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="type" type="VARCHAR(30)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="message" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payload" type="TEXT"/>
+            <column name="read" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="read_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <createIndex indexName="idx_notifications_user_id" tableName="notifications">
+            <column name="user_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_notifications_user_read" tableName="notifications">
+            <column name="user_id"/>
+            <column name="read"/>
+        </createIndex>
+
+        <createIndex indexName="idx_notifications_type" tableName="notifications">
+            <column name="type"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <changeSet id="003-create-lp-positions-table" author="dlmm-platform">
+        <createTable tableName="lp_positions">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="pool_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="bin_range_min" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="bin_range_max" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="strategy" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_liquidity_shares" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="unclaimed_fee_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="unclaimed_fee_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_fee_growth_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_fee_growth_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="is_active" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="closed_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <createIndex indexName="idx_lp_positions_user_id" tableName="lp_positions">
+            <column name="user_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_lp_positions_pool_id" tableName="lp_positions">
+            <column name="pool_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_lp_positions_active" tableName="lp_positions">
+            <column name="is_active"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

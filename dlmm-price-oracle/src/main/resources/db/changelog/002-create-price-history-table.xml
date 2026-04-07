@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <changeSet id="002-create-price-history-table" author="dlmm-platform">
+        <createTable tableName="price_history">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="price_feed_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="price" type="DECIMAL(30,18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="timestamp_epoch_ms" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_price_history_feed_id" tableName="price_history">
+            <column name="price_feed_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_price_history_timestamp" tableName="price_history">
+            <column name="timestamp_epoch_ms"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

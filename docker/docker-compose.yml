@@ -1,0 +1,353 @@
+version: "3.9"
+
+services:
+  # ─── Infrastructure ────────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16
+    container_name: dlmm-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: dlmm
+      POSTGRES_USER: dlmm
+      POSTGRES_PASSWORD: dlmm_secret
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dlmm -d dlmm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dlmm-network
+
+  redis:
+    image: redis:7
+    container_name: dlmm-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dlmm-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: dlmm-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - dlmm-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: dlmm-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+    volumes:
+      - ./init-kafka-topics.sh:/init-kafka-topics.sh
+    networks:
+      - dlmm-network
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: dlmm-kafka-init
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/bash", "/init-kafka-topics.sh"]
+    volumes:
+      - ./init-kafka-topics.sh:/init-kafka-topics.sh
+    networks:
+      - dlmm-network
+    restart: "no"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    container_name: dlmm-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    networks:
+      - dlmm-network
+
+  # ─── Java Services ─────────────────────────────────────────────────────────────
+
+  dlmm-gateway:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: dlmm-gateway
+    container_name: dlmm-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: dlmm
+      DB_PASS: dlmm_secret
+      REDIS_HOST: redis
+      KAFKA_SERVERS: kafka:9092
+      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      USER_SERVICE_URL: http://dlmm-user-service:8081
+      TOKEN_SERVICE_URL: http://dlmm-token-service:8082
+      POOL_ENGINE_URL: http://dlmm-pool-engine:8083
+      FEE_SERVICE_URL: http://dlmm-fee-service:8084
+      TRANSACTION_SERVICE_URL: http://dlmm-transaction-service:8085
+      PRICE_ORACLE_URL: http://dlmm-price-oracle:8086
+      NOTIFICATION_SERVICE_URL: http://dlmm-notification-service:8087
+      ADMIN_BFF_URL: http://dlmm-admin-bff:8088
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - dlmm-network
+
+  dlmm-user-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: dlmm-user-service
+    container_name: dlmm-user-service
+    ports:
+      - "8081:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: dlmm
+      DB_PASS: dlmm_secret
+      REDIS_HOST: redis
+      KAFKA_SERVERS: kafka:9092
+      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - dlmm-network
+
+  dlmm-token-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: dlmm-token-service
+    container_name: dlmm-token-service
+    ports:
+      - "8082:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: dlmm
+      DB_PASS: dlmm_secret
+      REDIS_HOST: redis
+      KAFKA_SERVERS: kafka:9092
+      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - dlmm-network
+
+  dlmm-pool-engine:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: dlmm-pool-engine
+    container_name: dlmm-pool-engine
+    ports:
+      - "8083:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: dlmm
+      DB_PASS: dlmm_secret
+      REDIS_HOST: redis
+      KAFKA_SERVERS: kafka:9092
+      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - dlmm-network
+
+  dlmm-fee-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: dlmm-fee-service
+    container_name: dlmm-fee-service
+    ports:
+      - "8084:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: dlmm
+      DB_PASS: dlmm_secret
+      REDIS_HOST: redis
+      KAFKA_SERVERS: kafka:9092
+      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - dlmm-network
+
+  dlmm-transaction-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: dlmm-transaction-service
+    container_name: dlmm-transaction-service
+    ports:
+      - "8085:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: dlmm
+      DB_PASS: dlmm_secret
+      REDIS_HOST: redis
+      KAFKA_SERVERS: kafka:9092
+      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - dlmm-network
+
+  dlmm-price-oracle:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: dlmm-price-oracle
+    container_name: dlmm-price-oracle
+    ports:
+      - "8086:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: dlmm
+      DB_PASS: dlmm_secret
+      REDIS_HOST: redis
+      KAFKA_SERVERS: kafka:9092
+      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - dlmm-network
+
+  dlmm-notification-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: dlmm-notification-service
+    container_name: dlmm-notification-service
+    ports:
+      - "8087:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: dlmm
+      DB_PASS: dlmm_secret
+      REDIS_HOST: redis
+      KAFKA_SERVERS: kafka:9092
+      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - dlmm-network
+
+  dlmm-admin-bff:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        MODULE: dlmm-admin-bff
+    container_name: dlmm-admin-bff
+    ports:
+      - "8088:8080"
+    environment:
+      DB_HOST: postgres
+      DB_USER: dlmm
+      DB_PASS: dlmm_secret
+      REDIS_HOST: redis
+      KAFKA_SERVERS: kafka:9092
+      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      USER_SERVICE_URL: http://dlmm-user-service:8081
+      TOKEN_SERVICE_URL: http://dlmm-token-service:8082
+      POOL_ENGINE_URL: http://dlmm-pool-engine:8083
+      FEE_SERVICE_URL: http://dlmm-fee-service:8084
+      TRANSACTION_SERVICE_URL: http://dlmm-transaction-service:8085
+      PRICE_ORACLE_URL: http://dlmm-price-oracle:8086
+    depends_on:
+      - dlmm-user-service
+      - dlmm-token-service
+      - dlmm-pool-engine
+      - dlmm-fee-service
+      - dlmm-transaction-service
+      - dlmm-price-oracle
+      - dlmm-notification-service
+    networks:
+      - dlmm-network
+
+  dlmm-admin-ui:
+    image: nginx:alpine
+    container_name: dlmm-admin-ui
+    ports:
+      - "3000:80"
+    volumes:
+      - ./admin-ui-nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - dlmm-admin-bff
+      - dlmm-gateway
+    networks:
+      - dlmm-network
+
+networks:
+  dlmm-network:
+    driver: bridge
+
+volumes:
+  postgres-data:

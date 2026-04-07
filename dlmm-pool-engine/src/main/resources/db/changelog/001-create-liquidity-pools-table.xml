@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <changeSet id="001-create-liquidity-pools-table" author="dlmm-platform">
+        <createTable tableName="liquidity_pools">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="token_x_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="token_y_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="bin_step" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="base_fee_bps" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_variable_fee_bps" type="INT" defaultValueNumeric="300">
+                <constraints nullable="false"/>
+            </column>
+            <column name="volatility_accumulator" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="decay_period_seconds" type="INT" defaultValueNumeric="600">
+                <constraints nullable="false"/>
+            </column>
+            <column name="active_bin_id" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="base_price" type="DECIMAL(30,18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="protocol_fee_pct" type="INT" defaultValueNumeric="20">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_tvl_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_tvl_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="volume_24h" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_fees_collected_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_fees_collected_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(30)" defaultValue="ACTIVE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint constraintName="uq_pools_token_x_token_y_bin_step"
+                             tableName="liquidity_pools"
+                             columnNames="token_x_id, token_y_id, bin_step"/>
+
+        <createIndex indexName="idx_pools_status" tableName="liquidity_pools">
+            <column name="status"/>
+        </createIndex>
+
+        <createIndex indexName="idx_pools_token_x" tableName="liquidity_pools">
+            <column name="token_x_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_pools_token_y" tableName="liquidity_pools">
+            <column name="token_y_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <changeSet id="002-create-pool-bins-table" author="dlmm-platform">
+        <createTable tableName="pool_bins">
+            <column name="pool_id" type="UUID">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_pool_bins"/>
+            </column>
+            <column name="bin_id" type="INT">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_pool_bins"/>
+            </column>
+            <column name="price" type="DECIMAL(30,18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="liquidity" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reserve_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reserve_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="composition_factor" type="DECIMAL(30,18)" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_fee_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_fee_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="fee_growth_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="fee_growth_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_pool_bins_pool_id" tableName="pool_bins">
+            <column name="pool_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

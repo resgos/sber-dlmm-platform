@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <changeSet id="001-create-transactions-table" author="dlmm-platform">
+        <createTable tableName="transactions">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="tx_type" type="VARCHAR(30)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(30)" defaultValue="CREATED">
+                <constraints nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="pool_id" type="UUID"/>
+            <column name="token_in_id" type="UUID"/>
+            <column name="amount_in" type="BIGINT"/>
+            <column name="token_out_id" type="UUID"/>
+            <column name="amount_out" type="BIGINT"/>
+            <column name="fee_amount" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="fee_rate" type="DECIMAL(10,6)"/>
+            <column name="bins_crossed" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="VARCHAR(255)">
+                <constraints unique="true"/>
+            </column>
+            <column name="metadata" type="TEXT"/>
+            <column name="error_message" type="TEXT"/>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="confirmed_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <createIndex indexName="idx_transactions_user_id" tableName="transactions">
+            <column name="user_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_transactions_pool_id" tableName="transactions">
+            <column name="pool_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_transactions_status" tableName="transactions">
+            <column name="status"/>
+        </createIndex>
+
+        <createIndex indexName="idx_transactions_tx_type" tableName="transactions">
+            <column name="tx_type"/>
+        </createIndex>
+
+        <createIndex indexName="idx_transactions_idempotency" tableName="transactions">
+            <column name="idempotency_key"/>
+        </createIndex>
+
+        <createIndex indexName="idx_transactions_created_at" tableName="transactions">
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

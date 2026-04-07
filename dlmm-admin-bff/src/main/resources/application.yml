@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: dlmm-admin-bff
+
+server:
+  port: 8088
+
+dlmm:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-256-bit-minimum-secret-key}
+    access-token-expiry-minutes: 30
+  services:
+    user-service-url: ${USER_SERVICE_URL:http://localhost:8081}
+    token-service-url: ${TOKEN_SERVICE_URL:http://localhost:8082}
+    pool-engine-url: ${POOL_ENGINE_URL:http://localhost:8083}
+    fee-service-url: ${FEE_SERVICE_URL:http://localhost:8084}
+    transaction-service-url: ${TRANSACTION_SERVICE_URL:http://localhost:8085}
+    price-oracle-url: ${PRICE_ORACLE_URL:http://localhost:8086}
+
+logging:
+  level:
+    com.sber.dlmm: DEBUG
+    org.springframework: INFO

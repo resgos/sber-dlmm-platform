@@ -1,0 +1,258 @@
+package com.sber.dlmm.user.service;
+
+import com.sber.dlmm.common.dto.PageResponse;
+import com.sber.dlmm.common.enums.KycStatus;
+import com.sber.dlmm.common.enums.UserRole;
+import com.sber.dlmm.common.exception.ForbiddenException;
+import com.sber.dlmm.common.exception.UnauthorizedException;
+import com.sber.dlmm.common.exception.UserAlreadyExistsException;
+import com.sber.dlmm.common.exception.UserNotFoundException;
+import com.sber.dlmm.user.dto.AuthResponse;
+import com.sber.dlmm.user.dto.LoginRequest;
+import com.sber.dlmm.user.dto.RefreshTokenRequest;
+import com.sber.dlmm.user.dto.RegisterRequest;
+import com.sber.dlmm.user.dto.UpdateKycRequest;
+import com.sber.dlmm.user.dto.UpdateProfileRequest;
+import com.sber.dlmm.user.dto.UpdateRoleRequest;
+import com.sber.dlmm.user.dto.UserProfileResponse;
+import com.sber.dlmm.user.entity.User;
+import com.sber.dlmm.user.event.KafkaProducerService;
+import com.sber.dlmm.user.event.UserBlockedEvent;
+import com.sber.dlmm.user.event.UserCreatedEvent;
+import com.sber.dlmm.user.event.UserKycVerifiedEvent;
+import com.sber.dlmm.user.repository.UserRepository;
+import com.sber.dlmm.user.security.JwtTokenProvider;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class UserService {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final KafkaProducerService kafkaProducerService;
+
+    @Transactional
+    public AuthResponse register(RegisterRequest req) {
+        if (userRepository.existsBySberId(req.sberId())) {
+            throw new UserAlreadyExistsException("User with sberId " + req.sberId() + " already exists");
+        }
+        if (userRepository.existsByEmail(req.email())) {
+            throw new UserAlreadyExistsException("User with email " + req.email() + " already exists");
+        }
+
+        User user = User.builder()
+                .sberId(req.sberId())
+                .email(req.email())
+                .phone(req.phone())
+                .firstName(req.firstName())
+                .lastName(req.lastName())
+                .passwordHash(passwordEncoder.encode(req.password()))
+                .kycStatus(KycStatus.PENDING)
+                .role(UserRole.USER)
+                .build();
+
+        user = userRepository.save(user);
+        log.info("User registered: id={}, sberId={}", user.getId(), user.getSberId());
+
+        kafkaProducerService.sendUserCreated(new UserCreatedEvent(
+                user.getId(), user.getSberId(), user.getEmail(), user.getCreatedAt()
+        ));
+
+        String accessToken = jwtTokenProvider.generateAccessToken(
+                user.getId(), user.getRole(), user.getKycStatus());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+
+        return new AuthResponse(
+                accessToken,
+                refreshToken,
+                jwtTokenProvider.getAccessTokenExpirySeconds(),
+                toProfileResponse(user)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public AuthResponse login(LoginRequest req) {
+        User user = userRepository.findByEmail(req.email())
+                .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
+
+        if (!passwordEncoder.matches(req.password(), user.getPasswordHash())) {
+            throw new UnauthorizedException("Invalid email or password");
+        }
+
+        String accessToken = jwtTokenProvider.generateAccessToken(
+                user.getId(), user.getRole(), user.getKycStatus());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+
+        return new AuthResponse(
+                accessToken,
+                refreshToken,
+                jwtTokenProvider.getAccessTokenExpirySeconds(),
+                toProfileResponse(user)
+        );
+    }
+
+    public AuthResponse refresh(RefreshTokenRequest req) {
+        if (!jwtTokenProvider.validateToken(req.refreshToken())) {
+            throw new UnauthorizedException("Invalid refresh token");
+        }
+        if (!jwtTokenProvider.isRefreshToken(req.refreshToken())) {
+            throw new UnauthorizedException("Token is not a refresh token");
+        }
+
+        UUID userId = jwtTokenProvider.getUserId(req.refreshToken());
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+
+        String accessToken = jwtTokenProvider.generateAccessToken(
+                user.getId(), user.getRole(), user.getKycStatus());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
+
+        return new AuthResponse(
+                accessToken,
+                refreshToken,
+                jwtTokenProvider.getAccessTokenExpirySeconds(),
+                toProfileResponse(user)
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfileResponse getProfile(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+        return toProfileResponse(user);
+    }
+
+    @Transactional
+    public UserProfileResponse updateProfile(UUID userId, UpdateProfileRequest req) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+
+        if (req.email() != null) {
+            user.setEmail(req.email());
+        }
+        if (req.phone() != null) {
+            user.setPhone(req.phone());
+        }
+        if (req.firstName() != null) {
+            user.setFirstName(req.firstName());
+        }
+        if (req.lastName() != null) {
+            user.setLastName(req.lastName());
+        }
+
+        user = userRepository.save(user);
+        log.info("User profile updated: id={}", user.getId());
+        return toProfileResponse(user);
+    }
+
+    @Transactional
+    public UserProfileResponse updateKycStatus(UUID userId, UpdateKycRequest req) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+
+        user.setKycStatus(req.kycStatus());
+        user = userRepository.save(user);
+        log.info("User KYC status updated: id={}, status={}", user.getId(), req.kycStatus());
+
+        if (req.kycStatus() == KycStatus.VERIFIED) {
+            kafkaProducerService.sendUserKycVerified(new UserKycVerifiedEvent(
+                    user.getId(), LocalDateTime.now()
+            ));
+        }
+
+        return toProfileResponse(user);
+    }
+
+    @Transactional
+    public UserProfileResponse updateRole(UUID userId, UpdateRoleRequest req) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+
+        user.setRole(req.role());
+        user = userRepository.save(user);
+        log.info("User role updated: id={}, role={}", user.getId(), req.role());
+        return toProfileResponse(user);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<UserProfileResponse> searchUsers(String query, KycStatus kycStatus,
+                                                          UserRole role, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<User> userPage;
+
+        if (query != null && !query.isBlank()) {
+            userPage = userRepository.search(query, pageable);
+        } else if (kycStatus != null) {
+            userPage = userRepository.findByKycStatus(kycStatus, pageable);
+        } else if (role != null) {
+            userPage = userRepository.findByRole(role, pageable);
+        } else {
+            userPage = userRepository.findAll(pageable);
+        }
+
+        return new PageResponse<>(
+                userPage.getContent().stream().map(this::toProfileResponse).toList(),
+                userPage.getNumber(),
+                userPage.getSize(),
+                userPage.getTotalElements(),
+                userPage.getTotalPages()
+        );
+    }
+
+    @Transactional
+    public void blockUser(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+
+        if (user.getRole() == UserRole.SUPER_ADMIN) {
+            throw new ForbiddenException("Cannot block a SUPER_ADMIN user");
+        }
+
+        user.setRole(UserRole.USER);
+        user.setKycStatus(KycStatus.REJECTED);
+        userRepository.save(user);
+        log.info("User blocked: id={}", userId);
+
+        kafkaProducerService.sendUserBlocked(new UserBlockedEvent(
+                userId, LocalDateTime.now()
+        ));
+    }
+
+    @Transactional
+    public void unblockUser(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+
+        user.setKycStatus(KycStatus.PENDING);
+        userRepository.save(user);
+        log.info("User unblocked: id={}", userId);
+    }
+
+    private UserProfileResponse toProfileResponse(User user) {
+        return new UserProfileResponse(
+                user.getId(),
+                user.getSberId(),
+                user.getEmail(),
+                user.getPhone(),
+                user.getFirstName(),
+                user.getLastName(),
+                user.getKycStatus(),
+                user.getRole(),
+                user.getCreatedAt()
+        );
+    }
+}

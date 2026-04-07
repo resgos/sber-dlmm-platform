@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <changeSet id="001-create-tokens-table" author="dlmm-platform">
+        <createTable tableName="tokens">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="symbol" type="VARCHAR(10)">
+                <constraints unique="true" nullable="false"/>
+            </column>
+            <column name="decimals" type="INT" defaultValueNumeric="8">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_supply" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_supply" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="token_type" type="VARCHAR(30)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="underlying_asset" type="VARCHAR(255)"/>
+            <column name="price_oracle_id" type="VARCHAR(255)"/>
+            <column name="mintable" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="burnable" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="active" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_tokens_symbol" tableName="tokens">
+            <column name="symbol"/>
+        </createIndex>
+
+        <createIndex indexName="idx_tokens_token_type" tableName="tokens">
+            <column name="token_type"/>
+        </createIndex>
+
+        <createIndex indexName="idx_tokens_active" tableName="tokens">
+            <column name="active"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

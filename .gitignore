@@ -1,0 +1,26 @@
+# Maven
+target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Node
+dlmm-admin-ui/node_modules/
+dlmm-admin-ui/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+*.log
+
+# Skills (build tool artifacts)
+skills/

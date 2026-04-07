@@ -1,0 +1,112 @@
+package com.sber.dlmm.gateway.filter;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
+import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SecurityException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.Ordered;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpResponse;
+import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
+@Component
+public class JwtValidationFilter implements GlobalFilter, Ordered {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtValidationFilter.class);
+
+    private static final String BEARER_PREFIX = "Bearer ";
+    private static final String HEADER_USER_ID = "X-User-Id";
+    private static final String HEADER_USER_ROLE = "X-User-Role";
+    private static final String HEADER_KYC_STATUS = "X-Kyc-Status";
+
+    private static final List<String> SKIP_PATHS = List.of(
+            "/api/v1/auth/login",
+            "/api/v1/auth/register",
+            "/api/v1/auth/refresh",
+            "/actuator/**"
+    );
+
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
+    private final SecretKey secretKey;
+
+    public JwtValidationFilter(@Value("${dlmm.jwt.secret}") String jwtSecret) {
+        this.secretKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        ServerHttpRequest request = exchange.getRequest();
+        String path = request.getURI().getPath();
+
+        if (shouldSkipValidation(path)) {
+            return chain.filter(exchange);
+        }
+
+        String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+            log.warn("Missing or invalid Authorization header for path: {}", path);
+            return onUnauthorized(exchange);
+        }
+
+        String token = authHeader.substring(BEARER_PREFIX.length());
+
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+
+            String userId = claims.getSubject();
+            String userRole = claims.get("role", String.class);
+            String kycStatus = claims.get("kycStatus", String.class);
+
+            ServerHttpRequest mutatedRequest = request.mutate()
+                    .header(HEADER_USER_ID, userId != null ? userId : "")
+                    .header(HEADER_USER_ROLE, userRole != null ? userRole : "")
+                    .header(HEADER_KYC_STATUS, kycStatus != null ? kycStatus : "")
+                    .build();
+
+            return chain.filter(exchange.mutate().request(mutatedRequest).build());
+
+        } catch (ExpiredJwtException e) {
+            log.warn("Expired JWT token for path: {}", path);
+            return onUnauthorized(exchange);
+        } catch (UnsupportedJwtException | MalformedJwtException | SecurityException | IllegalArgumentException e) {
+            log.warn("Invalid JWT token for path: {} - {}", path, e.getMessage());
+            return onUnauthorized(exchange);
+        }
+    }
+
+    private boolean shouldSkipValidation(String path) {
+        return SKIP_PATHS.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
+    }
+
+    private Mono<Void> onUnauthorized(ServerWebExchange exchange) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        return response.setComplete();
+    }
+
+    @Override
+    public int getOrder() {
+        return -100;
+    }
+}

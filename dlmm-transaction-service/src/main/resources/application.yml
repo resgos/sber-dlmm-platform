@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: dlmm-transaction-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/dlmm
+    username: ${DB_USER:dlmm}
+    password: ${DB_PASS:dlmm_secret}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+    consumer:
+      group-id: dlmm-transaction-service
+      auto-offset-reset: earliest
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+server:
+  port: 8085
+
+dlmm:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-256-bit-minimum}
+
+logging:
+  level:
+    com.sber.dlmm: DEBUG
+    org.springframework: INFO

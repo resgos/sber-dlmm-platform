@@ -1,0 +1,69 @@
+spring:
+  application:
+    name: dlmm-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: ${USER_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/auth/**
+        - id: user-service
+          uri: ${USER_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/users/**
+        - id: token-service
+          uri: ${TOKEN_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/tokens/**
+        - id: balance-service
+          uri: ${TOKEN_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/balances/**
+        - id: pool-engine
+          uri: ${POOL_ENGINE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/pools/**
+        - id: fee-service
+          uri: ${FEE_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/v1/fees/**
+        - id: transaction-service
+          uri: ${TRANSACTION_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/v1/transactions/**
+        - id: price-oracle
+          uri: ${PRICE_ORACLE_URL:http://localhost:8086}
+          predicates:
+            - Path=/api/v1/oracle/**
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8087}
+          predicates:
+            - Path=/api/v1/notifications/**
+        - id: admin-bff
+          uri: ${ADMIN_BFF_URL:http://localhost:8088}
+          predicates:
+            - Path=/api/v1/admin/**
+      default-filters:
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 100
+            redis-rate-limiter.burstCapacity: 150
+            key-resolver: "#{@userKeyResolver}"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+
+server:
+  port: 8080
+
+dlmm:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-256-bit-minimum-secret-key}
+
+logging:
+  level:
+    com.sber.dlmm: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework: INFO
