@@ -1,0 +1,190 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --sber-green: #21A038;
+  --sber-green-hover: #1C8A30;
+  --sber-green-light: #E8F5E9;
+  --sber-green-dark: #0E6B1E;
+  --bg-page: #F3F4F6;
+  --bg-card: #FFFFFF;
+  --bg-sidebar: #FFFFFF;
+  --border-light: #E5E7EB;
+  --border-sidebar: #F0F0F0;
+  --text-primary: #1F2937;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* Sber sidebar overrides */
+.sber-sidebar .ant-menu-light {
+  background: #FFFFFF;
+  border-right: none;
+}
+.sber-sidebar .ant-menu-item {
+  margin: 2px 8px;
+  border-radius: 8px;
+  height: 44px;
+  line-height: 44px;
+}
+.sber-sidebar .ant-menu-item:hover {
+  background: #F9FAFB !important;
+}
+.sber-sidebar .ant-menu-item-selected {
+  background: #E8F5E9 !important;
+  color: #21A038 !important;
+  font-weight: 500;
+}
+.sber-sidebar .ant-menu-item-selected::after {
+  display: none;
+}
+.sber-sidebar .ant-menu-item-selected .anticon {
+  color: #21A038 !important;
+}
+
+/* Table overrides */
+.sber-table .ant-table-thead > tr > th {
+  background: #F9FAFB !important;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid var(--border-light);
+}
+.sber-table .ant-table-tbody > tr:hover > td {
+  background: #F9FAFB !important;
+}
+.sber-table .ant-table-tbody > tr > td {
+  border-bottom: 1px solid #F3F4F6;
+}
+
+/* Card styling */
+.sber-card {
+  border-radius: 12px !important;
+  border: 1px solid var(--border-light) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+}
+.sber-card .ant-card-head {
+  border-bottom: 1px solid #F3F4F6;
+  font-weight: 600;
+  min-height: 48px;
+}
+
+/* Stat icon circles */
+.stat-icon-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.stat-icon-circle.green {
+  background: #E8F5E9;
+  color: #21A038;
+}
+.stat-icon-circle.blue {
+  background: #EFF6FF;
+  color: #3B82F6;
+}
+.stat-icon-circle.amber {
+  background: #FEF3C7;
+  color: #F59E0B;
+}
+.stat-icon-circle.purple {
+  background: #F3E8FF;
+  color: #8B5CF6;
+}
+.stat-icon-circle.red {
+  background: #FEE2E2;
+  color: #EF4444;
+}
+.stat-icon-circle.teal {
+  background: #E0F2FE;
+  color: #0EA5E9;
+}
+
+/* Login page */
+.sber-login-bg {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F3F4F6;
+}
+
+/* Tag badges */
+.sber-badge {
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Danger row */
+.ant-table-row-danger {
+  background: #FEF2F2 !important;
+}
+.ant-table-row-danger:hover > td {
+  background: #FEE2E2 !important;
+}
+
+/* Page title */
+.sber-page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Descriptions */
+.ant-descriptions-bordered .ant-descriptions-item-label {
+  background: #F9FAFB;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* Swap card */
+.swap-card {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* Strategy card */
+.strategy-card {
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent !important;
+}
+.strategy-card:hover {
+  border-color: #21A038 !important;
+}
+.strategy-card.active {
+  border-color: #21A038 !important;
+  background: #F0FFF4 !important;
+}

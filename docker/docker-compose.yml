@@ -345,6 +345,18 @@ services:
     networks:
       - dlmm-network
 
+  dlmm-user-ui:
+    build:
+      context: ..
+      dockerfile: Dockerfile.user-frontend
+    container_name: dlmm-user-ui
+    ports:
+      - "3001:80"
+    depends_on:
+      - dlmm-gateway
+    networks:
+      - dlmm-network
+
 networks:
   dlmm-network:
     driver: bridge
