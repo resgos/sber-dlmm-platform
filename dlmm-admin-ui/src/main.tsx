@@ -1,7 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
-import { setupMockApi } from './api/mockApi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
 import ruRU from 'antd/locale/ru_RU'
@@ -59,9 +58,6 @@ const queryClient = new QueryClient({
     },
   },
 })
-
-// Setup mock API interceptor for demo mode
-setupMockApi()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

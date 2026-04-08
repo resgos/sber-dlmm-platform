@@ -8,14 +8,6 @@ export interface StoredUser {
   role: string
 }
 
-// Auto-initialize with demo admin user
-_token = 'demo-admin-token'
-_user = {
-  userId: '1',
-  email: 'admin@sber-dlmm.ru',
-  role: 'SUPER_ADMIN',
-}
-
 export const authStore = {
   getToken: (): string | null => {
     return _token

@@ -130,6 +130,22 @@ public class TransactionService {
     }
 
     @Transactional(readOnly = true)
+    public PageResponse<TransactionResponse> getAllTransactions(TransactionType type,
+                                                                TransactionStatus status,
+                                                                int page,
+                                                                int size) {
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Transaction> transactionPage = transactionRepository.findAllFiltered(type, status, pageRequest);
+        return new PageResponse<>(
+                transactionPage.getContent().stream().map(this::toResponse).toList(),
+                transactionPage.getNumber(),
+                transactionPage.getSize(),
+                transactionPage.getTotalElements(),
+                transactionPage.getTotalPages()
+        );
+    }
+
+    @Transactional(readOnly = true)
     public Optional<Transaction> findByIdempotencyKey(String key) {
         return transactionRepository.findByIdempotencyKey(key);
     }

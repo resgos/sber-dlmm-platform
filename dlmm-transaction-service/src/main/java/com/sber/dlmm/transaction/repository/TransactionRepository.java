@@ -36,4 +36,11 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
                                     @Param("fromDate") LocalDateTime fromDate,
                                     @Param("toDate") LocalDateTime toDate,
                                     Pageable pageable);
+
+    @Query("SELECT t FROM Transaction t WHERE " +
+           "(:txType IS NULL OR t.txType = :txType) " +
+           "AND (:status IS NULL OR t.status = :status)")
+    Page<Transaction> findAllFiltered(@Param("txType") TransactionType txType,
+                                       @Param("status") TransactionStatus status,
+                                       Pageable pageable);
 }

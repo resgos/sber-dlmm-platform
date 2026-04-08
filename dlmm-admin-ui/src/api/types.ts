@@ -1,9 +1,18 @@
 // Auth
+export interface AuthUserInfo {
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+  role: string
+  kycStatus: string
+}
+
 export interface AuthResponse {
   accessToken: string
   refreshToken: string
-  userId: string
-  role: string
+  expiresIn: number
+  user: AuthUserInfo
 }
 
 // User

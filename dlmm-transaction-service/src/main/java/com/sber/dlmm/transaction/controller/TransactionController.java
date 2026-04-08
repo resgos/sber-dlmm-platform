@@ -27,6 +27,16 @@ public class TransactionController {
 
     private final TransactionService transactionService;
 
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<PageResponse<TransactionResponse>> getAllTransactions(
+            @RequestParam(required = false) TransactionType type,
+            @RequestParam(required = false) TransactionStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(transactionService.getAllTransactions(type, status, page, size));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<PageResponse<TransactionResponse>> getMyTransactions(
             Authentication authentication,

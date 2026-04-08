@@ -41,9 +41,9 @@ export default function LoginPage() {
       const response = await auth.login(values.email, values.password)
       authStore.setToken(response.accessToken)
       authStore.setUser({
-        userId: response.userId,
-        email: values.email,
-        role: response.role,
+        userId: response.user.id,
+        email: response.user.email,
+        role: response.user.role,
       })
       navigate('/dashboard', { replace: true })
     } catch (err: unknown) {
