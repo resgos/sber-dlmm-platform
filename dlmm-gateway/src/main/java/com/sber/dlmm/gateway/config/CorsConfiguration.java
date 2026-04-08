@@ -14,7 +14,7 @@ public class CorsConfiguration {
     @Bean
     public CorsWebFilter corsWebFilter() {
         org.springframework.web.cors.CorsConfiguration corsConfig = new org.springframework.web.cors.CorsConfiguration();
-        corsConfig.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:8080"));
+        corsConfig.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:3001", "http://localhost:8080"));
         corsConfig.setAllowedMethods(List.of(
                 HttpMethod.GET.name(),
                 HttpMethod.POST.name(),
