@@ -254,20 +254,20 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (create
 
 -- users (default password for all seed users: Demo1234)
 INSERT INTO users (id, sber_id, email, phone, first_name, last_name, kyc_status, role, password_hash) VALUES
-  ('a0000000-0000-0000-0000-000000000001', 'SBER-ADMIN-001', 'admin@sber-dlmm.ru',  '+79001000001', 'Иван',   'Петров',   'APPROVED', 'ADMIN',     '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
-  ('a0000000-0000-0000-0000-000000000002', 'SBER-USR-10042', 'ivanov@example.com',  '+79001000002', 'Алексей','Иванов',   'APPROVED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
-  ('a0000000-0000-0000-0000-000000000003', 'SBER-USR-20017', 'sidorov@example.com', '+79001000003', 'Мария',  'Сидорова', 'APPROVED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
+  ('a0000000-0000-0000-0000-000000000001', 'SBER-ADMIN-001', 'admin@sber-dlmm.ru',  '+79001000001', 'Иван',   'Петров',   'VERIFIED', 'ADMIN',     '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
+  ('a0000000-0000-0000-0000-000000000002', 'SBER-USR-10042', 'ivanov@example.com',  '+79001000002', 'Алексей','Иванов',   'VERIFIED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
+  ('a0000000-0000-0000-0000-000000000003', 'SBER-USR-20017', 'sidorov@example.com', '+79001000003', 'Мария',  'Сидорова', 'VERIFIED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
   ('a0000000-0000-0000-0000-000000000004', 'SBER-USR-99901', 'suspect@example.com', '+79001000099', 'Сергей', 'Попов',    'PENDING',  'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS')
 ON CONFLICT DO NOTHING;
 
 -- tokens
 INSERT INTO tokens (id, name, symbol, decimals, total_supply, max_supply, token_type, underlying_asset, price_oracle_id, mintable, burnable, active, created_by) VALUES
-  ('b0000000-0000-0000-0000-000000000001',  'Sber Ruble',    'SRUB',  2,  500000000000,  1000000000000, 'FIAT_BACKED',      'RUB',  'MOEX_USDRUB',  true,  true,  true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000002',  'Sber Bitcoin',  'SBTC',  8,    100000000,     2100000000, 'COMMODITY_BACKED', 'BTC',  'BINANCE_BTC',  false, true,  true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000003',  'Sber Ethereum', 'SETH',  8,   1200000000,   1200000000, 'UTILITY',          'ETH',  'BINANCE_ETH',  false, true,  true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000004', 'Sber Gold',     'SGOLD', 4,     10000000,    100000000, 'COMMODITY_BACKED', 'XAU',  'MOEX_GOLD',    false, false, true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000005', 'Sber Silver',   'SSILV', 4,    200000000,   2000000000, 'COMMODITY_BACKED', 'XAG',  'MOEX_SILVER',  false, false, true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000006',  'Sber Oil',      'SOIL',  4,    500000000,   5000000000, 'COMMODITY_BACKED', 'BRENT','MOEX_OIL',     false, false, true, 'a0000000-0000-0000-0000-000000000001')
+  ('b0000000-0000-0000-0000-000000000001',  'Sber Ruble',    'SRUB',  2,  500000000000,  1000000000000, 'STABLE_TOKEN',      'RUB',  'MOEX_USDRUB',  true,  true,  true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000002',  'Sber Bitcoin',  'SBTC',  8,    100000000,     2100000000, 'EQUITY_TOKEN', 'BTC',  'BINANCE_BTC',  false, true,  true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000003',  'Sber Ethereum', 'SETH',  8,   1200000000,   1200000000, 'GOVERNANCE_TOKEN',          'ETH',  'BINANCE_ETH',  false, true,  true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000004', 'Sber Gold',     'SGOLD', 4,     10000000,    100000000, 'EQUITY_TOKEN', 'XAU',  'MOEX_GOLD',    false, false, true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000005', 'Sber Silver',   'SSILV', 4,    200000000,   2000000000, 'EQUITY_TOKEN', 'XAG',  'MOEX_SILVER',  false, false, true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000006',  'Sber Oil',      'SOIL',  4,    500000000,   5000000000, 'EQUITY_TOKEN', 'BRENT','MOEX_OIL',     false, false, true, 'a0000000-0000-0000-0000-000000000001')
 ON CONFLICT DO NOTHING;
 
 -- user_balances
