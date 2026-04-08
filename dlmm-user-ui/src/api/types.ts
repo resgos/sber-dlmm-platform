@@ -61,11 +61,12 @@ export interface Token {
 
 // Balances
 export interface TokenBalance {
+  userId: string
   tokenId: string
-  tokenSymbol: string
-  tokenName: string
+  symbol: string
   available: number
   locked: number
+  total: number
 }
 
 // Bin Data

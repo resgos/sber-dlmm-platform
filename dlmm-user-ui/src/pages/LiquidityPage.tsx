@@ -47,8 +47,8 @@ export default function LiquidityPage() {
     [myPositions, id],
   )
 
-  const balanceX = myBalances?.find((b) => b.tokenSymbol === pool?.tokenXSymbol)
-  const balanceY = myBalances?.find((b) => b.tokenSymbol === pool?.tokenYSymbol)
+  const balanceX = myBalances?.find((b) => b.symbol === pool?.tokenXSymbol)
+  const balanceY = myBalances?.find((b) => b.symbol === pool?.tokenYSymbol)
 
   const addMutation = useMutation({
     mutationFn: () =>
