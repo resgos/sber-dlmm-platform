@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Form, Input, Button, Card, Typography, Alert, Space } from 'antd'
-import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons'
+import { UserOutlined, LockOutlined, MailOutlined, IdcardOutlined, PhoneOutlined } from '@ant-design/icons'
 import { auth } from '@/api/services'
 import { authStore } from '@/store/authStore'
 
@@ -23,6 +23,8 @@ export default function RegisterPage() {
   const [form] = Form.useForm()
 
   const handleSubmit = async (values: {
+    sberId: string
+    phone: string
     firstName: string
     lastName: string
     email: string
@@ -32,6 +34,8 @@ export default function RegisterPage() {
     setError(null)
     try {
       const response = await auth.register({
+        sberId: values.sberId,
+        phone: values.phone,
         firstName: values.firstName,
         lastName: values.lastName,
         email: values.email,
@@ -56,10 +60,10 @@ export default function RegisterPage() {
   return (
     <div className="sber-login-bg">
       <Card
-        style={{ width: 420, borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E5E7EB' }}
+        style={{ width: 460, borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E5E7EB' }}
         styles={{ body: { padding: '40px' } }}
       >
-        <Space direction="vertical" size={8} style={{ width: '100%', marginBottom: 32, textAlign: 'center' }}>
+        <Space direction="vertical" size={8} style={{ width: '100%', marginBottom: 24, textAlign: 'center' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
             <SberLogoLarge />
           </div>
@@ -85,7 +89,7 @@ export default function RegisterPage() {
             <Form.Item
               name="firstName"
               label={<span style={{ fontWeight: 500, color: '#374151' }}>Имя</span>}
-              rules={[{ required: true, message: 'Введите имя' }]}
+              rules={[{ required: true, message: 'Введите имя' }, { min: 2, message: 'Минимум 2 символа' }]}
               style={{ flex: 1 }}
             >
               <Input
@@ -97,12 +101,39 @@ export default function RegisterPage() {
             <Form.Item
               name="lastName"
               label={<span style={{ fontWeight: 500, color: '#374151' }}>Фамилия</span>}
-              rules={[{ required: true, message: 'Введите фамилию' }]}
+              rules={[{ required: true, message: 'Введите фамилию' }, { min: 2, message: 'Минимум 2 символа' }]}
               style={{ flex: 1 }}
             >
               <Input placeholder="Иванов" style={{ height: 44, borderRadius: 8 }} />
             </Form.Item>
           </Space>
+
+          <Form.Item
+            name="sberId"
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>Сбер ID</span>}
+            rules={[{ required: true, message: 'Введите Сбер ID' }]}
+          >
+            <Input
+              prefix={<IdcardOutlined style={{ color: '#9CA3AF' }} />}
+              placeholder="SBER-USR-12345"
+              style={{ height: 44, borderRadius: 8 }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="phone"
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>Телефон</span>}
+            rules={[
+              { required: true, message: 'Введите номер телефона' },
+              { pattern: /^\+7\d{10}$/, message: 'Формат: +7XXXXXXXXXX' },
+            ]}
+          >
+            <Input
+              prefix={<PhoneOutlined style={{ color: '#9CA3AF' }} />}
+              placeholder="+79001234567"
+              style={{ height: 44, borderRadius: 8 }}
+            />
+          </Form.Item>
 
           <Form.Item
             name="email"
@@ -125,7 +156,8 @@ export default function RegisterPage() {
             label={<span style={{ fontWeight: 500, color: '#374151' }}>Пароль</span>}
             rules={[
               { required: true, message: 'Введите пароль' },
-              { min: 6, message: 'Минимум 6 символов' },
+              { min: 8, message: 'Минимум 8 символов' },
+              { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: 'Должен содержать буквы и цифры' },
             ]}
           >
             <Input.Password
