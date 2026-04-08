@@ -208,7 +208,7 @@ export default function TokenDetailPage() {
               style={{ width: '100%' }}
               placeholder="Введите количество"
               formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={(value) => Number(value!.replace(/,/g, ''))}
+              parser={(value) => Number(value!.replace(/,/g, '')) as unknown as 1}
             />
           </Form.Item>
 
