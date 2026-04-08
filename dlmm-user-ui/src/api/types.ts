@@ -16,10 +16,12 @@ export interface AuthResponse {
 }
 
 export interface RegisterRequest {
+  sberId: string
   email: string
-  password: string
+  phone: string
   firstName: string
   lastName: string
+  password: string
 }
 
 // User
