@@ -136,7 +136,7 @@ export default function TokenCreatePage() {
                 min={0}
                 style={{ width: '100%' }}
                 formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={(value) => Number(value!.replace(/,/g, ''))}
+                parser={(value) => Number(value!.replace(/,/g, '')) as unknown as 0}
               />
             </Form.Item>
 
