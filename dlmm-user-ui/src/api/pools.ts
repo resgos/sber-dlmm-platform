@@ -19,8 +19,19 @@ export const pools = {
   },
 
   getPool: async (id: string): Promise<PoolDetail> => {
-    const { data } = await apiClient.get<PoolDetail>(`/pools/${id}`)
-    return data
+    const { data } = await apiClient.get(`/pools/${id}`)
+    // Backend returns {pool: {...}, bins: [...], volatilityAccumulator, ...}
+    if (data.pool) {
+      return {
+        ...data.pool,
+        bins: data.bins || [],
+        volatilityAccumulator: data.volatilityAccumulator ?? 0,
+        currentDynamicFeeBps: data.currentDynamicFeeBps ?? 0,
+        totalFeesCollectedX: data.totalFeesCollectedX ?? 0,
+        totalFeesCollectedY: data.totalFeesCollectedY ?? 0,
+      } as PoolDetail
+    }
+    return data as PoolDetail
   },
 
   getSwapQuote: async (req: Omit<SwapRequest, 'idempotencyKey' | 'minAmountOut'>): Promise<SwapQuote> => {
