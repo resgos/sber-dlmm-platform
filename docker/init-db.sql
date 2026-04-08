@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS price_feeds (
     source VARCHAR(50) NOT NULL,
     current_price DECIMAL(30,18) NOT NULL,
     twap_price DECIMAL(30,18) NOT NULL,
-    price_change_24h_pct DECIMAL(10,4) NOT NULL DEFAULT 0,
+    price_change24h_pct DECIMAL(10,4) NOT NULL DEFAULT 0,
     updated_at_epoch_ms BIGINT NOT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -451,7 +451,7 @@ INSERT INTO transactions (id, tx_type, status, user_id, pool_id, token_in_id, am
 ON CONFLICT DO NOTHING;
 
 -- price_feeds
-INSERT INTO price_feeds (id, asset_symbol, source, current_price, twap_price, price_change_24h_pct, updated_at_epoch_ms) VALUES
+INSERT INTO price_feeds (id, asset_symbol, source, current_price, twap_price, price_change24h_pct, updated_at_epoch_ms) VALUES
   ('f0000000-0000-0000-0000-000000000001',  'SRUB',  'MOEX_USDRUB',  1.000000000000000000, 1.000000000000000000,  0.0000, 1744090000000),
   ('f0000000-0000-0000-0000-000000000002',  'SBTC',  'BINANCE_BTC',  5000000.000000000000000000, 4980000.000000000000000000,  2.4500, 1744090000000),
   ('f0000000-0000-0000-0000-000000000003',  'SETH',  'BINANCE_ETH',  300000.000000000000000000,  298000.000000000000000000,   1.8200, 1744090000000),
