@@ -6,6 +6,9 @@
                             http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
 
     <changeSet id="004-create-position-bins-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="position_bins"/></not>
+        </preConditions>
         <createTable tableName="position_bins">
             <column name="position_id" type="UUID">
                 <constraints nullable="false" primaryKey="true" primaryKeyName="pk_position_bins"/>
