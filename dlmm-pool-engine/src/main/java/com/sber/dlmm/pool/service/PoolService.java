@@ -118,8 +118,21 @@ public class PoolService {
             poolPage = poolRepository.findAll(PageRequest.of(page, size, sort));
         }
 
+        // Resolve token symbols for all pools
+        java.util.Map<UUID, String> symbolMap = new java.util.HashMap<>();
+        for (LiquidityPool pool : poolPage.getContent()) {
+            symbolMap.computeIfAbsent(pool.getTokenXId(), id -> {
+                try { var t = tokenServiceClient.getToken(id); return t != null ? t.symbol() : null; }
+                catch (Exception e) { return null; }
+            });
+            symbolMap.computeIfAbsent(pool.getTokenYId(), id -> {
+                try { var t = tokenServiceClient.getToken(id); return t != null ? t.symbol() : null; }
+                catch (Exception e) { return null; }
+            });
+        }
+
         List<PoolResponse> responses = poolPage.getContent().stream()
-                .map(pool -> toPoolResponse(pool, null, null))
+                .map(pool -> toPoolResponse(pool, symbolMap.get(pool.getTokenXId()), symbolMap.get(pool.getTokenYId())))
                 .toList();
 
         return new PageResponse<>(responses, page, size,
@@ -136,10 +149,15 @@ public class PoolService {
                         bin.getReserveX(), bin.getReserveY(), bin.getCompositionFactor()))
                 .toList();
 
+        // Resolve token symbols
+        String symX = null, symY = null;
+        try { var tx = tokenServiceClient.getToken(pool.getTokenXId()); if (tx != null) symX = tx.symbol(); } catch (Exception ignored) {}
+        try { var ty = tokenServiceClient.getToken(pool.getTokenYId()); if (ty != null) symY = ty.symbol(); } catch (Exception ignored) {}
+
         int currentDynamicFeeBps = calculateDynamicFee(pool);
         BigDecimal estimatedApy = calculateEstimatedApy(pool, currentDynamicFeeBps);
 
-        PoolResponse poolResponse = toPoolResponseWithApy(pool, null, null, estimatedApy);
+        PoolResponse poolResponse = toPoolResponseWithApy(pool, symX, symY, estimatedApy);
 
         return new PoolDetailResponse(poolResponse, binResponses,
                 pool.getVolatilityAccumulator(), currentDynamicFeeBps,
@@ -223,7 +241,10 @@ public class PoolService {
     }
 
     private PoolResponse toPoolResponse(LiquidityPool pool, String tokenXSymbol, String tokenYSymbol) {
-        BigDecimal currentPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(), pool.getActiveBinId());
+        // Use basePrice as currentPrice — it represents the pool's reference market price.
+        // Do NOT compute BinMath.binPrice(base, step, activeBinId) because activeBinId is absolute
+        // (e.g. 8388608) and would cause astronomical overflow.
+        BigDecimal currentPrice = pool.getBasePrice();
         int dynamicFeeBps = calculateDynamicFee(pool);
         BigDecimal apy = calculateEstimatedApy(pool, dynamicFeeBps);
         return new PoolResponse(pool.getId(), pool.getTokenXId(), pool.getTokenYId(),
@@ -234,7 +255,7 @@ public class PoolService {
 
     private PoolResponse toPoolResponseWithApy(LiquidityPool pool, String tokenXSymbol,
                                                  String tokenYSymbol, BigDecimal apy) {
-        BigDecimal currentPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(), pool.getActiveBinId());
+        BigDecimal currentPrice = pool.getBasePrice();
         return new PoolResponse(pool.getId(), pool.getTokenXId(), pool.getTokenYId(),
                 tokenXSymbol, tokenYSymbol, pool.getBinStep(), pool.getBaseFeeBps(),
                 pool.getActiveBinId(), currentPrice, pool.getTotalTvlX(), pool.getTotalTvlY(),

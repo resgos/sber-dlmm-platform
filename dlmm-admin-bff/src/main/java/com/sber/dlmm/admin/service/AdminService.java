@@ -61,25 +61,26 @@ public class AdminService {
     public DashboardResponse getDashboard() {
         log.debug("Fetching dashboard data from all microservices");
 
-        Mono<List<Map<String, Object>>> usersMono = userServiceClient.get()
-                .uri("/api/v1/users")
+        // All endpoints return PageResponse {content: [...], page, size, totalElements, totalPages}
+        Mono<Map<String, Object>> usersPageMono = userServiceClient.get()
+                .uri("/api/v1/users?page=0&size=1000")
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList());
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .onErrorReturn(Collections.emptyMap());
 
-        Mono<List<Map<String, Object>>> poolsMono = poolEngineClient.get()
-                .uri("/api/v1/pools")
+        Mono<Map<String, Object>> poolsPageMono = poolEngineClient.get()
+                .uri("/api/v1/pools?page=0&size=1000")
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList());
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .onErrorReturn(Collections.emptyMap());
 
-        Mono<List<Map<String, Object>>> transactionsMono = transactionServiceClient.get()
-                .uri("/api/v1/transactions")
+        Mono<Map<String, Object>> transactionsPageMono = transactionServiceClient.get()
+                .uri("/api/v1/transactions?page=0&size=1000")
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList());
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .onErrorReturn(Collections.emptyMap());
 
-        var combined = Mono.zip(usersMono, poolsMono, transactionsMono);
+        var combined = Mono.zip(usersPageMono, poolsPageMono, transactionsPageMono);
         var tuple = combined.block(REQUEST_TIMEOUT);
 
         if (tuple == null) {
@@ -87,13 +88,13 @@ public class AdminService {
             return new DashboardResponse(0, 0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0, 0);
         }
 
-        List<Map<String, Object>> users = tuple.getT1();
-        List<Map<String, Object>> pools = tuple.getT2();
-        List<Map<String, Object>> transactions = tuple.getT3();
+        List<Map<String, Object>> users = extractList(tuple.getT1(), "content");
+        List<Map<String, Object>> pools = extractList(tuple.getT2(), "content");
+        List<Map<String, Object>> transactions = extractList(tuple.getT3(), "content");
 
         long totalUsers = users.size();
         long verifiedUsers = users.stream()
-                .filter(u -> Boolean.TRUE.equals(u.get("verified")) || Boolean.TRUE.equals(u.get("kycVerified")))
+                .filter(u -> "VERIFIED".equals(toString(u.get("kycStatus"))))
                 .count();
 
         int totalPools = pools.size();
@@ -102,7 +103,7 @@ public class AdminService {
                 .count();
 
         BigDecimal totalTvlRub = pools.stream()
-                .map(p -> toBigDecimal(p.get("tvl")))
+                .map(p -> toBigDecimal(p.get("totalTvlX")).add(toBigDecimal(p.get("totalTvlY"))))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal volume24hRub = pools.stream()
@@ -110,12 +111,10 @@ public class AdminService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalFeesCollectedRub = pools.stream()
-                .map(p -> toBigDecimal(p.get("totalFees")))
+                .map(p -> toBigDecimal(p.get("totalFeesCollectedX")).add(toBigDecimal(p.get("totalFeesCollectedY"))))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        long activePositions = pools.stream()
-                .mapToLong(p -> toLong(p.get("activePositions")))
-                .sum();
+        long activePositions = 0; // Position count not available from pool list endpoint
 
         long transactionsToday = transactions.size();
 

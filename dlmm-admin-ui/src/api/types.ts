@@ -30,7 +30,7 @@ export interface User {
 }
 
 // Token
-export type TokenType = 'FIAT_BACKED' | 'COMMODITY_BACKED' | 'UTILITY' | 'SECURITY'
+export type TokenType = 'STABLE_TOKEN' | 'EQUITY_TOKEN' | 'LP_TOKEN' | 'GOVERNANCE_TOKEN'
 
 export interface Token {
   id: string
