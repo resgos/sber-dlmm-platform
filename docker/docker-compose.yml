@@ -189,12 +189,15 @@ services:
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      TOKEN_SERVICE_URL: http://dlmm-token-service:8080
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       kafka:
+        condition: service_started
+      dlmm-token-service:
         condition: service_started
     networks:
       - dlmm-network
