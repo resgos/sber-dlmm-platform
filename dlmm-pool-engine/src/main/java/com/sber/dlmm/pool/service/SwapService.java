@@ -10,6 +10,7 @@ import com.sber.dlmm.common.exception.SlippageExceededException;
 import com.sber.dlmm.common.util.BinMath;
 import com.sber.dlmm.common.util.FeeCalculator;
 import com.sber.dlmm.pool.client.TokenServiceClient;
+import com.sber.dlmm.pool.client.UserServiceClient;
 import com.sber.dlmm.pool.dto.SwapQuoteRequest;
 import com.sber.dlmm.pool.dto.SwapQuoteResponse;
 import com.sber.dlmm.pool.dto.SwapRequest;
@@ -44,17 +45,20 @@ public class SwapService {
     private final LiquidityPoolRepository poolRepository;
     private final PoolBinRepository poolBinRepository;
     private final TokenServiceClient tokenServiceClient;
+    private final UserServiceClient userServiceClient;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final StringRedisTemplate redisTemplate;
 
     public SwapService(LiquidityPoolRepository poolRepository,
                        PoolBinRepository poolBinRepository,
                        TokenServiceClient tokenServiceClient,
+                       UserServiceClient userServiceClient,
                        KafkaTemplate<String, Object> kafkaTemplate,
                        StringRedisTemplate redisTemplate) {
         this.poolRepository = poolRepository;
         this.poolBinRepository = poolBinRepository;
         this.tokenServiceClient = tokenServiceClient;
+        this.userServiceClient = userServiceClient;
         this.kafkaTemplate = kafkaTemplate;
         this.redisTemplate = redisTemplate;
     }
@@ -186,7 +190,7 @@ public class SwapService {
             throw new PoolNotActiveException("Input token is not active");
         }
 
-        if (!tokenServiceClient.isUserKycVerified(userId)) {
+        if (!userServiceClient.isUserKycVerified(userId)) {
             throw new ForbiddenException("User KYC not verified");
         }
 

@@ -10,6 +10,7 @@ import com.sber.dlmm.common.exception.PoolNotActiveException;
 import com.sber.dlmm.common.exception.PoolNotFoundException;
 import com.sber.dlmm.common.util.BinMath;
 import com.sber.dlmm.pool.client.TokenServiceClient;
+import com.sber.dlmm.pool.client.UserServiceClient;
 import com.sber.dlmm.pool.dto.AddLiquidityRequest;
 import com.sber.dlmm.pool.dto.AddLiquidityResponse;
 import com.sber.dlmm.pool.dto.BinAllocation;
@@ -55,6 +56,7 @@ public class LiquidityService {
     private final LpPositionRepository positionRepository;
     private final PositionBinRepository positionBinRepository;
     private final TokenServiceClient tokenServiceClient;
+    private final UserServiceClient userServiceClient;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final StringRedisTemplate redisTemplate;
 
@@ -63,6 +65,7 @@ public class LiquidityService {
                             LpPositionRepository positionRepository,
                             PositionBinRepository positionBinRepository,
                             TokenServiceClient tokenServiceClient,
+                            UserServiceClient userServiceClient,
                             KafkaTemplate<String, Object> kafkaTemplate,
                             StringRedisTemplate redisTemplate) {
         this.poolRepository = poolRepository;
@@ -70,6 +73,7 @@ public class LiquidityService {
         this.positionRepository = positionRepository;
         this.positionBinRepository = positionBinRepository;
         this.tokenServiceClient = tokenServiceClient;
+        this.userServiceClient = userServiceClient;
         this.kafkaTemplate = kafkaTemplate;
         this.redisTemplate = redisTemplate;
     }
@@ -92,7 +96,7 @@ public class LiquidityService {
         }
 
         // Verify KYC
-        if (!tokenServiceClient.isUserKycVerified(userId)) {
+        if (!userServiceClient.isUserKycVerified(userId)) {
             throw new ForbiddenException("User KYC not verified");
         }
 

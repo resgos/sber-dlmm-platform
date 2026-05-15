@@ -7,6 +7,7 @@ import com.sber.dlmm.common.exception.IdempotencyConflictException;
 import com.sber.dlmm.common.exception.InvalidBinRangeException;
 import com.sber.dlmm.common.exception.PoolNotActiveException;
 import com.sber.dlmm.pool.client.TokenServiceClient;
+import com.sber.dlmm.pool.client.UserServiceClient;
 import com.sber.dlmm.pool.dto.AddLiquidityRequest;
 import com.sber.dlmm.pool.dto.AddLiquidityResponse;
 import com.sber.dlmm.pool.dto.RemoveLiquidityRequest;
@@ -69,6 +70,8 @@ class LiquidityServiceTest {
     @Mock
     private TokenServiceClient tokenServiceClient;
     @Mock
+    private UserServiceClient userServiceClient;
+    @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
     @Mock
     private StringRedisTemplate redisTemplate;
@@ -111,7 +114,7 @@ class LiquidityServiceTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.TRUE);
         when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
-        when(tokenServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
+        when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
         doNothing().when(tokenServiceClient).deductBalance(any(), any(), anyLong());
         when(kafkaTemplate.send(anyString(), anyString(), any()))
                 .thenReturn(CompletableFuture.completedFuture(null));
@@ -260,7 +263,7 @@ class LiquidityServiceTest {
         void kycNotVerified() {
             when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
             when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
-            when(tokenServiceClient.isUserKycVerified(USER_ID)).thenReturn(false);
+            when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(false);
 
             AddLiquidityRequest req = new AddLiquidityRequest(
                     POOL_ID, 100_000, 100_000, 3, 7, LiquidityStrategy.SPOT, null);
@@ -274,7 +277,7 @@ class LiquidityServiceTest {
         void invalidBinRange() {
             when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
             when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
-            when(tokenServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
+            when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
 
             AddLiquidityRequest req = new AddLiquidityRequest(
                     POOL_ID, 100_000, 100_000, 10, 5, LiquidityStrategy.SPOT, null);
@@ -288,7 +291,7 @@ class LiquidityServiceTest {
         void idempotencyConflict() {
             when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
             when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
-            when(tokenServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
+            when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.FALSE);
 

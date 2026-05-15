@@ -104,23 +104,6 @@ public class TokenServiceClient {
         throw new IllegalStateException("Token service unavailable for credit: " + ex.getMessage(), ex);
     }
 
-    @CircuitBreaker(name = CB_NAME, fallbackMethod = "isUserKycVerifiedFallback")
-    public boolean isUserKycVerified(UUID userId) {
-        UserKycResponse response = webClient.get()
-                .uri("/api/v1/users/internal/{userId}/kyc", userId)
-                .retrieve()
-                .bodyToMono(UserKycResponse.class)
-                .onErrorReturn(new UserKycResponse(false))
-                .block(CALL_TIMEOUT);
-        return response != null && response.verified();
-    }
-
-    @SuppressWarnings("unused")
-    private boolean isUserKycVerifiedFallback(UUID userId, Throwable ex) {
-        log.warn("KYC check failed-open (treating as not verified) for user={}: {}", userId, ex.toString());
-        return false;
-    }
-
     public record TokenInfo(UUID id, String name, String symbol, boolean active) {
     }
 
@@ -128,8 +111,5 @@ public class TokenServiceClient {
     }
 
     public record CreditRequest(UUID userId, UUID tokenId, long amount) {
-    }
-
-    public record UserKycResponse(boolean verified) {
     }
 }

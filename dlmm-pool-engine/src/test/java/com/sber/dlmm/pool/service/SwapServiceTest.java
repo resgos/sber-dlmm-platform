@@ -6,6 +6,7 @@ import com.sber.dlmm.common.exception.InsufficientLiquidityException;
 import com.sber.dlmm.common.exception.PoolNotActiveException;
 import com.sber.dlmm.common.exception.SlippageExceededException;
 import com.sber.dlmm.pool.client.TokenServiceClient;
+import com.sber.dlmm.pool.client.UserServiceClient;
 import com.sber.dlmm.pool.dto.SwapQuoteRequest;
 import com.sber.dlmm.pool.dto.SwapQuoteResponse;
 import com.sber.dlmm.pool.dto.SwapRequest;
@@ -40,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -53,6 +55,8 @@ class SwapServiceTest {
     private PoolBinRepository poolBinRepository;
     @Mock
     private TokenServiceClient tokenServiceClient;
+    @Mock
+    private UserServiceClient userServiceClient;
     @Mock
     private KafkaTemplate<String, Object> kafkaTemplate;
     @Mock
@@ -172,6 +176,7 @@ class SwapServiceTest {
 
     @Nested
     @DisplayName("swap")
+    @org.mockito.junit.jupiter.MockitoSettings(strictness = org.mockito.quality.Strictness.LENIENT)
     class SwapTests {
 
         @BeforeEach
@@ -179,12 +184,13 @@ class SwapServiceTest {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.TRUE);
             when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
-            when(tokenServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
+            when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
             doNothing().when(tokenServiceClient).deductBalance(any(), any(), anyLong());
             doNothing().when(tokenServiceClient).creditBalance(any(), any(), anyLong());
             when(kafkaTemplate.send(anyString(), anyString(), any()))
                     .thenReturn(CompletableFuture.completedFuture(null));
         }
+
 
         /**
          * Spec 14.1: testSwapSingleBin — single-bin swap X→Y
@@ -279,7 +285,7 @@ class SwapServiceTest {
         void testSwapIdempotency() {
             when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
             when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
-            when(tokenServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
+            lenient().when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.FALSE);
 
             SwapRequest req = new SwapRequest(POOL_ID, TOKEN_X_ID, 10_000, 0, "dup-idempotency-key");
@@ -383,7 +389,7 @@ class SwapServiceTest {
         void idempotencyConflict() {
             when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
             when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
-            when(tokenServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
+            lenient().when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.FALSE);
 
             SwapRequest req = new SwapRequest(POOL_ID, TOKEN_X_ID, 10_000, 0, "dup-key");

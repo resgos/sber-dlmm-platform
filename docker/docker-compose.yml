@@ -196,6 +196,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
       TOKEN_SERVICE_URL: http://dlmm-token-service:8082
+      USER_SERVICE_URL: http://dlmm-user-service:8081
     depends_on:
       postgres:
         condition: service_healthy

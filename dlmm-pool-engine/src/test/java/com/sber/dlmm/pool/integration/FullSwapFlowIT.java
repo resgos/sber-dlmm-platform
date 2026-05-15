@@ -7,6 +7,7 @@ import com.sber.dlmm.common.exception.SlippageExceededException;
 import com.sber.dlmm.common.util.BinMath;
 import com.sber.dlmm.pool.DlmmPoolEngineApplication;
 import com.sber.dlmm.pool.client.TokenServiceClient;
+import com.sber.dlmm.pool.client.UserServiceClient;
 import com.sber.dlmm.pool.dto.AddLiquidityRequest;
 import com.sber.dlmm.pool.dto.AddLiquidityResponse;
 import com.sber.dlmm.pool.dto.RemoveLiquidityRequest;
@@ -128,6 +129,9 @@ class FullSwapFlowIT {
     private TokenServiceClient tokenServiceClient;
 
     @MockBean
+    private UserServiceClient userServiceClient;
+
+    @MockBean
     private StringRedisTemplate redisTemplate;
 
     private static final UUID TOKEN_X_ID = UUID.fromString("00000000-0000-0000-0000-000000000001"); // sGAZP
@@ -138,9 +142,9 @@ class FullSwapFlowIT {
 
     @BeforeEach
     void setUp() {
-        // Mock TokenServiceClient for all tests
+        // Mock TokenServiceClient + UserServiceClient for all tests
         when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
-        when(tokenServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
+        when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
         doNothing().when(tokenServiceClient).deductBalance(any(), any(), anyLong());
         doNothing().when(tokenServiceClient).creditBalance(any(), any(), anyLong());
 
