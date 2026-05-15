@@ -1,0 +1,91 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+Sber DLMM (Dynamic Liquidity Market Maker) — Spring Boot 3.2.5 / Java 21 microservices backend (Maven multi-module) plus two React 18 + Vite + Ant Design frontends (admin + user). All inter-service traffic flows through `dlmm-gateway` (Spring Cloud Gateway). Persistence is PostgreSQL 16 + Liquibase, eventing is Kafka, cache and rate-limiting state live in Redis, analytics in ClickHouse.
+
+## Common commands
+
+Run from repo root unless noted.
+
+**Backend (Maven multi-module, parent `pom.xml`):**
+```bash
+mvn -DskipTests package                       # build everything
+mvn -pl dlmm-pool-engine -am package          # build one module + its deps
+mvn -pl dlmm-pool-engine spring-boot:run      # run one service locally (needs Postgres/Redis/Kafka up)
+mvn -pl dlmm-pool-engine test                 # run module tests
+mvn -pl dlmm-pool-engine test -Dtest=SwapServiceTest                       # single test class
+mvn -pl dlmm-pool-engine test -Dtest=SwapServiceTest#shouldExecuteSwap     # single test method
+```
+Note: there is **no surefire/JaCoCo plugin configured** — `mvn test` only picks up tests via Spring Boot's default. Test coverage is currently very thin (only `dlmm-common` and `dlmm-pool-engine` ship tests).
+
+**Full stack (Docker Compose):**
+```bash
+cd docker && docker-compose up -d             # brings up infra + all 10 services + 2 UIs
+docker-compose logs -f dlmm-pool-engine       # tail one service
+docker-compose down -v                        # full reset (drops volumes / Postgres data)
+```
+Compose builds each Java service via the root `Dockerfile` with `--build-arg MODULE=dlmm-xxx` (multi-stage Maven → JRE). Frontends use `Dockerfile.frontend` / `Dockerfile.user-frontend`.
+
+**Frontends (standalone dev):**
+```bash
+cd dlmm-admin-ui && npm install && npm run dev   # http://localhost:3000
+cd dlmm-user-ui  && npm install && npm run dev   # http://localhost:3001
+npm run build                                    # tsc + vite build (TS errors fail the build)
+```
+Both Vite dev servers proxy `/api` → `http://localhost:8080` (the gateway). The admin UI also has `src/api/mockApi.ts` (axios-mock-adapter) which can run the UI without a backend — see `setupMockApi()`.
+
+## Architecture (the parts that aren't obvious from a single file)
+
+### Service map and ports
+| Service | Port | Role |
+|---|---|---|
+| `dlmm-gateway` | 8080 | Spring Cloud Gateway. Single public entry point. JWT validation, rate limiting (Redis), route table in `dlmm-gateway/src/main/resources/application.yml` |
+| `dlmm-user-service` | 8081 | Auth (login/register/refresh), users, KYC |
+| `dlmm-token-service` | 8082 | Tokens + user balances |
+| `dlmm-pool-engine` | 8083 | Core DLMM math: bins, liquidity, swaps. Has scheduling for liquidity ops |
+| `dlmm-fee-service` | 8084 | Fee calc and distribution |
+| `dlmm-transaction-service` | 8085 | Transaction recording, settlement |
+| `dlmm-price-oracle` | 8086 | Price feed aggregation |
+| `dlmm-notification-service` | 8087 | Kafka-driven notifications |
+| `dlmm-admin-bff` | 8088 | BFF aggregating admin endpoints |
+| `dlmm-common` | (lib) | Shared DTOs, enums, exceptions, `BinMath`, `FeeCalculator`, `GlobalExceptionHandler` |
+| `dlmm-admin-ui` | 3000 | React/AntD admin |
+| `dlmm-user-ui` | 3001 | React/AntD user-facing |
+
+### Auth flow — important
+1. Client posts to `/api/v1/auth/login` (gateway skips auth for `/auth/{login,register,refresh}` and `/actuator/**`).
+2. `dlmm-user-service` issues a JWT (HS256, secret in `dlmm.jwt.secret`).
+3. Gateway's `JwtValidationFilter` validates every other request, decodes claims, and **injects `X-User-Id`, `X-User-Role`, `X-Kyc-Status` headers** into the upstream request.
+4. Each downstream service has its own `JwtAuthenticationFilter` + `JwtTokenProvider` that re-validates the token and builds `Authentication`. **Yes, this is duplicated** across 7 services (~939 lines total) — see "Known debt" below.
+
+### Kafka topics
+Defined in `docker/init-kafka-topics.sh`: `user-events`, `token-events`, `pool-events`, `fee-events`. Each is 3 partitions, RF=1. `dlmm-notification-service` consumes; producers live in the corresponding domain services.
+
+### Database
+Single Postgres database `dlmm`, user `dlmm`, password `dlmm_secret` (dev default). Schema is bootstrapped by `docker/init-db.sql` (~470 lines) — Liquibase is wired with `validate-on-migrate`, **not auto-update**, so schema changes require a Liquibase changeset, not just an entity edit. JPA `ddl-auto: validate` enforces this.
+
+### Frontend conventions
+- API client: `src/api/client.ts` in both UIs — single Axios instance, `baseURL: '/api/v1'`, request interceptor adds `Bearer` from `authStore` (Zustand), response interceptor force-redirects to `/login` on 401.
+- State: only auth is in Zustand. Server state is React Query (`@tanstack/react-query`). Don't add Redux.
+- Routing: React Router 6 with `ProtectedRoute` / `ProtectedLayout` wrappers (see `src/routes` or `src/components`).
+- UI kit: Ant Design 5 + Pro Components. No design system layer — pages call AntD directly.
+- TS strictness: `noUnusedLocals`/`noUnusedParams` are intentionally disabled in `tsconfig.json` (commit `700a185`).
+
+## Conventions worth knowing
+
+- **Java 21** with Lombok and MapStruct annotation processors (configured in root `pom.xml`). `mvn idea:idea` / IDE annotation-processing must be enabled.
+- **All HTTP exceptions** go through `dlmm-common`'s `GlobalExceptionHandler` — throw `DlmmException` (with error code) rather than building `ResponseEntity` manually.
+- **No service-to-service circuit breaker** is configured (no Resilience4j). Inter-service calls are bare `RestTemplate`/`WebClient`.
+- **Default JWT secret** in committed `application.yml` files is `change-me-in-production-...` — always overridden via `JWT_SECRET` env in Compose. Don't commit a real secret.
+- **Actuator** is enabled per service: `/actuator/health,info,metrics,prometheus`.
+- **Swagger** is per service: `http://localhost:<port>/swagger-ui.html`, OpenAPI JSON at `/v3/api-docs`.
+
+## Known debt (relevant context for changes)
+
+- JWT filter + provider duplicated across 7 services. If you touch auth in one service, check whether the same change is needed in the others, or push the shared code into `dlmm-common`.
+- Tests exist only in `dlmm-common` (BinMath, FeeCalculator) and `dlmm-pool-engine` (Swap, Liquidity, FullSwapFlowIT). New business logic should land with tests.
+- No root README, no architecture diagram. Service `pom.xml` `<description>` tags are the only inline docs.
+- `docker-compose.yml` ships plaintext `dlmm_secret` for Postgres — fine for local, do not reuse.

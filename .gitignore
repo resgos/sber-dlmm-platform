@@ -13,6 +13,11 @@ target/
 # Node
 dlmm-admin-ui/node_modules/
 dlmm-admin-ui/dist/
+dlmm-user-ui/node_modules/
+dlmm-user-ui/dist/
+
+# Worktree-local config
+.claude/launch.json
 
 # OS
 .DS_Store
