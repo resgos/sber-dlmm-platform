@@ -159,10 +159,17 @@ public class PoolController {
 
     private JwtUserDetails getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getDetails() == null || !(auth.getDetails() instanceof JwtUserDetails)) {
+        if (auth == null || !auth.isAuthenticated() || auth.getPrincipal() == null
+                || "anonymousUser".equals(auth.getPrincipal())) {
             throw new ForbiddenException("Authentication required");
         }
-        return (JwtUserDetails) auth.getDetails();
+        String userId = auth.getPrincipal().toString();
+        String kycStatus = auth.getCredentials() == null ? null : auth.getCredentials().toString();
+        String role = auth.getAuthorities().stream()
+                .map(a -> a.getAuthority().startsWith("ROLE_") ? a.getAuthority().substring(5) : a.getAuthority())
+                .findFirst()
+                .orElse(null);
+        return new JwtUserDetails(userId, role, kycStatus);
     }
 
     private void requireAdmin(JwtUserDetails user) {
