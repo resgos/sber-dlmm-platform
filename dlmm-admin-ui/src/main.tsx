@@ -8,6 +8,13 @@ import App from './App'
 import 'antd/dist/reset.css'
 import './sber-theme.css'
 
+if (import.meta.env.VITE_USE_MOCKS === 'true') {
+  void import('./api/mockApi').then(({ setupMockApi }) => {
+    setupMockApi()
+    console.info('[dlmm-admin-ui] Mock API enabled (VITE_USE_MOCKS=true)')
+  })
+}
+
 const sberTheme = {
   token: {
     colorPrimary: '#21A038',
