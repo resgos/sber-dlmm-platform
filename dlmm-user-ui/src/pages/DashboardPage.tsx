@@ -74,9 +74,37 @@ export default function DashboardPage() {
     return <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
   }
 
+  const totalEarned = (feeSummary?.totalClaimed ?? 0) + (feeSummary?.totalUnclaimed ?? 0)
+  const earnedDelta = totalBalanceRub > 0 ? (totalEarned / totalBalanceRub) * 100 : 0
+
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
-      <Title level={4} className="sber-page-title">Портфель</Title>
+      {/* Hero — gradient lockup with the headline portfolio number */}
+      <div className="sber-hero">
+        <Row gutter={[24, 16]} align="middle">
+          <Col xs={24} md={14}>
+            <div className="sber-hero-title">Ваш портфель</div>
+            <div className="sber-hero-value">{formatRub(totalBalanceRub)}</div>
+            <div className="sber-hero-meta" style={{ marginTop: 6 }}>
+              {activePositions.length} активн{activePositions.length === 1 ? 'ая' : 'ых'} позици
+              {activePositions.length === 1 ? 'я' : 'й'} · доход {formatRub(totalEarned)}
+              {earnedDelta > 0 && ` (+${earnedDelta.toFixed(2)}%)`}
+            </div>
+          </Col>
+          <Col xs={24} md={10} style={{ textAlign: 'right' }}>
+            <Space size={12} wrap>
+              <Button size="large" onClick={() => navigate('/swap')}
+                style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)', color: '#fff' }}>
+                Обменять
+              </Button>
+              <Button size="large" onClick={() => navigate('/pools')}
+                style={{ background: '#fff', borderColor: '#fff', color: '#0E6B1E', fontWeight: 600 }}>
+                В пулы <ArrowRightOutlined />
+              </Button>
+            </Space>
+          </Col>
+        </Row>
+      </div>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>

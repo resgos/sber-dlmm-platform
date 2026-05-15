@@ -1,6 +1,6 @@
-// In-memory auth store (compatible with sandboxed environments)
-let _token: string | null = null
-let _user: StoredUser | null = null
+// Persistent auth store backed by localStorage. Survives F5 / iframe reloads.
+const TOKEN_KEY = 'dlmm.admin.token'
+const USER_KEY = 'dlmm.admin.user'
 
 export interface StoredUser {
   userId: string
@@ -8,37 +8,42 @@ export interface StoredUser {
   role: string
 }
 
+function safeRead<T>(key: string, parse: (raw: string) => T): T | null {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 export const authStore = {
-  getToken: (): string | null => {
-    return _token
-  },
+  getToken: (): string | null => safeRead(TOKEN_KEY, (s) => s),
 
   setToken: (token: string): void => {
-    _token = token
+    try { localStorage.setItem(TOKEN_KEY, token) } catch { /* ignore */ }
   },
 
   removeToken: (): void => {
-    _token = null
+    try { localStorage.removeItem(TOKEN_KEY) } catch { /* ignore */ }
   },
 
-  getUser: (): StoredUser | null => {
-    return _user
-  },
+  getUser: (): StoredUser | null => safeRead(USER_KEY, (s) => JSON.parse(s) as StoredUser),
 
   setUser: (user: StoredUser): void => {
-    _user = user
+    try { localStorage.setItem(USER_KEY, JSON.stringify(user)) } catch { /* ignore */ }
   },
 
   removeUser: (): void => {
-    _user = null
+    try { localStorage.removeItem(USER_KEY) } catch { /* ignore */ }
   },
 
-  isAuthenticated: (): boolean => {
-    return !!_token
-  },
+  isAuthenticated: (): boolean => !!safeRead(TOKEN_KEY, (s) => s),
 
   logout: (): void => {
-    _token = null
-    _user = null
+    try {
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(USER_KEY)
+    } catch { /* ignore */ }
   },
 }

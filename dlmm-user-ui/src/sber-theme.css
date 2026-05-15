@@ -1,10 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
   --sber-green: #21A038;
   --sber-green-hover: #1C8A30;
   --sber-green-light: #E8F5E9;
   --sber-green-dark: #0E6B1E;
+  --sber-green-vibrant: #00C853;
+  --sber-green-deep: #006B3F;
+  --sber-aqua: #00B5A1;
+  --sber-violet: #6E5BFF;
+  --sber-amber: #FFB320;
+
+  /* Brand gradients (used on hero cards, primary CTAs, login backdrop) */
+  --grad-brand: linear-gradient(135deg, #21A038 0%, #00C853 50%, #00B5A1 100%);
+  --grad-brand-soft: linear-gradient(135deg, #E8F5E9 0%, #DDF8E5 50%, #DAF7F0 100%);
+  --grad-aurora: radial-gradient(at 20% 10%, rgba(33,160,56,0.18), transparent 60%),
+                  radial-gradient(at 90% 0%, rgba(0,181,161,0.14), transparent 55%),
+                  radial-gradient(at 50% 100%, rgba(110,91,255,0.10), transparent 60%);
+  --grad-night: linear-gradient(135deg, #0E6B1E 0%, #006B3F 50%, #003B49 100%);
+
   --bg-page: #F3F4F6;
   --bg-card: #FFFFFF;
   --bg-sidebar: #FFFFFF;
@@ -13,6 +27,18 @@
   --text-primary: #1F2937;
   --text-secondary: #6B7280;
   --text-muted: #9CA3AF;
+
+  /* Modern shadow ramp */
+  --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-sm: 0 2px 8px rgba(15,23,42,0.05);
+  --shadow-md: 0 8px 24px rgba(15,23,42,0.06);
+  --shadow-lg: 0 24px 48px rgba(15,23,42,0.10);
+  --shadow-glow: 0 12px 32px rgba(33,160,56,0.30);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 28px;
 }
 
 body {
@@ -129,14 +155,176 @@ body {
   color: #0EA5E9;
 }
 
-/* Login page */
+/* ──────────────────────────────────────────────────────────────────────────
+   "Sber 2026" — modern visual layer (auth pages, hero cards, bento dashboard)
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Login / register backdrop with aurora gradient + animated bokeh */
 .sber-login-bg {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #F3F4F6;
+  background-color: #F8FAF9;
+  background-image: var(--grad-aurora);
+  overflow: hidden;
 }
+.sber-login-bg::before,
+.sber-login-bg::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 0;
+}
+.sber-login-bg::before {
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(circle, #21A038 0%, transparent 70%);
+  top: -120px;
+  right: -120px;
+  animation: sber-bokeh-a 14s ease-in-out infinite;
+}
+.sber-login-bg::after {
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, #00B5A1 0%, transparent 70%);
+  bottom: -100px;
+  left: -100px;
+  animation: sber-bokeh-b 16s ease-in-out infinite;
+}
+@keyframes sber-bokeh-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-30px, 40px) scale(1.08); }
+}
+@keyframes sber-bokeh-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(40px, -30px) scale(1.10); }
+}
+
+/* Glassmorphism auth card */
+.sber-glass-card {
+  position: relative;
+  z-index: 1;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  border-radius: var(--radius-xl) !important;
+  border: 1px solid rgba(255, 255, 255, 0.65) !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(33,160,56,0.05) !important;
+  overflow: hidden;
+}
+.sber-glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(at 80% 0%, rgba(33,160,56,0.10), transparent 50%),
+    radial-gradient(at 0% 100%, rgba(0,181,161,0.08), transparent 50%);
+  pointer-events: none;
+}
+.sber-glass-card .ant-card-body { position: relative; padding: 44px !important; }
+
+.sber-brand-mark {
+  width: 64px;
+  height: 64px;
+  border-radius: 22px;
+  background: var(--grad-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-glow);
+  margin: 0 auto;
+}
+.sber-brand-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--text-primary);
+}
+.sber-brand-title-accent {
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Primary buttons — gradient + soft glow on hover */
+.sber-btn-primary,
+.ant-btn-primary {
+  background: var(--grad-brand) !important;
+  border: none !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.1px;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.ant-btn-primary:hover {
+  filter: brightness(1.05);
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+.ant-btn-primary:active { transform: translateY(0); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Hero card (used at top of dashboards) — gradient + currency lockup
+   ────────────────────────────────────────────────────────────────────────── */
+.sber-hero {
+  position: relative;
+  border-radius: var(--radius-xl);
+  padding: 28px 32px;
+  color: #FFFFFF;
+  background: var(--grad-brand);
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow: var(--shadow-md);
+}
+.sber-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(at 80% 20%, rgba(255,255,255,0.18), transparent 50%),
+    radial-gradient(at 20% 100%, rgba(0,0,0,0.15), transparent 60%);
+  pointer-events: none;
+}
+.sber-hero-title { font-size: 13px; font-weight: 500; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.6px; }
+.sber-hero-value { font-size: 34px; font-weight: 700; letter-spacing: -0.6px; line-height: 1.15; }
+.sber-hero-meta { font-size: 13px; opacity: 0.85; }
+
+/* Bento tile — modern stat card */
+.sber-bento {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--border-light) !important;
+  background: #FFFFFF !important;
+  box-shadow: var(--shadow-xs) !important;
+  transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.2s ease;
+}
+.sber-bento:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md) !important;
+  border-color: rgba(33,160,56,0.45) !important;
+}
+.sber-bento .ant-card-body { padding: 20px 22px !important; }
+
+/* Trend chip — used on dashboards next to numbers */
+.sber-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: #ECFDF5;
+  color: #047857;
+}
+.sber-trend.down { background: #FEF2F2; color: #B91C1C; }
+.sber-trend.flat { background: #F3F4F6; color: #4B5563; }
 
 /* Tag badges */
 .sber-badge {

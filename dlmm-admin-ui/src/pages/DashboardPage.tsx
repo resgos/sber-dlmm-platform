@@ -107,9 +107,25 @@ export default function DashboardPage() {
 
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
-      <Title level={4} className="sber-page-title">
-        Обзор платформы
-      </Title>
+      {/* Hero — gradient lockup with platform-wide TVL */}
+      <div className="sber-hero">
+        <Row gutter={[24, 16]} align="middle">
+          <Col xs={24} md={16}>
+            <div className="sber-hero-title">Total Value Locked</div>
+            <div className="sber-hero-value">{formatRub(dashboard?.totalTvlRub ?? 0)}</div>
+            <div className="sber-hero-meta" style={{ marginTop: 6 }}>
+              {dashboard?.activePools ?? 0} активных пул
+              {(dashboard?.activePools ?? 0) === 1 ? '' : 'ов'} ·{' '}
+              {(dashboard?.totalUsers ?? 0).toLocaleString('ru-RU')} пользователей ·{' '}
+              объём 24ч {formatRub(dashboard?.volume24hRub ?? 0)}
+            </div>
+          </Col>
+          <Col xs={24} md={8} style={{ textAlign: 'right' }}>
+            <div className="sber-hero-title">Комиссия за всё время</div>
+            <div className="sber-hero-value">{formatRub(dashboard?.totalFeesCollectedRub ?? 0)}</div>
+          </Col>
+        </Row>
+      </div>
 
       {/* Row 1: Users and Pools */}
       <Row gutter={[16, 16]}>
