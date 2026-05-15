@@ -254,9 +254,9 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (create
 
 -- users (default password for all seed users: Demo1234)
 INSERT INTO users (id, sber_id, email, phone, first_name, last_name, kyc_status, role, password_hash) VALUES
-  ('a0000000-0000-0000-0000-000000000001', 'SBER-ADMIN-001', 'admin@sber-dlmm.ru',  '+79001000001', 'Иван',   'Петров',   'APPROVED', 'ADMIN',     '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
-  ('a0000000-0000-0000-0000-000000000002', 'SBER-USR-10042', 'ivanov@example.com',  '+79001000002', 'Алексей','Иванов',   'APPROVED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
-  ('a0000000-0000-0000-0000-000000000003', 'SBER-USR-20017', 'sidorov@example.com', '+79001000003', 'Мария',  'Сидорова', 'APPROVED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
+  ('a0000000-0000-0000-0000-000000000001', 'SBER-ADMIN-001', 'admin@sber-dlmm.ru',  '+79001000001', 'Иван',   'Петров',   'VERIFIED', 'ADMIN',     '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
+  ('a0000000-0000-0000-0000-000000000002', 'SBER-USR-10042', 'ivanov@example.com',  '+79001000002', 'Алексей','Иванов',   'VERIFIED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
+  ('a0000000-0000-0000-0000-000000000003', 'SBER-USR-20017', 'sidorov@example.com', '+79001000003', 'Мария',  'Сидорова', 'VERIFIED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
   ('a0000000-0000-0000-0000-000000000004', 'SBER-USR-99901', 'suspect@example.com', '+79001000099', 'Сергей', 'Попов',    'PENDING',  'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS')
 ON CONFLICT DO NOTHING;
 
