@@ -1,1 +1,2 @@
 com.sber.dlmm.common.security.DlmmJwtAutoConfiguration
+com.sber.dlmm.common.security.DlmmWebClientAutoConfiguration

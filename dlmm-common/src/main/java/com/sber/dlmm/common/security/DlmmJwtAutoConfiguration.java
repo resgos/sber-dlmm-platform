@@ -4,22 +4,18 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.web.reactive.function.client.WebClientCustomizer;
 import org.springframework.context.annotation.Bean;
 
 /**
- * Auto-registers JWT support across the platform:
- * <ul>
- *   <li>{@link JwtTokenProvider} + {@link JwtAuthenticationFilter} for inbound
- *       JWT validation on servlet-stack services (gateway is reactive and has
- *       its own {@code JwtValidationFilter} — guarded by {@code @ConditionalOnClass}
- *       on {@code OncePerRequestFilter}).</li>
- *   <li>{@link WebClientCustomizer} that installs
- *       {@link BearerTokenForwardingFilter} on every {@code WebClient.Builder}
- *       in the context — so service-to-service WebClient calls automatically
- *       carry the inbound caller's Bearer token. Without this, downstream
- *       services protected by JWT reject the call with 403.</li>
- * </ul>
+ * Auto-registers {@link JwtTokenProvider} and {@link JwtAuthenticationFilter}
+ * for inbound JWT validation on servlet-stack services. Gateway (reactive,
+ * no servlet) is unaffected because the {@code @ConditionalOnClass} guard
+ * skips registration when {@code OncePerRequestFilter} isn't present.
+ *
+ * The Bearer-forwarding {@link org.springframework.boot.web.reactive.function.client.WebClientCustomizer}
+ * lives in {@link DlmmWebClientAutoConfiguration} so that services without
+ * spring-webflux on the classpath (e.g. user-service) don't fail bean
+ * introspection.
  */
 @AutoConfiguration
 @ConditionalOnClass(name = "org.springframework.web.filter.OncePerRequestFilter")
@@ -35,15 +31,5 @@ public class DlmmJwtAutoConfiguration {
     @ConditionalOnMissingBean
     public JwtAuthenticationFilter dlmmJwtAuthenticationFilter(JwtTokenProvider provider) {
         return new JwtAuthenticationFilter(provider);
-    }
-
-    /**
-     * Applied to every {@code WebClient.Builder} bean — propagates inbound
-     * {@code Authorization} header onto outgoing WebClient calls when present.
-     */
-    @Bean
-    @ConditionalOnClass(name = "org.springframework.web.reactive.function.client.WebClient")
-    public WebClientCustomizer dlmmBearerForwardingCustomizer() {
-        return builder -> builder.filter(BearerTokenForwardingFilter.create());
     }
 }
