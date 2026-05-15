@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:5432/dlmm
     username: ${DB_USER:dlmm}
-    password: ${DB_PASS:dlmm_secret}
+    password: ${DB_PASSWORD:?DB_PASSWORD env var is required}
   jpa:
     hibernate:
       ddl-auto: validate

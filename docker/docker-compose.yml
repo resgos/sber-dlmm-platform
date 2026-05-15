@@ -10,11 +10,12 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_DB: dlmm
-      POSTGRES_USER: dlmm
-      POSTGRES_PASSWORD: dlmm_secret
+      POSTGRES_USER: ${DB_USER:-dlmm}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql
+      - ./02-extended-assets.sql:/docker-entrypoint-initdb.d/02-extended-assets.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dlmm -d dlmm"]
       interval: 10s
@@ -100,11 +101,11 @@ services:
       - "8080:8080"
     environment:
       DB_HOST: postgres
-      DB_USER: dlmm
-      DB_PASS: dlmm_secret
+      DB_USER: ${DB_USER:-dlmm}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
-      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
       USER_SERVICE_URL: http://dlmm-user-service:8081
       TOKEN_SERVICE_URL: http://dlmm-token-service:8082
       POOL_ENGINE_URL: http://dlmm-pool-engine:8083
@@ -132,11 +133,11 @@ services:
       - "8081:8080"
     environment:
       DB_HOST: postgres
-      DB_USER: dlmm
-      DB_PASS: dlmm_secret
+      DB_USER: ${DB_USER:-dlmm}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
-      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -158,11 +159,11 @@ services:
       - "8082:8080"
     environment:
       DB_HOST: postgres
-      DB_USER: dlmm
-      DB_PASS: dlmm_secret
+      DB_USER: ${DB_USER:-dlmm}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
-      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -179,16 +180,22 @@ services:
       dockerfile: Dockerfile
       args:
         MODULE: dlmm-pool-engine
+    # NOTE: TOKEN_SERVICE_URL is set below — pool-engine WebClient depends on
+    # it for swap/balance forwarding. Without it, default localhost:8082 is
+    # used (which inside docker is the pool-engine container itself, not
+    # token-service) — swaps would fail with Connection refused.
     container_name: dlmm-pool-engine
     ports:
       - "8083:8080"
     environment:
       DB_HOST: postgres
-      DB_USER: dlmm
-      DB_PASS: dlmm_secret
+      DB_USER: ${DB_USER:-dlmm}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
-      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
+      TOKEN_SERVICE_URL: http://dlmm-token-service:8082
     depends_on:
       postgres:
         condition: service_healthy
@@ -210,11 +217,11 @@ services:
       - "8084:8080"
     environment:
       DB_HOST: postgres
-      DB_USER: dlmm
-      DB_PASS: dlmm_secret
+      DB_USER: ${DB_USER:-dlmm}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
-      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -236,11 +243,11 @@ services:
       - "8085:8080"
     environment:
       DB_HOST: postgres
-      DB_USER: dlmm
-      DB_PASS: dlmm_secret
+      DB_USER: ${DB_USER:-dlmm}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
-      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -260,11 +267,11 @@ services:
       - "8086:8080"
     environment:
       DB_HOST: postgres
-      DB_USER: dlmm
-      DB_PASS: dlmm_secret
+      DB_USER: ${DB_USER:-dlmm}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
-      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -286,11 +293,11 @@ services:
       - "8087:8080"
     environment:
       DB_HOST: postgres
-      DB_USER: dlmm
-      DB_PASS: dlmm_secret
+      DB_USER: ${DB_USER:-dlmm}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
-      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -310,11 +317,11 @@ services:
       - "8088:8080"
     environment:
       DB_HOST: postgres
-      DB_USER: dlmm
-      DB_PASS: dlmm_secret
+      DB_USER: ${DB_USER:-dlmm}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
-      JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
       USER_SERVICE_URL: http://dlmm-user-service:8081
       TOKEN_SERVICE_URL: http://dlmm-token-service:8082
       POOL_ENGINE_URL: http://dlmm-pool-engine:8083

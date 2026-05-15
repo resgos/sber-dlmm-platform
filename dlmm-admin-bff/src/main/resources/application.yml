@@ -7,7 +7,7 @@ server:
 
 dlmm:
   jwt:
-    secret: ${JWT_SECRET:change-me-in-production-256-bit-minimum-secret-key}
+    secret: ${JWT_SECRET:?JWT_SECRET env var is required (≥32 bytes)}
     access-token-expiry-minutes: 30
   services:
     user-service-url: ${USER_SERVICE_URL:http://localhost:8081}

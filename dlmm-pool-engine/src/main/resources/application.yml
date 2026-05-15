@@ -6,9 +6,9 @@ spring:
     name: dlmm-pool-engine
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/dlmm_pools
-    username: ${DB_USERNAME:dlmm}
-    password: ${DB_PASSWORD:dlmm_secret}
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/${DB_NAME:dlmm}
+    username: ${DB_USER:dlmm}
+    password: ${DB_PASSWORD:?DB_PASSWORD env var is required}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 20
@@ -56,10 +56,10 @@ springdoc:
 
 dlmm:
   jwt:
-    secret: ${JWT_SECRET:c2Jlci1kbG1tLXBsYXRmb3JtLXN1cGVyLXNlY3JldC1rZXktZm9yLWp3dC10b2tlbi1zaWduaW5n}
+    secret: ${JWT_SECRET:?JWT_SECRET env var is required (≥32 bytes)}
   services:
     token-service:
-      url: ${TOKEN_SERVICE_URL:http://localhost:8081}
+      url: ${TOKEN_SERVICE_URL:http://localhost:8082}
 
 logging:
   level:
@@ -72,7 +72,48 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info,metrics,prometheus,circuitbreakers,retries,timelimiters
   endpoint:
     health:
       show-details: when-authorized
+    circuitbreakers:
+      enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+
+# ─── Resilience4j: protect inter-service WebClient calls (token-service) ──────
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 20
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      token-service:
+        base-config: default
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 200ms
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientRequestException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+    instances:
+      token-service:
+        base-config: default
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 3s
+        cancel-running-future: true
+    instances:
+      token-service:
+        base-config: default

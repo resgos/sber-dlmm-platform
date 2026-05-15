@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:5432/dlmm
     username: ${DB_USER:dlmm}
-    password: ${DB_PASS:dlmm_secret}
+    password: ${DB_PASSWORD:?DB_PASSWORD env var is required}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -25,7 +25,7 @@ server:
 
 dlmm:
   jwt:
-    secret: ${JWT_SECRET:change-me-in-production-256-bit-minimum}
+    secret: ${JWT_SECRET:?JWT_SECRET env var is required (≥32 bytes)}
   token-service:
     url: ${TOKEN_SERVICE_URL:http://dlmm-token-service:8082}
 
