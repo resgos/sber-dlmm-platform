@@ -39,6 +39,7 @@
         <clickhouse-jdbc.version>0.6.0</clickhouse-jdbc.version>
         <testcontainers.version>1.19.7</testcontainers.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
+        <resilience4j.version>2.2.0</resilience4j.version>
     </properties>
 
     <dependencyManagement>
@@ -98,6 +99,16 @@
                 <groupId>com.sber.dlmm</groupId>
                 <artifactId>dlmm-common</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-spring-boot3</artifactId>
+                <version>${resilience4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-reactor</artifactId>
+                <version>${resilience4j.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
