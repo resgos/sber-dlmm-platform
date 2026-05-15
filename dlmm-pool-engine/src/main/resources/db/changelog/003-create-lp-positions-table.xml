@@ -6,6 +6,9 @@
                             http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
 
     <changeSet id="003-create-lp-positions-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="lp_positions"/></not>
+        </preConditions>
         <createTable tableName="lp_positions">
             <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
                 <constraints primaryKey="true" nullable="false"/>

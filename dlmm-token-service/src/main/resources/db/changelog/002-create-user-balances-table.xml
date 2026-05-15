@@ -6,6 +6,9 @@
                             http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
 
     <changeSet id="002-create-user-balances-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="user_balances"/></not>
+        </preConditions>
         <createTable tableName="user_balances">
             <column name="user_id" type="UUID">
                 <constraints nullable="false" primaryKey="true" primaryKeyName="pk_user_balances"/>
