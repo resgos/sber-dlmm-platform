@@ -1,11 +1,62 @@
 # Sber DLMM Platform — Отчёт об улучшениях
 
 **Сессия:** 2026-05-15
-**Объём:** ~9 фаз работы по согласованному плану. Все изменения локальны worktree `claude/elated-elgamal-dba521` — ничего не запушено и не закомичено.
+**Объём:** Большая итерация рефакторинга + второй проход «как senior» с фокусом на регрессионное покрытие и закрытие основного swap-флоу.
+
+## TL;DR
+
+- **Главное достижение второго прохода:** swap end-to-end через UI работает.
+  Доказано на живом стеке: `POST /api/v1/pools/swap` → 200, txId, баланс пользователя
+  правильно меняется. До этого захода swap **никогда** не работал в проекте — pool-engine
+  падал на 403 ещё на стадии Bearer-token forwarding к token-service. Теперь — 18/18
+  свопов через 18 новых пулов, ~1 030 614 RUB объёма, ~2 208 RUB комиссии (avg ~21 bps).
+- **96 unit тестов проходят** (61 в dlmm-common + 35 в dlmm-pool-engine), включая 23
+  новых regression теста для security-инфры.
+- **15 атомарных коммитов** разбитых по логическим scope (security, infra, seed, UI,
+  tests, fixes) — `git log main..HEAD` читается, каждый можно ревьюить независимо.
+- Что **ещё не работает**: `admin/dashboard` 403 (BFF proxy таймаутит) — отдельный
+  legacy баг в `AdminService`/`AdminProxyController`, не закрыт.
 
 ---
 
 ## Что сделано
+
+## Второй проход (как senior, с диалогом руководитель ↔ системный аналитик)
+
+После критики первого прохода руководитель и СА согласовали короткий план:
+swap починить, JWT покрыть тестами, TokenType зафиксировать regression-тестом,
+коммитить атомарно. Что сделано:
+
+| # | Что | Acceptance |
+|---|---|---|
+| 1 | **Bearer-token forwarding** — общий `BearerTokenForwardingFilter` + `WebClientCustomizer` через autoconfig | Pool-engine WebClient достучался до downstream сервисов с auth-header'ом; admin-bff клиенты тоже подхватили |
+| 2 | **`UserServiceClient` отделён** — `isUserKycVerified` теперь смотрит в правильный сервис (был баг: метод жил в `TokenServiceClient` с базой token-service) | KYC check end-to-end работает |
+| 3 | **`/users/internal/{id}/kyc` endpoint** добавлен в user-service | Возвращает `{verified}` на основе `kyc_status` |
+| 4 | **`/tokens/internal/{deduct,credit}` endpoints** добавлены в token-service | Атомарные операции через `UserBalanceRepository` |
+| 5 | **`DlmmWebClientAutoConfiguration` отделён** от `DlmmJwtAutoConfiguration` | user-service (без spring-webflux) больше не падает на NoClassDefFoundError WebClient$Builder |
+| 6 | **`JwtTokenProviderTest`** — 11 кейсов | validate, parseClaims, getUserId String/UUID, getRole, getRoles (single + array), isRefreshToken, expired, malformed, wrong-signature |
+| 7 | **`JwtAuthenticationFilterTest`** — 5 кейсов через MockHttpServletRequest | access-token populates context, refresh dropped silently, no-bearer untouched, invalid untouched, multi-role array |
+| 8 | **`BearerTokenForwardingFilterTest`** — 4 кейса через WebClient `exchangeFunction` stub | copy on inbound auth, respect explicit override, no-op outside scope, no-op without inbound auth |
+| 9 | **`TokenTypeTest`** — 3 кейса | pinned EXPECTED_NAMES set, valueOf для всех 8, JSON roundtrip |
+| 10 | **`FullSwapFlowIT`** обновлён под новый `UserServiceClient` mock | Testcontainers swap E2E зелёный (~13 swap-сценариев включая slippage, multi-bin, removeLiquidity) |
+| 11 | **15 атомарных коммитов** | `git log main..HEAD` self-contained per scope |
+
+**Real swap simulation на живом стеке:**
+
+```
+=== Aggregated results (REAL swaps, balances mutated) ===
+Successful: 18 / 18,  Failed: 0
+Total volume in (kop SRUB): 103 061 400  (~1 030 614 RUB)
+Total fees collected (kop SRUB): 220 862  (~2 208 RUB)
+Average fee rate: ~21 bps
+```
+
+Балансы юзера ivanov реально изменились: SRUB 50_000_000_000 → 49_990_000_000
+после 10M свопа; TATN 0 → 13854 credited. То же повторено для 17 других пулов.
+
+---
+
+## Первый проход (детально)
 
 ### Фаза 1 — Smoke-verification baseline
 До правок зафиксированы реальные баги:

@@ -83,9 +83,70 @@ Single Postgres database `dlmm`, user `dlmm`, password `dlmm_secret` (dev defaul
 - **Actuator** is enabled per service: `/actuator/health,info,metrics,prometheus`.
 - **Swagger** is per service: `http://localhost:<port>/swagger-ui.html`, OpenAPI JSON at `/v3/api-docs`.
 
-## Known debt (relevant context for changes)
+## Recent fixes (post-feaecfa baseline)
 
-- JWT filter + provider duplicated across 7 services. If you touch auth in one service, check whether the same change is needed in the others, or push the shared code into `dlmm-common`.
-- Tests exist only in `dlmm-common` (BinMath, FeeCalculator) and `dlmm-pool-engine` (Swap, Liquidity, FullSwapFlowIT). New business logic should land with tests.
-- No root README, no architecture diagram. Service `pom.xml` `<description>` tags are the only inline docs.
-- `docker-compose.yml` ships plaintext `dlmm_secret` for Postgres — fine for local, do not reuse.
+The session under `claude/elated-elgamal-dba521` closed several blockers and
+the major shared-infra refactors below. Read this before assuming the codebase
+matches the original feaecfa state:
+
+- **JWT consolidated in `dlmm-common`** — `JwtTokenProvider` + `JwtAuthenticationFilter`
+  are now in `com.sber.dlmm.common.security` and auto-registered via
+  `DlmmJwtAutoConfiguration`. Per-service copies (7 of each) were deleted.
+  Note: the shared filter **rejects refresh tokens on business endpoints**
+  (only valid against `/auth/refresh`) — this is stricter than some old
+  per-service filters were.
+- **Bearer-token forwarding on outbound WebClient calls** — `BearerTokenForwardingFilter`
+  + `DlmmWebClientAutoConfiguration` install a `WebClientCustomizer` that copies
+  the inbound `Authorization` header onto outgoing `WebClient` requests. Without
+  it, `pool-engine -> token-service` and `admin-bff -> downstream` calls returned
+  403. Lives in a dedicated auto-config so user-service (no spring-webflux) doesn't
+  trip on `WebClient$Builder` introspection.
+- **`UserServiceClient` split out of `TokenServiceClient`** — `isUserKycVerified`
+  now points at `dlmm-user-service` (it always was supposed to). Requires
+  `USER_SERVICE_URL` env (set in compose).
+- **Swap pipeline now functional end-to-end.** Two missing pieces were added:
+  `GET /api/v1/users/internal/{id}/kyc` in user-service and
+  `POST /api/v1/tokens/internal/{deduct,credit}` in token-service. Verified
+  against the live stack (real swap, balance mutations match).
+- **Resilience4j** on pool-engine `TokenServiceClient` and `UserServiceClient`
+  with circuit-breaker + retry + timeout. KYC fallback is **fail-closed**
+  (treats user as not verified on user-service outage).
+- **Liquibase preConditions** — every per-service changeset wraps `createTable`
+  in `<preConditions onFail="MARK_RAN"><not><tableExists/></not></preConditions>`
+  so changesets coexist with `init-db.sql`. Tactical — see backlog for the
+  proper split.
+- **TokenType enum extended** with `FIAT_BACKED`, `COMMODITY_BACKED`, `UTILITY`,
+  `INDEX_TOKEN` to match seed data. Pinned by `TokenTypeTest` so future edits
+  are deliberate.
+- **Test coverage grew** — 11 new cases for `JwtTokenProvider`, 5 for
+  `JwtAuthenticationFilter`, 4 for `BearerTokenForwardingFilter`, 3 for
+  `TokenType` (96 unit tests across `dlmm-common` + `dlmm-pool-engine` now
+  green; `FullSwapFlowIT` Testcontainers swap E2E updated to mock `UserServiceClient`).
+- **Secrets out of YAML** — `${DB_PASSWORD:?required}` / `${JWT_SECRET:?required}`,
+  values come from `docker/.env` (gitignored), template in `docker/.env.example`.
+- **Extended catalog seed** — `docker/02-extended-assets.sql` adds 18 tokens
+  (Russian blue-chips, MOEX index tokens, FX-pegged, additional commodities)
+  and 18 pools paired against SRUB. Loaded by postgres entrypoint after
+  `init-db.sql`.
+
+## Known debt (still open)
+
+- **`/api/v1/admin/dashboard` still returns 403** — admin-bff's WebClient
+  forwarding works (Bearer customizer applied), but the BFF's downstream
+  proxy logic times out. Needs separate investigation in
+  `dlmm-admin-bff/AdminService` and `AdminProxyController`.
+- **Liquibase preConditions are a tactical hack.** Future schema changes won't
+  apply on existing DBs (the changeset will be MARK_RAN'd because the table
+  already exists). The proper fix is to remove `CREATE TABLE` from `init-db.sql`
+  and move seed inserts into a Spring `@PostConstruct` runner or a Liquibase
+  `<sqlFile>` step.
+- **Resilience4j** not yet wired in `dlmm-fee-service` and `dlmm-admin-bff`
+  (deps added, annotations not). pool-engine is fully covered.
+- **TokenType extended values** (`FIAT_BACKED` etc.) are not handled in any
+  business logic `switch`. They behave as opaque labels for the catalog UX.
+- `docker/.env` ships dev-default secrets. Production should override via
+  `Vault`/`AWS Secrets Manager`, not this file.
+- `dlmm-pool-engine` returns mojibake-encoded cyrillic in JSON (double UTF-8
+  encoding); affects all backend responses.
+- No CI/CD pipeline, no Helm chart, no DB backup story. See IMPROVEMENTS-REPORT.md
+  for the full systems-analyst review.
