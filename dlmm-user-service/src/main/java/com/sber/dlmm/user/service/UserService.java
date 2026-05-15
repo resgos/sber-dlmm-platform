@@ -136,6 +136,14 @@ public class UserService {
         return toProfileResponse(user);
     }
 
+    /** Used by pool-engine for KYC pre-checks before swap / add-liquidity. */
+    @Transactional(readOnly = true)
+    public boolean isKycVerified(UUID userId) {
+        return userRepository.findById(userId)
+                .map(u -> u.getKycStatus() == com.sber.dlmm.common.enums.KycStatus.VERIFIED)
+                .orElse(false);
+    }
+
     @Transactional
     public UserProfileResponse updateProfile(UUID userId, UpdateProfileRequest req) {
         User user = userRepository.findById(userId)

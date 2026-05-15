@@ -259,6 +259,52 @@ public class TokenService {
                         req.amount(), req.idempotencyKey(), LocalDateTime.now()));
     }
 
+    /**
+     * Internal: deduct token amount from a user's available balance.
+     * Used by pool-engine during swap (debit caller's input token) and
+     * add-liquidity (debit deposited tokens). Throws InsufficientBalanceException
+     * if balance is insufficient — the caller should treat that as a hard fail.
+     */
+    @Transactional
+    public void deductInternal(UUID userId, UUID tokenId, long amount) {
+        Token token = findTokenOrThrow(tokenId);
+        if (!token.isActive()) {
+            throw new IllegalStateException("Token " + token.getSymbol() + " is paused");
+        }
+        int deducted = userBalanceRepository.deductAvailable(userId, tokenId, amount);
+        if (deducted == 0) {
+            throw new InsufficientBalanceException(
+                    "Insufficient available balance for user " + userId + " token " + token.getSymbol());
+        }
+        log.info("Internal deduct: user={} token={} amount={}", userId, token.getSymbol(), amount);
+    }
+
+    /**
+     * Internal: credit token amount to a user's available balance.
+     * Used by pool-engine during swap (credit caller's output token) and
+     * remove-liquidity (return withdrawn tokens). Creates the balance row
+     * if it doesn't exist yet.
+     */
+    @Transactional
+    public void creditInternal(UUID userId, UUID tokenId, long amount) {
+        Token token = findTokenOrThrow(tokenId);
+        UserBalance balance = userBalanceRepository.findByUserIdAndTokenId(userId, tokenId)
+                .orElse(null);
+        if (balance == null) {
+            balance = new UserBalance();
+            balance.setUserId(userId);
+            balance.setTokenId(tokenId);
+            balance.setAvailable(0);
+            balance.setLocked(0);
+            userBalanceRepository.save(balance);
+        }
+        int credited = userBalanceRepository.creditAvailable(userId, tokenId, amount);
+        if (credited == 0) {
+            throw new IllegalStateException("Failed to credit balance for user " + userId);
+        }
+        log.info("Internal credit: user={} token={} amount={}", userId, token.getSymbol(), amount);
+    }
+
     @Transactional
     public TokenResponse pauseToken(UUID tokenId) {
         Token token = findTokenOrThrow(tokenId);

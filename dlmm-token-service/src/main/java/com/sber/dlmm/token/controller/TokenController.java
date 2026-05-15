@@ -122,4 +122,29 @@ public class TokenController {
         List<BalanceResponse> response = tokenService.getUserBalances(userId);
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * Internal endpoints consumed by pool-engine during swap / add-liquidity /
+     * remove-liquidity. Any authenticated user can invoke them — pool-engine
+     * forwards the caller's Bearer via BearerTokenForwardingFilter, so these
+     * effectively run "on behalf of" the original user. The deduct path
+     * enforces ownership via userId in the body matching balance owner.
+     */
+    @PostMapping("/tokens/internal/deduct")
+    public ResponseEntity<Void> deductInternal(@Valid @RequestBody InternalBalanceRequest req) {
+        tokenService.deductInternal(req.userId(), req.tokenId(), req.amount());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/tokens/internal/credit")
+    public ResponseEntity<Void> creditInternal(@Valid @RequestBody InternalBalanceRequest req) {
+        tokenService.creditInternal(req.userId(), req.tokenId(), req.amount());
+        return ResponseEntity.noContent().build();
+    }
+
+    public record InternalBalanceRequest(
+            @jakarta.validation.constraints.NotNull UUID userId,
+            @jakarta.validation.constraints.NotNull UUID tokenId,
+            @jakarta.validation.constraints.Positive long amount
+    ) {}
 }

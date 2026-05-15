@@ -109,4 +109,18 @@ public class UserController {
         userService.unblockUser(id);
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * Internal endpoint for service-to-service KYC checks (consumed by
+     * pool-engine before swap / add-liquidity). Any authenticated principal
+     * can call it — pool-engine forwards the caller's Bearer token via
+     * BearerTokenForwardingFilter.
+     */
+    @GetMapping("/users/internal/{id}/kyc")
+    public ResponseEntity<KycCheckResponse> checkKyc(@PathVariable UUID id) {
+        boolean verified = userService.isKycVerified(id);
+        return ResponseEntity.ok(new KycCheckResponse(verified));
+    }
+
+    public record KycCheckResponse(boolean verified) {}
 }
