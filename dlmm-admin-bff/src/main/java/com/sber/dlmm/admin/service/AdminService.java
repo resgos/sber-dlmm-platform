@@ -30,7 +30,15 @@ import java.util.UUID;
 @Service
 public class AdminService {
 
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
+    // Per-call timeout. Each downstream is called independently with this
+    // budget — a single slow service can't stall the whole dashboard.
+    // 8s accommodates pool-engine /pools current N+1 latency (~5-7s for 22
+    // pools with bins eagerly loaded — tracked separately as a perf bug).
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(8);
+    // Smaller page than the previous 1000 — seed catalog is 22 pools / 4
+    // users / 15 tx; 200 leaves headroom for growth without making the
+    // unbounded fetch slower than it has to be.
+    private static final int AGGREGATION_PAGE_SIZE = 200;
     private static final BigDecimal PRICE_IMPACT_THRESHOLD = new BigDecimal("3.0");
     private static final long HIGH_FREQUENCY_THRESHOLD = 50;
 
@@ -61,39 +69,26 @@ public class AdminService {
     public DashboardResponse getDashboard() {
         log.debug("Fetching dashboard data from all microservices");
 
-        Mono<List<Map<String, Object>>> usersMono = userServiceClient.get()
-                .uri("/api/v1/users")
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList());
-
-        Mono<List<Map<String, Object>>> poolsMono = poolEngineClient.get()
-                .uri("/api/v1/pools")
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList());
-
-        Mono<List<Map<String, Object>>> transactionsMono = transactionServiceClient.get()
-                .uri("/api/v1/transactions")
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList());
-
-        var combined = Mono.zip(usersMono, poolsMono, transactionsMono);
-        var tuple = combined.block(REQUEST_TIMEOUT);
-
-        if (tuple == null) {
-            log.warn("Timed out waiting for dashboard data, returning defaults");
-            return new DashboardResponse(0, 0, 0, 0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0, 0);
-        }
-
-        List<Map<String, Object>> users = tuple.getT1();
-        List<Map<String, Object>> pools = tuple.getT2();
-        List<Map<String, Object>> transactions = tuple.getT3();
+        // Independent blocking calls with per-call timeout. The previous
+        // Mono.zip(...) implementation had two bugs:
+        //   1. it parsed Page<...> responses as List<Map>, which Jackson
+        //      couldn't deserialise — onErrorReturn was never wired against
+        //      that failure mode so the Mono stalled silently;
+        //   2. any single slow downstream stalled the entire dashboard
+        //      because zip awaits all three signals.
+        // Now each call is bounded by REQUEST_TIMEOUT and degrades to an
+        // empty list independently.
+        List<Map<String, Object>> users = fetchPageContent(userServiceClient,
+                "/api/v1/users?page=0&size=" + AGGREGATION_PAGE_SIZE, "users");
+        List<Map<String, Object>> pools = fetchPageContent(poolEngineClient,
+                "/api/v1/pools?page=0&size=" + AGGREGATION_PAGE_SIZE, "pools");
+        List<Map<String, Object>> transactions = fetchPageContent(transactionServiceClient,
+                "/api/v1/transactions?page=0&size=" + AGGREGATION_PAGE_SIZE, "transactions");
 
         long totalUsers = users.size();
+        // user-service returns kycStatus as a string ("VERIFIED" | "PENDING" | …)
         long verifiedUsers = users.stream()
-                .filter(u -> Boolean.TRUE.equals(u.get("verified")) || Boolean.TRUE.equals(u.get("kycVerified")))
+                .filter(u -> "VERIFIED".equals(u.get("kycStatus")))
                 .count();
 
         int totalPools = pools.size();
@@ -101,8 +96,13 @@ public class AdminService {
                 .filter(p -> "ACTIVE".equals(p.get("status")))
                 .count();
 
+        // pool-engine DTO exposes totalTvlX / totalTvlY in token smallest units
+        // (no shared decimals model yet). totalTvlY is the SRUB-side reserve
+        // for every SRUB-quoted pool in the extended catalog, so summing it
+        // gives a rough RUB-denominated TVL. Proper price-aware aggregation
+        // is a follow-up once the precision/decimals story is cleaned up.
         BigDecimal totalTvlRub = pools.stream()
-                .map(p -> toBigDecimal(p.get("tvl")))
+                .map(p -> toBigDecimal(p.get("totalTvlY")))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal volume24hRub = pools.stream()
@@ -110,7 +110,7 @@ public class AdminService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalFeesCollectedRub = pools.stream()
-                .map(p -> toBigDecimal(p.get("totalFees")))
+                .map(p -> toBigDecimal(p.get("totalFeesCollectedY")))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         long activePositions = pools.stream()
@@ -125,10 +125,39 @@ public class AdminService {
                 activePositions, transactionsToday
         );
 
-        log.debug("Dashboard data assembled: totalUsers={}, totalPools={}, transactionsToday={}",
+        log.debug("Dashboard assembled: users={}, pools={}, tx={}",
                 totalUsers, totalPools, transactionsToday);
 
         return response;
+    }
+
+    /**
+     * Fetches a Spring Data {@code Page<...>} response and returns its
+     * {@code content} list, or an empty list on any failure (HTTP error,
+     * deserialisation error, timeout). Dashboard degrades gracefully when
+     * a single downstream is unavailable.
+     */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> fetchPageContent(WebClient client, String uri, String label) {
+        try {
+            Map<String, Object> page = client.get()
+                    .uri(uri)
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .onErrorResume(ex -> {
+                        log.warn("Downstream {} failed: {}", label, ex.toString());
+                        return Mono.empty();
+                    })
+                    .block(REQUEST_TIMEOUT);
+            if (page == null) return Collections.emptyList();
+            Object content = page.get("content");
+            return content instanceof List<?> list
+                    ? (List<Map<String, Object>>) list
+                    : Collections.emptyList();
+        } catch (RuntimeException ex) {
+            log.warn("Downstream {} blocking call exhausted timeout: {}", label, ex.toString());
+            return Collections.emptyList();
+        }
     }
 
     public PoolAnalyticsResponse getPoolAnalytics(UUID poolId) {

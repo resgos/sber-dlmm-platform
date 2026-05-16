@@ -223,7 +223,15 @@ public class PoolService {
     }
 
     private PoolResponse toPoolResponse(LiquidityPool pool, String tokenXSymbol, String tokenYSymbol) {
-        BigDecimal currentPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(), pool.getActiveBinId());
+        // pool.activeBinId follows the Meteora-style "middle bin = 2^23 (8_388_608)"
+        // convention — it's an ABSOLUTE bin id calibrated so that bin 8_388_608
+        // equals pool.basePrice. Feeding the raw activeBinId straight into
+        // BinMath.binPrice computes basePrice * (1 + binStep/10000)^8_388_608
+        // (~10^36000 for SBTC) — semantically meaningless and overflows any
+        // downstream JSON consumer (Jackson rejects it). Until the
+        // absolute-vs-relative bin-id semantics are formalised (open backlog),
+        // expose basePrice as the listing-level current price.
+        BigDecimal currentPrice = pool.getBasePrice();
         int dynamicFeeBps = calculateDynamicFee(pool);
         BigDecimal apy = calculateEstimatedApy(pool, dynamicFeeBps);
         return new PoolResponse(pool.getId(), pool.getTokenXId(), pool.getTokenYId(),
@@ -234,7 +242,15 @@ public class PoolService {
 
     private PoolResponse toPoolResponseWithApy(LiquidityPool pool, String tokenXSymbol,
                                                  String tokenYSymbol, BigDecimal apy) {
-        BigDecimal currentPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(), pool.getActiveBinId());
+        // pool.activeBinId follows the Meteora-style "middle bin = 2^23 (8_388_608)"
+        // convention — it's an ABSOLUTE bin id calibrated so that bin 8_388_608
+        // equals pool.basePrice. Feeding the raw activeBinId straight into
+        // BinMath.binPrice computes basePrice * (1 + binStep/10000)^8_388_608
+        // (~10^36000 for SBTC) — semantically meaningless and overflows any
+        // downstream JSON consumer (Jackson rejects it). Until the
+        // absolute-vs-relative bin-id semantics are formalised (open backlog),
+        // expose basePrice as the listing-level current price.
+        BigDecimal currentPrice = pool.getBasePrice();
         return new PoolResponse(pool.getId(), pool.getTokenXId(), pool.getTokenYId(),
                 tokenXSymbol, tokenYSymbol, pool.getBinStep(), pool.getBaseFeeBps(),
                 pool.getActiveBinId(), currentPrice, pool.getTotalTvlX(), pool.getTotalTvlY(),
