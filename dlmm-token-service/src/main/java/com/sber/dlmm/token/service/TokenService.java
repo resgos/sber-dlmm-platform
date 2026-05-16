@@ -107,6 +107,20 @@ public class TokenService {
         return toTokenResponse(token);
     }
 
+    /**
+     * Bulk lookup by ids — used by pool-engine to resolve every token symbol
+     * in /pools listing with a single network round-trip instead of N+1
+     * GET /tokens/{id} calls. Order of the returned list is undefined; callers
+     * key by id.
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<TokenResponse> getTokensByIds(java.util.Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return java.util.List.of();
+        return tokenRepository.findAllById(ids).stream()
+                .map(this::toTokenResponse)
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public TokenResponse getTokenBySymbol(String symbol) {
         Token token = tokenRepository.findBySymbol(symbol)

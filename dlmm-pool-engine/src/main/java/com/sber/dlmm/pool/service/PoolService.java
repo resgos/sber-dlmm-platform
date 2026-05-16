@@ -118,21 +118,26 @@ public class PoolService {
             poolPage = poolRepository.findAll(PageRequest.of(page, size, sort));
         }
 
-        // Resolve token symbols for all pools
-        java.util.Map<UUID, String> symbolMap = new java.util.HashMap<>();
+        // Resolve token symbols in one bulk call instead of N+1 GET /tokens/{id}.
+        // Previous per-pool loop made up to 2N WebClient round-trips
+        // (44 calls for 22 seed pools) and pushed /api/v1/pools latency to
+        // ~7s+ even after the BinMath fast-pow fix. The batch endpoint on
+        // token-service is a single network hit.
+        java.util.Set<UUID> uniqueIds = new java.util.HashSet<>();
         for (LiquidityPool pool : poolPage.getContent()) {
-            symbolMap.computeIfAbsent(pool.getTokenXId(), id -> {
-                try { var t = tokenServiceClient.getToken(id); return t != null ? t.symbol() : null; }
-                catch (Exception e) { return null; }
-            });
-            symbolMap.computeIfAbsent(pool.getTokenYId(), id -> {
-                try { var t = tokenServiceClient.getToken(id); return t != null ? t.symbol() : null; }
-                catch (Exception e) { return null; }
-            });
+            uniqueIds.add(pool.getTokenXId());
+            uniqueIds.add(pool.getTokenYId());
         }
+        java.util.Map<UUID, TokenServiceClient.TokenInfo> tokens =
+                tokenServiceClient.getTokensByIds(uniqueIds);
 
         List<PoolResponse> responses = poolPage.getContent().stream()
-                .map(pool -> toPoolResponse(pool, symbolMap.get(pool.getTokenXId()), symbolMap.get(pool.getTokenYId())))
+                .map(pool -> {
+                    var tx = tokens.get(pool.getTokenXId());
+                    var ty = tokens.get(pool.getTokenYId());
+                    return toPoolResponse(pool, tx != null ? tx.symbol() : null,
+                            ty != null ? ty.symbol() : null);
+                })
                 .toList();
 
         return new PageResponse<>(responses, page, size,

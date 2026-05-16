@@ -76,6 +76,14 @@
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
 
+        <!-- Caffeine LRU cache for short-lived TokenServiceClient lookups
+             so repeated swap quotes within a few seconds don't keep hitting
+             token-service. -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Resilience4j: circuit breaker + retry + timeout for inter-service WebClient calls -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>

@@ -57,6 +57,17 @@ public class TokenController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Bulk lookup endpoint consumed by pool-engine to avoid N+1 in /pools
+     * symbol resolution. {@code ?ids=uuid1,uuid2,...} — comma-separated.
+     * Returns a flat list; callers key by id.
+     */
+    @GetMapping("/tokens/batch")
+    public ResponseEntity<java.util.List<TokenResponse>> getTokensByIds(
+            @RequestParam("ids") java.util.List<UUID> ids) {
+        return ResponseEntity.ok(tokenService.getTokensByIds(ids));
+    }
+
     @GetMapping("/tokens/symbol/{symbol}")
     public ResponseEntity<TokenResponse> getTokenBySymbol(@PathVariable String symbol) {
         TokenResponse response = tokenService.getTokenBySymbol(symbol);
