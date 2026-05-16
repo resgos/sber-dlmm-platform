@@ -19,10 +19,10 @@ import com.sber.dlmm.pool.repository.LiquidityPoolRepository;
 import com.sber.dlmm.pool.repository.PoolBinRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.sber.dlmm.pool.outbox.OutboxService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,16 +41,16 @@ public class PoolService {
     private final LiquidityPoolRepository poolRepository;
     private final PoolBinRepository poolBinRepository;
     private final TokenServiceClient tokenServiceClient;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxService outbox;
 
     public PoolService(LiquidityPoolRepository poolRepository,
                        PoolBinRepository poolBinRepository,
                        TokenServiceClient tokenServiceClient,
-                       KafkaTemplate<String, Object> kafkaTemplate) {
+                       OutboxService outbox) {
         this.poolRepository = poolRepository;
         this.poolBinRepository = poolBinRepository;
         this.tokenServiceClient = tokenServiceClient;
-        this.kafkaTemplate = kafkaTemplate;
+        this.outbox = outbox;
     }
 
     @Transactional
@@ -99,7 +99,7 @@ public class PoolService {
         log.info("Pool created: id={}, tokens=({},{}), binStep={}, activeBin={}",
                 pool.getId(), tokenX.symbol(), tokenY.symbol(), req.binStep(), activeBinId);
 
-        kafkaTemplate.send(POOL_EVENTS_TOPIC, pool.getId().toString(),
+        outbox.append("pool", pool.getId().toString(), "PoolCreated", POOL_EVENTS_TOPIC,
                 new PoolCreatedEvent(pool.getId(), pool.getTokenXId(), pool.getTokenYId(),
                         pool.getBinStep(), pool.getCreatedAt()));
 

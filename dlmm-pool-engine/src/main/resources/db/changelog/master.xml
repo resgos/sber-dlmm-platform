@@ -9,5 +9,6 @@
     <include file="002-create-pool-bins-table.xml" relativeToChangelogFile="true"/>
     <include file="003-create-lp-positions-table.xml" relativeToChangelogFile="true"/>
     <include file="004-create-position-bins-table.xml" relativeToChangelogFile="true"/>
+    <include file="005-create-outbox-events-table.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

@@ -27,10 +27,10 @@ import com.sber.dlmm.pool.repository.LiquidityPoolRepository;
 import com.sber.dlmm.pool.repository.LpPositionRepository;
 import com.sber.dlmm.pool.repository.PoolBinRepository;
 import com.sber.dlmm.pool.repository.PositionBinRepository;
+import com.sber.dlmm.pool.outbox.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,7 +57,8 @@ public class LiquidityService {
     private final PositionBinRepository positionBinRepository;
     private final TokenServiceClient tokenServiceClient;
     private final UserServiceClient userServiceClient;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    // Replaced direct KafkaTemplate with the transactional outbox.
+    private final OutboxService outbox;
     private final StringRedisTemplate redisTemplate;
 
     public LiquidityService(LiquidityPoolRepository poolRepository,
@@ -66,7 +67,7 @@ public class LiquidityService {
                             PositionBinRepository positionBinRepository,
                             TokenServiceClient tokenServiceClient,
                             UserServiceClient userServiceClient,
-                            KafkaTemplate<String, Object> kafkaTemplate,
+                            OutboxService outbox,
                             StringRedisTemplate redisTemplate) {
         this.poolRepository = poolRepository;
         this.poolBinRepository = poolBinRepository;
@@ -74,7 +75,7 @@ public class LiquidityService {
         this.positionBinRepository = positionBinRepository;
         this.tokenServiceClient = tokenServiceClient;
         this.userServiceClient = userServiceClient;
-        this.kafkaTemplate = kafkaTemplate;
+        this.outbox = outbox;
         this.redisTemplate = redisTemplate;
     }
 
@@ -271,8 +272,8 @@ public class LiquidityService {
                 .build();
         positionRepository.save(position);
 
-        // 8. Kafka event
-        kafkaTemplate.send(POOL_EVENTS_TOPIC, pool.getId().toString(),
+        // 8. Outbox: durable LiquidityAdded event
+        outbox.append("position", positionId.toString(), "LiquidityAdded", POOL_EVENTS_TOPIC,
                 new LiquidityAddedEvent(pool.getId(), userId, positionId, totalDepositedX, totalDepositedY));
 
         log.info("Liquidity added: pool={}, user={}, position={}, depositedX={}, depositedY={}, shares={}",
@@ -411,8 +412,8 @@ public class LiquidityService {
         }
         positionRepository.save(position);
 
-        // 8. Kafka event
-        kafkaTemplate.send(POOL_EVENTS_TOPIC, pool.getId().toString(),
+        // 8. Outbox: durable LiquidityRemoved event
+        outbox.append("position", position.getId().toString(), "LiquidityRemoved", POOL_EVENTS_TOPIC,
                 new LiquidityRemovedEvent(pool.getId(), userId, position.getId(), totalWithdrawnX, totalWithdrawnY));
 
         log.info("Liquidity removed: pool={}, user={}, position={}, withdrawnX={}, withdrawnY={}, feeX={}, feeY={}",

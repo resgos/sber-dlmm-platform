@@ -1,4 +1,4 @@
-package com.sber.dlmm.token.outbox;
+package com.sber.dlmm.pool.outbox;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,24 +10,19 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Single entrypoint for appending to the transactional outbox. Callers
- * use this instead of {@code kafkaTemplate.send(...)} directly so the
- * event lands in the same DB transaction as the domain mutation.
+ * Pool-engine's outbox append entry-point. Used in place of
+ * {@code kafkaTemplate.send(...)} so events land in the same DB transaction
+ * as the pool/position mutation. See companion class in dlmm-token-service
+ * for the design rationale.
  *
- * If the surrounding @Transactional rolls back, the outbox row rolls
- * back with it — no ghost events. If the dispatcher hasn't sent yet
- * when the service crashes, the next poll picks it up — no lost events.
+ * Propagation.MANDATORY: calling without an active @Transactional throws,
+ * which surfaces the dual-write bug at the call site instead of silently
+ * losing the atomicity guarantee.
  */
 @Service
 public class OutboxService {
 
-    /**
-     * Service name tag — written into every outbox row so this service's
-     * dispatcher can filter to only its own events. Hard-coded rather than
-     * @Value because if it ever drifts from the dispatcher's poll filter
-     * we'd silently leak events to a foreign dispatcher.
-     */
-    public static final String SERVICE_NAME = "token-service";
+    public static final String SERVICE_NAME = "pool-engine";
 
     private final OutboxEventRepository repository;
     private final ObjectMapper objectMapper;
@@ -37,13 +32,6 @@ public class OutboxService {
         this.objectMapper = objectMapper;
     }
 
-    /**
-     * Append must run inside the caller's transaction — that's the whole
-     * point of the pattern. MANDATORY propagation makes that explicit:
-     * calling append() without an active @Transactional throws, which
-     * surfaces the bug at the call site instead of silently allowing
-     * a dual-write.
-     */
     @Transactional(propagation = Propagation.MANDATORY)
     public void append(String aggregateType, String aggregateId, String eventType,
                        String topic, Object payload) {
@@ -51,9 +39,6 @@ public class OutboxService {
         try {
             json = objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException e) {
-            // Fail loud — a malformed event payload should not silently
-            // bypass the outbox. The whole transaction (including the
-            // balance mutation) rolls back.
             throw new IllegalStateException("Failed to serialise outbox payload for "
                     + eventType + ": " + e.getMessage(), e);
         }

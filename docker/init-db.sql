@@ -266,13 +266,17 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     published_at TIMESTAMP,
     attempts INT NOT NULL DEFAULT 0,
-    last_error TEXT
+    last_error TEXT,
+    -- Originator service name. Multiple services share this table;
+    -- each dispatcher only polls rows it created (filter on service).
+    service VARCHAR(32) NOT NULL DEFAULT 'unknown'
 );
 
--- Partial index keeps poll cost O(unpublished) instead of O(total)
--- once the table grows past a few million dispatched rows.
-CREATE INDEX IF NOT EXISTS idx_outbox_unpublished
-  ON outbox_events (created_at)
+-- Partial index scoped per service. Polls become
+-- WHERE service = :me AND published_at IS NULL ORDER BY created_at,
+-- bounded by the unpublished-per-service queue depth.
+CREATE INDEX IF NOT EXISTS idx_outbox_unpublished_per_service
+  ON outbox_events (service, created_at)
   WHERE published_at IS NULL;
 
 -- ============================================================================

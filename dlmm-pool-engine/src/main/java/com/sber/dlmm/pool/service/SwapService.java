@@ -20,10 +20,10 @@ import com.sber.dlmm.pool.entity.PoolBin;
 import com.sber.dlmm.pool.event.SwapExecutedEvent;
 import com.sber.dlmm.pool.repository.LiquidityPoolRepository;
 import com.sber.dlmm.pool.repository.PoolBinRepository;
+import com.sber.dlmm.pool.outbox.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,20 +46,23 @@ public class SwapService {
     private final PoolBinRepository poolBinRepository;
     private final TokenServiceClient tokenServiceClient;
     private final UserServiceClient userServiceClient;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    // Replaced direct KafkaTemplate with the transactional outbox — Kafka
+    // send no longer happens inline with the swap mutation, which closed
+    // the lost-event window. See OutboxService / OutboxDispatcher.
+    private final OutboxService outbox;
     private final StringRedisTemplate redisTemplate;
 
     public SwapService(LiquidityPoolRepository poolRepository,
                        PoolBinRepository poolBinRepository,
                        TokenServiceClient tokenServiceClient,
                        UserServiceClient userServiceClient,
-                       KafkaTemplate<String, Object> kafkaTemplate,
+                       OutboxService outbox,
                        StringRedisTemplate redisTemplate) {
         this.poolRepository = poolRepository;
         this.poolBinRepository = poolBinRepository;
         this.tokenServiceClient = tokenServiceClient;
         this.userServiceClient = userServiceClient;
-        this.kafkaTemplate = kafkaTemplate;
+        this.outbox = outbox;
         this.redisTemplate = redisTemplate;
     }
 
@@ -373,8 +376,11 @@ public class SwapService {
 
         UUID txId = UUID.randomUUID();
 
-        // 9. Kafka event
-        kafkaTemplate.send(POOL_EVENTS_TOPIC, pool.getId().toString(),
+        // 9. Outbox: durable swap-executed event. Same DB transaction as the
+        // pool/bin updates and the inter-service deduct/credit calls, so
+        // either everything sticks and Kafka eventually sees the event, or
+        // nothing sticks and nothing gets emitted. No half-applied swaps.
+        outbox.append("pool", pool.getId().toString(), "SwapExecuted", POOL_EVENTS_TOPIC,
                 new SwapExecutedEvent(pool.getId(), userId, req.tokenInId(),
                         consumedAmountIn, totalAmountOut, totalFee, binsCrossed));
 
