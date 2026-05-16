@@ -77,14 +77,18 @@ export default function TokensPage() {
       dataIndex: 'totalSupply',
       key: 'totalSupply',
       align: 'right',
-      render: (val: number) => val.toLocaleString('ru-RU'),
+      render: (val: number | undefined) => (val ?? 0).toLocaleString('ru-RU'),
     },
     {
+      // circulatingSupply isn't returned by the token-service list endpoint
+      // today (only totalSupply / maxSupply). Render "—" when absent so the
+      // table cell doesn't blow up with `undefined.toLocaleString()`.
       title: 'В обращении',
       dataIndex: 'circulatingSupply',
       key: 'circulatingSupply',
       align: 'right',
-      render: (val: number) => val.toLocaleString('ru-RU'),
+      render: (val: number | undefined) =>
+        typeof val === 'number' ? val.toLocaleString('ru-RU') : '—',
     },
     {
       title: 'Статус',
