@@ -17,6 +17,7 @@ import com.sber.dlmm.token.event.TokenBurnedEvent;
 import com.sber.dlmm.token.event.TokenCreatedEvent;
 import com.sber.dlmm.token.event.TokenMintedEvent;
 import com.sber.dlmm.token.event.TokenTransferredEvent;
+import com.sber.dlmm.token.outbox.OutboxService;
 import com.sber.dlmm.token.repository.TokenRepository;
 import com.sber.dlmm.token.repository.UserBalanceRepository;
 import org.slf4j.Logger;
@@ -24,7 +25,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,15 +42,19 @@ public class TokenService {
 
     private final TokenRepository tokenRepository;
     private final UserBalanceRepository userBalanceRepository;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    // Direct KafkaTemplate use was replaced with the transactional outbox
+    // — Kafka send no longer happens inline with the balance mutation,
+    // which closed the lost-event window. See OutboxService /
+    // OutboxDispatcher for the new path.
+    private final OutboxService outbox;
     private final Set<String> processedIdempotencyKeys = ConcurrentHashMap.newKeySet();
 
     public TokenService(TokenRepository tokenRepository,
                         UserBalanceRepository userBalanceRepository,
-                        KafkaTemplate<String, Object> kafkaTemplate) {
+                        OutboxService outbox) {
         this.tokenRepository = tokenRepository;
         this.userBalanceRepository = userBalanceRepository;
-        this.kafkaTemplate = kafkaTemplate;
+        this.outbox = outbox;
     }
 
     @Transactional
@@ -81,7 +85,7 @@ public class TokenService {
 
         log.info("Token created: id={}, symbol={}", token.getId(), token.getSymbol());
 
-        kafkaTemplate.send(TOPIC, token.getId().toString(),
+        outbox.append("token", token.getId().toString(), "TokenCreated", TOPIC,
                 new TokenCreatedEvent(token.getId(), token.getSymbol(),
                         token.getTokenType(), adminUserId, LocalDateTime.now()));
 
@@ -167,7 +171,7 @@ public class TokenService {
 
         log.info("Minted {} of {} to user {}", req.amount(), token.getSymbol(), req.toUserId());
 
-        kafkaTemplate.send(TOPIC, token.getId().toString(),
+        outbox.append("token", token.getId().toString(), "TokenMinted", TOPIC,
                 new TokenMintedEvent(token.getId(), req.toUserId(), req.amount(),
                         token.getTotalSupply(), LocalDateTime.now()));
 
@@ -196,7 +200,7 @@ public class TokenService {
 
         log.info("Burned {} of {} from user {}", req.amount(), token.getSymbol(), req.fromUserId());
 
-        kafkaTemplate.send(TOPIC, token.getId().toString(),
+        outbox.append("token", token.getId().toString(), "TokenBurned", TOPIC,
                 new TokenBurnedEvent(token.getId(), req.fromUserId(), req.amount(),
                         token.getTotalSupply(), LocalDateTime.now()));
 
@@ -268,7 +272,7 @@ public class TokenService {
         log.info("Transferred {} of {} from {} to {}", req.amount(), token.getSymbol(),
                 req.fromUserId(), req.toUserId());
 
-        kafkaTemplate.send(TOPIC, token.getId().toString(),
+        outbox.append("token", token.getId().toString(), "TokenTransferred", TOPIC,
                 new TokenTransferredEvent(token.getId(), req.fromUserId(), req.toUserId(),
                         req.amount(), req.idempotencyKey(), LocalDateTime.now()));
     }
@@ -290,6 +294,13 @@ public class TokenService {
             throw new InsufficientBalanceException(
                     "Insufficient available balance for user " + userId + " token " + token.getSymbol());
         }
+        // Outbox: every swap leg goes through here. Previously these mutations
+        // were Kafka-silent — notification-service never knew about them.
+        // Now downstream projections (transaction ledger, user notification,
+        // analytics) get a durable event per balance change.
+        outbox.append("balance", userId + ":" + tokenId, "BalanceDeducted", TOPIC,
+                new BalanceMutatedEvent(userId, tokenId, token.getSymbol(),
+                        -amount, "deduct", LocalDateTime.now()));
         log.info("Internal deduct: user={} token={} amount={}", userId, token.getSymbol(), amount);
     }
 
@@ -316,8 +327,27 @@ public class TokenService {
         if (credited == 0) {
             throw new IllegalStateException("Failed to credit balance for user " + userId);
         }
+        outbox.append("balance", userId + ":" + tokenId, "BalanceCredited", TOPIC,
+                new BalanceMutatedEvent(userId, tokenId, token.getSymbol(),
+                        amount, "credit", LocalDateTime.now()));
         log.info("Internal credit: user={} token={} amount={}", userId, token.getSymbol(), amount);
     }
+
+    /**
+     * Event payload for the swap-critical balance mutations (deduct/credit).
+     * Amount is signed: positive = credit, negative = deduct. Co-located here
+     * so the TokenService stays the single source of truth for what gets
+     * written to the outbox; if downstream consumers need a richer schema
+     * we'll lift this into a shared module.
+     */
+    public record BalanceMutatedEvent(
+            UUID userId,
+            UUID tokenId,
+            String symbol,
+            long signedAmount,
+            String operation,
+            LocalDateTime occurredAt
+    ) {}
 
     @Transactional
     public TokenResponse pauseToken(UUID tokenId) {

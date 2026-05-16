@@ -248,6 +248,33 @@ CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications (read);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications (user_id, read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (created_at);
 
+-- ─── outbox_events (token-service, optionally other services) ───────────────
+-- Transactional outbox: domain-mutation @Transactional writes a row here
+-- alongside the balance change; a scheduled dispatcher polls
+-- WHERE published_at IS NULL ORDER BY created_at, sends to Kafka, marks
+-- published_at. Eliminates the lost-event window between DB commit and
+-- Kafka send.
+CREATE TABLE IF NOT EXISTS outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    aggregate_type VARCHAR(64) NOT NULL,
+    -- 128 chars accommodates composite keys like "userId:tokenId"
+    -- (two UUIDs = 73 chars + slack).
+    aggregate_id VARCHAR(128) NOT NULL,
+    event_type VARCHAR(128) NOT NULL,
+    topic VARCHAR(128) NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMP,
+    attempts INT NOT NULL DEFAULT 0,
+    last_error TEXT
+);
+
+-- Partial index keeps poll cost O(unpublished) instead of O(total)
+-- once the table grows past a few million dispatched rows.
+CREATE INDEX IF NOT EXISTS idx_outbox_unpublished
+  ON outbox_events (created_at)
+  WHERE published_at IS NULL;
+
 -- ============================================================================
 -- SEED DATA for demo
 -- ============================================================================

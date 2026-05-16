@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Transactional outbox table. Domain mutations (mint/burn/deduct/credit/
+      transfer) write a row here in the SAME @Transactional as the balance
+      change; a separate scheduled dispatcher reads `WHERE published_at IS NULL`,
+      sends to Kafka, marks `published_at`. Eliminates the lost-event window
+      between DB commit and Kafka send.
+    -->
+    <changeSet id="003-create-outbox-events-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="outbox_events"/></not>
+        </preConditions>
+        <createTable tableName="outbox_events">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_outbox_events"/>
+            </column>
+            <column name="aggregate_type" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- 128 chars accommodates composite keys like "userId:tokenId"
+                 (two UUIDs = 73 chars + slack). Original 64-char limit truncated
+                 those at insert time with a Postgres 22001 error. -->
+            <column name="aggregate_id" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_type" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="topic" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payload" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="published_at" type="TIMESTAMP"/>
+            <column name="attempts" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_error" type="TEXT"/>
+        </createTable>
+
+        <!--
+          Partial index: dispatcher polls WHERE published_at IS NULL ORDER BY created_at.
+          The partial filter keeps the index tiny even as the table grows to millions
+          of dispatched rows, so polling remains O(unpublished) not O(total).
+        -->
+        <sql>
+            CREATE INDEX IF NOT EXISTS idx_outbox_unpublished
+              ON outbox_events (created_at)
+              WHERE published_at IS NULL;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>
