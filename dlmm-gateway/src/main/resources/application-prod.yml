@@ -1,0 +1,35 @@
+# Production overrides for dlmm-gateway. Activated by setting
+# SPRING_PROFILES_ACTIVE=prod (compose / k8s deployment manifest).
+#
+# Everything not listed here inherits from application.yml — so JWT
+# secret, route table, rate limiter etc. stay shared, and we only
+# tighten the bits that should differ between dev and prod.
+
+dlmm:
+  cors:
+    # Lock CORS to Sber-owned origins only. Anything else is rejected at
+    # the gateway — same-origin requests from the served UI keep working,
+    # cross-origin probes don't.
+    #
+    # If a new prod hostname is added, this list (and the cert SAN) gets
+    # bumped. Currently the env-override pattern leaves the wildcard
+    # off — Spring's setAllowedOrigins doesn't support wildcard +
+    # allowCredentials together, so we list exact origins instead of
+    # using *.sber-dlmm.ru.
+    allowed-origins: https://dlmm.sber-online.ru,https://admin.dlmm.sber-online.ru,https://api.dlmm.sber-online.ru
+
+logging:
+  level:
+    # Quieter logs in prod. The DEBUG noise from dev makes log volume
+    # in the SIEM unworkable.
+    com.sber.dlmm: INFO
+    org.springframework.cloud.gateway: WARN
+
+management:
+  endpoint:
+    health:
+      # Hide the breakdown from anonymous in prod — production
+      # /actuator/health responds to k8s probes (no auth) and to the
+      # admin UI (authenticated). Detailed per-component status only
+      # for the latter.
+      show-details: when-authorized

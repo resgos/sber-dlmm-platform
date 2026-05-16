@@ -61,6 +61,13 @@ server:
 dlmm:
   jwt:
     secret: ${JWT_SECRET:?JWT_SECRET env var is required (≥32 bytes)}
+  cors:
+    # Dev defaults — the two UI dev servers + the gateway's own URL for
+    # Swagger UI hitting itself. Production overrides via
+    # application-prod.yml to lock down to the Sber-owned domains.
+    # Comma-separated string (not YAML list) — see CorsConfiguration
+    # for the binding rationale.
+    allowed-origins: http://localhost:3000,http://localhost:3001,http://localhost:8080
 
 logging:
   level:
