@@ -129,12 +129,46 @@ matches the original feaecfa state:
   and 18 pools paired against SRUB. Loaded by postgres entrypoint after
   `init-db.sql`.
 
-## Known debt (still open)
+## Sprint 1 deliverables (2026-05-16, committed in this branch)
 
-- **`/api/v1/admin/dashboard` still returns 403** — admin-bff's WebClient
-  forwarding works (Bearer customizer applied), but the BFF's downstream
-  proxy logic times out. Needs separate investigation in
-  `dlmm-admin-bff/AdminService` and `AdminProxyController`.
+- **Pool-engine N+1 fix** — `GET /api/v1/tokens/batch?ids=csv` batch endpoint
+  on token-service, Caffeine LRU cache on `TokenServiceClient`
+  (60s TTL, 500 entries). `/admin/dashboard` cold 2.9s → warm 150–330ms,
+  `/pools` cold 2.4s → warm 35–106ms. See commit `f4fca78`.
+- **Deep healthchecks** across all services — `EndpointRequest.toAnyEndpoint()`
+  in every SecurityConfig (fixes Spring 6.2 MvcRequestMatcher silent-skip),
+  `spring-boot-starter-actuator` added to the 4 services that lacked it,
+  `show-details: always` + `probes.enabled` enabled per service.
+  `DownstreamHealthIndicator` in pool-engine (pings token-service +
+  user-service) and admin-bff (pings 5 downstreams). Kill-and-restore
+  drill verified — downstream DOWN reflects within 1s, recovery within 3s.
+  See commit `c3fb54c`.
+- **Seed enrichment** — `docker/03-seed-trading-history.sql` adds 210 swap
+  transactions across 30 days, 22 pools, 3 users, with realistic status
+  mix + 8 extra LP positions + matching position_bins + fee_accruals.
+  Updates pool rollups (`volume_24h`, `total_fees_collected_x/y`) to match.
+  Fixed two dashboard bugs along the way: `transactionsToday` was the page
+  size (now date-filtered), `activePositions` was hardcoded 0 (now hits
+  new `GET /api/v1/pools/positions/count`). See commit `2f800e7`.
+- **Transactional outbox in token-service** — `outbox_events` table
+  (Liquibase changeset 003 + init-db.sql), `OutboxEvent` + `OutboxService`
+  (propagation=MANDATORY so dual-writes fail loudly) + `OutboxDispatcher`
+  (@Scheduled 500ms, batch=100, retry on failure). All 4 `kafkaTemplate.send`
+  sites rewired to `outbox.append`. Critically, the two internal endpoints
+  (`deductInternal` / `creditInternal`) now publish `BalanceMutated` events —
+  previously they were Kafka-silent so every swap was invisible to
+  notification-service. Kill-Kafka drill verified — swaps stay sub-second,
+  events buffer in outbox, dispatcher drains automatically on recovery.
+  See commit `d03742a`.
+- **Docs** — `docs/GLOSSARY.md` (1-pager domain vocab),
+  `docs/RISK-REGISTER.md` (18 risks scored S×L), `docs/DEMO-SCRIPT.md`
+  (20-min demo flow + Q&A bank for PO/IT-lead/sysAnalyst/demo-day
+  questions). See commit `8e00036`.
+
+## Known debt (still open)
+- **Pool-engine outbox** not yet wired — pool state mutations
+  (active_bin updates, fee accruals on swap) follow the same pattern
+  but are Sprint 2 work.
 - **Liquibase preConditions are a tactical hack.** Future schema changes won't
   apply on existing DBs (the changeset will be MARK_RAN'd because the table
   already exists). The proper fix is to remove `CREATE TABLE` from `init-db.sql`
