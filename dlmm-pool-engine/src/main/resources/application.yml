@@ -11,8 +11,14 @@ spring:
     password: ${DB_PASSWORD:?DB_PASSWORD env var is required}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+      # Sprint 3 #3.6: bumped 20→50 after k6 baseline showed pool
+      # saturation past 20 concurrent (Sprint 2 risk #13). Postgres
+      # max_connections default 100, 6 JPA services × 50 = 300 — too
+      # high. In prod we'll either raise Postgres limit or use pgBouncer;
+      # for dev compose each service gets a smaller fair share and we
+      # ride out the 100-connection ceiling.
+      maximum-pool-size: 50
+      minimum-idle: 10
       idle-timeout: 300000
       connection-timeout: 20000
 

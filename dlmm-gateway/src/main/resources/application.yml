@@ -74,3 +74,18 @@ logging:
     com.sber.dlmm: DEBUG
     org.springframework.cloud.gateway: DEBUG
     org.springframework: INFO
+
+# Sprint 3 #3.12: gateway actuator. Reactive endpoints — no separate
+# permitAll config needed because gateway routes don't catch /actuator/**
+# (no predicate matches it), so it falls through to the actuator's
+# own handler with default permitAll.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true

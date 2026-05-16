@@ -5,6 +5,10 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:5432/dlmm
     username: ${DB_USER:dlmm}
     password: ${DB_PASSWORD:?DB_PASSWORD env var is required}
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+      connection-timeout: 20000
   jpa:
     hibernate:
       ddl-auto: validate

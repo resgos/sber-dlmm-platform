@@ -12,6 +12,10 @@ services:
       POSTGRES_DB: dlmm
       POSTGRES_USER: ${DB_USER:-dlmm}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in docker/.env}
+    # Sprint 3 #3.6: 6 JPA services × 50 Hikari = 300 connections.
+    # Default 100 isn't enough; bump to 400 with a small headroom for
+    # admin/psql clients. Prod uses pgBouncer; this is dev compose.
+    command: ["postgres", "-c", "max_connections=400", "-c", "shared_buffers=256MB"]
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql
@@ -376,6 +380,7 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml

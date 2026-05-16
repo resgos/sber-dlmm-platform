@@ -1,0 +1,118 @@
+# Sber DLMM — Prometheus alert rules (Sprint 3 #3.11)
+#
+# Wired to PagerDuty / Slack via Alertmanager in Sprint 4 #4.D.
+# Today these only fire on the Prometheus UI; they're the first
+# real SLO-like guardrails.
+#
+# Thresholds picked from Sprint 2 k6 baseline + Sprint 3 row-lock
+# analysis. Re-tune after Sprint 4 #4.7 (lock fix) raises the
+# operational ceiling.
+
+groups:
+  - name: dlmm-hikari
+    rules:
+      - alert: HikariPoolSaturated
+        # `pending` is callers waiting for a connection. > 0 sustained
+        # for 1 minute = pool is at max and there's a queue → we're
+        # paying queue latency on every request.
+        expr: hikaricp_connections_pending > 0
+        for: 1m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Hikari pool saturated on {{ $labels.service }}"
+          description: "{{ $value }} connection requests pending for >1m. Raise maximum-pool-size or check for connection-leak; investigate {{ $labels.service }} pod."
+
+      - alert: HikariPoolNearLimit
+        # active > 80% of max for 5 minutes is an early warning that
+        # we'll soon saturate. Less noisy than the above.
+        expr: (hikaricp_connections_active / hikaricp_connections_max) > 0.8
+        for: 5m
+        labels:
+          severity: info
+          team: backend
+        annotations:
+          summary: "Hikari pool >80% utilised on {{ $labels.service }}"
+          description: "Sustained high pool utilisation. May indicate slow queries or rising load. Consider tuning pool size or query plans."
+
+  - name: dlmm-outbox
+    rules:
+      - alert: OutboxBacklogGrowing
+        # Outbox unpublished count is exposed as
+        # `outbox_unpublished_total{service=...}` by a Sprint 3 follow-up
+        # (NOT yet wired — see TODO below). Until then this alert
+        # uses a proxy: rate of swap success > 0 but JVM-thread for
+        # OutboxDispatcher idle. Placeholder rule for now; will swap
+        # to the proper metric once exposed.
+        #
+        # TODO Sprint 4: expose `outbox_unpublished_total` as a
+        # Micrometer Gauge in OutboxService + replace this expr with
+        # `outbox_unpublished_total > 100 for 2m`.
+        expr: rate(http_server_requests_seconds_count{uri="/api/v1/pools/swap", status="200"}[1m]) > 5
+              and on (service) rate(jvm_threads_states_threads{state="timed-waiting"}[1m]) < 0.1
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Outbox dispatcher may be wedged on {{ $labels.service }}"
+          description: "High swap success rate but outbox dispatcher thread appears inactive. Check OutboxDispatcher logs and Kafka broker reachability."
+
+  - name: dlmm-kafka
+    rules:
+      - alert: KafkaConsumerLagHigh
+        # Mirror of the per-service healthcheck. Once the indicator
+        # marks DOWN it's already past 1000 lag; this catches the
+        # ramp earlier.
+        expr: kafka_consumer_fetch_manager_records_lag_avg > 500
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Kafka consumer lag rising on {{ $labels.service }}"
+          description: "Consumer lag avg > 500 for 2m. Below the DOWN threshold (1000) but trending. Check downstream listener throughput."
+
+  - name: dlmm-http
+    rules:
+      - alert: HighErrorRate
+        # 5xx rate > 5% of total over 5 min.
+        expr: (sum by (service) (rate(http_server_requests_seconds_count{status=~"5.."}[5m])))
+              /
+              (sum by (service) (rate(http_server_requests_seconds_count[5m])))
+              > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "5xx rate >5% on {{ $labels.service }}"
+          description: "Sustained server-error rate. Page the on-call. Likely a downstream DOWN or DB issue."
+
+      - alert: SlowSwapP99
+        # Swap p99 > 2s for 5 minutes. Our SLO target is < 2s warm.
+        expr: histogram_quantile(0.99,
+                sum by (le) (rate(http_server_requests_seconds_bucket{uri="/api/v1/pools/swap"}[2m])))
+              > 2.0
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Swap p99 latency >2s"
+          description: "Sustained breach of the warm-state SLO. Check Hikari saturation, downstream services, same-pool lock contention (R#20)."
+
+  - name: dlmm-downstream
+    rules:
+      - alert: DownstreamServiceDown
+        # Built-in `up` metric from Prometheus scrape itself —
+        # a scraped target failing == that service is DOWN.
+        expr: up{job="dlmm-services"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: sre
+        annotations:
+          summary: "{{ $labels.service }} appears to be down"
+          description: "Prometheus has not been able to scrape /actuator/prometheus on this service for >2m. Restart pod or check container health."

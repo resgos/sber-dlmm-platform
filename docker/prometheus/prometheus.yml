@@ -16,9 +16,9 @@ global:
     cluster: dlmm-dev
     env: docker
 
-# Alert rule files (Sprint 3 — add hikari_saturation, dispatcher_failures).
-# rule_files:
-#   - "rules/*.yml"
+# Sprint 3 #3.11: alert rules live. Pagerduty wiring is Sprint 4 #4.D.
+rule_files:
+  - "rules/*.yml"
 
 scrape_configs:
   - job_name: prometheus

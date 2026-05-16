@@ -30,6 +30,7 @@ import com.sber.dlmm.pool.repository.PositionBinRepository;
 import com.sber.dlmm.pool.outbox.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,6 +61,13 @@ public class LiquidityService {
     // Replaced direct KafkaTemplate with the transactional outbox.
     private final OutboxService outbox;
     private final StringRedisTemplate redisTemplate;
+
+    // Sprint 3 #3.4 — exit fee on LP close in basis points.
+    // 10 bps = 0.10% of withdrawn principal (NOT of fees earned).
+    // Tunable via env so we can A/B in pilot pools without redeploy.
+    // Set to 0 to disable.
+    @Value("${dlmm.fees.lp-exit-bps:10}")
+    private int lpExitFeeBps;
 
     public LiquidityService(LiquidityPoolRepository poolRepository,
                             PoolBinRepository poolBinRepository,
@@ -377,19 +385,34 @@ public class LiquidityService {
             positionBinRepository.delete(pb);
         }
 
-        // 5. Credit amounts + fees to user balance
-        long creditX = totalWithdrawnX + totalClaimedFeeX;
-        long creditY = totalWithdrawnY + totalClaimedFeeY;
+        // 5. Exit fee — Sprint 3 #3.4. Applies to withdrawn PRINCIPAL only
+        // (not to fees earned, which already paid a share to the protocol
+        // when accrued). Routes to pool's protocol fee accumulator —
+        // claimable by admin treasury in the Sprint 3 #3.2 distribution
+        // sweep. Computed before crediting the user.
+        long exitFeeX = (totalWithdrawnX * lpExitFeeBps) / 10_000L;
+        long exitFeeY = (totalWithdrawnY * lpExitFeeBps) / 10_000L;
+        long creditX = (totalWithdrawnX - exitFeeX) + totalClaimedFeeX;
+        long creditY = (totalWithdrawnY - exitFeeY) + totalClaimedFeeY;
         if (creditX > 0) {
             tokenServiceClient.creditBalance(userId, pool.getTokenXId(), creditX);
         }
         if (creditY > 0) {
             tokenServiceClient.creditBalance(userId, pool.getTokenYId(), creditY);
         }
+        if (exitFeeX > 0 || exitFeeY > 0) {
+            log.info("Exit fee charged: position={} feeX={} feeY={} ({}bps)",
+                    position.getId(), exitFeeX, exitFeeY, lpExitFeeBps);
+        }
 
-        // 6. Update pool TVL
+        // 6. Update pool TVL — withdrawn amount left the pool entirely
+        // (user got most, protocol kept exit fee on the pool's books).
+        // Protocol fee stays on `liquidity_pools.total_fees_collected_*`
+        // — those are the same accumulator already used by base swap fee.
         pool.setTotalTvlX(Math.max(0, pool.getTotalTvlX() - totalWithdrawnX));
         pool.setTotalTvlY(Math.max(0, pool.getTotalTvlY() - totalWithdrawnY));
+        pool.setTotalFeesCollectedX(pool.getTotalFeesCollectedX() + exitFeeX);
+        pool.setTotalFeesCollectedY(pool.getTotalFeesCollectedY() + exitFeeY);
         poolRepository.save(pool);
 
         // Update position shares and fee snapshots
