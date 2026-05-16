@@ -211,6 +211,25 @@ matches the original feaecfa state:
   locks to `*.sber-online.ru`. Verified: localhost:3000 → 200 +
   ACA-Origin, evil.com → 403. See commit `6003805`.
 
+## What's next (planning artefacts)
+
+The forward roadmap lives in three docs in `docs/`:
+
+- **`SPRINT-PLAN.md`** — detailed Sprint 3-7 backlogs with task source-tags
+  (R# risk, M# monetization idea, D# discovery commitment, TD tech-debt).
+  Parking lot catalogues 14 ideas we explicitly aren't building (with
+  re-evaluation triggers).
+- **`MONETIZATION-STRATEGY.md`** — 60+ revenue ideas across 10 categories,
+  filtered through Sber's moats, scored, recommended in 3 horizons
+  (NOW Sprint 3-4, NEXT Q3-Q4, LATER 2027 H1+). Top picks:
+  enable `protocol_fee_pct=5%`, pitch Sber Treasury as LP venue,
+  SberSpasibo integration, B2B settlement rail.
+- **`PRODUCT-DISCOVERY-2026-05-16.md`** — BA-led mini-demo + 3 revenue
+  directions: FX hedges, DLMM-as-Service, MM rebate.
+
+Cumulative target: 30M ₽/yr today → 300-500M (Q3) → 800M-1.2B (Q4) →
+1.5-2B (Q1 2027) → 3-4B (Q3 2027) by stacking 7-8 streams.
+
 ## Known debt (still open)
 - **Pool-engine outbox** not yet wired — pool state mutations
   (active_bin updates, fee accruals on swap) follow the same pattern
