@@ -77,7 +77,12 @@ management:
         include: health,info,metrics,prometheus,circuitbreakers,retries,timelimiters
   endpoint:
     health:
-      show-details: when-authorized
+      # Demo-friendly: anyone hitting /actuator/health sees the
+      # per-component breakdown (DB, Kafka, Redis, token-service,
+      # user-service). For prod this should drop back to when-authorized.
+      show-details: always
+      probes:
+        enabled: true
     circuitbreakers:
       enabled: true
   health:

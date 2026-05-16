@@ -1,5 +1,6 @@
 package com.sber.dlmm.pool.config;
 
+import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -29,7 +30,12 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/actuator/**").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // EndpointRequest matches actuator endpoints via Spring Boot's
+                        // EndpointRequestMatcher — bypasses the MvcRequestMatcher path
+                        // inference that silently fails for non-MVC handlers, which
+                        // would otherwise drop /actuator/** through to anyRequest().
+                        .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/pools", "/api/v1/pools/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/pools/swap/quote").permitAll()
                         .anyRequest().authenticated()

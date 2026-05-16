@@ -21,3 +21,16 @@ logging:
   level:
     com.sber.dlmm: DEBUG
     org.springframework: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      # Surfaces the per-downstream health (token, user, pool, fee, tx) so
+      # the admin UI can render a dependency status panel without extra calls.
+      show-details: always
+      probes:
+        enabled: true

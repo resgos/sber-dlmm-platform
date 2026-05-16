@@ -36,3 +36,14 @@ logging:
   level:
     com.sber.dlmm: DEBUG
     org.springframework: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
