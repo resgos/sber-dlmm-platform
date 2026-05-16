@@ -23,17 +23,17 @@ import type { Token, TokenType, MintBurnRequest } from '@/api/types'
 const { Title } = Typography
 
 const tokenTypeColor: Record<TokenType, string> = {
-  FIAT_BACKED: 'blue',
-  COMMODITY_BACKED: 'gold',
-  UTILITY: 'cyan',
-  SECURITY: 'purple',
+  STABLE_TOKEN: 'blue',
+  EQUITY_TOKEN: 'gold',
+  LP_TOKEN: 'cyan',
+  GOVERNANCE_TOKEN: 'purple',
 }
 
 const tokenTypeLabel: Record<TokenType, string> = {
-  FIAT_BACKED: 'Фиатный',
-  COMMODITY_BACKED: 'Товарный',
-  UTILITY: 'Утилитарный',
-  SECURITY: 'Ценная бумага',
+  STABLE_TOKEN: 'Стейблкоин',
+  EQUITY_TOKEN: 'Товарный',
+  LP_TOKEN: 'LP-токен',
+  GOVERNANCE_TOKEN: 'Управление',
 }
 
 type ModalMode = 'mint' | 'burn' | null

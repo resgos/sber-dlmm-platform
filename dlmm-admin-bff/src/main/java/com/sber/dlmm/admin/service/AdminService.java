@@ -87,8 +87,9 @@ public class AdminService {
 
         long totalUsers = users.size();
         // user-service returns kycStatus as a string ("VERIFIED" | "PENDING" | …)
+        // toString(...) guards against null / unexpected types.
         long verifiedUsers = users.stream()
-                .filter(u -> "VERIFIED".equals(u.get("kycStatus")))
+                .filter(u -> "VERIFIED".equals(toString(u.get("kycStatus"))))
                 .count();
 
         int totalPools = pools.size();
@@ -96,13 +97,13 @@ public class AdminService {
                 .filter(p -> "ACTIVE".equals(p.get("status")))
                 .count();
 
-        // pool-engine DTO exposes totalTvlX / totalTvlY in token smallest units
-        // (no shared decimals model yet). totalTvlY is the SRUB-side reserve
-        // for every SRUB-quoted pool in the extended catalog, so summing it
-        // gives a rough RUB-denominated TVL. Proper price-aware aggregation
-        // is a follow-up once the precision/decimals story is cleaned up.
+        // Both sides of every pool contribute to TVL. The result is in mixed
+        // token smallest units (no shared decimals model yet) but already
+        // ordered-of-magnitude useful for the admin view; price-aware
+        // aggregation is a follow-up once the precision/decimals story is
+        // cleaned up.
         BigDecimal totalTvlRub = pools.stream()
-                .map(p -> toBigDecimal(p.get("totalTvlY")))
+                .map(p -> toBigDecimal(p.get("totalTvlX")).add(toBigDecimal(p.get("totalTvlY"))))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal volume24hRub = pools.stream()
@@ -110,12 +111,11 @@ public class AdminService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalFeesCollectedRub = pools.stream()
-                .map(p -> toBigDecimal(p.get("totalFeesCollectedY")))
+                .map(p -> toBigDecimal(p.get("totalFeesCollectedX"))
+                        .add(toBigDecimal(p.get("totalFeesCollectedY"))))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        long activePositions = pools.stream()
-                .mapToLong(p -> toLong(p.get("activePositions")))
-                .sum();
+        long activePositions = 0; // Position count not available from pool list endpoint
 
         long transactionsToday = transactions.size();
 

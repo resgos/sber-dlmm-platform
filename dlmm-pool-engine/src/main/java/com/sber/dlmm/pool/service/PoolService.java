@@ -118,8 +118,21 @@ public class PoolService {
             poolPage = poolRepository.findAll(PageRequest.of(page, size, sort));
         }
 
+        // Resolve token symbols for all pools
+        java.util.Map<UUID, String> symbolMap = new java.util.HashMap<>();
+        for (LiquidityPool pool : poolPage.getContent()) {
+            symbolMap.computeIfAbsent(pool.getTokenXId(), id -> {
+                try { var t = tokenServiceClient.getToken(id); return t != null ? t.symbol() : null; }
+                catch (Exception e) { return null; }
+            });
+            symbolMap.computeIfAbsent(pool.getTokenYId(), id -> {
+                try { var t = tokenServiceClient.getToken(id); return t != null ? t.symbol() : null; }
+                catch (Exception e) { return null; }
+            });
+        }
+
         List<PoolResponse> responses = poolPage.getContent().stream()
-                .map(pool -> toPoolResponse(pool, null, null))
+                .map(pool -> toPoolResponse(pool, symbolMap.get(pool.getTokenXId()), symbolMap.get(pool.getTokenYId())))
                 .toList();
 
         return new PageResponse<>(responses, page, size,
@@ -136,10 +149,15 @@ public class PoolService {
                         bin.getReserveX(), bin.getReserveY(), bin.getCompositionFactor()))
                 .toList();
 
+        // Resolve token symbols
+        String symX = null, symY = null;
+        try { var tx = tokenServiceClient.getToken(pool.getTokenXId()); if (tx != null) symX = tx.symbol(); } catch (Exception ignored) {}
+        try { var ty = tokenServiceClient.getToken(pool.getTokenYId()); if (ty != null) symY = ty.symbol(); } catch (Exception ignored) {}
+
         int currentDynamicFeeBps = calculateDynamicFee(pool);
         BigDecimal estimatedApy = calculateEstimatedApy(pool, currentDynamicFeeBps);
 
-        PoolResponse poolResponse = toPoolResponseWithApy(pool, null, null, estimatedApy);
+        PoolResponse poolResponse = toPoolResponseWithApy(pool, symX, symY, estimatedApy);
 
         return new PoolDetailResponse(poolResponse, binResponses,
                 pool.getVolatilityAccumulator(), currentDynamicFeeBps,
@@ -242,14 +260,8 @@ public class PoolService {
 
     private PoolResponse toPoolResponseWithApy(LiquidityPool pool, String tokenXSymbol,
                                                  String tokenYSymbol, BigDecimal apy) {
-        // pool.activeBinId follows the Meteora-style "middle bin = 2^23 (8_388_608)"
-        // convention — it's an ABSOLUTE bin id calibrated so that bin 8_388_608
-        // equals pool.basePrice. Feeding the raw activeBinId straight into
-        // BinMath.binPrice computes basePrice * (1 + binStep/10000)^8_388_608
-        // (~10^36000 for SBTC) — semantically meaningless and overflows any
-        // downstream JSON consumer (Jackson rejects it). Until the
-        // absolute-vs-relative bin-id semantics are formalised (open backlog),
-        // expose basePrice as the listing-level current price.
+        // See toPoolResponse(...) comment above for why basePrice is used directly
+        // instead of BinMath.binPrice(base, step, activeBinId).
         BigDecimal currentPrice = pool.getBasePrice();
         return new PoolResponse(pool.getId(), pool.getTokenXId(), pool.getTokenYId(),
                 tokenXSymbol, tokenYSymbol, pool.getBinStep(), pool.getBaseFeeBps(),
