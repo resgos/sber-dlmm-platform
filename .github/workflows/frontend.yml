@@ -1,0 +1,59 @@
+name: frontend
+
+# Type-check + Vitest for both UIs. Only triggered when the UI folders
+# (or this file) change — keeps minutes free for backend churn.
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "dlmm-admin-ui/**"
+      - "dlmm-user-ui/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "dlmm-admin-ui/**"
+      - "dlmm-user-ui/**"
+      - ".github/workflows/frontend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        ui: [dlmm-admin-ui, dlmm-user-ui]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ matrix.ui }}/package-lock.json
+
+      # npm ci (not install) — locks to package-lock.json + fails on
+      # missing entries. Catches dep drift in PRs.
+      - name: npm ci
+        working-directory: ${{ matrix.ui }}
+        run: npm ci
+
+      # Vitest unit tests. Continue-on-error: false (default) so they're
+      # a hard gate. tsc + vite build below catches type drift even
+      # without strict noUnusedLocals.
+      - name: Vitest
+        working-directory: ${{ matrix.ui }}
+        run: npm run test -- --run --reporter=verbose
+
+      - name: Build (tsc + vite)
+        working-directory: ${{ matrix.ui }}
+        run: npm run build

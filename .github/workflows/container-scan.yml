@@ -1,0 +1,76 @@
+name: container-scan
+
+# Build one representative service image and scan it with Trivy. Runs
+# weekly + on every change to Dockerfile/root pom. Catches CVEs in the
+# base image (eclipse-temurin:21-jre) and in pinned Maven deps.
+#
+# Not blocking on merge today — Trivy noise rate (especially OS-level
+# CVEs the base image hasn't patched yet) would chase every PR with
+# unrelated tickets. Run as a separate workflow with a clear "advisory"
+# severity threshold; promote to required-status-check once the noise
+# is tuned (Sprint 3).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "pom.xml"
+      - "dlmm-*/pom.xml"
+      - ".github/workflows/container-scan.yml"
+  schedule:
+    # Mondays 06:00 UTC — fresh CVE feed for the week.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: container-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write  # upload SARIF to the Security tab
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Pick pool-engine: the biggest service (Resilience4j, Caffeine,
+      # webflux, kafka, redis). Anything that fails here will likely
+      # fail in every service.
+      - name: Build pool-engine image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+            MODULE=dlmm-pool-engine
+          push: false
+          load: true
+          tags: dlmm-pool-engine:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # severity=HIGH,CRITICAL — ignore LOW/MEDIUM noise. SARIF goes
+      # to GitHub Security tab, JSON to artefact for ad-hoc review.
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: dlmm-pool-engine:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true  # noise control: fix unavailable upstream
+          exit-code: "0"        # advisory, not blocking — see header comment
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif

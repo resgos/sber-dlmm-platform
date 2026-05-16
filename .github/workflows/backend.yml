@@ -1,0 +1,72 @@
+name: backend
+
+# Build + test all Maven modules on every push / PR to main and to claude/* branches.
+# Stays cheap: single matrix job, maven cache via setup-java, parallel module build.
+# Test runner is whatever surefire picks up (limited today — dlmm-common +
+# dlmm-pool-engine ship the bulk of tests). The pipeline doesn't block on
+# missing coverage yet; that's a Sprint 3 deliverable.
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - "dlmm-admin-ui/**"
+      - "dlmm-user-ui/**"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - "dlmm-admin-ui/**"
+      - "dlmm-user-ui/**"
+  workflow_dispatch:
+
+# Cancel older runs of the same branch — saves runner minutes when you push
+# follow-up commits quickly.
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Compile everything first — fails fast if any module is broken,
+      # before we incur the slower test runs.
+      - name: Maven compile (skip tests)
+        run: mvn -B -DskipTests -T 1C package
+
+      # Run tests for every module. -fae (fail-at-end) so one flaky module
+      # doesn't mask others. Surfaces real failures across the whole tree
+      # in a single PR comment.
+      - name: Maven test (-fae)
+        env:
+          # Tests don't actually need a real DB password — they wire
+          # Testcontainers — but the Spring fail-fast YAML refs require
+          # the env vars to be set.
+          DB_PASSWORD: ci-placeholder
+          JWT_SECRET: ci-placeholder-jwt-secret-32-bytes-min
+        run: mvn -B -fae test
+
+      # Surface test reports as an artefact for any failures the action
+      # output truncates.
+      - name: Upload surefire reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: "**/target/surefire-reports/**"
+          retention-days: 7
