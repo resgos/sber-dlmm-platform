@@ -5,17 +5,20 @@
 
 ## TL;DR
 
-- **Главное достижение второго прохода:** swap end-to-end через UI работает.
-  Доказано на живом стеке: `POST /api/v1/pools/swap` → 200, txId, баланс пользователя
-  правильно меняется. До этого захода swap **никогда** не работал в проекте — pool-engine
-  падал на 403 ещё на стадии Bearer-token forwarding к token-service. Теперь — 18/18
-  свопов через 18 новых пулов, ~1 030 614 RUB объёма, ~2 208 RUB комиссии (avg ~21 bps).
-- **96 unit тестов проходят** (61 в dlmm-common + 35 в dlmm-pool-engine), включая 23
-  новых regression теста для security-инфры.
-- **15 атомарных коммитов** разбитых по логическим scope (security, infra, seed, UI,
-  tests, fixes) — `git log main..HEAD` читается, каждый можно ревьюить независимо.
-- Что **ещё не работает**: `admin/dashboard` 403 (BFF proxy таймаутит) — отдельный
-  legacy баг в `AdminService`/`AdminProxyController`, не закрыт.
+- **Главное достижение:** свежеоткрытая параллельная ветка `claude/clever-blackwell`
+  (13 коммитов от Claude Opus 4.6 в апреле) была обнаружена и **частично смерджена**
+  через cherry-pick — 7 коммитов добавлены, 6 пропущены как дубликаты моих фиксов.
+- **Swap end-to-end работает** через UI: `POST /api/v1/pools/swap` → 200,
+  18/18 свопов через 18 новых пулов прошли, балансы мутируются.
+- **`/admin/dashboard` теперь HTTP 200** с реальными данными (22 пула, 4 пользователя,
+  3 VERIFIED, 15 транзакций, KYC 75%) — раньше падал в 10s timeout с 403.
+- **Pool listing API возвращает символы**: `tokenXSymbol="GAZP", tokenYSymbol="SRUB"`
+  (раньше null) — UI показывает SBER/SRUB, LKOH/SRUB, ... вместо `POOL-c000…`.
+- **`BinMath.binPrice` оптимизирован O(N)→O(log N)** через `BigDecimal.pow(int)`,
+  ускорение ~360 000× для seed activeBinId=8388608.
+- **152 backend unit-теста + 34 frontend Vitest** проходят (1 disabled known
+  formula bug).
+- **31 атомарный коммит** в `claude/elated-elgamal-dba521`, запушено в origin.
 
 ---
 
