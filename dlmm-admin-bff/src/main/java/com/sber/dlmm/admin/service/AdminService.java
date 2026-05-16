@@ -19,6 +19,7 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -115,9 +116,19 @@ public class AdminService {
                         .add(toBigDecimal(p.get("totalFeesCollectedY"))))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        long activePositions = 0; // Position count not available from pool list endpoint
+        // activePositions: ask pool-engine directly — count is O(1) at the
+        // repository level and avoids a per-pool fan-out. Falls back to 0
+        // if the call fails so the rest of the dashboard still renders.
+        long activePositions = fetchActivePositionsCount();
 
-        long transactionsToday = transactions.size();
+        // transactionsToday was counting the entire page size — the page can
+        // hold up to AGGREGATION_PAGE_SIZE rows of history, none of which are
+        // necessarily from today. Filter by createdAt date prefix so the
+        // number actually reflects today's activity.
+        String todayPrefix = LocalDate.now().toString();
+        long transactionsToday = transactions.stream()
+                .filter(t -> toString(t.get("createdAt")).startsWith(todayPrefix))
+                .count();
 
         DashboardResponse response = new DashboardResponse(
                 totalUsers, verifiedUsers, totalPools, activePools,
@@ -129,6 +140,29 @@ public class AdminService {
                 totalUsers, totalPools, transactionsToday);
 
         return response;
+    }
+
+    /**
+     * Calls pool-engine's {@code /positions/count} endpoint. Returns 0 on
+     * any failure — the dashboard simply renders 0 in that case rather
+     * than breaking the whole response.
+     */
+    private long fetchActivePositionsCount() {
+        try {
+            Map<String, Object> response = poolEngineClient.get()
+                    .uri("/api/v1/pools/positions/count")
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                    .onErrorResume(ex -> {
+                        log.warn("positions/count failed: {}", ex.toString());
+                        return Mono.empty();
+                    })
+                    .block(REQUEST_TIMEOUT);
+            return response == null ? 0L : toLong(response.get("activePositions"));
+        } catch (RuntimeException ex) {
+            log.warn("positions/count blocking call timed out: {}", ex.toString());
+            return 0L;
+        }
     }
 
     /**

@@ -19,4 +19,6 @@ public interface LpPositionRepository extends JpaRepository<LpPosition, UUID> {
     List<LpPosition> findByUserId(UUID userId);
 
     Page<LpPosition> findByPoolId(UUID poolId, Pageable pageable);
+
+    long countByIsActiveTrue();
 }

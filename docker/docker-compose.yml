@@ -16,6 +16,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql
       - ./02-extended-assets.sql:/docker-entrypoint-initdb.d/02-extended-assets.sql
+      - ./03-seed-trading-history.sql:/docker-entrypoint-initdb.d/03-seed-trading-history.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dlmm -d dlmm"]
       interval: 10s

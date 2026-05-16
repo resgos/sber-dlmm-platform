@@ -144,6 +144,17 @@ public class PoolController {
         return ResponseEntity.ok(liquidityService.getUserPositions(user.userIdAsUUID()));
     }
 
+    /**
+     * Platform-wide count of open LP positions. Used by admin-bff to fill
+     * in {@code activePositions} on the dashboard — calling /positions/me
+     * for every user would be O(users) round-trips.
+     */
+    @GetMapping("/positions/count")
+    @Operation(summary = "Total active LP positions across the platform")
+    public ResponseEntity<java.util.Map<String, Long>> getActivePositionsCount() {
+        return ResponseEntity.ok(java.util.Map.of("activePositions", liquidityService.countActivePositions()));
+    }
+
     @PostMapping("/swap")
     @Operation(summary = "Execute a token swap (KYC verified users)")
     public ResponseEntity<SwapResponse> swap(@Valid @RequestBody SwapRequest request) {

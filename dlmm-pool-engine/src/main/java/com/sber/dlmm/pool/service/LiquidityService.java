@@ -422,6 +422,15 @@ public class LiquidityService {
                 totalClaimedFeeX, totalClaimedFeeY);
     }
 
+    /**
+     * Total open LP positions across all users — used by /admin/dashboard
+     * to surface platform-wide liquidity engagement without paging through
+     * every pool's position list.
+     */
+    public long countActivePositions() {
+        return positionRepository.countByIsActiveTrue();
+    }
+
     public List<PositionResponse> getUserPositions(UUID userId) {
         List<LpPosition> positions = positionRepository.findByUserIdAndIsActiveTrue(userId);
         List<PositionResponse> responses = new ArrayList<>();
