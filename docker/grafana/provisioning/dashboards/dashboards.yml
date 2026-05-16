@@ -1,0 +1,16 @@
+apiVersion: 1
+
+# Tell Grafana to load any *.json dashboard from this directory at startup.
+# Drop more dashboards into docker/grafana/dashboards/ and they appear
+# in the "DLMM" folder automatically.
+
+providers:
+  - name: dlmm
+    orgId: 1
+    folder: DLMM
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

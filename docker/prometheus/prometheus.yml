@@ -1,0 +1,46 @@
+# Sber DLMM — Prometheus scrape config
+#
+# Each Spring Boot service exposes /actuator/prometheus once
+# micrometer-registry-prometheus is on the classpath
+# (added at dlmm-common in Sprint 2). 5-second scrape interval is
+# coarse enough not to perturb the workload but fine enough that
+# Hikari saturation alerts fire within a minute.
+#
+# Static targets work for compose. For k8s use the
+# kubernetes_sd_configs role=pod scrape with annotations.
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 10s
+  external_labels:
+    cluster: dlmm-dev
+    env: docker
+
+# Alert rule files (Sprint 3 — add hikari_saturation, dispatcher_failures).
+# rule_files:
+#   - "rules/*.yml"
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: dlmm-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - dlmm-gateway:8080
+          - dlmm-user-service:8081
+          - dlmm-token-service:8082
+          - dlmm-pool-engine:8083
+          - dlmm-fee-service:8084
+          - dlmm-transaction-service:8085
+          - dlmm-notification-service:8087
+          - dlmm-admin-bff:8088
+    relabel_configs:
+      # Surface the service name as a Prometheus label so
+      # PromQL queries can group/filter without parsing instance.
+      - source_labels: [__address__]
+        regex: "([^:]+):.*"
+        target_label: service
+        replacement: "$1"

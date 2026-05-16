@@ -1,0 +1,15 @@
+apiVersion: 1
+
+# Auto-provisioned datasource so a fresh Grafana container points at
+# the dlmm Prometheus without manual setup. Grafana picks this up on
+# startup from /etc/grafana/provisioning/datasources.
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://dlmm-prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 5s
