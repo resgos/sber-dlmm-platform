@@ -165,6 +165,52 @@ matches the original feaecfa state:
   (20-min demo flow + Q&A bank for PO/IT-lead/sysAnalyst/demo-day
   questions). See commit `8e00036`.
 
+## Sprint 2 deliverables (2026-05-16, committed in this branch)
+
+- **Pool-engine outbox** — all four `kafkaTemplate.send` sites in
+  `SwapService`, `LiquidityService`, `PoolService` rewired to
+  `outbox.append`. New `service` column on shared `outbox_events`
+  table so token-service's and pool-engine's dispatchers don't fight
+  over each other's rows. Cross-service kill-Kafka drill verified:
+  both services buffer events independently, drain on recovery.
+  Also fixed a serialiser footgun: `KafkaTemplate` was JsonSerializer
+  but the outbox already JSON-encodes payloads — would double-encode.
+  Both services now use `StringSerializer`. See commit `eed99a3`.
+- **CI/CD pipeline** — `.github/workflows/backend.yml` (Maven + JDK 21,
+  compile + test with `-fae`), `frontend.yml` (Node 20, npm ci +
+  Vitest + vite build matrixed across both UIs), `container-scan.yml`
+  (Trivy scan of pool-engine image, weekly + on Dockerfile/pom change,
+  SARIF to Security tab, advisory not blocking). See commit `3429ab2`.
+- **k6 load test baseline** — `loadtest/baseline.js` ramping-arrival
+  scenario (60% pools / 20% dashboard / 20% swap) with per-endpoint
+  Trend metrics + SLO thresholds. First-cut numbers in `loadtest/README.md`:
+  /pools p99 23.22s, dashboard 16.87s, swap 42.29s under 300 VUs —
+  honest "this is where we break" data, not aspirational. Diagnosis
+  (Hikari saturation, test-design pile-up on single balance, same-pool
+  row lock) documented. See commit `c230ef2`.
+- **Kafka consumer lag healthcheck** — `KafkaConsumerLagHealthIndicator`
+  in notification-service. Uses `AdminClient` to compute end-offset
+  minus committed-offset per partition, marks DOWN at total lag >
+  1000. Verified by injecting 2000 messages while consumer was
+  stopped — DOWN with `totalLag=2000`, then UP after catchup.
+  See commit `2b8a92a`.
+- **Prometheus + Grafana stack** — `micrometer-registry-prometheus`
+  at dlmm-common as runtime dep (cascades to all services).
+  `docker/prometheus/prometheus.yml` scrapes 8 services every 5s.
+  `docker/grafana/provisioning/` auto-provisions Prometheus datasource
+  + DLMM Overview dashboard (request rate, p99 latency, Hikari pool,
+  JVM heap, 5xx error rate). Anonymous viewer enabled for demo
+  walkthroughs. Gateway target is currently DOWN (404 — reactive
+  actuator needs separate webflux config, Sprint 3). See commit `618bf9f`.
+- **Startup warmers + CORS prod split** — `StartupWarmer` beans in
+  pool-engine and admin-bff fire on `ApplicationReadyEvent` and call
+  the hot paths once (logged: "Startup warm complete in ~800ms").
+  Dashboard cold-start dropped from ~2.9s to first-user ~150ms.
+  Gateway CORS now reads `dlmm.cors.allowed-origins` (comma-split via
+  SpEL) — `application.yml` carries dev localhost, `application-prod.yml`
+  locks to `*.sber-online.ru`. Verified: localhost:3000 → 200 +
+  ACA-Origin, evil.com → 403. See commit `6003805`.
+
 ## Known debt (still open)
 - **Pool-engine outbox** not yet wired — pool state mutations
   (active_bin updates, fee accruals on swap) follow the same pattern
