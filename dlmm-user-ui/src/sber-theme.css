@@ -326,6 +326,275 @@ body {
 .sber-trend.down { background: #FEF2F2; color: #B91C1C; }
 .sber-trend.flat { background: #F3F4F6; color: #4B5563; }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Pool grid (PoolsPage cards) — replaces the legacy table view
+   ────────────────────────────────────────────────────────────────────────── */
+.sber-pool-card {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--border-light) !important;
+  background: #FFFFFF !important;
+  box-shadow: var(--shadow-xs) !important;
+  transition: transform 0.18s ease, box-shadow 0.22s ease, border-color 0.18s ease;
+  overflow: hidden;
+}
+.sber-pool-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(33,160,56,0.15) !important;
+  border-color: rgba(33,160,56,0.45) !important;
+}
+.sber-pool-card .ant-card-body {
+  padding: 20px 22px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.sber-pool-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.sber-pool-pair {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;       /* allow label to shrink instead of letter-wrapping */
+  flex: 1;
+}
+.sber-pool-pair__label {
+  display: flex;
+  flex-direction: column;
+  margin-left: 6px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sber-pool-pair__label > * {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sber-token-chip {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: #FFFFFF;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 2px 8px rgba(15,23,42,0.08);
+  flex-shrink: 0;
+}
+.sber-token-chip--overlap {
+  margin-left: -16px;
+}
+.sber-pool-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #F9FAFB 0%, #F3F4F6 100%);
+  border-radius: var(--radius-md);
+}
+.sber-pool-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sber-pool-metric__label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+.sber-pool-metric__value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.sber-pool-metric__value--accent {
+  color: var(--sber-green);
+  display: flex;
+  align-items: center;
+}
+.sber-pool-card__cta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.sber-pool-card__cta .ant-btn-primary {
+  flex: 1;
+  height: 40px;
+  border-radius: 10px;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Swap (DeFi-style) — single big card with two input boxes
+   ────────────────────────────────────────────────────────────────────────── */
+.sber-swap-shell {
+  max-width: 520px;
+  margin: 0 auto;
+}
+.sber-swap-headerline {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+.sber-swap-card {
+  border-radius: var(--radius-xl) !important;
+  border: 1px solid var(--border-light) !important;
+  background:
+    radial-gradient(at 100% 0%, rgba(33,160,56,0.06), transparent 50%),
+    radial-gradient(at 0% 100%, rgba(0,181,161,0.05), transparent 50%),
+    #FFFFFF !important;
+  box-shadow: var(--shadow-md) !important;
+  overflow: hidden;
+}
+.sber-swap-card__body {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sber-swap-box {
+  background: #F9FAFB;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.sber-swap-box:focus-within {
+  border-color: rgba(33,160,56,0.5);
+  background: #FFFFFF;
+}
+.sber-swap-box__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.sber-swap-box__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sber-swap-tokenpick.ant-select {
+  min-width: 130px;
+  flex-shrink: 0;
+}
+.sber-swap-tokenpick .ant-select-selector {
+  background: #FFFFFF !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 999px !important;
+  padding: 4px 16px 4px 6px !important;
+  height: 40px !important;
+  display: flex;
+  align-items: center;
+}
+.sber-swap-tokenpick .ant-select-selection-item {
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+.sber-swap-amount.ant-input-number {
+  flex: 1;
+  background: transparent !important;
+  text-align: right;
+}
+.sber-swap-amount .ant-input-number-input {
+  font-size: 28px;
+  font-weight: 600;
+  text-align: right;
+  color: var(--text-primary);
+  padding: 0 !important;
+  height: 40px;
+}
+.sber-swap-amount .ant-input-number-input::placeholder {
+  color: #D1D5DB;
+  font-weight: 500;
+}
+.sber-swap-flip {
+  display: flex;
+  justify-content: center;
+  margin: -6px 0;
+  position: relative;
+  z-index: 2;
+}
+.sber-swap-flip__btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: #FFFFFF;
+  border: 3px solid #F9FAFB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.sber-swap-flip__btn:hover {
+  transform: rotate(180deg);
+  color: var(--sber-green);
+  border-color: rgba(33,160,56,0.25);
+}
+.sber-swap-quote {
+  background: rgba(232,245,233,0.4);
+  border: 1px solid rgba(33,160,56,0.18);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.sber-swap-quote--loading {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  background: #F9FAFB;
+  border-color: var(--border-light);
+}
+.sber-swap-quote__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sber-swap-quote__route {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(33,160,56,0.25);
+}
+.sber-swap-cta {
+  height: 56px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  border-radius: var(--radius-md) !important;
+  letter-spacing: 0.2px;
+}
+.sber-swap-cta:disabled {
+  background: #E5E7EB !important;
+  color: #9CA3AF !important;
+  filter: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
 /* Tag badges */
 .sber-badge {
   border-radius: 12px;

@@ -8,11 +8,13 @@ import { authStore } from '@/store/authStore'
 const { Title, Text } = Typography
 
 function SberLogoLarge() {
+  // Gradient pill brand mark — matches LoginPage. See .sber-brand-mark in sber-theme.css.
   return (
-    <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="28" cy="28" r="28" fill="#21A038" />
-      <path d="M15 28L23 36L41 18" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div className="sber-brand-mark">
+      <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9 17L14.5 22.5L25 12" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
   )
 }
 
@@ -59,18 +61,13 @@ export default function RegisterPage() {
 
   return (
     <div className="sber-login-bg">
-      <Card
-        style={{ width: 460, borderRadius: 16, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E5E7EB' }}
-        styles={{ body: { padding: '40px' } }}
-      >
-        <Space direction="vertical" size={8} style={{ width: '100%', marginBottom: 24, textAlign: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-            <SberLogoLarge />
-          </div>
-          <Title level={3} style={{ margin: 0, color: '#1F2937', fontWeight: 700 }}>
-            СБЕР <span style={{ color: '#21A038' }}>DLMM</span>
+      <Card className="sber-glass-card" styles={{ body: { padding: '44px' } }} style={{ width: 480 }}>
+        <Space direction="vertical" size={12} style={{ width: '100%', marginBottom: 28, textAlign: 'center' }}>
+          <SberLogoLarge />
+          <Title level={3} className="sber-brand-title" style={{ margin: 0 }}>
+            СБЕР <span className="sber-brand-title-accent">DLMM</span>
           </Title>
-          <Text style={{ color: '#6B7280', fontSize: 14 }}>Регистрация</Text>
+          <Text style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Создайте аккаунт</Text>
         </Space>
 
         {error && (

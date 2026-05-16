@@ -1,14 +1,45 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Card, Select, InputNumber, Button, Typography, Space, Alert, Divider, Spin, Collapse } from 'antd'
-import { SwapOutlined, SettingOutlined } from '@ant-design/icons'
+import { useMemo, useState } from 'react'
+import { Card, Select, InputNumber, Button, Typography, Space, Alert, Spin, Popover, Tag, Divider } from 'antd'
+import { SettingOutlined, ArrowDownOutlined, ThunderboltFilled } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { tokens, pools, balances } from '@/api/services'
-import type { Token, Pool, TokenBalance, SwapQuote } from '@/api/types'
-import { formatRub } from '@/components/StatCard'
+import type { Token, Pool, TokenBalance } from '@/api/types'
 
 const { Title, Text } = Typography
 
 const SLIPPAGE_OPTIONS = [0.1, 0.5, 1.0]
+
+// Same accent function as PoolsPage — keeps token chips consistent across the app.
+function pairAccent(symbol: string): { from: string; to: string } {
+  const palette: Array<{ from: string; to: string }> = [
+    { from: '#21A038', to: '#00C853' },
+    { from: '#00B5A1', to: '#21A038' },
+    { from: '#6E5BFF', to: '#00B5A1' },
+    { from: '#FFB320', to: '#FF6F61' },
+    { from: '#0EA5E9', to: '#6E5BFF' },
+    { from: '#21A038', to: '#FFB320' },
+    { from: '#FF6F61', to: '#6E5BFF' },
+    { from: '#00C853', to: '#0EA5E9' },
+  ]
+  let hash = 0
+  for (let i = 0; i < symbol.length; i++) hash = (hash * 31 + symbol.charCodeAt(i)) >>> 0
+  return palette[hash % palette.length]
+}
+
+function TokenChip({ symbol }: { symbol?: string }) {
+  if (!symbol) {
+    return <div className="sber-token-chip" style={{ background: '#E5E7EB', width: 32, height: 32, fontSize: 10 }}>—</div>
+  }
+  const c = pairAccent(symbol)
+  return (
+    <div className="sber-token-chip" style={{
+      background: `linear-gradient(135deg, ${c.from}, ${c.to})`,
+      width: 32, height: 32, fontSize: 10,
+    }}>
+      {symbol.slice(0, 4)}
+    </div>
+  )
+}
 
 export default function SwapPage() {
   const queryClient = useQueryClient()
@@ -35,44 +66,38 @@ export default function SwapPage() {
     queryFn: () => pools.getPools(0, 100),
   })
 
-  // Find best pool for selected pair
   const selectedPool = useMemo(() => {
     if (!tokenInId || !tokenOutId || !poolList?.content) return null
     return poolList.content
       .filter((p: Pool) => p.status === 'ACTIVE')
-      .find(
-        (p: Pool) =>
-          (p.tokenXId === tokenInId && p.tokenYId === tokenOutId) ||
-          (p.tokenXId === tokenOutId && p.tokenYId === tokenInId),
+      .find((p: Pool) =>
+        (p.tokenXId === tokenInId && p.tokenYId === tokenOutId) ||
+        (p.tokenXId === tokenOutId && p.tokenYId === tokenInId),
       ) || null
   }, [tokenInId, tokenOutId, poolList])
 
-  // Get quote
-  const { data: quote, isLoading: quoteLoading, error: quoteError } = useQuery({
+  const { data: quote, isLoading: quoteLoading } = useQuery({
     queryKey: ['swapQuote', selectedPool?.id, tokenInId, amountIn],
-    queryFn: () =>
-      pools.getSwapQuote({
-        poolId: selectedPool!.id,
-        tokenInId,
-        amountIn: amountIn!,
-      }),
+    queryFn: () => pools.getSwapQuote({
+      poolId: selectedPool!.id,
+      tokenInId,
+      amountIn: amountIn!,
+    }),
     enabled: !!selectedPool && !!tokenInId && !!amountIn && amountIn > 0,
     retry: false,
   })
 
   const effectiveSlippage = customSlippage ?? slippage
-
   const minAmountOut = quote ? Math.floor(quote.amountOut * (1 - effectiveSlippage / 100)) : 0
 
   const swapMutation = useMutation({
-    mutationFn: () =>
-      pools.executeSwap({
-        poolId: selectedPool!.id,
-        tokenInId,
-        amountIn: amountIn!,
-        minAmountOut,
-        idempotencyKey: crypto.randomUUID(),
-      }),
+    mutationFn: () => pools.executeSwap({
+      poolId: selectedPool!.id,
+      tokenInId,
+      amountIn: amountIn!,
+      minAmountOut,
+      idempotencyKey: crypto.randomUUID(),
+    }),
     onSuccess: () => {
       setSwapSuccess(true)
       setSwapError(null)
@@ -81,14 +106,16 @@ export default function SwapPage() {
       queryClient.invalidateQueries({ queryKey: ['myTransactions'] })
       setTimeout(() => setSwapSuccess(false), 5000)
     },
-    onError: (err: any) => {
-      setSwapError(err?.response?.data?.message || 'Ошибка при выполнении обмена')
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { message?: string } } }
+      setSwapError(e?.response?.data?.message || 'Ошибка при выполнении обмена')
     },
   })
 
   const tokenOptions = (tokenList?.content || []).map((t: Token) => ({
     label: `${t.symbol} — ${t.name}`,
     value: t.id,
+    symbol: t.symbol,
   }))
 
   const balanceMap = new Map((myBalances || []).map((b: TokenBalance) => [b.tokenId, b]))
@@ -103,181 +130,223 @@ export default function SwapPage() {
     setAmountIn(null)
   }
 
+  const priceImpactColor = !quote
+    ? undefined
+    : quote.priceImpact < 1 ? 'var(--sber-green)'
+    : quote.priceImpact < 5 ? 'var(--sber-amber)'
+    : '#EF4444'
+
+  const slippageMenu = (
+    <div style={{ padding: 4, minWidth: 240 }}>
+      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+        Допуск проскальзывания
+      </Text>
+      <Space size={6} style={{ marginBottom: 8 }}>
+        {SLIPPAGE_OPTIONS.map((opt) => (
+          <Button
+            key={opt}
+            type={slippage === opt && !customSlippage ? 'primary' : 'default'}
+            size="small"
+            onClick={() => { setSlippage(opt); setCustomSlippage(null) }}
+          >
+            {opt}%
+          </Button>
+        ))}
+        <InputNumber
+          size="small"
+          placeholder="свой"
+          style={{ width: 80 }}
+          min={0.01}
+          max={50}
+          step={0.1}
+          value={customSlippage}
+          onChange={(v) => setCustomSlippage(v)}
+          suffix="%"
+        />
+      </Space>
+    </div>
+  )
+
+  // Render a single "box" — either the IN side or the OUT side.
+  const renderBox = (opts: {
+    label: string
+    selectedTokenId: string
+    onSelectToken: (id: string) => void
+    excludeId: string
+    value: number | null
+    onValueChange?: (v: number | null) => void
+    showBalance?: boolean
+    readOnly?: boolean
+    symbol?: string
+  }) => (
+    <div className="sber-swap-box">
+      <div className="sber-swap-box__head">
+        <Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>{opts.label}</Text>
+        {opts.showBalance && inBalance && (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Доступно: {inBalance.available.toLocaleString('ru-RU')}{' '}
+            <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 12, height: 'auto' }}
+              onClick={() => setAmountIn(inBalance.available)}>
+              MAX
+            </Button>
+          </Text>
+        )}
+      </div>
+      <div className="sber-swap-box__row">
+        <Select
+          className="sber-swap-tokenpick"
+          placeholder="Токен"
+          value={opts.selectedTokenId || undefined}
+          onChange={opts.onSelectToken}
+          options={tokenOptions.filter((o) => o.value !== opts.excludeId)}
+          showSearch
+          optionFilterProp="label"
+          variant="borderless"
+          suffixIcon={null}
+          labelRender={({ value }) => {
+            const t = tokenOptions.find((o) => o.value === value)
+            return (
+              <Space size={8} style={{ alignItems: 'center' }}>
+                <TokenChip symbol={t?.symbol} />
+                <Text strong>{t?.symbol}</Text>
+              </Space>
+            )
+          }}
+        />
+        <InputNumber
+          className="sber-swap-amount"
+          placeholder="0.0"
+          value={opts.value}
+          onChange={opts.onValueChange}
+          min={0}
+          controls={false}
+          variant="borderless"
+          disabled={opts.readOnly}
+        />
+      </div>
+    </div>
+  )
+
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto' }}>
-      <Title level={4} className="sber-page-title" style={{ textAlign: 'center', marginBottom: 24 }}>
-        Обмен токенов
-      </Title>
+    <div className="sber-swap-shell">
+      <div className="sber-swap-headerline">
+        <div>
+          <Title level={4} className="sber-page-title" style={{ marginBottom: 4 }}>Обмен</Title>
+          <Text type="secondary">Мгновенный своп между токенами через DLMM-пулы</Text>
+        </div>
+        <Popover content={slippageMenu} trigger="click" placement="bottomRight">
+          <Button shape="circle" icon={<SettingOutlined />} size="large" />
+        </Popover>
+      </div>
 
       {swapSuccess && (
         <Alert message="Обмен выполнен успешно!" type="success" showIcon closable
-          onClose={() => setSwapSuccess(false)} style={{ marginBottom: 16, borderRadius: 8 }} />
+          onClose={() => setSwapSuccess(false)} style={{ marginBottom: 16, borderRadius: 12 }} />
       )}
       {swapError && (
         <Alert message={swapError} type="error" showIcon closable
-          onClose={() => setSwapError(null)} style={{ marginBottom: 16, borderRadius: 8 }} />
+          onClose={() => setSwapError(null)} style={{ marginBottom: 16, borderRadius: 12 }} />
       )}
 
-      <Card className="sber-card" styles={{ body: { padding: 24 } }}>
-        {/* Token In */}
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <Text strong>Вы отдаёте</Text>
-            {inBalance && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Доступно: {inBalance.available.toLocaleString('ru-RU')}
-                <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 12 }}
-                  onClick={() => setAmountIn(inBalance.available)}>MAX</Button>
-              </Text>
-            )}
-          </div>
-          <Space.Compact style={{ width: '100%' }}>
-            <Select
-              style={{ width: '45%' }}
-              placeholder="Токен"
-              value={tokenInId || undefined}
-              onChange={setTokenInId}
-              options={tokenOptions.filter((o: { value: string }) => o.value !== tokenOutId)}
-              showSearch
-              optionFilterProp="label"
-              size="large"
-            />
-            <InputNumber
-              style={{ width: '55%' }}
-              placeholder="0.00"
-              value={amountIn}
-              onChange={(v) => setAmountIn(v)}
-              min={0}
-              size="large"
-              controls={false}
-            />
-          </Space.Compact>
-        </div>
+      <Card className="sber-swap-card" styles={{ body: { padding: 0 } }}>
+        <div className="sber-swap-card__body">
+          {renderBox({
+            label: 'Вы отдаёте',
+            selectedTokenId: tokenInId,
+            onSelectToken: setTokenInId,
+            excludeId: tokenOutId,
+            value: amountIn,
+            onValueChange: (v) => setAmountIn(v),
+            showBalance: true,
+          })}
 
-        {/* Swap direction button */}
-        <div style={{ textAlign: 'center', margin: '12px 0' }}>
+          <div className="sber-swap-flip">
+            <button
+              type="button"
+              className="sber-swap-flip__btn"
+              onClick={handleSwapDirection}
+              aria-label="Поменять направление"
+            >
+              <ArrowDownOutlined />
+            </button>
+          </div>
+
+          {renderBox({
+            label: 'Вы получаете',
+            selectedTokenId: tokenOutId,
+            onSelectToken: setTokenOutId,
+            excludeId: tokenInId,
+            value: quote?.amountOut ?? null,
+            readOnly: true,
+          })}
+
+          {/* Quote summary — collapsed metadata panel */}
+          {quoteLoading && (
+            <div className="sber-swap-quote sber-swap-quote--loading">
+              <Spin size="small" /> <Text type="secondary">Расчёт маршрута…</Text>
+            </div>
+          )}
+          {quote && !quoteLoading && (
+            <div className="sber-swap-quote">
+              <div className="sber-swap-quote__row">
+                <Text type="secondary">Курс</Text>
+                <Text strong>
+                  1 {tokenInSymbol} ≈ {(quote.amountOut / quote.amountIn).toFixed(6)} {tokenOutSymbol}
+                </Text>
+              </div>
+              <div className="sber-swap-quote__row">
+                <Text type="secondary">Влияние на цену</Text>
+                <Text strong style={{ color: priceImpactColor }}>{quote.priceImpact.toFixed(2)}%</Text>
+              </div>
+              <div className="sber-swap-quote__row">
+                <Text type="secondary">Комиссия</Text>
+                <Text>{quote.fee.toLocaleString('ru-RU')} {tokenInSymbol}</Text>
+              </div>
+              <div className="sber-swap-quote__row">
+                <Text type="secondary">Мин. к получению</Text>
+                <Text>{minAmountOut.toLocaleString('ru-RU')} {tokenOutSymbol}</Text>
+              </div>
+              {selectedPool && (
+                <div className="sber-swap-quote__route">
+                  <Tag color="green" style={{ borderRadius: 999, padding: '2px 10px' }}>
+                    <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
+                    через пул {selectedPool.tokenXSymbol}/{selectedPool.tokenYSymbol}
+                  </Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {selectedPool.baseFeeBps} bps · допуск {effectiveSlippage}%
+                  </Text>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!selectedPool && tokenInId && tokenOutId && (
+            <Alert message="Нет активного пула для выбранной пары" type="warning" showIcon
+              style={{ borderRadius: 12 }} />
+          )}
+
+          <Divider style={{ margin: '4px 0' }} />
+
           <Button
-            shape="circle"
-            icon={<SwapOutlined rotate={90} />}
-            onClick={handleSwapDirection}
-            style={{ border: '2px solid #E5E7EB' }}
-          />
+            type="primary"
+            block
+            size="large"
+            className="sber-swap-cta"
+            disabled={!quote || !selectedPool || swapMutation.isPending}
+            loading={swapMutation.isPending}
+            onClick={() => swapMutation.mutate()}
+          >
+            {!tokenInId || !tokenOutId
+              ? 'Выберите токены'
+              : !amountIn
+              ? 'Введите сумму'
+              : !selectedPool
+              ? 'Пул недоступен'
+              : swapMutation.isPending
+              ? 'Выполняется обмен…'
+              : 'Обменять'}
+          </Button>
         </div>
-
-        {/* Token Out */}
-        <div style={{ marginBottom: 16 }}>
-          <Text strong style={{ display: 'block', marginBottom: 8 }}>Вы получаете</Text>
-          <Space.Compact style={{ width: '100%' }}>
-            <Select
-              style={{ width: '45%' }}
-              placeholder="Токен"
-              value={tokenOutId || undefined}
-              onChange={setTokenOutId}
-              options={tokenOptions.filter((o: { value: string }) => o.value !== tokenInId)}
-              showSearch
-              optionFilterProp="label"
-              size="large"
-            />
-            <InputNumber
-              style={{ width: '55%' }}
-              placeholder="0.00"
-              value={quote?.amountOut ?? null}
-              disabled
-              size="large"
-              controls={false}
-            />
-          </Space.Compact>
-        </div>
-
-        {/* Quote info */}
-        {quoteLoading && <div style={{ textAlign: 'center', padding: 12 }}><Spin size="small" /> Расчёт...</div>}
-
-        {quote && !quoteLoading && (
-          <div style={{
-            background: '#F9FAFB', borderRadius: 8, padding: 12, marginBottom: 16, fontSize: 13,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <Text type="secondary">Курс</Text>
-              <Text>1 {tokenInSymbol} = {(quote.amountOut / quote.amountIn).toFixed(6)} {tokenOutSymbol}</Text>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <Text type="secondary">Влияние на цену</Text>
-              <Text style={{
-                color: quote.priceImpact < 1 ? '#21A038' : quote.priceImpact < 5 ? '#F59E0B' : '#EF4444',
-                fontWeight: 600,
-              }}>
-                {quote.priceImpact.toFixed(2)}%
-              </Text>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <Text type="secondary">Комиссия</Text>
-              <Text>{quote.fee.toLocaleString('ru-RU')}</Text>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <Text type="secondary">Мин. получаемая сумма</Text>
-              <Text>{minAmountOut.toLocaleString('ru-RU')} {tokenOutSymbol}</Text>
-            </div>
-          </div>
-        )}
-
-        {selectedPool && (
-          <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>
-            Пул: {selectedPool.tokenXSymbol}/{selectedPool.tokenYSymbol} (комиссия {selectedPool.baseFeeBps} bps)
-          </div>
-        )}
-
-        {!selectedPool && tokenInId && tokenOutId && (
-          <Alert message="Нет активного пула для выбранной пары" type="warning" showIcon
-            style={{ marginBottom: 12, borderRadius: 8 }} />
-        )}
-
-        {/* Slippage settings */}
-        <Collapse
-          ghost
-          items={[{
-            key: '1',
-            label: <Space><SettingOutlined /> <Text type="secondary" style={{ fontSize: 13 }}>Допуск проскальзывания: {effectiveSlippage}%</Text></Space>,
-            children: (
-              <Space>
-                {SLIPPAGE_OPTIONS.map((opt) => (
-                  <Button
-                    key={opt}
-                    type={slippage === opt && !customSlippage ? 'primary' : 'default'}
-                    size="small"
-                    onClick={() => { setSlippage(opt); setCustomSlippage(null) }}
-                  >
-                    {opt}%
-                  </Button>
-                ))}
-                <InputNumber
-                  size="small"
-                  placeholder="Custom"
-                  style={{ width: 80 }}
-                  min={0.01}
-                  max={50}
-                  step={0.1}
-                  value={customSlippage}
-                  onChange={(v) => setCustomSlippage(v)}
-                  suffix="%"
-                />
-              </Space>
-            ),
-          }]}
-        />
-
-        <Divider style={{ margin: '12px 0' }} />
-
-        <Button
-          type="primary"
-          block
-          size="large"
-          style={{ height: 52, fontSize: 16, fontWeight: 600, borderRadius: 10 }}
-          disabled={!quote || !selectedPool || swapMutation.isPending}
-          loading={swapMutation.isPending}
-          onClick={() => swapMutation.mutate()}
-        >
-          {swapMutation.isPending ? 'Выполняется обмен...' : 'Обменять'}
-        </Button>
       </Card>
     </div>
   )
