@@ -51,6 +51,13 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Sprint 4 #4.10: liquibase missing since Sprint 1, changesets
+             silently never ran. Adding it now so future schema mutations
+             go through the audited migration path. -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

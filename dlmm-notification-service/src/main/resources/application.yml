@@ -11,11 +11,15 @@ spring:
       connection-timeout: 20000
   jpa:
     hibernate:
-      ddl-auto: update
+      # Sprint 4 #4.10: was `update` (silent schema mutation). Now
+      # `validate` — all schema work via Liquibase changesets.
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  liquibase:
+    change-log: classpath:db/changelog/master.xml
   kafka:
     bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
     consumer:

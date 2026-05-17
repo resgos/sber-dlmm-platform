@@ -11,5 +11,6 @@
     <include file="004-create-position-bins-table.xml" relativeToChangelogFile="true"/>
     <include file="005-create-outbox-events-table.xml" relativeToChangelogFile="true"/>
     <include file="006-add-version-to-liquidity-pools.xml" relativeToChangelogFile="true"/>
+    <include file="007-add-counterparty-limits-to-pools.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

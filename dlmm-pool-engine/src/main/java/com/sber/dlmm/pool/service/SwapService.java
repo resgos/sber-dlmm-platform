@@ -262,6 +262,17 @@ public class SwapService {
         boolean swapXtoY = req.tokenInId().equals(pool.getTokenXId());
         UUID tokenOutId = swapXtoY ? pool.getTokenYId() : pool.getTokenXId();
 
+        // Sprint 4 #4.2 — counterparty single-swap exposure cap.
+        // Enforce per-pool cap on the input side. NULL = no limit (default
+        // for existing pools, backward-compatible). For corp FX hedge pool
+        // SRUB/SCNY, admin will set max_single_swap_nominal_y to 50M SRUB.
+        Long cap = swapXtoY ? pool.getMaxSingleSwapNominalX() : pool.getMaxSingleSwapNominalY();
+        if (cap != null && req.amountIn() > cap) {
+            throw new com.sber.dlmm.common.exception.CounterpartyLimitExceededException(
+                    "Single-swap exposure cap exceeded: amount " + req.amountIn()
+                    + " > cap " + cap + " on pool " + pool.getId());
+        }
+
         BigDecimal spotPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(), pool.getActiveBinId());
 
         // 2. Execute swap atomically, updating bins

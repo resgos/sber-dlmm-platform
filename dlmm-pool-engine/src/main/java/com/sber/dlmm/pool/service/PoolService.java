@@ -224,6 +224,29 @@ public class PoolService {
         return toPoolResponse(pool, null, null);
     }
 
+    /**
+     * Sprint 4 #4.2 — admin sets per-pool single-swap counterparty caps.
+     *
+     * Either field may be null. Null = "no cap" (full pre-Sprint-4 behaviour).
+     * Distinguishing "leave as-is" from "reset to null" is the caller's
+     * job — they always send the full target state, so what arrives wins.
+     * Frontend (admin-ui) should pre-fill with current values to avoid
+     * accidental cap removal.
+     */
+    @Transactional
+    public PoolResponse updateCounterpartyLimits(UUID poolId,
+                                                  Long maxSingleSwapNominalX,
+                                                  Long maxSingleSwapNominalY) {
+        LiquidityPool pool = poolRepository.findById(poolId)
+                .orElseThrow(() -> new PoolNotFoundException("Pool not found: " + poolId));
+        pool.setMaxSingleSwapNominalX(maxSingleSwapNominalX);
+        pool.setMaxSingleSwapNominalY(maxSingleSwapNominalY);
+        poolRepository.save(pool);
+        log.info("Pool counterparty limits updated: pool={}, maxX={}, maxY={}",
+                poolId, maxSingleSwapNominalX, maxSingleSwapNominalY);
+        return toPoolResponse(pool, null, null);
+    }
+
     private int calculateDynamicFee(LiquidityPool pool) {
         long vaSquared = (long) pool.getVolatilityAccumulator() * pool.getVolatilityAccumulator();
         long variableFeeBps = vaSquared * pool.getBinStep() / 10_000_000_000L;

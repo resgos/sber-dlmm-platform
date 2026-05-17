@@ -16,6 +16,7 @@ import com.sber.dlmm.pool.dto.SwapQuoteResponse;
 import com.sber.dlmm.pool.dto.SwapRequest;
 import com.sber.dlmm.pool.dto.SwapResponse;
 import com.sber.dlmm.pool.dto.CreatePoolRequest;
+import com.sber.dlmm.pool.dto.UpdateCounterpartyLimitsRequest;
 import com.sber.dlmm.pool.dto.UpdateFeeParamsRequest;
 import com.sber.dlmm.pool.service.LiquidityService;
 import com.sber.dlmm.pool.service.PoolService;
@@ -118,6 +119,23 @@ public class PoolController {
         requireAdmin(getCurrentUser());
         return ResponseEntity.ok(poolService.updateFeeParams(id,
                 request.baseFeeBps(), request.maxVariableFeeBps(), request.decayPeriodSeconds()));
+    }
+
+    /**
+     * Sprint 4 #4.2 — admin sets per-pool counterparty caps.
+     *
+     * Either side may be omitted (null) to leave it uncapped. The full
+     * target state is replayed every call — admin-ui should pre-fill with
+     * current values to prevent accidental cap removal.
+     */
+    @PutMapping("/{id}/counterparty-limits")
+    @Operation(summary = "Update per-pool counterparty single-swap caps (ADMIN only)")
+    public ResponseEntity<PoolResponse> updateCounterpartyLimits(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateCounterpartyLimitsRequest request) {
+        requireAdmin(getCurrentUser());
+        return ResponseEntity.ok(poolService.updateCounterpartyLimits(id,
+                request.maxSingleSwapNominalX(), request.maxSingleSwapNominalY()));
     }
 
     @PostMapping("/add-liquidity")

@@ -78,6 +78,19 @@ public class LiquidityPool {
     @Column(name = "total_fees_collected_y", nullable = false)
     private long totalFeesCollectedY;
 
+    /**
+     * Sprint 4 #4.2 — per-pool counterparty limits.
+     * Maximum amount_in for a single swap on the X-side (NULL = no cap).
+     * Admin sets per pool based on liquidity depth + risk appetite.
+     * Open-position aggregation across multiple swaps is Sprint 5+ work.
+     */
+    @Column(name = "max_single_swap_nominal_x")
+    private Long maxSingleSwapNominalX;
+
+    /** Same as above for Y-side. */
+    @Column(name = "max_single_swap_nominal_y")
+    private Long maxSingleSwapNominalY;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PoolStatus status;

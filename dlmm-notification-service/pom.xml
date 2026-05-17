@@ -56,6 +56,13 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Sprint 4 #4.10: liquibase missing since Sprint 1. Combined
+             with ddl-auto=update, Hibernate was silently mutating schema.
+             Now auditable migration path. -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

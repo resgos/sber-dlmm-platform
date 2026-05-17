@@ -11,8 +11,12 @@ spring:
       connection-timeout: 20000
   jpa:
     hibernate:
-      ddl-auto: update
+      # Sprint 4 #4.10: was `update` (Hibernate auto-ALTERed schema).
+      # Now `validate` — schema mutation goes via Liquibase changesets.
+      ddl-auto: validate
     show-sql: false
+  liquibase:
+    change-log: classpath:db/changelog/master.xml
   kafka:
     bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
     consumer:

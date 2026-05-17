@@ -1,10 +1,12 @@
 package com.sber.dlmm.pool.service;
 
 import com.sber.dlmm.common.enums.PoolStatus;
+import com.sber.dlmm.common.exception.CounterpartyLimitExceededException;
 import com.sber.dlmm.common.exception.IdempotencyConflictException;
 import com.sber.dlmm.common.exception.InsufficientLiquidityException;
 import com.sber.dlmm.common.exception.PoolNotActiveException;
 import com.sber.dlmm.common.exception.SlippageExceededException;
+import com.sber.dlmm.common.outbox.OutboxService;
 import com.sber.dlmm.pool.client.TokenServiceClient;
 import com.sber.dlmm.pool.client.UserServiceClient;
 import com.sber.dlmm.pool.dto.SwapQuoteRequest;
@@ -23,14 +25,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -57,12 +59,21 @@ class SwapServiceTest {
     private TokenServiceClient tokenServiceClient;
     @Mock
     private UserServiceClient userServiceClient;
+    // Sprint 3 #3.9 — production code switched from KafkaTemplate to OutboxService.
     @Mock
-    private KafkaTemplate<String, Object> kafkaTemplate;
+    private OutboxService outbox;
     @Mock
     private StringRedisTemplate redisTemplate;
     @Mock
     private ValueOperations<String, String> valueOperations;
+    /**
+     * Sprint 4 #4.7 — SwapService self-injects via {@code appCtx.getBean(SwapService.class)}
+     * so the @Transactional proxy boundary fires on each retry of the bounded
+     * optimistic-lock loop. Tests stub it back to the @InjectMocks instance
+     * so the swap path actually executes instead of NPE'ing on bean lookup.
+     */
+    @Mock
+    private ApplicationContext appCtx;
 
     @InjectMocks
     private SwapService swapService;
@@ -76,6 +87,12 @@ class SwapServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Mockito's constructor injection (6-arg ctor matches our @Mock fields) wins
+        // over field injection, so the @Autowired ApplicationContext appCtx in
+        // production code stays null. Patch it in explicitly so the @Transactional
+        // self-invocation path resolves to our test bean instead of NPE'ing.
+        ReflectionTestUtils.setField(swapService, "appCtx", appCtx);
+
         pool = LiquidityPool.builder()
                 .id(POOL_ID)
                 .tokenXId(TOKEN_X_ID)
@@ -187,8 +204,9 @@ class SwapServiceTest {
             when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
             doNothing().when(tokenServiceClient).deductBalance(any(), any(), anyLong());
             doNothing().when(tokenServiceClient).creditBalance(any(), any(), anyLong());
-            when(kafkaTemplate.send(anyString(), anyString(), any()))
-                    .thenReturn(CompletableFuture.completedFuture(null));
+            // Self-injection: route appCtx.getBean(SwapService.class) back at the
+            // @InjectMocks instance so retry loop calls hit our bean, not null.
+            when(appCtx.getBean(SwapService.class)).thenReturn(swapService);
         }
 
 
@@ -215,7 +233,8 @@ class SwapServiceTest {
 
             verify(tokenServiceClient).deductBalance(eq(USER_ID), eq(TOKEN_X_ID), anyLong());
             verify(tokenServiceClient).creditBalance(eq(USER_ID), eq(TOKEN_Y_ID), anyLong());
-            verify(kafkaTemplate).send(eq("pool-events"), anyString(), any());
+            // Swap event published via transactional outbox (post Sprint 3 #3.9).
+            verify(outbox).append(anyString(), anyString(), anyString(), eq("pool-events"), any());
         }
 
         /**
@@ -315,8 +334,8 @@ class SwapServiceTest {
             verify(tokenServiceClient).deductBalance(eq(USER_ID), eq(TOKEN_X_ID), anyLong());
             verify(tokenServiceClient).creditBalance(eq(USER_ID), eq(TOKEN_Y_ID), anyLong());
 
-            // Verify Kafka event sent
-            verify(kafkaTemplate).send(eq("pool-events"), anyString(), any());
+            // Verify pool-event appended to outbox (replaces direct KafkaTemplate.send).
+            verify(outbox).append(anyString(), anyString(), anyString(), eq("pool-events"), any());
         }
 
         @Test
@@ -428,6 +447,46 @@ class SwapServiceTest {
             // After crossing bins, VA should have been updated
             assertTrue(pool.getVolatilityAccumulator() >= 0);
             verify(poolRepository).save(pool);
+        }
+
+        /**
+         * Sprint 4 #4.2 — counterparty single-swap cap rejects oversized X→Y swap.
+         * Cap check sits before the bin walk and the token transfer, so neither
+         * is allowed to happen on rejection (verified via never()).
+         */
+        @Test
+        @DisplayName("counterparty cap on X side rejects oversized swap")
+        void counterpartyCapRejectsOversizedXSwap() {
+            pool.setMaxSingleSwapNominalX(50_000L);
+            when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
+
+            SwapRequest req = new SwapRequest(POOL_ID, TOKEN_X_ID, 100_000, 0, "key-cap-x");
+
+            assertThrows(CounterpartyLimitExceededException.class,
+                    () -> swapService.swap(req, USER_ID));
+
+            verify(tokenServiceClient, never()).deductBalance(any(), any(), anyLong());
+            verify(tokenServiceClient, never()).creditBalance(any(), any(), anyLong());
+        }
+
+        /**
+         * Cap on Y side must only fire for Y→X direction — an X→Y swap of any
+         * size should be unaffected by maxSingleSwapNominalY.
+         */
+        @Test
+        @DisplayName("counterparty cap on Y side ignored for X-to-Y direction")
+        void counterpartyCapYIgnoredForXtoY() {
+            pool.setMaxSingleSwapNominalY(50_000L); // Y-side cap
+            PoolBin bin = createBin(0, 500_000, 500_000, 1_000_000);
+            when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
+            when(poolBinRepository.findByPoolIdAndBinId(POOL_ID, 0)).thenReturn(Optional.of(bin));
+
+            // X→Y, amount 100k exceeds Y-cap of 50k but Y-cap shouldn't apply here.
+            SwapRequest req = new SwapRequest(POOL_ID, TOKEN_X_ID, 100_000, 0, "key-cap-y-noop");
+            SwapResponse resp = swapService.swap(req, USER_ID);
+
+            assertNotNull(resp);
+            assertTrue(resp.amountOut() > 0);
         }
     }
 }

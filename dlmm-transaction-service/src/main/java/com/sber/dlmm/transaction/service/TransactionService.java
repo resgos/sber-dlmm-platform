@@ -159,6 +159,24 @@ public class TransactionService {
         return transactionRepository.findByIdempotencyKey(key);
     }
 
+    /**
+     * Sprint 4 #4.4 — settlement-report CSV row source.
+     * Returns up to {@link #REPORT_MAX_ROWS} transactions matching the
+     * filter, sorted by createdAt DESC. Capped to bound memory; corp
+     * accountants who need bigger windows should paginate by date range.
+     */
+    private static final int REPORT_MAX_ROWS = 10_000;
+
+    @Transactional(readOnly = true)
+    public java.util.List<Transaction> findForReport(UUID userId,
+                                                      LocalDateTime from,
+                                                      LocalDateTime to) {
+        PageRequest pageRequest = PageRequest.of(0, REPORT_MAX_ROWS,
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+        return transactionRepository.findFiltered(userId, null, null, from, to, pageRequest)
+                .getContent();
+    }
+
     private TransactionResponse toResponse(Transaction tx) {
         return new TransactionResponse(
                 tx.getId(),

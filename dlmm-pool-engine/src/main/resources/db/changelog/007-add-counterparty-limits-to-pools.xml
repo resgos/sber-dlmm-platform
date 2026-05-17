@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Sprint 4 #4.2 — counterparty single-swap exposure limits.
+
+      Per-pool cap on amount_in for a single swap. NULL = no limit
+      (default for existing pools — backwards compatible). Admin sets
+      values per pool depending on liquidity depth + risk appetite:
+      e.g. FX hedge SRUB/SCNY pool caps at 50M SRUB (max_single_swap_y
+      where Y is SRUB).
+
+      Open-position aggregation (sum across multiple swaps per user)
+      is deliberately NOT in this changeset — it requires tracking
+      cumulative net exposure per (user, pool), which is Sprint 5+
+      work. Single-swap cap is the meaningful 80% of the protection
+      for the MVP.
+
+      Follows DB-MIGRATION-CONVENTION: ALTER without preCondition.
+    -->
+    <changeSet id="007-add-counterparty-limits-to-pools" author="dlmm-platform">
+        <addColumn tableName="liquidity_pools">
+            <column name="max_single_swap_nominal_x" type="BIGINT">
+                <!-- NULL = no cap on X-token swaps -->
+            </column>
+            <column name="max_single_swap_nominal_y" type="BIGINT">
+                <!-- NULL = no cap on Y-token swaps -->
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

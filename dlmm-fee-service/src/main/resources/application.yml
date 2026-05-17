@@ -13,6 +13,10 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: false
+  # Sprint 4 #4.10: wire liquibase so changesets actually run on startup
+  # (was missing since Sprint 1 — silent gap).
+  liquibase:
+    change-log: classpath:db/changelog/master.xml
   kafka:
     bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
     consumer:

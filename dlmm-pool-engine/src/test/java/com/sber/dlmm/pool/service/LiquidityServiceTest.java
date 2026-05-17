@@ -6,6 +6,7 @@ import com.sber.dlmm.common.exception.ForbiddenException;
 import com.sber.dlmm.common.exception.IdempotencyConflictException;
 import com.sber.dlmm.common.exception.InvalidBinRangeException;
 import com.sber.dlmm.common.exception.PoolNotActiveException;
+import com.sber.dlmm.common.outbox.OutboxService;
 import com.sber.dlmm.pool.client.TokenServiceClient;
 import com.sber.dlmm.pool.client.UserServiceClient;
 import com.sber.dlmm.pool.dto.AddLiquidityRequest;
@@ -31,14 +32,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.kafka.core.KafkaTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -71,8 +70,9 @@ class LiquidityServiceTest {
     private TokenServiceClient tokenServiceClient;
     @Mock
     private UserServiceClient userServiceClient;
+    // Sprint 3 #3.9 — production code switched from KafkaTemplate to OutboxService.
     @Mock
-    private KafkaTemplate<String, Object> kafkaTemplate;
+    private OutboxService outbox;
     @Mock
     private StringRedisTemplate redisTemplate;
     @Mock
@@ -116,8 +116,8 @@ class LiquidityServiceTest {
         when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
         when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
         doNothing().when(tokenServiceClient).deductBalance(any(), any(), anyLong());
-        when(kafkaTemplate.send(anyString(), anyString(), any()))
-                .thenReturn(CompletableFuture.completedFuture(null));
+        // OutboxService.append returns void — no future stub needed.
+        doNothing().when(outbox).append(anyString(), anyString(), anyString(), anyString(), any());
     }
 
     // ── addLiquidity ────────────────────────────────────────────
@@ -158,7 +158,7 @@ class LiquidityServiceTest {
 
             verify(poolBinRepository, atLeastOnce()).save(any(PoolBin.class));
             verify(positionRepository).save(any(LpPosition.class));
-            verify(kafkaTemplate).send(eq("pool-events"), anyString(), any());
+            verify(outbox).append(anyString(), anyString(), anyString(), eq("pool-events"), any());
         }
 
         /**
@@ -210,7 +210,7 @@ class LiquidityServiceTest {
             // Verify position saved
             verify(positionRepository).save(any(LpPosition.class));
             // Verify Kafka event
-            verify(kafkaTemplate).send(eq("pool-events"), anyString(), any());
+            verify(outbox).append(anyString(), anyString(), anyString(), eq("pool-events"), any());
         }
 
         @Test
@@ -374,8 +374,8 @@ class LiquidityServiceTest {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.TRUE);
             doNothing().when(tokenServiceClient).creditBalance(any(), any(), anyLong());
-            when(kafkaTemplate.send(anyString(), anyString(), any()))
-                    .thenReturn(CompletableFuture.completedFuture(null));
+            // OutboxService.append returns void — no future stub needed.
+            doNothing().when(outbox).append(anyString(), anyString(), anyString(), anyString(), any());
 
             PoolBin bin5 = PoolBin.builder()
                     .poolId(POOL_ID).binId(5).price(BigDecimal.ONE)
@@ -418,8 +418,8 @@ class LiquidityServiceTest {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.TRUE);
             doNothing().when(tokenServiceClient).creditBalance(any(), any(), anyLong());
-            when(kafkaTemplate.send(anyString(), anyString(), any()))
-                    .thenReturn(CompletableFuture.completedFuture(null));
+            // OutboxService.append returns void — no future stub needed.
+            doNothing().when(outbox).append(anyString(), anyString(), anyString(), anyString(), any());
 
             PoolBin bin5 = PoolBin.builder()
                     .poolId(POOL_ID).binId(5).price(BigDecimal.ONE)
@@ -455,8 +455,8 @@ class LiquidityServiceTest {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.TRUE);
             doNothing().when(tokenServiceClient).creditBalance(any(), any(), anyLong());
-            when(kafkaTemplate.send(anyString(), anyString(), any()))
-                    .thenReturn(CompletableFuture.completedFuture(null));
+            // OutboxService.append returns void — no future stub needed.
+            doNothing().when(outbox).append(anyString(), anyString(), anyString(), anyString(), any());
 
             PoolBin bin5 = PoolBin.builder()
                     .poolId(POOL_ID).binId(5).price(BigDecimal.ONE)
@@ -494,8 +494,8 @@ class LiquidityServiceTest {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.TRUE);
             doNothing().when(tokenServiceClient).creditBalance(any(), any(), anyLong());
-            when(kafkaTemplate.send(anyString(), anyString(), any()))
-                    .thenReturn(CompletableFuture.completedFuture(null));
+            // OutboxService.append returns void — no future stub needed.
+            doNothing().when(outbox).append(anyString(), anyString(), anyString(), anyString(), any());
 
             PoolBin bin5 = PoolBin.builder()
                     .poolId(POOL_ID).binId(5).price(BigDecimal.ONE)
@@ -529,8 +529,8 @@ class LiquidityServiceTest {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.TRUE);
             doNothing().when(tokenServiceClient).creditBalance(any(), any(), anyLong());
-            when(kafkaTemplate.send(anyString(), anyString(), any()))
-                    .thenReturn(CompletableFuture.completedFuture(null));
+            // OutboxService.append returns void — no future stub needed.
+            doNothing().when(outbox).append(anyString(), anyString(), anyString(), anyString(), any());
 
             // Bin has accumulated fee growth since position was opened (lastFeeGrowth=0)
             PoolBin bin5 = PoolBin.builder()
@@ -589,8 +589,8 @@ class LiquidityServiceTest {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(Boolean.TRUE);
             doNothing().when(tokenServiceClient).creditBalance(any(), any(), anyLong());
-            when(kafkaTemplate.send(anyString(), anyString(), any()))
-                    .thenReturn(CompletableFuture.completedFuture(null));
+            // OutboxService.append returns void — no future stub needed.
+            doNothing().when(outbox).append(anyString(), anyString(), anyString(), anyString(), any());
 
             PoolBin bin5 = PoolBin.builder()
                     .poolId(POOL_ID).binId(5).price(BigDecimal.ONE)
