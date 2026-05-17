@@ -17,7 +17,7 @@ import com.sber.dlmm.token.event.TokenBurnedEvent;
 import com.sber.dlmm.token.event.TokenCreatedEvent;
 import com.sber.dlmm.token.event.TokenMintedEvent;
 import com.sber.dlmm.token.event.TokenTransferredEvent;
-import com.sber.dlmm.token.outbox.OutboxService;
+import com.sber.dlmm.common.outbox.OutboxService;
 import com.sber.dlmm.token.repository.TokenRepository;
 import com.sber.dlmm.token.repository.UserBalanceRepository;
 import org.slf4j.Logger;

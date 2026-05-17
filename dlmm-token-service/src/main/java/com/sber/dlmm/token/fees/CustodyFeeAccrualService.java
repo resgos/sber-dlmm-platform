@@ -1,7 +1,7 @@
 package com.sber.dlmm.token.fees;
 
 import com.sber.dlmm.token.entity.UserBalance;
-import com.sber.dlmm.token.outbox.OutboxService;
+import com.sber.dlmm.common.outbox.OutboxService;
 import com.sber.dlmm.token.repository.TokenRepository;
 import com.sber.dlmm.token.repository.UserBalanceRepository;
 import org.slf4j.Logger;

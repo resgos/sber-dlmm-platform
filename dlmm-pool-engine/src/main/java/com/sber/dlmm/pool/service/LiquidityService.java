@@ -27,7 +27,7 @@ import com.sber.dlmm.pool.repository.LiquidityPoolRepository;
 import com.sber.dlmm.pool.repository.LpPositionRepository;
 import com.sber.dlmm.pool.repository.PoolBinRepository;
 import com.sber.dlmm.pool.repository.PositionBinRepository;
-import com.sber.dlmm.pool.outbox.OutboxService;
+import com.sber.dlmm.common.outbox.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

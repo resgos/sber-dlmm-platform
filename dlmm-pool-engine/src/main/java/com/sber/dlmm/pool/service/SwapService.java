@@ -20,7 +20,7 @@ import com.sber.dlmm.pool.entity.PoolBin;
 import com.sber.dlmm.pool.event.SwapExecutedEvent;
 import com.sber.dlmm.pool.repository.LiquidityPoolRepository;
 import com.sber.dlmm.pool.repository.PoolBinRepository;
-import com.sber.dlmm.pool.outbox.OutboxService;
+import com.sber.dlmm.common.outbox.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;

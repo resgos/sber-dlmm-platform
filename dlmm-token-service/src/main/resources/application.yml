@@ -35,6 +35,11 @@ dlmm:
     secret: ${JWT_SECRET:?JWT_SECRET env var is required (≥32 bytes)}
     access-token-expiry-minutes: 30
     refresh-token-expiry-days: 7
+  # Sprint 3 #3.9 — shared outbox lib. service-name tags every row this
+  # service produces so its dispatcher only polls its own queue in the
+  # shared outbox_events table.
+  outbox:
+    service-name: token-service
   # Sprint 3 #3.3 custody fee tuning. Dev: tick every 30s to enable
   # end-to-end verification without waiting an hour. Prod overrides to
   # "0 5 * * * *" (once per hour at xx:05) via SPRING_PROFILES_ACTIVE=prod.

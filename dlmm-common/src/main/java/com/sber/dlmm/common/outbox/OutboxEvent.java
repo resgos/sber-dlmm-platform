@@ -1,4 +1,4 @@
-package com.sber.dlmm.token.outbox;
+package com.sber.dlmm.common.outbox;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -9,14 +9,15 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * One row per durable domain event. Written in the same @Transactional
- * as the balance mutation; published asynchronously by {@link OutboxDispatcher}.
+ * Shared outbox row. One per durable domain event. Written in the same
+ * transaction as the domain mutation; shipped to Kafka asynchronously
+ * by {@link OutboxDispatcher}.
  *
- * The {@code published_at} timestamp is the only mutable column once a
- * row is created — set non-null by the dispatcher when the Kafka ack
- * comes back. {@code attempts} and {@code last_error} are bumped on
- * each failed delivery so the dispatcher's retry behaviour is visible
- * from a query.
+ * Sprint 3 #3.9 — extracted from per-service copies in token-service
+ * and pool-engine. The {@code service} column tags the originator so
+ * each service's dispatcher only sees rows it created (per-service
+ * partial index in the shared table). The {@code published_at}
+ * timestamp is the only mutable column once a row is created.
  */
 @Entity
 @Table(name = "outbox_events")
@@ -53,11 +54,6 @@ public class OutboxEvent {
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 
-    /**
-     * Originator service. Set by {@link OutboxService} so this service's
-     * dispatcher only polls rows it created — prevents two dispatchers
-     * fighting over the same row when multiple services share this table.
-     */
     @Column(name = "service", nullable = false, length = 32)
     private String service;
 

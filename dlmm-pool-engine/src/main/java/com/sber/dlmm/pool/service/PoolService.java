@@ -19,7 +19,7 @@ import com.sber.dlmm.pool.repository.LiquidityPoolRepository;
 import com.sber.dlmm.pool.repository.PoolBinRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.sber.dlmm.pool.outbox.OutboxService;
+import com.sber.dlmm.common.outbox.OutboxService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
