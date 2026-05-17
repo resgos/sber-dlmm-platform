@@ -38,6 +38,11 @@ public class PriceFeed {
 
     private BigDecimal twapPrice;
 
+    // DB column is `price_change_24h_pct` (init-db.sql). Hibernate's
+    // naming convention would translate `priceChange24hPct` to
+    // `price_change24h_pct` (no underscore before 24) and fail
+    // schema-validation. Explicit @Column avoids the rename.
+    @Column(name = "price_change_24h_pct")
     private BigDecimal priceChange24hPct;
 
     private long updatedAtEpochMs;

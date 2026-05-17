@@ -8,9 +8,13 @@ import org.springframework.context.annotation.Bean;
 
 /**
  * Auto-registers {@link JwtTokenProvider} and {@link JwtAuthenticationFilter}
- * for inbound JWT validation on servlet-stack services. Gateway (reactive,
- * no servlet) is unaffected because the {@code @ConditionalOnClass} guard
- * skips registration when {@code OncePerRequestFilter} isn't present.
+ * for inbound JWT validation on servlet-stack services.
+ *
+ * Conditions: both spring-webmvc ({@code OncePerRequestFilter}) AND jjwt
+ * ({@code io.jsonwebtoken.Jwts}) must be present. Services without jjwt
+ * on the classpath (e.g. price-oracle, which is a read-only stub today)
+ * silently skip this auto-config instead of crashing with
+ * ClassNotFoundException at startup.
  *
  * The Bearer-forwarding {@link org.springframework.boot.web.reactive.function.client.WebClientCustomizer}
  * lives in {@link DlmmWebClientAutoConfiguration} so that services without
@@ -18,7 +22,10 @@ import org.springframework.context.annotation.Bean;
  * introspection.
  */
 @AutoConfiguration
-@ConditionalOnClass(name = "org.springframework.web.filter.OncePerRequestFilter")
+@ConditionalOnClass(name = {
+        "org.springframework.web.filter.OncePerRequestFilter",
+        "io.jsonwebtoken.Jwts"
+})
 public class DlmmJwtAutoConfiguration {
 
     @Bean
