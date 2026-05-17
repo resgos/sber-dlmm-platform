@@ -254,6 +254,10 @@ services:
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in docker/.env}
+      # Sprint 4 #4.6 — B2B settlement endpoint calls token-service for
+      # deduct/credit. Without this var the default localhost:8082 would
+      # resolve to the transaction-service container itself.
+      TOKEN_SERVICE_URL: http://dlmm-token-service:8082
     depends_on:
       postgres:
         condition: service_healthy
