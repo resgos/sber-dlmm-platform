@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Sprint 4 #4.7 — optimistic locking on liquidity_pools.
+      Option A from docs/ANALYSIS-SAME-POOL-LOCK.md: add @Version column
+      so concurrent swaps on the same pool detect conflicts at commit
+      time rather than serialising on a Postgres row lock.
+
+      Default 0 for existing rows so the first @Version-aware UPDATE
+      doesn't fail on `version = NULL`.
+
+      Pattern: ALTER changeset without preConditions
+      (see docs/DB-MIGRATION-CONVENTION.md).
+    -->
+    <changeSet id="006-add-version-to-liquidity-pools" author="dlmm-platform">
+        <addColumn tableName="liquidity_pools">
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

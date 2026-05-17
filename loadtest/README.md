@@ -50,6 +50,36 @@ k6 run -e POOL_ID=c0000000-... -e SWAP_TOKEN_IN=b0000000-... loadtest/baseline.j
 * `swap_errors` rate is shown separately so HTTP 200 isn't conflated with successful swaps.
 * If a threshold fires, the run exits non-zero — wire that into CI for nightly regression detection.
 
+## Sprint 4 #4.7 single-pool contention test (2026-05-17)
+
+After optimistic locking landed (`@Version` on LiquidityPool + retry
+loop in SwapService), ran the new `single-pool-lock.js` to verify
+linear scaling under same-pool contention (the Sprint 2 disaster
+scenario).
+
+| Load profile | p99 latency | Successful TPS | Notes |
+|---|---|---|---|
+| 15 VU / 21 swaps/s in one pool | 1.25s | ~21 | ✓ under target. Retry mechanic visible in logs ("Swap retry 4/5 after 33ms backoff"). Pool `version` ticks linearly. |
+| 80 VU / 80 swaps/s in one pool (extreme) | 15.6s | ~16 | Threshold violated. Retry storm — 5 attempts × backoff each. Acceptable: 80 swaps/s on a single pool is not a realistic prod SLA. |
+
+**Conclusion:** optimistic locking + retry restores throughput on
+single-hot-pool scenarios up to ~20 swaps/s without serialising on
+the Postgres row lock. Real prod traffic spreads across 22+ pools,
+so per-pool contention rarely exceeds 5–10 swaps/s — well inside the
+fix's capacity.
+
+For extreme single-pool concentration (Treasury LP scenario, MM
+rebate hot-pool), upgrade path is Option B (per-bin lock granularity)
+from `docs/ANALYSIS-SAME-POOL-LOCK.md`. Not needed for Sprint 4
+acceptance; flagged in `docs/SPRINT-PLAN.md` parking lot.
+
+`swap_5xx = 0%` in both tests — no unhandled exceptions. All
+non-200s are 4xx (InsufficientLiquidityException after pool drains,
+or OptimisticLockingFailureException after MAX_SWAP_ATTEMPTS=5).
+Either resolves with bigger seed liquidity OR higher attempt cap.
+
+---
+
 ## Sprint 3 re-baseline (2026-05-17, Hikari 50 + multi-user/multi-pool mix)
 
 After Sprint 3 #3.6 (Hikari 20→50) + Sprint 3 #3.7 (rotate across 3 users

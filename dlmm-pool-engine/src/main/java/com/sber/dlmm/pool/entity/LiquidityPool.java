@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -87,11 +88,23 @@ public class LiquidityPool {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * Sprint 4 #4.7 — optimistic locking. JPA increments on every
+     * UPDATE; if two concurrent swaps both load version=N and try to
+     * commit, the second gets OptimisticLockingFailureException.
+     * SwapService catches and retries (bounded loop). See
+     * docs/ANALYSIS-SAME-POOL-LOCK.md for the design rationale.
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();
         if (createdAt == null) createdAt = LocalDateTime.now();
         if (status == null) status = PoolStatus.ACTIVE;
         if (basePrice == null) basePrice = BigDecimal.ONE;
+        if (version == null) version = 0L;
     }
 }

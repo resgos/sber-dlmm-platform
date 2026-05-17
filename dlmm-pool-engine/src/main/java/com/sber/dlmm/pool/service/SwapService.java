@@ -23,7 +23,10 @@ import com.sber.dlmm.pool.repository.PoolBinRepository;
 import com.sber.dlmm.common.outbox.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -179,8 +182,65 @@ public class SwapService {
                 binsCrossed, executionPrice, priceImpact);
     }
 
-    @Transactional
+    // Sprint 4 #4.7 — same-pool row lock fix via optimistic locking.
+    // Public swap() wraps the @Transactional swapTransactional() in a
+    // bounded retry loop. When two concurrent swaps hit the same pool
+    // and both bump LiquidityPool.@Version, JPA throws
+    // ObjectOptimisticLockingFailureException — we catch and retry
+    // with a tiny jittered backoff. Failure is rare under realistic
+    // multi-pool load; the loop is the safety net for hot pools.
+    //
+    // Self-invocation via appCtx.getBean() so the proxy intercept fires
+    // each retry (this.swapTransactional() would bypass @Transactional).
+    private static final int MAX_SWAP_ATTEMPTS = 5;
+    private static final long RETRY_BASE_BACKOFF_MS = 5L;
+
+    @Autowired
+    private ApplicationContext appCtx;
+
     public SwapResponse swap(SwapRequest req, UUID userId) {
+        // Idempotency must run ONCE per request, not per retry —
+        // otherwise the second attempt sees its own "processing"
+        // marker and throws IdempotencyConflictException.
+        if (req.idempotencyKey() != null && !req.idempotencyKey().isBlank()) {
+            String redisKey = IDEMPOTENCY_PREFIX + req.idempotencyKey();
+            Boolean wasAbsent = redisTemplate.opsForValue()
+                    .setIfAbsent(redisKey, "processing", Duration.ofHours(24));
+            if (Boolean.FALSE.equals(wasAbsent)) {
+                throw new IdempotencyConflictException("Duplicate swap request: " + req.idempotencyKey());
+            }
+        }
+
+        SwapService self = appCtx.getBean(SwapService.class);
+        int attempt = 0;
+        while (true) {
+            attempt++;
+            try {
+                return self.swapTransactional(req, userId);
+            } catch (ObjectOptimisticLockingFailureException ex) {
+                if (attempt >= MAX_SWAP_ATTEMPTS) {
+                    log.warn("Swap failed after {} retries on pool {} due to optimistic lock contention",
+                            attempt, req.poolId());
+                    throw ex;
+                }
+                // Tiny jittered backoff: 5–25 ms × attempt. Prevents
+                // synchronised retry storms on the same hot pool.
+                long backoff = RETRY_BASE_BACKOFF_MS * attempt
+                        + (long) (Math.random() * RETRY_BASE_BACKOFF_MS * attempt);
+                try {
+                    Thread.sleep(backoff);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw ex;
+                }
+                log.debug("Swap retry {}/{} on pool {} after {}ms backoff",
+                        attempt, MAX_SWAP_ATTEMPTS, req.poolId(), backoff);
+            }
+        }
+    }
+
+    @Transactional
+    public SwapResponse swapTransactional(SwapRequest req, UUID userId) {
         // 1. Validate
         LiquidityPool pool = poolRepository.findById(req.poolId())
                 .orElseThrow(() -> new PoolNotFoundException("Pool not found: " + req.poolId()));
@@ -197,15 +257,7 @@ public class SwapService {
             throw new ForbiddenException("User KYC not verified");
         }
 
-        // Idempotency check
-        if (req.idempotencyKey() != null && !req.idempotencyKey().isBlank()) {
-            String redisKey = IDEMPOTENCY_PREFIX + req.idempotencyKey();
-            Boolean wasAbsent = redisTemplate.opsForValue()
-                    .setIfAbsent(redisKey, "processing", Duration.ofHours(24));
-            if (Boolean.FALSE.equals(wasAbsent)) {
-                throw new IdempotencyConflictException("Duplicate swap request: " + req.idempotencyKey());
-            }
-        }
+        // Idempotency check moved to the outer swap() — see comment there.
 
         boolean swapXtoY = req.tokenInId().equals(pool.getTokenXId());
         UUID tokenOutId = swapXtoY ? pool.getTokenYId() : pool.getTokenXId();
