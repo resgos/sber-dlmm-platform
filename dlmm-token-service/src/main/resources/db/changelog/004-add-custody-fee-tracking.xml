@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Sprint 3 #3.3 (custody fee).
+
+      First migration written under the new convention (docs/DB-MIGRATION-CONVENTION.md).
+      Note: NO <preConditions> wrapper — this is an ALTER, not a CREATE.
+      Runs cleanly on both greenfield (after init-db.sql created the table)
+      and existing DBs (modifies the live table). Idempotent because
+      Liquibase tracks applied changesets in DATABASECHANGELOG.
+    -->
+    <changeSet id="004-add-custody-fee-tracking" author="dlmm-platform">
+        <addColumn tableName="user_balances">
+            <!-- Last time the custody fee scheduled job touched this row.
+                 NULL for legacy rows; CustodyFeeJob uses COALESCE
+                 (last_custody_fee_at, updated_at) when computing the
+                 accrual window so we never bill twice for the same day. -->
+            <column name="last_custody_fee_at" type="TIMESTAMP"/>
+        </addColumn>
+
+        <!-- Index used by the daily job to find rows due for accrual.
+             WHERE clause keeps it tiny — only rows that have ever been
+             accrued + have remaining balance. -->
+        <sql>
+            CREATE INDEX IF NOT EXISTS idx_user_balances_custody_due
+              ON user_balances (last_custody_fee_at)
+              WHERE available &gt; 0;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

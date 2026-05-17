@@ -55,4 +55,24 @@ public interface UserBalanceRepository extends JpaRepository<UserBalance, UserBa
     int unlockBalance(@Param("userId") UUID userId,
                       @Param("tokenId") UUID tokenId,
                       @Param("amount") long amount);
+
+    /**
+     * Rows due for custody-fee accrual: positive balance + either never
+     * accrued before, OR last accrued before today. Uses COALESCE so
+     * legacy rows (lastCustodyFeeAt = null) fall through naturally.
+     * Capped at :limit so a single tick doesn't tie the DB for minutes
+     * if the catalog grows past 100k balances.
+     */
+    // Native query: COALESCE with a CAST literal rather than the `::timestamp`
+    // shorthand — Hibernate's parameter parser treats `:timestamp` as a
+    // named-parameter placeholder and chokes on the postgres cast syntax.
+    @Query(value =
+        "SELECT * FROM user_balances " +
+        "WHERE available > 0 " +
+        "  AND COALESCE(last_custody_fee_at, CAST('1970-01-01' AS TIMESTAMP)) < :sinceCutoff " +
+        "ORDER BY COALESCE(last_custody_fee_at, CAST('1970-01-01' AS TIMESTAMP)) ASC " +
+        "LIMIT :limit",
+        nativeQuery = true)
+    List<UserBalance> findDueForCustodyFee(@Param("sinceCutoff") java.time.LocalDateTime sinceCutoff,
+                                            @Param("limit") int limit);
 }

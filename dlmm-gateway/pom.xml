@@ -28,10 +28,18 @@
         </dependency>
 
         <!-- Sprint 3 #3.12: actuator + prometheus for gateway scrape target.
-             Reactive actuator works automatically with spring-cloud-gateway. -->
+             Reactive actuator works automatically with spring-cloud-gateway.
+             Gateway doesn't depend on dlmm-common (no JWT filter on
+             reactive side), so prometheus registry needs an explicit
+             dep here — wasn't picked up transitively. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- JWT -->

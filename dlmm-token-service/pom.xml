@@ -51,6 +51,15 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Sprint 3 #3.3 / #3.8: liquibase was missing from token-service
+             pom since Sprint 1; changesets were silently never running
+             (init-db.sql was the only schema source). Adding it now so the
+             custody-fee column migration (004) and any future schema work
+             actually applies. -->
+        <dependency>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

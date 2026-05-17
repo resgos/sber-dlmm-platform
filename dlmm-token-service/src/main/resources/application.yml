@@ -35,6 +35,12 @@ dlmm:
     secret: ${JWT_SECRET:?JWT_SECRET env var is required (≥32 bytes)}
     access-token-expiry-minutes: 30
     refresh-token-expiry-days: 7
+  # Sprint 3 #3.3 custody fee tuning. Dev: tick every 30s to enable
+  # end-to-end verification without waiting an hour. Prod overrides to
+  # "0 5 * * * *" (once per hour at xx:05) via SPRING_PROFILES_ACTIVE=prod.
+  fees:
+    custody-bps-pa: 5
+    custody-tick-cron: "*/30 * * * * *"
 
 logging:
   level:

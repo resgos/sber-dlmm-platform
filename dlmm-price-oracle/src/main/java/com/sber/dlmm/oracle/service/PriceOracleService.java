@@ -31,15 +31,28 @@ public class PriceOracleService {
     private static final int TWAP_DEFAULT_PERIOD_MINUTES = 15;
     private static final MathContext MC = new MathContext(10, RoundingMode.HALF_UP);
 
-    private static final Map<String, BigDecimal> INITIAL_PRICES = Map.of(
-            "SBER", new BigDecimal("280.50"),
-            "GAZP", new BigDecimal("165.20"),
-            "LKOH", new BigDecimal("7450.00"),
-            "YNDX", new BigDecimal("3200.00"),
-            "GMKN", new BigDecimal("15800.00"),
-            "ROSN", new BigDecimal("550.30"),
-            "VTBR", new BigDecimal("0.0225"),
-            "MGNT", new BigDecimal("5400.00")
+    // Equity feeds — anchored on rough MOEX spot at branch time.
+    // Real MOEX integration ships in Sprint 4 once procurement of
+    // ISS API access lands (tracked separately as R#11).
+    private static final Map<String, BigDecimal> INITIAL_PRICES = Map.ofEntries(
+            Map.entry("SBER", new BigDecimal("280.50")),
+            Map.entry("GAZP", new BigDecimal("165.20")),
+            Map.entry("LKOH", new BigDecimal("7450.00")),
+            Map.entry("YNDX", new BigDecimal("3200.00")),
+            Map.entry("GMKN", new BigDecimal("15800.00")),
+            Map.entry("ROSN", new BigDecimal("550.30")),
+            Map.entry("VTBR", new BigDecimal("0.0225")),
+            Map.entry("MGNT", new BigDecimal("5400.00")),
+            // Sprint 3 #3.5 — FX feeds required by USE-CASE-FX-HEDGE.md.
+            // Quoted as "1 unit of FX = N RUB" (the price of the foreign
+            // currency in rubles). FX hedge UI in Sprint 4 reads these
+            // to compute the SRUB/SCNY, SRUB/SUSDT, SRUB/SEUR pool quotes.
+            // Volatility envelope on these is the same ±2%/15s random
+            // walk as equity — fine for demo, replaced by MOEX FX feed
+            // (different endpoint than ISS equity) in Sprint 4.
+            Map.entry("CNY", new BigDecimal("12.50")),
+            Map.entry("USD", new BigDecimal("80.00")),
+            Map.entry("EUR", new BigDecimal("95.00"))
     );
 
     private final PriceFeedRepository priceFeedRepository;

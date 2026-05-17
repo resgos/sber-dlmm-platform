@@ -8,5 +8,6 @@
     <include file="001-create-tokens-table.xml" relativeToChangelogFile="true"/>
     <include file="002-create-user-balances-table.xml" relativeToChangelogFile="true"/>
     <include file="003-create-outbox-events-table.xml" relativeToChangelogFile="true"/>
+    <include file="004-add-custody-fee-tracking.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

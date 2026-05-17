@@ -41,6 +41,15 @@ public class UserBalance {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    /**
+     * Last time the custody-fee scheduled job touched this row.
+     * NULL for rows that have never been accrued — the job treats
+     * those as "fresh" and uses updated_at as the start of the
+     * accrual window. See CustodyFeeJob + DB-MIGRATION-CONVENTION.md.
+     */
+    @Column(name = "last_custody_fee_at")
+    private LocalDateTime lastCustodyFeeAt;
+
     @PrePersist
     @PreUpdate
     protected void onUpdate() {
