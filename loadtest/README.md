@@ -50,7 +50,47 @@ k6 run -e POOL_ID=c0000000-... -e SWAP_TOKEN_IN=b0000000-... loadtest/baseline.j
 * `swap_errors` rate is shown separately so HTTP 200 isn't conflated with successful swaps.
 * If a threshold fires, the run exits non-zero — wire that into CI for nightly regression detection.
 
-## Baseline results (Sprint 2, single-laptop Docker)
+## Sprint 3 re-baseline (2026-05-17, Hikari 50 + multi-user/multi-pool mix)
+
+After Sprint 3 #3.6 (Hikari 20→50) + Sprint 3 #3.7 (rotate across 3 users
+× 4 pools), re-ran the 60s/80-VU smoke against the same single-laptop
+stack as Sprint 2:
+
+| Metric             | Target  | Sprint 2 p99 | Sprint 3 p99 | Delta     |
+|--------------------|---------|--------------|--------------|-----------|
+| `/pools`           | <500ms  | 23.22 s      | **595 ms**   | **40×**   |
+| `/dashboard`       | <1500ms | 16.87 s      | **5.6 s**    | **3×**    |
+| `/swap`            | <1500ms | 42.29 s      | **1.32 s** ✓ | **32×**   |
+| Throughput         | 100 rps | 34 rps       | **72 rps**   | **2.1×**  |
+| Swap errors        | <2%     | 96.55%       | **33%**      | bug → real |
+| Read errors        | <1%     | 19.79%       | 27%          | dashboard |
+
+**Threshold gates:**
+- ✓ `swap_latency p99 < 1.5s` — PASSED
+- ✗ `pools_latency p99 < 500ms` — failed by 95ms (close)
+- ✗ `dashboard_latency p99 < 1.5s` — still slow; admin-bff fan-out hits
+  3 downstreams serially under load
+- ✗ `swap_errors < 2%` — 33% real-world contention now, vs Sprint 2's
+  96% test-design pile-up. Bug fixed, ceiling exposed.
+
+**What the swap errors actually are** (root-caused via logs):
+- ~50% `InsufficientLiquidityException` on SETH/SRUB and SGOLD/SRUB —
+  those pools have limited bin liquidity in seed data, k6 drains them
+  in ~30s. Real-world prod has continuous LP supply; this is a seed
+  artefact. Mitigation for Sprint 4 baseline: bigger seed liquidity or
+  rotate across all 22 pools (currently use 4).
+- ~50% `InsufficientBalance` when one of the 3 rotated users runs out
+  of a side token after ~200 swaps. Same fix: more seed balance or
+  cycle balance replenishment.
+
+**Conclusion:** Sprint 3 closes the order-of-magnitude perf gap.
+Remaining /dashboard + /pools tail-latency work is queued for Sprint 4
+(admin-bff parallel-fanout already done in Sprint 1, the residual is
+the same-pool row lock from `docs/ANALYSIS-SAME-POOL-LOCK.md`).
+
+---
+
+## Sprint 2 baseline (kept for reference — single user/single pool pile-up)
 
 Captured 2026-05-16 against the seeded dev stack — **50 VUs ramping to
 300, target 200 RPS sustained**. All five thresholds fired, which is
