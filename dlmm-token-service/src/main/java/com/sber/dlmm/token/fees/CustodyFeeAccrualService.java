@@ -63,9 +63,10 @@ public class CustodyFeeAccrualService {
 
         if (fee <= 0) {
             // Sub-unit accrual → still mark accrued so the cron doesn't
-            // re-evaluate this row every tick forever.
-            b.setLastCustodyFeeAt(now);
-            userBalanceRepository.save(b);
+            // re-evaluate this row every tick forever. Uses a dedicated
+            // UPDATE rather than entity.save() to avoid round-tripping
+            // stale `available` (see markCustodyAccrued javadoc).
+            userBalanceRepository.markCustodyAccrued(b.getUserId(), b.getTokenId(), now);
             return 0;
         }
         if (fee >= b.getAvailable()) {
@@ -95,8 +96,12 @@ public class CustodyFeeAccrualService {
             userBalanceRepository.creditAvailable(treasuryUserId, b.getTokenId(), fee);
         }
 
-        b.setLastCustodyFeeAt(now);
-        userBalanceRepository.save(b);
+        // Mark accrual via dedicated UPDATE — NOT via b.save(), which
+        // would write back the stale in-memory `available` and silently
+        // undo the deduct we just made. Caught in Sprint 3 day 3
+        // smoke-test: ivanov's SBER showed unchanged despite a
+        // CustodyFeeAccrued event being published.
+        userBalanceRepository.markCustodyAccrued(b.getUserId(), b.getTokenId(), now);
 
         String symbol = tokenRepository.findById(b.getTokenId())
                 .map(t -> t.getSymbol())

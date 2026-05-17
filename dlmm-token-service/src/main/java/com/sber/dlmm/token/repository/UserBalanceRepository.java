@@ -75,4 +75,19 @@ public interface UserBalanceRepository extends JpaRepository<UserBalance, UserBa
         nativeQuery = true)
     List<UserBalance> findDueForCustodyFee(@Param("sinceCutoff") java.time.LocalDateTime sinceCutoff,
                                             @Param("limit") int limit);
+
+    /**
+     * Dedicated UPDATE for the accrual mark. We CANNOT use save() on the
+     * UserBalance entity because the in-memory copy still holds the
+     * pre-deduct `available` — JPA save() writes all fields and would
+     * undo the {@link #deductAvailable} we just ran. This @Modifying
+     * query touches only the two columns that legitimately changed.
+     */
+    @Modifying
+    @Query("UPDATE UserBalance b SET b.lastCustodyFeeAt = :now, " +
+           "b.updatedAt = CURRENT_TIMESTAMP " +
+           "WHERE b.userId = :userId AND b.tokenId = :tokenId")
+    int markCustodyAccrued(@Param("userId") UUID userId,
+                           @Param("tokenId") UUID tokenId,
+                           @Param("now") java.time.LocalDateTime now);
 }

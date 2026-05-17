@@ -31,8 +31,8 @@ import java.util.UUID;
  * isolate failures: one weird row doesn't roll back the whole sweep.
  *
  * Tick interval is 1 hour by default — the cutoff check makes
- * within-day re-ticks no-ops. Dev overrides to "*/30 * * * * *"
- * (every 30s) for end-to-end verification.
+ * within-day re-ticks no-ops. Dev overrides cron to fire every 30s
+ * for end-to-end verification.
  *
  * Tunable env (no redeploy):
  *   dlmm.fees.custody-bps-pa  (default 5)
