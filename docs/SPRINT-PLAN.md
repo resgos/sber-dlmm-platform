@@ -163,54 +163,114 @@ foundations before pilot scale-up (see `docs/RU-MARKET-RESEARCH-2026-05-18.md`).
 
 ---
 
-## Sprint 6 — "OTC desk + MM rebate + RU compliance core"
+## Sprint 6 — "Compliance core + carry-overs + B2B portal frontend"
 
-**Theme**: Institutional layer (OTC + MM rebate to attract whales),
-**plus the RU regulatory + retail-protection layer that lets us
-serve non-SBBOL clients (ЕСИА) and meet 2024 user-protection law
-(самозапрет, AML pattern alerts).**
+**Theme rebalanced 2026-06-02 post Sprint 5 acceptance** (was: "OTC desk
++ MM rebate + RU compliance core"). Sprint 5 over-shipped on the Spasibo
++ B2B portal lanes and now has 5 day-1 commitments + the carry-overs to
+absorb. **OTC desk + MM rebate moved to Sprint 7** to keep Sprint 6
+under capacity — see `## Sprint 7` revised section below.
 
-### Code work
+> Sprint 5 acceptance §5: «Sprint 6 day-1 includes 3.1+3.2 (1d each
+> unblocked), 5.13 SBBOL OIDC (after §7 q3), B2B portal frontend
+> (sales pre-empted by R#30). Plan-B: OTC desk легко переносится —
+> рынок институциональный, может ждать». Decision: rebalance.
+
+### Code work (post-rebalance)
+
+**Day-1 commits (5 items, ~14 person-days):**
 
 | # | Task | Source | Owner | Effort |
 |---|---|---|---|---|
-| 6.1 | **OTC desk admin workflow** — manual RFQ entry, principal-side execution | M#7 | Backend + Admin UI | 6d |
-| 6.2 | **RFQ (request-for-quote) API** — POST /api/v1/rfq, GET /api/v1/rfq/:id for VIP clients | M#7 | Backend lead | 4d |
-| 6.3 | **MM rebate scheduler** — daily job, top-10 LP by share, distributes 80% of protocol_fee_x/y | M#10 | Backend lead | 4d |
-| 6.4 | **MM tier table** (Bronze/Silver/Gold) with config-driven rebate % | M#10 | Backend lead | 2d |
-| 6.5 | **MM onboarding workflow** — admin approves MM, assigns tier, generates rebate report | M#10 | Backend + Admin UI | 4d |
-| 6.6 | **API access paid tiers** — rate-limit per API key tier (Free/Pro/Enterprise) at gateway | M#20 (low priority but bundled) | SRE + Backend | 3d |
-| 6.7 | **Самозапрет (115-ФЗ amendment 2024)** — `user_self_restrictions` table (immutable, append-only), user-ui "Запретить себе новые позиции" toggle in /profile, all open-position paths (swap/hedge/add-liquidity) check restriction. ЦБ РФ верификация stub for now (real CBR check in Sprint 7). | RU-R6 | Backend + Frontend | 3-4d |
-| 6.8 | **ЕСИА (Госуслуги) OIDC handoff** — second OIDC provider beside SBBOL on the new `dlmm-common/auth/oidc` shared bus (Sprint 5 #5.13 introduces the bus). Maps ЕСИА claims to DLMM USER role; KYC=VERIFIED inherited from Госуслуги ESIA-VERIFIED status. | RU-I1 | Backend | 5-6d |
-| 6.9 | **AML pattern-detection alert (proactive)** — scheduled job (every 15 min) scans recent transactions for: (a) round-amount repeats (≥3 transactions with identical amount within 1h), (b) fast-in-fast-out (deposit → withdrawal within 5 min, ≥80% of deposit), (c) split-transactions just under 600k ₽ threshold. Hits → `aml_alerts` table + email to compliance. **Pre-emptive to RU-R2 (Sprint 7 Росфинмониторинг feed).** | RU-U3 | Backend lead | 3-4d |
-| 6.10 | **Pangolin / PgPro CI matrix test** — extend `.github/workflows/backend.yml` to run integration tests against both `postgres:16` and `pangolin/pangolin:latest`. Drop-in compatibility check; if all tests green, we can claim "Минцифры реестр-compliant БД stack" for Sprint 7+ application. | RU-X2 | SRE | 1-2d |
+| **3.1** | **Activate `protocol_fee_pct = 5%` per pool** + admin endpoint to tune (unblocked by 3.A legal memo) | M#1, was Sprint 3 | Backend lead | 1d |
+| **3.2** | **Protocol fee distribution split** (LP 95% / protocol 5%) — wire `total_protocol_fee_x/y` accumulation in pool fee path | M#1, was Sprint 3 | Backend lead | 1d |
+| **5.F-run** | k6 single-pool re-baseline run on staging (verify Sprint 4 #4.7) | Sprint 5 carry | SRE | 0.5d |
+| **5.13** | SBBOL OIDC handoff — Plan-B unblock once §7 q3 lands (sandbox tenant timeline) | Sprint 5 Plan-B | Backend | 5-8d |
+| **5.6-FE** | **B2B portal frontend** — self-service issuer registration form + admin KYB review screen (sales pre-empted) | Sprint 5 #5.6 carry | Frontend | 4d |
 
-### Non-code work
+**RU compliance core (~14 person-days, kept from original Sprint 6):**
+
+| # | Task | Source | Owner | Effort |
+|---|---|---|---|---|
+| 6.7 | **Самозапрет (115-ФЗ amendment 2024)** — `user_self_restrictions` table, user-ui «Запретить себе новые позиции» toggle, swap/hedge/add-liquidity check | RU-R6 | Backend + Frontend | 3-4d |
+| 6.8 | **ЕСИА (Госуслуги) OIDC handoff** — second OIDC provider on the auth bus (depends on 5.13 bus landing first) | RU-I1 | Backend | 5-6d |
+| 6.9 | **AML pattern-detection alert (proactive)** — scheduled scan: round-amount repeats / fast-in-fast-out / sub-600k splits → `aml_alerts` + compliance email | RU-U3 | Backend | 3-4d |
+| 6.10 | **Pangolin / PgPro CI matrix test** — backend.yml runs IT against postgres:16 AND pangolin:latest | RU-X2 | SRE | 1-2d |
+
+**BA-flagged Sprint 5 acceptance enhancements (~3 person-days):**
+
+| # | Task | Source | Owner | Effort |
+|---|---|---|---|---|
+| 6.14 | Hedge **«Закрыть всё»** mass-action on HedgePage (treasurer flat-the-book) | BA Sprint 5 §3 | Frontend | 1d |
+| 6.15 | Margin-alert **deep-link** «перейти к позиции» from NotificationBell | BA Sprint 5 §3 | Frontend | 0.5d |
+| 6.16 | Spasibo BU write-back (cashback flow back into points) — design memo only, R#29 | BA + SA | SA | 1.5d |
+
+**Total Sprint 6: ~31 person-days** (vs 30 capacity = ~3% over, healthy).
+
+### Moved to Sprint 7 (decision 2026-06-02)
+
+| # | Was Sprint 6 | Reason for move |
+|---|---|---|
+| **6.1** OTC desk admin workflow | 6d | Institutional client onboarding is multi-month; OTC can ship one sprint later without losing pipeline |
+| **6.2** RFQ API | 4d | Pairs with 6.1 |
+| **6.3** MM rebate scheduler | 4d | Depends on 3.1+3.2 (this sprint) — clean to ship together with MM tiers |
+| **6.4** MM tier table | 2d | Pairs with 6.3 |
+| **6.5** MM onboarding workflow | 4d | Pairs with 6.3+6.4 |
+| **6.6** API access paid tiers | 3d | Independent; bundles naturally with MM tiers Sprint 7 |
+
+**Net Sprint 6 cut: 23 person-days saved** by moving OTC+MM block to Sprint 7.
+
+### Non-code work (Sprint 6)
 
 | # | Task | Source | Owner | Effort | Deadline |
 |---|---|---|---|---|---|
-| 6.A | **First MM contracts signed** (2–3 anchor MMs) | M#10 dep | PO + Legal | 2w | End of sprint |
-| 6.B | **OTC client onboarding** — first 3 institutional clients for OTC desk | M#7 dep | PO + Corp Sales | 2w | End of sprint |
-| 6.C | **Атомайз / Мастерчейн listing discovery memo** — can DLMM list THEIR-issued ЦФА as tradeable assets? Opens new monetization (ЦФА secondary market fees, M-new). Conditional on Sprint 5 #5.D ЦФА memo lands "yes-but-bounded". | RU-C2 | SA | 5d | Sprint mid |
-| 6.D | **Минцифры реестр application — phase 1 form prep** | RU-X4 | PO + Legal | 2w | End of sprint |
+| 6.A | **First MM contracts signed** (2–3 anchor MMs) — *prep for Sprint 7 #6.3-6.5* | M#10 dep | PO + Legal | 2w | End of sprint |
+| 6.B | **OTC client onboarding** — first 3 institutional clients — *prep for Sprint 7 #6.1-6.2* | M#7 dep | PO + Corp Sales | 2w | End of sprint |
+| 6.C | **Атомайз / Мастерчейн listing discovery memo** | RU-C2 | SA | 5d | Sprint mid |
+| 6.D | **Минцифры реестр application phase 1 form prep** | RU-X4 | PO + Legal | 2w | End of sprint |
+| 6.E | **SBBOL §7 q3 response chase** — escalate to Sber integrations leadership if not landed by Day 3 | Sprint 5 carry | PO | Day 3 | Day 3 |
 
-### Sprint 6 acceptance
+### Sprint 6 acceptance (post-rebalance)
 
-- 1 OTC block trade settled (target: ≥ 10M ₽ notional)
-- 1 MM receives first rebate payment via scheduler
-- Daily revenue dashboard shows protocol_fee + MM rebate distribution
-- **Самозапрет toggle blocks a swap end-to-end** (test: enable restriction → POST /swap → 403 with code USER_SELF_RESTRICTED)
-- **ЕСИА login** completes silent SSO from Госуслуги test environment, DLMM JWT issued
-- **AML pattern alert fires** for a synthetic split-amount sequence and appears in compliance inbox
-- **CI matrix green on both Postgres 16 + Pangolin** (or Pangolin failures triaged + documented)
-- **Атомайз/Мастерчейн memo accepted** with go/no-go verdict for Q4 ЦФА secondary market track
+Day-1 unblocks:
+- **protocol_fee_pct=5% live** on at least 1 test pool (3.1+3.2 verified end-to-end with admin tooling)
+- **k6 single-pool re-baseline** numbers attached to commit, swap_errors <5% confirmed
+- **SBBOL OIDC sandbox** silent SSO works (5.13 once §7 q3 lands)
+- **B2B portal frontend** registration form + admin KYB review screen live
+
+RU compliance core:
+- **Самозапрет toggle** blocks swap end-to-end (test: enable → 403 USER_SELF_RESTRICTED)
+- **ЕСИА login** completes silent SSO from Госуслуги test environment
+- **AML pattern alert** fires on synthetic split-amount sequence
+- **CI matrix green** on Postgres 16 + Pangolin
+
+Cross-functional:
+- **Атомайз/Мастерчейн memo** accepted with Q4 go/no-go verdict
+- **Минцифры phase 1 form** submitted
+- 2-3 MM contract drafts in legal review (prep for Sprint 7)
+- 3 OTC institutional clients in onboarding pipeline (prep for Sprint 7)
 
 ---
 
-## Sprint 7 — "Money market + index funds prep"
+## Sprint 7 — "OTC + MM rebate (cut-over) + Money market + index funds"
 
-**Theme**: Open the LATER horizon. Tokenized money market is the
-adjacent product unlock; index funds give retail something to buy.
+**Theme rebalanced 2026-06-02** — picks up the OTC + MM rebate block
+moved out of Sprint 6 (capacity over-flow) and the original Sprint 7
+money-market + index-funds backlog. Cross-functional MM/OTC contracts
+ripen during Sprint 6 so code lands ready-for-go in Sprint 7.
+
+### Code work — OTC + MM (moved from Sprint 6)
+
+| # | Task | Source | Owner | Effort |
+|---|---|---|---|---|
+| 6.1 | OTC desk admin workflow (manual RFQ entry, principal-side execution) | M#7 | Backend + Admin UI | 6d |
+| 6.2 | RFQ API (POST /api/v1/rfq, GET /api/v1/rfq/{id}) for VIP | M#7 | Backend | 4d |
+| 6.3 | MM rebate scheduler — daily top-10 LP, distributes 80% protocol fee | M#10 | Backend | 4d |
+| 6.4 | MM tier table (Bronze/Silver/Gold) + config rebate % | M#10 | Backend | 2d |
+| 6.5 | MM onboarding workflow + rebate report | M#10 | Backend + Admin UI | 4d |
+| 6.6 | API access paid tiers (Free/Pro/Enterprise rate-limit at gateway) | M#20 | SRE + Backend | 3d |
+
+### Code work — Money market + index funds (original Sprint 7)
 
 ### Code work
 
