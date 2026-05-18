@@ -19,6 +19,18 @@ server:
 # common JWT auto-config now (Sprint 3 #3.5 follow-up) gates on jjwt
 # being on the classpath. Auto-config is silently skipped here.
 
+# Sprint 5 #5.9 — CBR (Bank of Russia) official daily FX rates feed.
+# Disable wholesale via dlmm.cbr.enabled=false (handy in dev / load tests
+# where outbound cbr.ru calls are noise).
+dlmm:
+  cbr:
+    enabled: ${DLMM_CBR_ENABLED:true}
+    url: ${DLMM_CBR_URL:https://www.cbr.ru/scripts/XML_daily.asp}
+    currencies: ${DLMM_CBR_CURRENCIES:USD,EUR,CNY}
+    # 14:00 server time = ~14:00 MSK if container TZ stays default.
+    # CBR publishes ~12:00 MSK so 14:00 gives a 2h buffer for any delays.
+    cron: ${DLMM_CBR_CRON:0 0 14 * * *}
+
 logging:
   level:
     com.sber.dlmm: DEBUG

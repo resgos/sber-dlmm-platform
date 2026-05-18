@@ -101,6 +101,53 @@ public class PriceOracleService {
                 .toList();
     }
 
+    /**
+     * Sprint 5 #5.9 — DLMM market vs CBR official spread for a single
+     * currency. Returns null if either side is missing (CBR fetch
+     * hasn't run yet, or DLMM doesn't have the currency in catalog).
+     * Caller (admin-bff) treats null as "show — instead of a number".
+     *
+     * <p>Currency lookup is by symbol: DLMM market is e.g. "USD",
+     * "EUR", "CNY" (matches the existing mock feed symbols); CBR side
+     * is prefixed "CBR-USD" etc.
+     */
+    @Transactional(readOnly = true)
+    public com.sber.dlmm.oracle.dto.CbrSpreadResponse getCbrSpread(String currency) {
+        String upper = currency.toUpperCase();
+        PriceFeed dlmm = priceFeedRepository.findByAssetSymbol(upper).orElse(null);
+        PriceFeed cbr = priceFeedRepository.findByAssetSymbol("CBR-" + upper).orElse(null);
+        if (dlmm == null || cbr == null) {
+            return new com.sber.dlmm.oracle.dto.CbrSpreadResponse(
+                    upper,
+                    dlmm == null ? null : dlmm.getCurrentPrice(),
+                    cbr == null ? null : cbr.getCurrentPrice(),
+                    null,
+                    dlmm == null ? null : dlmm.getUpdatedAt(),
+                    cbr == null ? null : cbr.getUpdatedAt());
+        }
+        BigDecimal spread = computeSpreadBps(dlmm.getCurrentPrice(), cbr.getCurrentPrice());
+        return new com.sber.dlmm.oracle.dto.CbrSpreadResponse(
+                upper,
+                dlmm.getCurrentPrice(),
+                cbr.getCurrentPrice(),
+                spread,
+                dlmm.getUpdatedAt(),
+                cbr.getUpdatedAt());
+    }
+
+    /**
+     * Signed spread in basis points (100 bps = 1%). Positive =
+     * DLMM market above CBR official, negative = below. Visible
+     * for unit testing.
+     */
+    static BigDecimal computeSpreadBps(BigDecimal dlmmRate, BigDecimal cbrRate) {
+        if (cbrRate == null || cbrRate.compareTo(BigDecimal.ZERO) <= 0) return null;
+        return dlmmRate.subtract(cbrRate)
+                .divide(cbrRate, MC)
+                .multiply(BigDecimal.valueOf(10_000))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
     @Scheduled(fixedRate = 15_000)
     @Transactional
     public void fetchPricesFromMoex() {

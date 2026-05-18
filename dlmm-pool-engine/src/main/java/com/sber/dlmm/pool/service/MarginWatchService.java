@@ -1,5 +1,6 @@
 package com.sber.dlmm.pool.service;
 
+import com.sber.dlmm.common.calendar.BankingCalendarService;
 import com.sber.dlmm.common.enums.NotificationType;
 import com.sber.dlmm.common.outbox.OutboxService;
 import com.sber.dlmm.pool.entity.LiquidityPool;
@@ -9,6 +10,7 @@ import com.sber.dlmm.pool.event.MarginCallEventPayload;
 import com.sber.dlmm.pool.repository.MarginCallEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,9 +37,26 @@ public class MarginWatchService {
 
     private final MarginCallEventRepository eventRepository;
     private final OutboxService outbox;
+    /**
+     * Sprint 5 #5.10 — used to compute working-day-aware rebalance
+     * deadline in the emitted event payload. Margin-call scheduler
+     * itself is NOT gated by the calendar (risk feature must fire 24/7
+     * regardless of bank holidays) — only the SLA deadline is
+     * calendar-aware.
+     */
+    private final BankingCalendarService bankingCalendar;
 
     /** Notification topic — matches the existing notification-service consumer. */
     private static final String NOTIFICATION_TOPIC = "user-events";
+
+    /**
+     * Sprint 5 #5.10 — how many working days the treasurer has to
+     * rebalance an out-of-range position. Default T+2 (Russian
+     * banking-conventional settlement window). Configurable per
+     * environment.
+     */
+    @Value("${dlmm.margin.rebalance-working-days:2}")
+    private int rebalanceWorkingDays;
 
     /**
      * Pure decision function — returns the event type to emit, or empty
@@ -129,6 +148,12 @@ public class MarginWatchService {
         // Publish to notification topic via outbox so the alert survives
         // a notification-service or Kafka outage. Payload carries the
         // bits notification-service needs to render the message.
+        //
+        // Sprint 5 #5.10 — rebalanceDeadline computed via banking calendar
+        // so treasurer sees "к понедельнику" (working-day aware), not a
+        // weekend that they can't act on.
+        java.time.LocalDate rebalanceDeadline = bankingCalendar.addWorkingDays(
+                event.getCreatedAt().toLocalDate(), rebalanceWorkingDays);
         outbox.append("margin-call", event.getId().toString(), eventType.name(),
                 NOTIFICATION_TOPIC,
                 new MarginCallEventPayload(
@@ -141,7 +166,8 @@ public class MarginWatchService {
                         position.getBinRangeMin(),
                         position.getBinRangeMax(),
                         result.distance(),
-                        event.getCreatedAt()));
+                        event.getCreatedAt(),
+                        rebalanceDeadline));
 
         log.info("Margin event {} emitted for position={} user={} pool={} activeBin={} range=[{},{}] distance={}",
                 eventType, position.getId(), position.getUserId(), position.getPoolId(),

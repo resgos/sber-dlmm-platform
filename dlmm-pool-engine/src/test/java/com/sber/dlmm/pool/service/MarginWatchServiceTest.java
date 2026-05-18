@@ -1,5 +1,6 @@
 package com.sber.dlmm.pool.service;
 
+import com.sber.dlmm.common.calendar.BankingCalendarService;
 import com.sber.dlmm.common.enums.NotificationType;
 import com.sber.dlmm.common.enums.PoolStatus;
 import com.sber.dlmm.common.outbox.OutboxService;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -40,6 +42,10 @@ class MarginWatchServiceTest {
     private MarginCallEventRepository eventRepository;
     @Mock
     private OutboxService outbox;
+    // Sprint 5 #5.10 — real BankingCalendarService (stateless, no I/O) so
+    // the rebalanceDeadline computation is exercised end-to-end.
+    @Spy
+    private BankingCalendarService bankingCalendar = new BankingCalendarService();
 
     @InjectMocks
     private MarginWatchService service;

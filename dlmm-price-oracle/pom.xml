@@ -51,6 +51,14 @@
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
 
+        <!-- Sprint 5 #5.9 — CBR (Bank of Russia) publishes daily FX rates
+             as XML at https://www.cbr.ru/scripts/XML_daily.asp. Jackson XML
+             keeps the parsing one annotated-POJO instead of hand-rolled DOM. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-xml</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

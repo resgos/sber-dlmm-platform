@@ -1,5 +1,6 @@
 package com.sber.dlmm.token.fees;
 
+import com.sber.dlmm.common.calendar.BankingCalendarService;
 import com.sber.dlmm.token.entity.UserBalance;
 import com.sber.dlmm.token.repository.UserBalanceRepository;
 import org.slf4j.Logger;
@@ -50,6 +51,8 @@ public class CustodyFeeJob {
 
     private final UserBalanceRepository userBalanceRepository;
     private final CustodyFeeAccrualService accrual;
+    // Sprint 5 #5.10 — RU banking calendar. Auto-wired from dlmm-common.
+    private final BankingCalendarService bankingCalendar;
 
     @Value("${dlmm.fees.custody-bps-pa:5}")
     private int custodyBpsPerAnnum;
@@ -60,10 +63,21 @@ public class CustodyFeeJob {
     @Value("${dlmm.fees.treasury-user-id:a0000000-0000-0000-0000-000000000001}")
     private UUID treasuryUserId;
 
+    /**
+     * Sprint 5 #5.10 — if true, skip accrual on RU non-banking days
+     * (weekends + federal holidays). Default true to match Russian
+     * banking conventions; tests / dev can flip to false to keep the
+     * job firing every day.
+     */
+    @Value("${dlmm.fees.custody-skip-holidays:true}")
+    private boolean skipHolidays;
+
     public CustodyFeeJob(UserBalanceRepository userBalanceRepository,
-                         CustodyFeeAccrualService accrual) {
+                         CustodyFeeAccrualService accrual,
+                         BankingCalendarService bankingCalendar) {
         this.userBalanceRepository = userBalanceRepository;
         this.accrual = accrual;
+        this.bankingCalendar = bankingCalendar;
     }
 
     @Scheduled(cron = "${dlmm.fees.custody-tick-cron:0 5 * * * *}")
@@ -71,6 +85,18 @@ public class CustodyFeeJob {
         if (custodyBpsPerAnnum <= 0) return;
 
         LocalDateTime now = LocalDateTime.now();
+
+        // Sprint 5 #5.10 — RU banking calendar gate. Custody fee accrues
+        // for HOLDING the balance, but conventionally banks freeze
+        // accrual on non-business days (no interest on weekends). For
+        // the prototype we mirror that. Daily proration arithmetic in
+        // CustodyFeeAccrualService is already idempotent — once we
+        // skip a day, next working day's accrual covers the elapsed
+        // calendar span automatically.
+        if (skipHolidays && !bankingCalendar.isWorkingDay(now.toLocalDate())) {
+            log.debug("Custody fee tick skipped: {} is a non-banking day", now.toLocalDate());
+            return;
+        }
         // Cutoff = midnight today. Anything accrued today is skipped
         // — makes within-day re-ticks no-ops.
         LocalDateTime cutoff = now.toLocalDate().atStartOfDay();

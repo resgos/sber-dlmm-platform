@@ -1,5 +1,6 @@
 package com.sber.dlmm.oracle.controller;
 
+import com.sber.dlmm.oracle.dto.CbrSpreadResponse;
 import com.sber.dlmm.oracle.dto.PriceFeedResponse;
 import com.sber.dlmm.oracle.dto.TwapResponse;
 import com.sber.dlmm.oracle.service.PriceOracleService;
@@ -39,5 +40,20 @@ public class PriceOracleController {
     public ResponseEntity<List<PriceFeedResponse>> getAllPrices() {
         List<PriceFeedResponse> prices = priceOracleService.getAllPrices();
         return ResponseEntity.ok(prices);
+    }
+
+    /**
+     * Sprint 5 #5.9 — DLMM market rate vs CBR (Bank of Russia) official
+     * rate for the given currency (USD / EUR / CNY / ...). Powers the
+     * admin-dashboard "spread vs official" tile.
+     *
+     * <p>Spread reported in signed basis points: positive = DLMM market
+     * is ABOVE official (DLMM USD costs more rubles), negative = below.
+     * Null spread = one side missing (CBR fetch hasn't run yet, or DLMM
+     * doesn't have the currency in catalog).
+     */
+    @GetMapping("/spread/{currency}")
+    public ResponseEntity<CbrSpreadResponse> getCbrSpread(@PathVariable String currency) {
+        return ResponseEntity.ok(priceOracleService.getCbrSpread(currency));
     }
 }
