@@ -64,15 +64,30 @@ the slower test/build matrix spends minutes.
 2. Run `node scripts/check-no-hex-in-tsx.mjs --update` to tighten baseline
 3. Commit the updated `scripts/hex-baseline.json` alongside the file edit
 
-## Tracked baseline snapshot (Sprint 8 Day 1)
+## Tracked baseline progression
 
-- 34 files contain hex
-- 243 total occurrences
-- Top 5 offenders:
-  - `dlmm-admin-ui/src/components/BinLiquidityChart.tsx` (22)
-  - `dlmm-admin-ui/src/pages/DashboardPage.tsx` (22)
-  - `dlmm-user-ui/src/components/BinLiquidityChart.tsx` (19)
-  - `dlmm-user-ui/src/components/UserLayout.tsx` (15)
-  - `dlmm-user-ui/src/pages/RegisterPage.tsx` (15)
+| Sprint 8 day | Files | Total hex | Δ vs Day 1 |
+|---|---|---|---|
+| Day 1 (baseline) | 34 | 243 | — |
+| Day 4 (UX-DS-1 first sweep) | 32 | 207 | −14.8% |
 
-Sprint 8 UX-DS-1 target: drop these top 5 by 50%+ → baseline ≤ 200.
+**Day 1 top 5 offenders:**
+- `dlmm-admin-ui/src/components/BinLiquidityChart.tsx` (22)
+- `dlmm-admin-ui/src/pages/DashboardPage.tsx` (22) → **swept to 0**
+- `dlmm-user-ui/src/components/BinLiquidityChart.tsx` (19)
+- `dlmm-user-ui/src/components/UserLayout.tsx` (15)
+- `dlmm-user-ui/src/pages/RegisterPage.tsx` (15)
+
+**Day 4 top 5 (post-sweep):**
+- `dlmm-admin-ui/src/components/BinLiquidityChart.tsx` (22)
+- `dlmm-user-ui/src/components/BinLiquidityChart.tsx` (19)
+- `dlmm-user-ui/src/components/UserLayout.tsx` (15)
+- `dlmm-user-ui/src/pages/RegisterPage.tsx` (15)
+- `dlmm-admin-ui/src/components/ProtectedLayout.tsx` (15)
+
+The BinLiquidityChart files are recharts-driven; the recharts API takes
+hex strings directly for fill/stroke, so those need either a chart-color
+const module or an opt-in allowlist entry. Sprint 9 work.
+
+Sprint 8 UX-DS-1 stretch goal: drop to ≤ 180 (further user/admin
+Layout + RegisterPage sweep) — Day 5+ work if time permits.

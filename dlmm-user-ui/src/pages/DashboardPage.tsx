@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import { balances, pools, fees, transactions, oracle } from '@/api/services'
 import StatCard, { formatRub } from '@/components/StatCard'
 import SpasiboWidget from '@/components/SpasiboWidget'
+import { DASHBOARD_TILE_PALETTE } from '@/styles/palette'
 import type { TokenBalance, Position, Transaction, TokenPrice } from '@/api/types'
 import dayjs from 'dayjs'
 
@@ -95,11 +96,11 @@ export default function DashboardPage() {
           <Col xs={24} md={10} style={{ textAlign: 'right' }}>
             <Space size={12} wrap>
               <Button size="large" onClick={() => navigate('/swap')}
-                style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)', color: '#fff' }}>
+                style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)', color: 'var(--bg-card)' }}>
                 Обменять
               </Button>
               <Button size="large" onClick={() => navigate('/pools')}
-                style={{ background: '#fff', borderColor: '#fff', color: '#0E6B1E', fontWeight: 600 }}>
+                style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-card)', color: 'var(--sber-green-dark)', fontWeight: 600 }}>
                 В пулы <ArrowRightOutlined />
               </Button>
             </Space>
@@ -110,19 +111,26 @@ export default function DashboardPage() {
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
           <StatCard title="Общий баланс" value={totalBalanceRub} icon={<WalletOutlined />}
-            iconBg="#FEF3C7" iconColor="#F59E0B" formatter={formatRub} />
+            iconBg={DASHBOARD_TILE_PALETTE.balance.bg}
+            iconColor={DASHBOARD_TILE_PALETTE.balance.fg}
+            formatter={formatRub} />
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <StatCard title="Активные позиции" value={activePositions.length} icon={<PieChartOutlined />}
-            iconBg="#F3E8FF" iconColor="#8B5CF6" />
+            iconBg={DASHBOARD_TILE_PALETTE.positions.bg}
+            iconColor={DASHBOARD_TILE_PALETTE.positions.fg} />
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <StatCard title="Незабранные комиссии" value={feeSummary?.totalUnclaimed ?? 0} icon={<DollarOutlined />}
-            iconBg="#E0F2FE" iconColor="#0EA5E9" formatter={formatRub} />
+            iconBg={DASHBOARD_TILE_PALETTE.feesPending.bg}
+            iconColor={DASHBOARD_TILE_PALETTE.feesPending.fg}
+            formatter={formatRub} />
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <StatCard title="Всего заработано" value={feeSummary?.totalClaimed ?? 0} icon={<TrophyOutlined />}
-            iconBg="#E8F5E9" iconColor="#21A038" formatter={formatRub} />
+            iconBg={DASHBOARD_TILE_PALETTE.earned.bg}
+            iconColor={DASHBOARD_TILE_PALETTE.earned.fg}
+            formatter={formatRub} />
         </Col>
       </Row>
 
@@ -152,8 +160,8 @@ export default function DashboardPage() {
                 <Space>
                   <div style={{
                     width: 32, height: 32, borderRadius: 16,
-                    background: '#E8F5E9', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 700, fontSize: 12, color: '#21A038',
+                    background: 'var(--sber-green-light)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 700, fontSize: 12, color: 'var(--sber-green)',
                   }}>
                     {sym?.slice(0, 2)}
                   </div>

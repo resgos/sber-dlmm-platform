@@ -12,6 +12,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { admin } from '@/api/services'
 import StatCard, { formatRub } from '@/components/StatCard'
+import { ADMIN_TILE_PALETTE } from '@/styles/palette'
 
 const { Title } = Typography
 
@@ -79,8 +80,8 @@ export default function DashboardPage() {
             title="Всего пользователей"
             value={dashboard?.totalUsers ?? 0}
             icon={<UserOutlined />}
-            iconBg="#EFF6FF"
-            iconColor="#3B82F6"
+            iconBg={ADMIN_TILE_PALETTE.users.bg}
+            iconColor={ADMIN_TILE_PALETTE.users.fg}
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -88,8 +89,8 @@ export default function DashboardPage() {
             title="Верифицированные"
             value={dashboard?.verifiedUsers ?? 0}
             icon={<CheckCircleOutlined />}
-            iconBg="#E8F5E9"
-            iconColor="#21A038"
+            iconBg={ADMIN_TILE_PALETTE.verified.bg}
+            iconColor={ADMIN_TILE_PALETTE.verified.fg}
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -97,8 +98,8 @@ export default function DashboardPage() {
             title="Всего пулов"
             value={dashboard?.totalPools ?? 0}
             icon={<FundOutlined />}
-            iconBg="#F3E8FF"
-            iconColor="#8B5CF6"
+            iconBg={ADMIN_TILE_PALETTE.pools.bg}
+            iconColor={ADMIN_TILE_PALETTE.pools.fg}
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -106,8 +107,8 @@ export default function DashboardPage() {
             title="Активные пулы"
             value={dashboard?.activePools ?? 0}
             icon={<TeamOutlined />}
-            iconBg="#E0F2FE"
-            iconColor="#0EA5E9"
+            iconBg={ADMIN_TILE_PALETTE.poolsActive.bg}
+            iconColor={ADMIN_TILE_PALETTE.poolsActive.fg}
           />
         </Col>
       </Row>
@@ -119,8 +120,8 @@ export default function DashboardPage() {
             title="Общий TVL"
             value={dashboard?.totalTvlRub ?? 0}
             icon={<DollarOutlined />}
-            iconBg="#FEF3C7"
-            iconColor="#F59E0B"
+            iconBg={ADMIN_TILE_PALETTE.tvl.bg}
+            iconColor={ADMIN_TILE_PALETTE.tvl.fg}
             formatter={formatRub}
           />
         </Col>
@@ -129,8 +130,8 @@ export default function DashboardPage() {
             title="Объём за 24ч"
             value={dashboard?.volume24hRub ?? 0}
             icon={<BarChartOutlined />}
-            iconBg="#FCE7F3"
-            iconColor="#EC4899"
+            iconBg={ADMIN_TILE_PALETTE.volume.bg}
+            iconColor={ADMIN_TILE_PALETTE.volume.fg}
             formatter={formatRub}
           />
         </Col>
@@ -139,8 +140,8 @@ export default function DashboardPage() {
             title="Собрано комиссий"
             value={dashboard?.totalFeesCollectedRub ?? 0}
             icon={<TrophyOutlined />}
-            iconBg="#E8F5E9"
-            iconColor="#21A038"
+            iconBg={ADMIN_TILE_PALETTE.verified.bg}
+            iconColor={ADMIN_TILE_PALETTE.verified.fg}
             formatter={formatRub}
           />
         </Col>
@@ -149,8 +150,8 @@ export default function DashboardPage() {
             title="Транзакций сегодня"
             value={dashboard?.transactionsToday ?? 0}
             icon={<TransactionOutlined />}
-            iconBg="#EFF6FF"
-            iconColor="#3B82F6"
+            iconBg={ADMIN_TILE_PALETTE.users.bg}
+            iconColor={ADMIN_TILE_PALETTE.users.fg}
           />
         </Col>
       </Row>
@@ -160,12 +161,12 @@ export default function DashboardPage() {
         <Col xs={24} sm={12}>
           <Card
             className="sber-card"
-            style={{ borderRadius: 12, border: '1px solid #E5E7EB' }}
-            title={<span style={{ fontWeight: 600, color: '#1F2937' }}>Активные позиции</span>}
+            style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+            title={<span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Активные позиции</span>}
           >
             <Statistic
               value={dashboard?.activePositions ?? 0}
-              valueStyle={{ color: '#21A038', fontSize: 36, fontWeight: 700 }}
+              valueStyle={{ color: 'var(--sber-green)', fontSize: 36, fontWeight: 700 }}
               prefix={<FundOutlined />}
               suffix="позиций"
             />
@@ -174,8 +175,8 @@ export default function DashboardPage() {
         <Col xs={24} sm={12}>
           <Card
             className="sber-card"
-            style={{ borderRadius: 12, border: '1px solid #E5E7EB' }}
-            title={<span style={{ fontWeight: 600, color: '#1F2937' }}>Уровень верификации KYC</span>}
+            style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+            title={<span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Уровень верификации KYC</span>}
           >
             <Statistic
               value={
@@ -184,7 +185,7 @@ export default function DashboardPage() {
                   : 0
               }
               suffix="%"
-              valueStyle={{ color: '#21A038', fontSize: 36, fontWeight: 700 }}
+              valueStyle={{ color: 'var(--sber-green)', fontSize: 36, fontWeight: 700 }}
               prefix={<CheckCircleOutlined />}
             />
           </Card>
