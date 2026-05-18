@@ -339,3 +339,61 @@ body {
   font-weight: 500;
   color: var(--text-secondary);
 }
+
+/* ======================================================================
+   Sprint 8 UX-MOBILE-1 — mobile breakpoint sweep (admin-ui).
+
+   Audit C-2: prior to this block, admin-ui had ZERO @media queries.
+   Admin is desktop-first by use case (operations team mostly on
+   workstations), but phone-OK matters for on-call alerts where the
+   ops engineer pulls the dashboard from a phone at 02:00.
+   ====================================================================== */
+
+@media (max-width: 768px) {
+  .sber-hero {
+    padding: 24px 20px !important;
+    border-radius: 14px;
+  }
+  .sber-hero-value {
+    font-size: 28px;
+    letter-spacing: -0.4px;
+  }
+  .sber-hero-meta {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 414px) {
+  .sber-hero {
+    padding: 20px 16px !important;
+  }
+  .sber-hero-title {
+    font-size: 11px;
+  }
+  .sber-hero-value {
+    font-size: 24px;
+  }
+  .sber-hero-meta {
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .sber-page-title {
+    font-size: 18px;
+  }
+  /* Admin tables (Users / Pools / Tokens / Transactions / SuspiciousTransactions)
+     have wider columns than user-side — explicit horizontal scroll on phone
+     prevents the page from breaking on viewport overflow. */
+  .sber-card .ant-card-body .ant-table-wrapper {
+    overflow-x: auto;
+  }
+  .sber-card .ant-card-body {
+    padding: 16px 12px;
+  }
+  /* Admin sider becomes a full-width overlay on phone — the user can
+     dismiss it via the same collapse button (already aria-controls
+     wired in Sprint 8 UX-A11Y-1). */
+  .sber-sidebar {
+    position: fixed !important;
+    z-index: 200 !important;
+  }
+}

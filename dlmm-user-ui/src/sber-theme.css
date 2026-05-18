@@ -645,3 +645,116 @@ body {
   border-color: #21A038 !important;
   background: #F0FFF4 !important;
 }
+
+/* ======================================================================
+   Sprint 8 UX-MOBILE-1 + UX-042 — mobile breakpoint sweep.
+
+   Audit C-2: prior to this block there were ZERO @media queries
+   anywhere; mobile relied entirely on AntD's structural Col breakpoints.
+   That worked for grids but not for typography, paddings, or hero
+   blocks, which stayed desktop-scale on phones.
+
+   Two breakpoints:
+     - max-width: 768px → tablet (iPad portrait, large phones landscape)
+     - max-width: 414px → phone (Pixel 5, iPhone 14 portrait)
+   Audited on Chrome devtools at 320, 375, 414, 768.
+   ====================================================================== */
+
+@media (max-width: 768px) {
+  /* Hero blocks (Dashboard, etc.) become more compact. */
+  .sber-hero {
+    padding: 24px 20px !important;
+    border-radius: 14px;
+  }
+  .sber-hero-value {
+    font-size: 28px;
+    letter-spacing: -0.4px;
+  }
+  .sber-hero-meta {
+    font-size: 12px;
+  }
+
+  /* Pool cards in the listing — slightly tighter padding so 2 cards
+     side-by-side at 768 don't feel cramped. */
+  .sber-pool-card .ant-card-body {
+    padding: 16px;
+  }
+  .sber-pool-card__metrics {
+    gap: 12px;
+  }
+
+  /* Swap card edges to viewport edge so the form gets the full width. */
+  .sber-swap-shell {
+    padding: 16px 12px;
+  }
+  .sber-swap-headerline {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 414px) {
+  /* Phone — typography drops further, hero stacks vertically. */
+  .sber-hero {
+    padding: 20px 16px !important;
+  }
+  .sber-hero-title {
+    font-size: 11px;
+  }
+  .sber-hero-value {
+    font-size: 24px;
+  }
+  .sber-hero-meta {
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  /* Swap form — bigger touch targets, smaller font on the in/out boxes
+     so 6-digit amounts don't overflow the 320px viewport. */
+  .sber-swap-shell {
+    padding: 12px 8px;
+  }
+  .sber-swap-box {
+    padding: 12px;
+  }
+  .sber-swap-amount input.ant-input-number-input {
+    font-size: 22px;
+  }
+  .sber-swap-flip__btn {
+    /* Bigger tap target than 32px AppleHIG minimum. */
+    width: 40px;
+    height: 40px;
+  }
+  .sber-swap-quote__row {
+    font-size: 12px;
+  }
+
+  /* Pool cards — full-width, narrower metric values. */
+  .sber-pool-card .ant-card-body {
+    padding: 14px;
+  }
+  .sber-pool-metric__value {
+    font-size: 14px;
+  }
+  .sber-pool-metric__label {
+    font-size: 11px;
+  }
+
+  /* Card titles — page titles drop one notch so 2-line headings on
+     small screens don't push the action button below the fold. */
+  .sber-page-title {
+    font-size: 18px;
+  }
+
+  /* AntD Table horizontal scroll on phone — Dashboard/Positions/
+     Transactions tables overflow without this. Wrap the table in
+     a scrolling container per usage (each page already nests in
+     .sber-card .ant-card-body which we shrink-pad). */
+  .sber-card .ant-card-body .ant-table-wrapper {
+    overflow-x: auto;
+  }
+  .sber-card .ant-card-body {
+    padding: 16px 12px;
+  }
+}
