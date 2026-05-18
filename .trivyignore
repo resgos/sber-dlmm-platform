@@ -1,0 +1,21 @@
+# .trivyignore — explicit allowlist for container-scan PR gate (Sprint 4 #4.8)
+#
+# Format: one CVE id per line. Optional rationale on the same line after `#`.
+# Trivy treats it as a hard allowlist — listed CVEs do not block the PR even
+# at HIGH/CRITICAL severity.
+#
+# RULES OF USE (enforced via PR review):
+#   1. Every entry MUST have a one-line rationale.
+#   2. Every entry MUST cite a tracking link (Sber JIRA, upstream issue,
+#      or "fixed-in <version> — upgrading in PR #NNN").
+#   3. Time-box entries with an `# expires: YYYY-MM-DD` tag if the
+#      acceptance is conditional. Container scan reads the file each run
+#      so revisiting is automatic.
+#   4. NEVER allowlist a CVE without compliance + SRE on-call sign-off.
+#
+# Examples (commented out — replace with real entries as needed):
+#
+# CVE-2025-12345  # base image: glibc heap UAF, fix-in 2.40, awaiting eclipse-temurin rebuild | tracking: SRE-1247 | expires: 2026-07-01
+# CVE-2024-99999  # spring-security: false positive — we don't enable the affected handler. Confirmed by compliance@sber.ru 2026-05-12.
+
+# (empty — no current waivers as of 2026-05-18 Sprint 4 close)

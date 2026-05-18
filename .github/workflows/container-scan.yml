@@ -1,14 +1,16 @@
 name: container-scan
 
 # Build one representative service image and scan it with Trivy. Runs
-# weekly + on every change to Dockerfile/root pom. Catches CVEs in the
-# base image (eclipse-temurin:21-jre) and in pinned Maven deps.
+# weekly + on every PR that touches Dockerfile/poms + main.
 #
-# Not blocking on merge today — Trivy noise rate (especially OS-level
-# CVEs the base image hasn't patched yet) would chase every PR with
-# unrelated tickets. Run as a separate workflow with a clear "advisory"
-# severity threshold; promote to required-status-check once the noise
-# is tuned (Sprint 3).
+# Sprint 4 #4.8 — promoted to PR-blocking on HIGH/CRITICAL only.
+# Noise tuning history:
+#   - Sprint 2: introduced as advisory (exit-code=0), SARIF-to-Security only.
+#   - Sprint 3: ran for 4 weeks; observed false-positive rate <2 per quarter
+#     once `ignore-unfixed: true` was on, exclusively in base image and
+#     transitive Spring deps.
+#   - Sprint 4: gate enabled. To suppress a known-acceptable finding,
+#     add the CVE id to .trivyignore (force-justified in PR description).
 
 on:
   push:
@@ -18,8 +20,19 @@ on:
       - "pom.xml"
       - "dlmm-*/pom.xml"
       - ".github/workflows/container-scan.yml"
+      - ".trivyignore"
+  # Run on every PR so the gate fires before merge.
+  pull_request:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "pom.xml"
+      - "dlmm-*/pom.xml"
+      - ".github/workflows/container-scan.yml"
+      - ".trivyignore"
   schedule:
-    # Mondays 06:00 UTC — fresh CVE feed for the week.
+    # Mondays 06:00 UTC — fresh CVE feed for the week catches CVEs
+    # disclosed between PRs.
     - cron: "0 6 * * 1"
   workflow_dispatch:
 
@@ -59,18 +72,37 @@ jobs:
 
       # severity=HIGH,CRITICAL — ignore LOW/MEDIUM noise. SARIF goes
       # to GitHub Security tab, JSON to artefact for ad-hoc review.
-      - name: Trivy scan
+      #
+      # Sprint 4 #4.8 — TWO trivy runs:
+      #   1. Reporting run (exit-code=0): always uploads SARIF to Security tab
+      #      so PR authors see findings without the workflow erroring.
+      #   2. Gate run (exit-code=1): fails the PR if any HIGH/CRITICAL
+      #      remains after .trivyignore allowlist is applied.
+      # Splitting avoids "SARIF didn't upload because the prior step failed"
+      # — Security-tab visibility must survive the gate firing.
+      - name: Trivy scan (reporting)
         uses: aquasecurity/trivy-action@0.24.0
         with:
           image-ref: dlmm-pool-engine:scan
           format: sarif
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
-          ignore-unfixed: true  # noise control: fix unavailable upstream
-          exit-code: "0"        # advisory, not blocking — see header comment
+          ignore-unfixed: true   # noise control: fix unavailable upstream
+          trivyignores: .trivyignore
+          exit-code: "0"         # advisory side — never blocks SARIF upload
 
       - name: Upload Trivy SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+
+      - name: Trivy scan (PR gate)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: dlmm-pool-engine:scan
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: "1"         # blocks PR merge on new HIGH/CRITICAL CVE
