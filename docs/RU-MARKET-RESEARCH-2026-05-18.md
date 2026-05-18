@@ -159,7 +159,7 @@ Each cell averaged across 4 voters (1-5 scale).
 | **RU-S4** | Sber CRM KYB-data import | 3 | 2 | 3 | 3 | **11** | T2 — Sprint 7 |
 | **RU-U2** | Период охлаждения для крупных операций | 4 | 1 | 4 | 3 | **12** | T2 — Sprint 7 (depends on retail track) |
 | **RU-U3** | AML alert на паттерны | 3 | 1 | 5 | 4 | **13** | T2 → **promoted T1 by Compliance** Sprint 6 |
-| **RU-X1** | Redis → Ignite (импортозамещение) | 3 | 1 | 5 | 2 | **11** | **Backlog, отдельный quarterly track** |
+| **RU-X1** | Redis → Ignite (импортозамещение) | 3 | 1 | 5 | 2 | **11** | **Parking lot, deep backlog** (IT-lead 2026-05-18 demote; KeyDB/Dragonfly = first-line defence drop-in) |
 | **RU-X2** | Postgres → Pangolin/PgPro | 4 | 1 | 5 | 4 | **14** | **T1 — drop-in test in Sprint 6** |
 | **RU-X4** | Минцифры реестр включение | 3 | 3 | 1 | 1 | **8** | T3 — multi-quarter PO+Legal trek |
 
@@ -286,7 +286,7 @@ market fees on ЦФА** (M-new в monetization strategy).
 
 - [✓] Sprint 5 принимает **5 RU-фич**: RU-M1, RU-D1, RU-T3, RU-R5 memo, RU-T2.
 - [✓] Sprint 6 принимает **5 RU-фич**: RU-R6, RU-I1, RU-U3, RU-C2 memo, RU-X2 drop-in test.
-- [✓] Redis → Ignite (RU-X1) **в backlog**, **не в Sprint 5/6**, отдельная strategic-tracks секция в SPRINT-PLAN.md с trigger'ом активации.
+- [✓] Redis → Ignite (RU-X1) — **deep backlog (parking lot)**, не в Strategic tracks. IT-lead 2026-05-18: монитоить ежемесячно нечего, current Redis surface слишком мал, активатор внешний. KeyDB/Dragonfly drop-in остаётся как first-line defence на случай импорт-замещения.
 - [✓] **Parking lot обновляется** parking lot'ом RU-фич с явными re-eval triggers.
 - [✓] SPRINT-PLAN.md обновляется в этой же PR, **SPRINT-5-KICKOFF.md создаётся** в этом же PR.
 

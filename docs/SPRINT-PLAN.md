@@ -258,6 +258,7 @@ Each line gets revisited at Q3 close.
 | **СберБизнес Эквайринг bridge** | RU-S3 | Speculative — corp merchant processing in DLMM context | When B2B portal (Sprint 5) shows merchant demand |
 | **БРИКС Pay rail integration** | RU-M3 | API access uncertain in 2026 | When BRICS rail issues v1 spec |
 | **Sber DFA platform integration** | RU-C3 | Own DFA platform GA + RU-R5 memo verdict required first | When Sber DFA platform reaches v1 + Sprint 5 #5.D memo accepts ЦФА classification |
+| **Redis → Apache Ignite / KeyDB / Dragonfly migration** | RU-X1, IT-lead 2026-05-18 | **Demoted from Strategic tracks 2026-05-18** per IT-lead decision. Current Redis surface tiny (3 setIfAbsent in pool-engine + Spring Cloud Gateway RequestRateLimiter); ~14 person-days for zero business value without external trigger. KeyDB / Dragonfly = Redis-API drop-in (~0.5 day compose swap) — recommended as first-line defence if import-substitution mandate fires, before considering full Ignite migration. | Any of: (1) Sber Security mandates exit from Redis Inc.; (2) Ignite SQL Grid as 2-level cache becomes a quarter-strategy initiative; (3) production stack standardizes on Ignite for cluster-wide IMDG |
 
 > Full BA discovery + scoring matrix → `docs/RU-MARKET-RESEARCH-2026-05-18.md`.
 
@@ -270,49 +271,13 @@ the 2-week iteration. Each has a clear **activation trigger** — when
 that fires, we cut Sprint-sized slices from the track and put them
 on the regular backlog. Until then, IT-lead reviews status monthly.
 
-### Track 1 — Redis → Apache Ignite (or KeyDB / Dragonfly) migration
+> Redis → Ignite was previously listed here as Track 1, **demoted to
+> the regular parking lot on 2026-05-18** by IT-lead — see parking-lot
+> entry "Redis → Ignite / KeyDB / Dragonfly migration" for the full
+> rationale + trigger preserved. Monthly monitoring dropped, Q3 review
+> cycle picks it up like other parking items.
 
-**Source**: IT-lead inquiry 2026-05-18. Driven by potential
-import-substitution mandate or expansion to Ignite SQL Grid for
-hot-table caching.
-
-**Current Redis surface (post Sprint 4)** — minimal:
-- `dlmm-gateway` — Spring Cloud Gateway `RequestRateLimiter`
-  (replenishRate=100, burstCapacity=150) on reactive Redis.
-- `dlmm-pool-engine` — 3 sites in SwapService + LiquidityService
-  using `StringRedisTemplate.opsForValue().setIfAbsent(...)` for
-  idempotency markers with 24h TTL.
-- Healthcheck + testcontainers.
-
-**Effort estimate** (see standalone analysis):
-- Pure cache (idempotency, healthcheck, tests) → ~3 days
-- Gateway rate-limiter (via `bucket4j-ignite` distributed proxy)
-  → +4 days
-- Infra (Compose, Prometheus, port conflicts) → +2 days
-- Buffer for new-stack debugging → +2 days
-- **Total: ~11 person-days (~1 sprint slice for 1 backend + 0.5 SRE)**
-
-**Activation triggers** (any of):
-- 🇷🇺 **Mandate from Sber Security** to exit Redis Inc. dependency
-  (import-substitution policy or sanctions risk classification).
-- 🚀 **Ignite SQL Grid as 2-level cache** for hot Postgres tables
-  (LP positions, user_balances) becomes a quarter-strategy initiative —
-  Redis migration falls out as a side-effect.
-- 📦 **Production environment** standardizes on Ignite for cluster-wide
-  IMDG (separate platform decision).
-
-**Risks if forced WITHOUT activation trigger**: ~14 person-days
-spent for zero business value (current Redis usage is trivial and
-production-proven). Backend dev time better spent on Sprint 5 SBBOL
-OIDC handoff or compliance unblocks.
-
-**Alternative**: Drop-in replacement with **KeyDB** or **Dragonfly** —
-Redis-API-compatible Apache 2.0 forks, no code changes, sidesteps
-vendor-lock concern without paying Ignite's IMDG complexity. ~0.5 day
-of compose-file change + retest. Recommended **first line of defence**
-if RU-X1 trigger fires.
-
-### Track 2 — Postgres → Pangolin / Postgres Pro
+### Track 1 (was Track 2) — Postgres → Pangolin / Postgres Pro
 
 **Source**: RU-X2 from `docs/RU-MARKET-RESEARCH-2026-05-18.md`.
 
@@ -324,7 +289,7 @@ default to Postgres community, but document Pangolin-compatibility for
 **Open task**: full performance baseline comparison after CI matrix
 green. Sprint 7+ depending on Pangolin licensing terms with Sber.
 
-### Track 3 — Минцифры реестр отечественного ПО включение
+### Track 2 (was Track 3) — Минцифры реестр отечественного ПО включение
 
 **Source**: RU-X4 from `docs/RU-MARKET-RESEARCH-2026-05-18.md`.
 
@@ -342,7 +307,7 @@ Full process takes 4-9 months from submission to listing decision.
 - DLMM not built on US-controlled SaaS dependencies (Redis Inc.-controlled → если Track 1 активируется, кладёт ещё balls в нашу сторону).
 - Russian legal entity owns IP (Sber как legal entity OK).
 
-### Track 4 — 152-ФЗ / 115-ФЗ / 161-ФЗ compliance battery
+### Track 3 (was Track 4) — 152-ФЗ / 115-ФЗ / 161-ФЗ compliance battery
 
 **Source**: RU-R1, RU-R2, RU-R3, RU-R4 from `docs/RU-MARKET-RESEARCH-2026-05-18.md`.
 
