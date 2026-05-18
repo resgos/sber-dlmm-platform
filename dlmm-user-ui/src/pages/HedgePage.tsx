@@ -304,6 +304,52 @@ export default function HedgePage() {
     })
   }
 
+  /**
+   * Sprint 6 #6.14 — «Закрыть всё»: mass-action для treasurer'а который
+   * хочет flat the book на конец дня. Sequentially fires unwind for
+   * every open hedge — серийно, не параллельно, чтобы pool не получил
+   * concurrent swaps на тот же бин (хотя optimistic lock #4.7 справится,
+   * последовательность даёт более предсказуемые price impacts).
+   */
+  const confirmUnwindAll = () => {
+    if (openHedges.length === 0) return
+    const totalHedged = openHedges.reduce((sum, h) => sum + (h.amountIn ?? 0), 0)
+    Modal.confirm({
+      title: `Закрыть все хеджи (${openHedges.length})?`,
+      width: 480,
+      content: (
+        <Space direction="vertical" size={8}>
+          <Text>
+            Будут последовательно закрыты <b>{openHedges.length}</b> открытых хеджа
+            на общую сумму <b>{totalHedged.toLocaleString('ru-RU')} SRUB</b>.
+          </Text>
+          <Text type="warning" style={{ fontSize: 12 }}>
+            Операция необратима. Каждое закрытие = swap по текущему курсу;
+            проскальзывание не ограничено.
+          </Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            Хеджи закрываются по очереди, не параллельно — это даёт более
+            предсказуемое влияние на цены пулов.
+          </Text>
+        </Space>
+      ),
+      okText: `Закрыть все ${openHedges.length}`,
+      okButtonProps: { danger: true },
+      cancelText: 'Отмена',
+      onOk: async () => {
+        for (const hedge of openHedges) {
+          try {
+            await unwindMutation.mutateAsync(hedge)
+          } catch (e) {
+            // Stop on first error so caller can investigate; success
+            // hedges already closed stay closed (idempotent unwind key).
+            return
+          }
+        }
+      },
+    })
+  }
+
   // Token-symbol lookup for the open-hedges table.
   const tokenMap = useMemo(() => {
     const m = new Map<string, Token>()
@@ -575,6 +621,7 @@ export default function HedgePage() {
       {/* Sprint 5 #5.14 — Open hedges table. Each row gets an "Закрыть" */}
       {/* action that fires a reverse swap (target FX → SRUB) tagged with */}
       {/* a paired idempotency key so the hedge falls off this list. */}
+      {/* Sprint 6 #6.14 — added "Закрыть всё" mass-action button in card extra. */}
       <Card
         className="sber-card"
         title={
@@ -582,6 +629,19 @@ export default function HedgePage() {
             <Text strong>Открытые хеджи</Text>
             <Tag color="green">{openHedges.length}</Tag>
           </Space>
+        }
+        extra={
+          openHedges.length > 0 && (
+            <Button
+              danger
+              size="small"
+              icon={<RollbackOutlined />}
+              onClick={confirmUnwindAll}
+              loading={unwindMutation.isPending}
+            >
+              Закрыть всё
+            </Button>
+          )
         }
         style={{ marginTop: 20 }}
       >

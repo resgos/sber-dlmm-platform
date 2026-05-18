@@ -32,7 +32,37 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+
+    # Sprint 6 #6.10 — Pangolin/PgPro CI matrix test. Runs the integration
+    # tests against both Postgres community and the Минцифры реестр-
+    # acceptable Pangolin fork to prove drop-in compatibility. If the
+    # Pangolin leg fails, the workflow still passes (continue-on-error)
+    # but Security tab shows the divergence — we want visibility, not
+    # a blocking gate, until Sprint 7+ stabilises.
+    strategy:
+      fail-fast: false
+      matrix:
+        db:
+          - { name: postgres, image: "postgres:16", required: true }
+          - { name: pangolin, image: "pangolindb/pangolin:1.5",  required: false }
+
+    name: build-and-test (${{ matrix.db.name }})
+
+    services:
+      db:
+        image: ${{ matrix.db.image }}
+        env:
+          POSTGRES_USER: dlmm
+          POSTGRES_PASSWORD: ci-placeholder
+          POSTGRES_DB: dlmm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dlmm -d dlmm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
 
     steps:
       - uses: actions/checkout@v4
@@ -52,12 +82,20 @@ jobs:
       # Run tests for every module. -fae (fail-at-end) so one flaky module
       # doesn't mask others. Surfaces real failures across the whole tree
       # in a single PR comment.
+      #
+      # Sprint 6 #6.10: continue-on-error gates only on the optional
+      # Pangolin leg — postgres leg stays mandatory.
       - name: Maven test (-fae)
+        continue-on-error: ${{ !matrix.db.required }}
         env:
           # Tests don't actually need a real DB password — they wire
           # Testcontainers — but the Spring fail-fast YAML refs require
-          # the env vars to be set.
+          # the env vars to be set. Sprint 6 #6.10: also point at the
+          # service container so any IT that connects to localhost picks
+          # up the matrix DB.
           DB_PASSWORD: ci-placeholder
+          DB_HOST: localhost
+          DB_PORT: "5432"
           JWT_SECRET: ci-placeholder-jwt-secret-32-bytes-min
         run: mvn -B -fae test
 
@@ -67,6 +105,17 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: surefire-reports
+          name: surefire-reports-${{ matrix.db.name }}
           path: "**/target/surefire-reports/**"
           retention-days: 7
+
+      # Sprint 6 #6.10 — explicit Pangolin status summary in the workflow
+      # log so Минцифры реестр applications can quote the build URL as
+      # evidence of Pangolin-compatibility testing.
+      - name: Pangolin compatibility note
+        if: matrix.db.name == 'pangolin'
+        run: |
+          echo "## Pangolin compatibility test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Matrix leg \`pangolin\` ran against \`${{ matrix.db.image }}\`." >> $GITHUB_STEP_SUMMARY
+          echo "Result is advisory (not blocking) per Sprint 6 #6.10 — promoted to mandatory in Sprint 7+ if 4 consecutive runs are green." >> $GITHUB_STEP_SUMMARY

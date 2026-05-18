@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Badge, Popover, List, Typography, Button, Empty, Space, Tag } from 'antd'
-import { BellOutlined, CheckOutlined } from '@ant-design/icons'
+import { BellOutlined, CheckOutlined, ArrowRightOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { notifications as notificationsApi } from '@/api/services'
 import type { Notification as NotifType } from '@/api/types'
 import dayjs from 'dayjs'
@@ -46,6 +47,23 @@ const typeRussianLabels: Record<string, string> = {
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+
+  /**
+   * Sprint 6 #6.15 — margin alerts deep-link to /positions. notification-service
+   * Sprint 5 #5.15 renders the alert message with the positionId; we pull
+   * the UUID out of the message text (format «Позиция {uuid} ...») and
+   * navigate. If no UUID found, fall back to plain /positions list.
+   */
+  const navigateForMarginAlert = (item: NotifType) => {
+    const match = item.message?.match(/Позиция ([0-9a-f-]{36})/i)
+    if (match) {
+      navigate(`/positions?highlight=${match[1]}`)
+    } else {
+      navigate('/positions')
+    }
+    setOpen(false)
+  }
 
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['unreadCount'],
@@ -122,6 +140,21 @@ export default function NotificationBell() {
                 </div>
                 <Text strong style={{ fontSize: 13 }}>{item.title}</Text>
                 <Text type="secondary" style={{ fontSize: 12 }}>{item.message}</Text>
+                {/* Sprint 6 #6.15 — margin alerts get a "перейти к позиции" link */}
+                {(item.type === 'MARGIN_WARNING' || item.type === 'MARGIN_CALL') && (
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<ArrowRightOutlined />}
+                    style={{ padding: 0, height: 'auto', marginTop: 2, fontSize: 12 }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigateForMarginAlert(item)
+                    }}
+                  >
+                    Перейти к позиции
+                  </Button>
+                )}
               </Space>
             </List.Item>
           )}

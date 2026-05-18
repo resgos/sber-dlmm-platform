@@ -5,8 +5,14 @@ import { useEffect } from 'react'
 import { users } from '@/api/services'
 import { authStore } from '@/store/authStore'
 import KycStatusBadge from '@/components/KycStatusBadge'
+import SelfRestrictionPanel from '@/components/SelfRestrictionPanel'
 import type { User } from '@/api/types'
 import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import 'dayjs/locale/ru'
+
+dayjs.extend(relativeTime)
+dayjs.locale('ru')
 
 const { Title, Text } = Typography
 
@@ -42,6 +48,10 @@ export default function ProfilePage() {
   return (
     <Space direction="vertical" size={24} style={{ width: '100%', maxWidth: 640 }}>
       <Title level={4} className="sber-page-title">Профиль</Title>
+
+      {/* Sprint 6 #6.7 — самозапрет 115-ФЗ panel. Placed AFTER the */}
+      {/* identity card so the user sees their identity first, then the */}
+      {/* protection toggle. */}
 
       {/* KYC Status */}
       <Card className="sber-card">
@@ -92,6 +102,9 @@ export default function ProfilePage() {
           />
         )}
       </Card>
+
+      {/* Sprint 6 #6.7 — 115-ФЗ самозапрет */}
+      <SelfRestrictionPanel />
 
       {/* Edit form */}
       <Card className="sber-card" title={<Text strong>Редактирование профиля</Text>}>
