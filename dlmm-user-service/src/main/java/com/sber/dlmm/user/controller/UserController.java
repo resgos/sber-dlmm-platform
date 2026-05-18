@@ -11,8 +11,12 @@ import com.sber.dlmm.user.dto.UpdateKycRequest;
 import com.sber.dlmm.user.dto.UpdateProfileRequest;
 import com.sber.dlmm.user.dto.UpdateRoleRequest;
 import com.sber.dlmm.user.dto.UserProfileResponse;
+import com.sber.dlmm.user.entity.UserSelfRestriction;
+import com.sber.dlmm.user.service.SelfRestrictionService;
 import com.sber.dlmm.user.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +39,7 @@ import java.util.UUID;
 public class UserController {
 
     private final UserService userService;
+    private final SelfRestrictionService selfRestrictionService;
 
     @PostMapping("/auth/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -123,4 +128,66 @@ public class UserController {
     }
 
     public record KycCheckResponse(boolean verified) {}
+
+    // ── Sprint 6 #6.7 — самозапрет (115-ФЗ amendment 2024) ──
+
+    /**
+     * Set self-restriction on the calling user. Idempotent — re-call
+     * while already restricted returns the existing SET row.
+     */
+    @PostMapping("/users/me/self-restriction/set")
+    @Operation(summary = "Установить самозапрет на новые позиции (115-ФЗ)")
+    public ResponseEntity<UserSelfRestriction> setSelfRestriction(
+            Authentication auth,
+            @Valid @RequestBody(required = false) SetSelfRestrictionRequest req) {
+        UUID userId = (UUID) auth.getPrincipal();
+        String reason = req != null ? req.reason() : "Установлен пользователем";
+        UserSelfRestriction row = selfRestrictionService.set(userId, reason);
+        return ResponseEntity.status(HttpStatus.CREATED).body(row);
+    }
+
+    /**
+     * Request to lift self-restriction — starts the cooling period
+     * (default 7 days per ЦБ РФ guidance).
+     */
+    @PostMapping("/users/me/self-restriction/lift-request")
+    @Operation(summary = "Запросить снятие самозапрета (7-дневный период охлаждения)")
+    public ResponseEntity<UserSelfRestriction> requestLiftSelfRestriction(
+            Authentication auth,
+            @Valid @RequestBody(required = false) SetSelfRestrictionRequest req) {
+        UUID userId = (UUID) auth.getPrincipal();
+        String reason = req != null ? req.reason() : "Запрос пользователя";
+        return ResponseEntity.ok(selfRestrictionService.requestLift(userId, reason));
+    }
+
+    /** Finalise lift after cooling period elapsed. Throws 400 if too early. */
+    @PostMapping("/users/me/self-restriction/lift-finalise")
+    @Operation(summary = "Финализировать снятие самозапрета (после периода охлаждения)")
+    public ResponseEntity<UserSelfRestriction> finaliseLiftSelfRestriction(Authentication auth) {
+        UUID userId = (UUID) auth.getPrincipal();
+        return ResponseEntity.ok(selfRestrictionService.finaliseLift(userId));
+    }
+
+    @GetMapping("/users/me/self-restriction")
+    @Operation(summary = "Текущий статус самозапрета + полная история")
+    public ResponseEntity<SelfRestrictionStatus> getMySelfRestriction(Authentication auth) {
+        UUID userId = (UUID) auth.getPrincipal();
+        return ResponseEntity.ok(new SelfRestrictionStatus(
+                selfRestrictionService.isActive(userId),
+                selfRestrictionService.history(userId)));
+    }
+
+    /**
+     * Internal endpoint for pool-engine to gate swap / add-liquidity /
+     * hedge on the user's self-restriction state. Same auth pattern as
+     * the KYC check above — Bearer-forwarded via dlmm-common filter.
+     */
+    @GetMapping("/users/internal/{id}/self-restriction-active")
+    public ResponseEntity<SelfRestrictionActiveResponse> checkSelfRestrictionActive(@PathVariable UUID id) {
+        return ResponseEntity.ok(new SelfRestrictionActiveResponse(selfRestrictionService.isActive(id)));
+    }
+
+    public record SetSelfRestrictionRequest(@Size(max = 500) String reason) {}
+    public record SelfRestrictionStatus(boolean active, java.util.List<UserSelfRestriction> history) {}
+    public record SelfRestrictionActiveResponse(boolean active) {}
 }

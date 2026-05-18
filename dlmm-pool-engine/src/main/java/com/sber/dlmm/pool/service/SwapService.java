@@ -257,6 +257,15 @@ public class SwapService {
             throw new ForbiddenException("User KYC not verified");
         }
 
+        // Sprint 6 #6.7 — 115-ФЗ самозапрет gate. Swap = new-money-out path,
+        // blocked when restriction is active. Existing positions remain
+        // operable (remove-liquidity / claim-fee path is NOT gated).
+        if (userServiceClient.isUserSelfRestricted(userId)) {
+            throw new com.sber.dlmm.common.exception.UserSelfRestrictedException(
+                    "Установлен самозапрет (115-ФЗ). Новые позиции запрещены. " +
+                    "Запросите снятие через /профиль (период охлаждения 7 дней).");
+        }
+
         // Idempotency check moved to the outer swap() — see comment there.
 
         boolean swapXtoY = req.tokenInId().equals(pool.getTokenXId());

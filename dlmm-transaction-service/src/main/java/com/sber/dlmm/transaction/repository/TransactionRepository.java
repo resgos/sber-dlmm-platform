@@ -43,4 +43,19 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     Page<Transaction> findAllFiltered(@Param("txType") TransactionType txType,
                                        @Param("status") TransactionStatus status,
                                        Pageable pageable);
+
+    /**
+     * Sprint 6 #6.9 — AML scanner input. All CONFIRMED transactions within
+     * the time window across all users. Capped at {@link org.springframework.data.domain.Pageable}
+     * caller-supplied page size to bound memory in case of unexpected
+     * volume spike.
+     */
+    @Query("SELECT t FROM Transaction t " +
+           "WHERE t.status = com.sber.dlmm.common.enums.TransactionStatus.CONFIRMED " +
+           "AND t.createdAt >= :since " +
+           "AND t.createdAt < :until " +
+           "ORDER BY t.userId, t.createdAt ASC")
+    java.util.List<Transaction> findConfirmedInWindow(@Param("since") LocalDateTime since,
+                                                       @Param("until") LocalDateTime until,
+                                                       Pageable pageable);
 }

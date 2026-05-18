@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 6 #6.7 — самозапрет на финансовые продукты per 115-ФЗ
+        amendment 2024.
+
+        Mandatory user-protection feature: a user can self-restrict from
+        opening new positions (swap / hedge / add-liquidity). Existing
+        positions remain operable so the user isn't stranded — but ALL
+        new-money-out paths are blocked at API layer.
+
+        Design constraints (per ЦБ РФ 115-ФЗ guidance):
+          - Immutable append-only record. Lift requires either ЦБ РФ
+            counter-action (Sprint 7+ real CBR check) OR a 7-day cooling
+            period via separate LIFT_REQUESTED → LIFTED entry. No DELETE.
+          - Reason captured at creation; lift reason captured at lift.
+          - Audit trail visible to user AND compliance.
+
+        For pilot: any user can SET a restriction immediately via
+        POST /api/v1/users/me/self-restriction. Lift requires 7-day
+        cooling stub (real CBR verification = Sprint 7 #RU-R6-stage2).
+    -->
+    <changeSet id="002-create-user-self-restrictions-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="user_self_restrictions"/></not>
+        </preConditions>
+        <createTable tableName="user_self_restrictions">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="action" type="VARCHAR(20)">
+                <!-- SET (impose restriction) | LIFT_REQUESTED (start 7d cooling) | LIFTED -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="scope" type="VARCHAR(40)" defaultValue="ALL_NEW_POSITIONS">
+                <!-- ALL_NEW_POSITIONS for v1; future: HEDGE_ONLY, SWAP_ONLY, etc. -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="reason" type="VARCHAR(500)"/>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="effective_at" type="TIMESTAMP">
+                <!-- For LIFT_REQUESTED: created_at + 7 days. For SET / LIFTED: same as created_at. -->
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_user_self_restrictions_user" tableName="user_self_restrictions">
+            <column name="user_id"/>
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

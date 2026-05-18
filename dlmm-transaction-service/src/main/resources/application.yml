@@ -37,6 +37,15 @@ dlmm:
   services:
     token-service:
       url: ${TOKEN_SERVICE_URL:http://localhost:8082}
+  # Sprint 6 #6.9 — AML pattern-detection scheduler tunables.
+  # Disable wholesale via DLMM_AML_ENABLED=false in dev / load tests.
+  aml:
+    enabled: ${DLMM_AML_ENABLED:true}
+    scan-interval-ms: ${DLMM_AML_SCAN_INTERVAL_MS:900000}   # 15 min
+    initial-delay-ms: ${DLMM_AML_INITIAL_DELAY_MS:120000}   # 2 min after boot
+    cooldown-hours: ${DLMM_AML_COOLDOWN_HOURS:4}            # per (user, pattern) dedup
+    window-hours: ${DLMM_AML_WINDOW_HOURS:24}               # scan window
+    page-size: ${DLMM_AML_PAGE_SIZE:5000}                   # tx scan cap per tick
 
 logging:
   level:

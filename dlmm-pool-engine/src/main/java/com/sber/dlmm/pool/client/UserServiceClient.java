@@ -55,5 +55,31 @@ public class UserServiceClient {
         return false;
     }
 
+    /**
+     * Sprint 6 #6.7 — checks the 115-ФЗ самозапрет state. Fail-OPEN here
+     * (treats user as NOT restricted on user-service outage) because we
+     * prefer false-negatives over user lockout: a restriction that fails
+     * to enforce ONE swap during an outage is recoverable, but mass user
+     * lockout during outage is a P0 incident. Trade-off accepted by
+     * Compliance in Sprint 6 #6.7 review.
+     */
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "isUserSelfRestrictedFallback")
+    public boolean isUserSelfRestricted(UUID userId) {
+        SelfRestrictionResponse response = webClient.get()
+                .uri("/api/v1/users/internal/{userId}/self-restriction-active", userId)
+                .retrieve()
+                .bodyToMono(SelfRestrictionResponse.class)
+                .block(CALL_TIMEOUT);
+        return response != null && response.active();
+    }
+
+    @SuppressWarnings("unused")
+    private boolean isUserSelfRestrictedFallback(UUID userId, Throwable ex) {
+        log.warn("Self-restriction check failed-OPEN (treating as not restricted) for user={}: {}",
+                userId, ex.toString());
+        return false;
+    }
+
     public record UserKycResponse(boolean verified) {}
+    public record SelfRestrictionResponse(boolean active) {}
 }

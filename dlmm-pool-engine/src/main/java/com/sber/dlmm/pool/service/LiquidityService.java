@@ -109,6 +109,14 @@ public class LiquidityService {
             throw new ForbiddenException("User KYC not verified");
         }
 
+        // Sprint 6 #6.7 — 115-ФЗ самозапрет gate. add-liquidity =
+        // new-money-out path. remove-liquidity is NOT gated (closing
+        // existing positions stays possible for restricted users).
+        if (userServiceClient.isUserSelfRestricted(userId)) {
+            throw new com.sber.dlmm.common.exception.UserSelfRestrictedException(
+                    "Установлен самозапрет (115-ФЗ). Новые позиции запрещены.");
+        }
+
         // 2. Idempotency check
         if (req.idempotencyKey() != null && !req.idempotencyKey().isBlank()) {
             String redisKey = IDEMPOTENCY_PREFIX + req.idempotencyKey();

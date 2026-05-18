@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 6 #6.9 — proactive AML pattern detection alerts.
+
+        Scheduler scans recent transactions every 15min for 3 patterns:
+          - ROUND_AMOUNT_REPEATS: ≥3 transactions with identical amount
+            within 1h (structuring proxy)
+          - FAST_IN_FAST_OUT: deposit → withdrawal within 5min, ≥80% of
+            deposit amount (laundering proxy)
+          - SUB_THRESHOLD_SPLIT: aggregate 24h transactions just under
+            600k ₽ (115-ФЗ reporting threshold — splitter trying to avoid
+            Rosfinmonitoring report)
+
+        Hits land in this table + a loud WARN log + outbox event to the
+        compliance-events topic. Compliance team reviews and decides
+        whether to escalate to 115-ФЗ Rosfinmonitoring feed (Sprint 7 #RU-R2).
+
+        This is PRE-EMPTIVE: real Rosfinmonitoring integration is Sprint 7+.
+        This sprint's value: visibility into suspicious patterns BEFORE
+        they trigger external reporting obligations.
+    -->
+    <changeSet id="004-create-aml-alerts-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="aml_alerts"/></not>
+        </preConditions>
+        <createTable tableName="aml_alerts">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="pattern" type="VARCHAR(40)">
+                <!-- ROUND_AMOUNT_REPEATS | FAST_IN_FAST_OUT | SUB_THRESHOLD_SPLIT -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="severity" type="VARCHAR(10)" defaultValue="MEDIUM">
+                <!-- LOW | MEDIUM | HIGH — review SLA differs by severity -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="detected_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="window_start" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="window_end" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="transaction_count" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_amount" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="evidence_json" type="TEXT"/>
+            <column name="reviewed_by" type="UUID"/>
+            <column name="reviewed_at" type="TIMESTAMP"/>
+            <column name="review_outcome" type="VARCHAR(40)">
+                <!-- PENDING (default) | FALSE_POSITIVE | ESCALATED_TO_ROSFINMONITORING | RESOLVED -->
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_aml_alerts_user" tableName="aml_alerts">
+            <column name="user_id"/>
+            <column name="detected_at"/>
+        </createIndex>
+        <createIndex indexName="idx_aml_alerts_pattern" tableName="aml_alerts">
+            <column name="pattern"/>
+        </createIndex>
+        <createIndex indexName="idx_aml_alerts_outcome" tableName="aml_alerts">
+            <column name="review_outcome"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
