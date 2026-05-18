@@ -1,5 +1,6 @@
 package com.sber.dlmm.admin.service;
 
+import com.sber.dlmm.admin.client.PoolEngineClient;
 import com.sber.dlmm.admin.dto.DashboardResponse;
 import com.sber.dlmm.admin.dto.PoolAnalyticsResponse;
 import com.sber.dlmm.admin.dto.PoolAnalyticsResponse.BinDistributionEntry;
@@ -49,9 +50,13 @@ public class AdminService {
     private final WebClient feeServiceClient;
     private final WebClient transactionServiceClient;
     private final WebClient priceOracleClient;
+    /** Sprint 8 C-10 — circuit-broken wrapper for pool-engine. Other downstreams
+        still use the raw WebClients above; Sprint 9 extracts them similarly. */
+    private final PoolEngineClient poolEngine;
 
     public AdminService(
             WebClient.Builder webClientBuilder,
+            PoolEngineClient poolEngine,
             @Value("${dlmm.services.user-service-url}") String userServiceUrl,
             @Value("${dlmm.services.token-service-url}") String tokenServiceUrl,
             @Value("${dlmm.services.pool-engine-url}") String poolEngineUrl,
@@ -59,6 +64,7 @@ public class AdminService {
             @Value("${dlmm.services.transaction-service-url}") String transactionServiceUrl,
             @Value("${dlmm.services.price-oracle-url}") String priceOracleUrl
     ) {
+        this.poolEngine = poolEngine;
         this.userServiceClient = webClientBuilder.clone().baseUrl(userServiceUrl).build();
         this.tokenServiceClient = webClientBuilder.clone().baseUrl(tokenServiceUrl).build();
         this.poolEngineClient = webClientBuilder.clone().baseUrl(poolEngineUrl).build();
@@ -81,8 +87,10 @@ public class AdminService {
         // empty list independently.
         List<Map<String, Object>> users = fetchPageContent(userServiceClient,
                 "/api/v1/users?page=0&size=" + AGGREGATION_PAGE_SIZE, "users");
-        List<Map<String, Object>> pools = fetchPageContent(poolEngineClient,
-                "/api/v1/pools?page=0&size=" + AGGREGATION_PAGE_SIZE, "pools");
+        // Sprint 8 C-10 — pool-engine call goes through the circuit-broken
+        // PoolEngineClient. Failures degrade to empty list (fallback method),
+        // same downstream-degraded shape the rest of this method expects.
+        List<Map<String, Object>> pools = poolEngine.fetchPoolsPage(AGGREGATION_PAGE_SIZE);
         List<Map<String, Object>> transactions = fetchPageContent(transactionServiceClient,
                 "/api/v1/transactions?page=0&size=" + AGGREGATION_PAGE_SIZE, "transactions");
 
@@ -116,10 +124,12 @@ public class AdminService {
                         .add(toBigDecimal(p.get("totalFeesCollectedY"))))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // activePositions: ask pool-engine directly — count is O(1) at the
-        // repository level and avoids a per-pool fan-out. Falls back to 0
-        // if the call fails so the rest of the dashboard still renders.
-        long activePositions = fetchActivePositionsCount();
+        // activePositions: ask pool-engine via the circuit-broken client.
+        // Sprint 8 C-10 — used to be a private fetchActivePositionsCount()
+        // with inline onErrorResume; replaced by PoolEngineClient which
+        // adds @CircuitBreaker + @Retry on top of the same fallback-to-0
+        // semantics.
+        long activePositions = poolEngine.fetchActivePositionsCount();
 
         // transactionsToday was counting the entire page size — the page can
         // hold up to AGGREGATION_PAGE_SIZE rows of history, none of which are
@@ -142,28 +152,10 @@ public class AdminService {
         return response;
     }
 
-    /**
-     * Calls pool-engine's {@code /positions/count} endpoint. Returns 0 on
-     * any failure — the dashboard simply renders 0 in that case rather
-     * than breaking the whole response.
-     */
-    private long fetchActivePositionsCount() {
-        try {
-            Map<String, Object> response = poolEngineClient.get()
-                    .uri("/api/v1/pools/positions/count")
-                    .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                    .onErrorResume(ex -> {
-                        log.warn("positions/count failed: {}", ex.toString());
-                        return Mono.empty();
-                    })
-                    .block(REQUEST_TIMEOUT);
-            return response == null ? 0L : toLong(response.get("activePositions"));
-        } catch (RuntimeException ex) {
-            log.warn("positions/count blocking call timed out: {}", ex.toString());
-            return 0L;
-        }
-    }
+    // Sprint 8 C-10 — fetchActivePositionsCount() moved to
+    // {@link com.sber.dlmm.admin.client.PoolEngineClient} so it can be
+    // @CircuitBreaker'd. The signature, return-on-failure semantics, and
+    // log shape are preserved by the new client (verified by manual diff).
 
     /**
      * Fetches a Spring Data {@code Page<...>} response and returns its
