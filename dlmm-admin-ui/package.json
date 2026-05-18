@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint:colors": "node ../scripts/check-no-hex-in-tsx.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.7",

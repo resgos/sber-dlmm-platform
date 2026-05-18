@@ -9,12 +9,16 @@ on:
     paths:
       - "dlmm-admin-ui/**"
       - "dlmm-user-ui/**"
+      - "scripts/check-no-hex-in-tsx.mjs"
+      - "scripts/hex-baseline.json"
       - ".github/workflows/frontend.yml"
   pull_request:
     branches: [main]
     paths:
       - "dlmm-admin-ui/**"
       - "dlmm-user-ui/**"
+      - "scripts/check-no-hex-in-tsx.mjs"
+      - "scripts/hex-baseline.json"
       - ".github/workflows/frontend.yml"
   workflow_dispatch:
 
@@ -23,7 +27,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Sprint 8 AU-2: design-token ratchet. Blocks PRs that add hex literals
+  # to any .tsx file (baseline at scripts/hex-baseline.json). Runs before
+  # the matrix so a token regression fails fast.
+  hex-ratchet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check no new hex in .tsx
+        run: node scripts/check-no-hex-in-tsx.mjs
+
   ui:
+    needs: hex-ratchet
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
