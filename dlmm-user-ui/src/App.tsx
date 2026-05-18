@@ -4,6 +4,7 @@ import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
 import DashboardPage from '@/pages/DashboardPage'
 import SwapPage from '@/pages/SwapPage'
+import HedgePage from '@/pages/HedgePage'
 import PoolsPage from '@/pages/PoolsPage'
 import PoolDetailPage from '@/pages/PoolDetailPage'
 import LiquidityPage from '@/pages/LiquidityPage'
@@ -19,6 +20,7 @@ function App() {
       <Route path="/" element={<UserLayout />}>
         <Route index element={<DashboardPage />} />
         <Route path="swap" element={<SwapPage />} />
+        <Route path="hedge" element={<HedgePage />} />
         <Route path="pools" element={<PoolsPage />} />
         <Route path="pools/:id" element={<PoolDetailPage />} />
         <Route path="pools/:id/liquidity" element={<LiquidityPage />} />

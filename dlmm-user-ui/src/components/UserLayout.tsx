@@ -4,6 +4,7 @@ import { Layout, Menu, Button, Avatar, Space, Typography, Dropdown } from 'antd'
 import {
   HomeOutlined,
   SwapOutlined,
+  SafetyCertificateOutlined,
   FundOutlined,
   PieChartOutlined,
   TransactionOutlined,
@@ -21,6 +22,9 @@ const { Text } = Typography
 const menuItems = [
   { key: '/', icon: <HomeOutlined />, label: 'Главная' },
   { key: '/swap', icon: <SwapOutlined />, label: 'Обмен' },
+  // Sprint 4 #4.1 — FX-хеджирование. Реюзит swap-API, но UX заточен под
+  // казначеев («хочу захеджировать X% рублёвой позиции»).
+  { key: '/hedge', icon: <SafetyCertificateOutlined />, label: 'Хедж FX' },
   { key: '/pools', icon: <FundOutlined />, label: 'Пулы' },
   { key: '/positions', icon: <PieChartOutlined />, label: 'Мои позиции' },
   { key: '/transactions', icon: <TransactionOutlined />, label: 'Транзакции' },

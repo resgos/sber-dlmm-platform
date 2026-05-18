@@ -45,8 +45,20 @@ export interface UpdateProfileRequest {
   lastName?: string
 }
 
-// Token
-export type TokenType = 'STABLE_TOKEN' | 'EQUITY_TOKEN' | 'LP_TOKEN' | 'GOVERNANCE_TOKEN'
+// Token — keep aligned with backend dlmm-common TokenType enum.
+// Backend extended this in a prior sprint with FIAT_BACKED / COMMODITY_BACKED /
+// UTILITY / INDEX_TOKEN; the old four still work but the wider catalog ships
+// these as well (e.g. SUSD/SEUR/SCNY are FIAT_BACKED). FX Hedge UI (#4.1)
+// uses FIAT_BACKED to find hedge candidates.
+export type TokenType =
+  | 'STABLE_TOKEN'
+  | 'EQUITY_TOKEN'
+  | 'LP_TOKEN'
+  | 'GOVERNANCE_TOKEN'
+  | 'FIAT_BACKED'
+  | 'COMMODITY_BACKED'
+  | 'UTILITY'
+  | 'INDEX_TOKEN'
 
 export interface Token {
   id: string
