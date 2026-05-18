@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { pools } from '@/api/services'
 import type { Pool } from '@/api/types'
 import { formatRub } from '@/components/StatCard'
+import { pairAccent } from '@/components/TokenChip'
 
 const { Title, Text } = Typography
 
@@ -23,23 +24,9 @@ const statusLabels: Record<string, string> = {
   PENDING: 'Ожидание',
 }
 
-// Deterministic accent colour per token pair — gives every card a unique
-// visual identity without needing real per-token branding assets.
-function pairAccent(symbol: string): { from: string; to: string } {
-  const palette: Array<{ from: string; to: string }> = [
-    { from: '#21A038', to: '#00C853' },  // sber green
-    { from: '#00B5A1', to: '#21A038' },  // aqua/green
-    { from: '#6E5BFF', to: '#00B5A1' },  // violet/aqua
-    { from: '#FFB320', to: '#FF6F61' },  // amber/coral
-    { from: '#0EA5E9', to: '#6E5BFF' },  // blue/violet
-    { from: '#21A038', to: '#FFB320' },  // green/amber
-    { from: '#FF6F61', to: '#6E5BFF' },  // coral/violet
-    { from: '#00C853', to: '#0EA5E9' },  // green/blue
-  ]
-  let hash = 0
-  for (let i = 0; i < symbol.length; i++) hash = (hash * 31 + symbol.charCodeAt(i)) >>> 0
-  return palette[hash % palette.length]
-}
+// Sprint 7 dedup — pairAccent extracted to @/components/TokenChip (was
+// duplicated here AND in SwapPage). PoolsPage uses just the function for
+// PoolCard gradient backgrounds; SwapPage uses the full TokenChip component.
 
 function PoolCard({ pool, onOpen, onAddLiquidity }: {
   pool: Pool

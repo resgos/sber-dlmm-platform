@@ -4,42 +4,15 @@ import { SettingOutlined, ArrowDownOutlined, ThunderboltFilled } from '@ant-desi
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { tokens, pools, balances } from '@/api/services'
 import type { Token, Pool, TokenBalance } from '@/api/types'
+import TokenChip from '@/components/TokenChip'
 
 const { Title, Text } = Typography
 
 const SLIPPAGE_OPTIONS = [0.1, 0.5, 1.0]
 
-// Same accent function as PoolsPage — keeps token chips consistent across the app.
-function pairAccent(symbol: string): { from: string; to: string } {
-  const palette: Array<{ from: string; to: string }> = [
-    { from: '#21A038', to: '#00C853' },
-    { from: '#00B5A1', to: '#21A038' },
-    { from: '#6E5BFF', to: '#00B5A1' },
-    { from: '#FFB320', to: '#FF6F61' },
-    { from: '#0EA5E9', to: '#6E5BFF' },
-    { from: '#21A038', to: '#FFB320' },
-    { from: '#FF6F61', to: '#6E5BFF' },
-    { from: '#00C853', to: '#0EA5E9' },
-  ]
-  let hash = 0
-  for (let i = 0; i < symbol.length; i++) hash = (hash * 31 + symbol.charCodeAt(i)) >>> 0
-  return palette[hash % palette.length]
-}
-
-function TokenChip({ symbol }: { symbol?: string }) {
-  if (!symbol) {
-    return <div className="sber-token-chip" style={{ background: '#E5E7EB', width: 32, height: 32, fontSize: 10 }}>—</div>
-  }
-  const c = pairAccent(symbol)
-  return (
-    <div className="sber-token-chip" style={{
-      background: `linear-gradient(135deg, ${c.from}, ${c.to})`,
-      width: 32, height: 32, fontSize: 10,
-    }}>
-      {symbol.slice(0, 4)}
-    </div>
-  )
-}
+// Sprint 7 dedup — TokenChip + pairAccent extracted to @/components/TokenChip.
+// Was copy-pasted between SwapPage (here) and PoolsPage with an admission
+// comment "Same accent function as PoolsPage — keeps token chips consistent".
 
 export default function SwapPage() {
   const queryClient = useQueryClient()
