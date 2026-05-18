@@ -235,14 +235,21 @@ export interface ClaimFeesRequest {
   positionId: string
 }
 
-// Notifications
+// Notifications — keep in sync with backend dlmm-common NotificationType.
+// Sprint 4 #4.3 added MARGIN_WARNING / MARGIN_CALL; Sprint 5 #5.15 surfaces
+// them on user-ui via NotificationBell.
 export type NotificationType =
   | 'SWAP_COMPLETED'
   | 'LIQUIDITY_ADDED'
   | 'FEE_ACCRUED'
   | 'KYC_APPROVED'
+  | 'KYC_REJECTED'
+  | 'POSITION_CLOSED'
+  | 'POOL_PAUSED'
   | 'SYSTEM_ALERT'
   | 'POOL_UPDATE'
+  | 'MARGIN_WARNING'
+  | 'MARGIN_CALL'
 
 export interface Notification {
   id: string

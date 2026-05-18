@@ -13,6 +13,8 @@ import {
   Statistic,
   Spin,
   Tooltip,
+  Table,
+  Modal,
 } from 'antd'
 import {
   ThunderboltFilled,
@@ -20,10 +22,11 @@ import {
   FallOutlined,
   InfoCircleOutlined,
   SafetyCertificateOutlined,
+  RollbackOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { pools, tokens, balances } from '@/api/services'
-import type { Pool, Token, TokenBalance } from '@/api/types'
+import { pools, tokens, balances, transactions } from '@/api/services'
+import type { Pool, Token, TokenBalance, Transaction } from '@/api/types'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -47,6 +50,15 @@ const { Title, Text, Paragraph } = Typography
 // Base currency for hedge calculator. The whole UX is framed around
 // "I have N rubles, I want to hedge X% of them" — SRUB is the anchor.
 const BASE_SYMBOL = 'SRUB'
+
+// Sprint 5 #5.14 — idempotency-key prefixes so we can find hedges
+// (open + closed) later via /transactions/me filter without adding a
+// new column to the transactions table. Pattern: `hedge-{uuid}` for the
+// open leg, `unwind-{originalIdemKey}` for the reverse swap. A hedge
+// is considered OPEN if there's a hedge-tagged tx with no matching
+// unwind-tagged tx.
+const HEDGE_KEY_PREFIX = 'hedge-'
+const UNWIND_KEY_PREFIX = 'unwind-'
 
 // Quick-pick hedge ratios as a fraction of available SRUB balance.
 const HEDGE_RATIO_PRESETS = [
@@ -173,7 +185,10 @@ export default function HedgePage() {
       tokenInId: selectedCandidate!.baseToken.id,
       amountIn: amountSrub!,
       minAmountOut,
-      idempotencyKey: crypto.randomUUID(),
+      // Sprint 5 #5.14 — hedge-prefix idempotency key so "My open
+      // hedges" table can find this swap later without a backend schema
+      // change. The unwind flow reuses the same uuid suffix.
+      idempotencyKey: HEDGE_KEY_PREFIX + crypto.randomUUID(),
     }),
     onSuccess: () => {
       setSuccess(true)
@@ -201,6 +216,102 @@ export default function HedgePage() {
     setAmountSrub(v)
     setPresetRatio(null) // manual edit clears preset highlight
   }
+
+  // ── Sprint 5 #5.14 — open-hedge discovery + unwind flow ──
+
+  /**
+   * Latest 100 swap txs for the current user. We over-fetch (default
+   * 20 too narrow if user is active) but bound the page size so the
+   * grid doesn't blow up.
+   */
+  const { data: myTxs } = useQuery({
+    queryKey: ['myTransactions', 'hedges'],
+    queryFn: () => transactions.getMyTransactions(0, 100, { txType: 'SWAP' }),
+  })
+
+  /**
+   * Open hedges = hedge-prefixed swaps whose idempotency-key suffix
+   * doesn't appear in any unwind-prefixed tx. Display sorted by
+   * created_at desc.
+   */
+  const openHedges = useMemo(() => {
+    if (!myTxs?.content) return []
+    const allSwaps: Transaction[] = myTxs.content
+    const unwoundSuffixes = new Set<string>()
+    for (const tx of allSwaps) {
+      if (tx.idempotencyKey?.startsWith(UNWIND_KEY_PREFIX)) {
+        unwoundSuffixes.add(tx.idempotencyKey.substring(UNWIND_KEY_PREFIX.length))
+      }
+    }
+    return allSwaps.filter((tx) => {
+      if (!tx.idempotencyKey?.startsWith(HEDGE_KEY_PREFIX)) return false
+      if (tx.status !== 'CONFIRMED') return false
+      return !unwoundSuffixes.has(tx.idempotencyKey)
+    })
+  }, [myTxs])
+
+  /**
+   * Unwind a hedge: swap target FX → SRUB at current rate. Reuses the
+   * pool found from the original hedge's poolId. Idempotency-key tags
+   * the unwind as paired with the original.
+   */
+  const unwindMutation = useMutation({
+    mutationFn: async (hedge: Transaction) => {
+      if (!hedge.poolId || !hedge.tokenOutId || !hedge.amountOut) {
+        throw new Error('Хедж-транзакция не содержит данных для разворота')
+      }
+      // We swap back whatever amount we received. minAmountOut omitted
+      // for simplicity; caller accepts current market rate (treasurer
+      // who clicks "Unwind now" cares about closing > about price).
+      await pools.executeSwap({
+        poolId: hedge.poolId,
+        tokenInId: hedge.tokenOutId,
+        amountIn: hedge.amountOut,
+        minAmountOut: 0,
+        idempotencyKey: UNWIND_KEY_PREFIX + (hedge.idempotencyKey ?? hedge.id),
+      })
+    },
+    onSuccess: () => {
+      setSuccess(true)
+      queryClient.invalidateQueries({ queryKey: ['myBalances'] })
+      queryClient.invalidateQueries({ queryKey: ['myTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['myTransactions', 'hedges'] })
+      setTimeout(() => setSuccess(false), 5000)
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { message?: string } } }
+      setError(e?.response?.data?.message || 'Не удалось закрыть хедж')
+    },
+  })
+
+  const confirmUnwind = (hedge: Transaction) => {
+    Modal.confirm({
+      title: 'Закрыть хедж?',
+      content: (
+        <Space direction="vertical">
+          <Text>
+            Будет выполнен обратный своп {hedge.amountOut?.toLocaleString('ru-RU')} единиц
+            обратно в SRUB по текущему курсу.
+          </Text>
+          <Text type="warning" style={{ fontSize: 12 }}>
+            Минимальный объём не задан — курс на момент исполнения.
+          </Text>
+        </Space>
+      ),
+      okText: 'Закрыть хедж',
+      cancelText: 'Отмена',
+      onOk: () => unwindMutation.mutate(hedge),
+    })
+  }
+
+  // Token-symbol lookup for the open-hedges table.
+  const tokenMap = useMemo(() => {
+    const m = new Map<string, Token>()
+    if (tokenList?.content) {
+      for (const t of tokenList.content) m.set(t.id, t)
+    }
+    return m
+  }, [tokenList])
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto' }}>
@@ -453,13 +564,93 @@ export default function HedgePage() {
                 </Button>
 
                 <Text type="secondary" style={{ fontSize: 11, textAlign: 'center', display: 'block' }}>
-                  История хеджей доступна на странице «Транзакции» (фильтр SWAP).
+                  История хеджей ниже + полная — на странице «Транзакции».
                 </Text>
               </Space>
             )}
           </Card>
         </Col>
       </Row>
+
+      {/* Sprint 5 #5.14 — Open hedges table. Each row gets an "Закрыть" */}
+      {/* action that fires a reverse swap (target FX → SRUB) tagged with */}
+      {/* a paired idempotency key so the hedge falls off this list. */}
+      <Card
+        className="sber-card"
+        title={
+          <Space>
+            <Text strong>Открытые хеджи</Text>
+            <Tag color="green">{openHedges.length}</Tag>
+          </Space>
+        }
+        style={{ marginTop: 20 }}
+      >
+        {openHedges.length === 0 ? (
+          <Text type="secondary">
+            Нет открытых хеджей. Создайте хедж в калькуляторе выше — он появится здесь
+            с кнопкой быстрого закрытия.
+          </Text>
+        ) : (
+          <Table
+            dataSource={openHedges}
+            rowKey="id"
+            pagination={false}
+            size="middle"
+            className="sber-table"
+            columns={[
+              {
+                title: 'Дата',
+                dataIndex: 'createdAt',
+                render: (v: string) => new Date(v).toLocaleDateString('ru-RU'),
+                width: 110,
+              },
+              {
+                title: 'Пара',
+                render: (_, tx: Transaction) => {
+                  const inSym = tx.tokenInId ? tokenMap.get(tx.tokenInId)?.symbol : '?'
+                  const outSym = tx.tokenOutId ? tokenMap.get(tx.tokenOutId)?.symbol : '?'
+                  return (
+                    <Tag color="green" style={{ fontWeight: 600 }}>
+                      {inSym} → {outSym}
+                    </Tag>
+                  )
+                },
+                width: 140,
+              },
+              {
+                title: 'Хеджировано (SRUB)',
+                dataIndex: 'amountIn',
+                render: (v: number | null) => v?.toLocaleString('ru-RU') ?? '—',
+                align: 'right',
+              },
+              {
+                title: 'Получено',
+                render: (_, tx: Transaction) => {
+                  const outSym = tx.tokenOutId ? tokenMap.get(tx.tokenOutId)?.symbol : ''
+                  return `${tx.amountOut?.toLocaleString('ru-RU') ?? '—'} ${outSym}`
+                },
+                align: 'right',
+              },
+              {
+                title: '',
+                width: 130,
+                render: (_, tx: Transaction) => (
+                  <Button
+                    type="default"
+                    size="small"
+                    icon={<RollbackOutlined />}
+                    danger
+                    onClick={() => confirmUnwind(tx)}
+                    loading={unwindMutation.isPending}
+                  >
+                    Закрыть
+                  </Button>
+                ),
+              },
+            ]}
+          />
+        )}
+      </Card>
     </div>
   )
 }

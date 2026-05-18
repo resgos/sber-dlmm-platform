@@ -18,8 +18,29 @@ const typeColors: Record<string, string> = {
   LIQUIDITY_ADDED: '#3B82F6',
   FEE_ACCRUED: '#F59E0B',
   KYC_APPROVED: '#21A038',
+  KYC_REJECTED: '#EF4444',
+  POSITION_CLOSED: '#6B7280',
+  POOL_PAUSED: '#F59E0B',
   SYSTEM_ALERT: '#EF4444',
   POOL_UPDATE: '#8B5CF6',
+  // Sprint 5 #5.15 — margin alerts. WARNING = amber (treasurer should
+  // look soon), CALL = red (position is out-of-range, fees not accruing).
+  MARGIN_WARNING: '#F59E0B',
+  MARGIN_CALL: '#DC2626',
+}
+
+const typeRussianLabels: Record<string, string> = {
+  SWAP_COMPLETED: 'Своп',
+  LIQUIDITY_ADDED: 'Ликвидность',
+  FEE_ACCRUED: 'Комиссии',
+  KYC_APPROVED: 'KYC ✓',
+  KYC_REJECTED: 'KYC ✗',
+  POSITION_CLOSED: 'Позиция закрыта',
+  POOL_PAUSED: 'Пул приостановлен',
+  SYSTEM_ALERT: 'Система',
+  POOL_UPDATE: 'Пул',
+  MARGIN_WARNING: '⚠ Маржин-вотчинг',
+  MARGIN_CALL: '🔴 Маржин-колл',
 }
 
 export default function NotificationBell() {
@@ -93,7 +114,7 @@ export default function NotificationBell() {
               <Space direction="vertical" size={2} style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Tag color={typeColors[item.type] || '#6B7280'} style={{ fontSize: 11 }}>
-                    {item.type.replace(/_/g, ' ')}
+                    {typeRussianLabels[item.type] || item.type.replace(/_/g, ' ')}
                   </Tag>
                   <Text type="secondary" style={{ fontSize: 11 }}>
                     {dayjs(item.createdAt).fromNow()}

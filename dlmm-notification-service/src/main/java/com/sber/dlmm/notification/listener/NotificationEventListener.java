@@ -65,6 +65,15 @@ public class NotificationEventListener {
         try {
             JsonNode node = objectMapper.readTree(record.value());
 
+            // Sprint 5 #5.15 — margin-call events from pool-engine
+            // MarginWatchService (#4.3). Routed via user-events topic
+            // (single notification entry-point per user). Distinguishing
+            // shape: has `eventType` AND `rangeMin`/`rangeMax`.
+            if (node.has("eventType") && node.has("rangeMin") && node.has("rangeMax")) {
+                handleMarginEvent(node, record.value());
+                return;
+            }
+
             if (node.has("userId") && node.has("email")) {
                 UUID userId = UUID.fromString(node.get("userId").asText());
                 String fullName = node.has("fullName") ? node.get("fullName").asText() : "User";
@@ -81,6 +90,46 @@ public class NotificationEventListener {
         } catch (Exception e) {
             log.error("Failed to process user event: {}", record.value(), e);
         }
+    }
+
+    /**
+     * Sprint 5 #5.15 — render margin-call / margin-warning event into
+     * the user's notification panel. notification-service is the only
+     * service writing to {@code notifications} table; pool-engine
+     * publishes the raw event and we craft the user-facing message here.
+     */
+    private void handleMarginEvent(JsonNode node, String rawPayload) {
+        String eventTypeStr = node.get("eventType").asText();
+        NotificationType type = NotificationType.valueOf(eventTypeStr);
+        UUID userId = UUID.fromString(node.get("userId").asText());
+        UUID positionId = UUID.fromString(node.get("positionId").asText());
+        int activeBin = node.get("activeBinId").asInt();
+        int rangeMin = node.get("rangeMin").asInt();
+        int rangeMax = node.get("rangeMax").asInt();
+        int distance = node.get("distanceFromBoundary").asInt();
+        String deadline = node.has("rebalanceDeadline") && !node.get("rebalanceDeadline").isNull()
+                ? node.get("rebalanceDeadline").asText() : null;
+
+        String title;
+        String message;
+        if (type == NotificationType.MARGIN_CALL) {
+            title = "Маржин-колл по LP-позиции";
+            message = String.format(
+                    "Позиция %s вышла из диапазона: активный бин %d, диапазон [%d, %d], отклонение %d бинов. " +
+                    "Комиссии не начисляются.%s",
+                    positionId, activeBin, rangeMin, rangeMax, Math.abs(distance),
+                    deadline != null ? " Перебалансировать к " + deadline + "." : "");
+        } else { // MARGIN_WARNING
+            title = "Предупреждение по LP-позиции";
+            message = String.format(
+                    "Позиция %s приближается к границе диапазона: активный бин %d, " +
+                    "до границы %d бинов. Рассмотрите ребалансировку.%s",
+                    positionId, activeBin, distance,
+                    deadline != null ? " Срок принятия решения: " + deadline + "." : "");
+        }
+
+        notificationService.createNotification(userId, type, title, message, rawPayload);
+        log.info("Created {} notification for user={} position={}", type, userId, positionId);
     }
 
     private String determinePoolEventType(JsonNode node) {
