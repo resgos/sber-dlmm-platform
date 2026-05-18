@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConfigProvider } from 'antd'
 import ruRU from 'antd/locale/ru_RU'
 import App from './App'
+// Sprint 8 C-4 — i18n init. Side-effect import: the module configures
+// i18next.use(initReactI18next).init() at load time. AntD's component
+// strings are already localised via ConfigProvider locale={ruRU} below;
+// this import covers app-owned copy (page titles, alerts, CTAs).
+import './i18n'
 import 'antd/dist/reset.css'
 import './sber-theme.css'
 

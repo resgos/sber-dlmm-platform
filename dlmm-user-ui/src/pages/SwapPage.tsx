@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Card, Select, InputNumber, Button, Typography, Space, Alert, Spin, Popover, Tag, Divider } from 'antd'
 import { SettingOutlined, ArrowDownOutlined, ThunderboltFilled } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { tokens, pools, balances } from '@/api/services'
 import type { Token, Pool, TokenBalance } from '@/api/types'
 import TokenChip from '@/components/TokenChip'
@@ -15,6 +16,10 @@ const SLIPPAGE_OPTIONS = [0.1, 0.5, 1.0]
 // comment "Same accent function as PoolsPage — keeps token chips consistent".
 
 export default function SwapPage() {
+  // Sprint 8 C-4 — translation wiring. Only some strings extracted in this
+  // first wave to keep the diff readable; full extraction is Sprint 9 work.
+  // The t() call pattern here is the template for the rest of the app.
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [tokenInId, setTokenInId] = useState<string>('')
   const [tokenOutId, setTokenOutId] = useState<string>('')
@@ -204,22 +209,22 @@ export default function SwapPage() {
     <div className="sber-swap-shell">
       <div className="sber-swap-headerline">
         <div>
-          <Title level={4} className="sber-page-title" style={{ marginBottom: 4 }}>Обмен</Title>
-          <Text type="secondary">Мгновенный своп между токенами через DLMM-пулы</Text>
+          <Title level={4} className="sber-page-title" style={{ marginBottom: 4 }}>{t('swap.title')}</Title>
+          <Text type="secondary">{t('swap.subtitle')}</Text>
         </div>
         <Popover content={slippageMenu} trigger="click" placement="bottomRight">
           <Button
             shape="circle"
             icon={<SettingOutlined aria-hidden />}
             size="large"
-            aria-label="Настройки проскальзывания"
+            aria-label={t('swap.settings')}
             aria-haspopup="dialog"
           />
         </Popover>
       </div>
 
       {swapSuccess && (
-        <Alert message="Обмен выполнен успешно!" type="success" showIcon closable
+        <Alert message={t('swap.alerts.success')} type="success" showIcon closable
           onClose={() => setSwapSuccess(false)} style={{ marginBottom: 16, borderRadius: 12 }} />
       )}
       {swapError && (
@@ -305,7 +310,7 @@ export default function SwapPage() {
           )}
 
           {!selectedPool && tokenInId && tokenOutId && (
-            <Alert message="Нет активного пула для выбранной пары" type="warning" showIcon
+            <Alert message={t('swap.alerts.noPool')} type="warning" showIcon
               style={{ borderRadius: 12 }} />
           )}
 
@@ -321,14 +326,14 @@ export default function SwapPage() {
             onClick={() => swapMutation.mutate()}
           >
             {!tokenInId || !tokenOutId
-              ? 'Выберите токены'
+              ? t('swap.cta.selectTokens')
               : !amountIn
-              ? 'Введите сумму'
+              ? t('swap.cta.enterAmount')
               : !selectedPool
-              ? 'Пул недоступен'
+              ? t('swap.cta.noPool')
               : swapMutation.isPending
-              ? 'Выполняется обмен…'
-              : 'Обменять'}
+              ? t('swap.cta.executing')
+              : t('swap.cta.swap')}
           </Button>
         </div>
       </Card>

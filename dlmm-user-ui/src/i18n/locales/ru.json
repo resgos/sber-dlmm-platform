@@ -1,0 +1,157 @@
+{
+  "_comment": "Sprint 8 C-4 — Russian translation source-of-truth. Top-5 page strings extracted in this first wave (Dashboard / Swap / Hedge / Pools / Login). Sprint 9+ extends to the rest of the app and adds EN translation.",
+
+  "common": {
+    "loading": "Загрузка...",
+    "error": "Ошибка",
+    "cancel": "Отмена",
+    "confirm": "Подтвердить",
+    "save": "Сохранить",
+    "delete": "Удалить",
+    "edit": "Изменить",
+    "close": "Закрыть",
+    "back": "Назад",
+    "next": "Далее",
+    "yes": "Да",
+    "no": "Нет",
+    "all": "Все",
+    "none": "Нет",
+    "open": "Открыть",
+    "details": "Подробнее"
+  },
+
+  "brand": {
+    "sber": "СБЕР",
+    "product": "DLMM",
+    "tagline": "Платформа ликвидности"
+  },
+
+  "auth": {
+    "login": {
+      "subtitle": "Платформа ликвидности нового поколения",
+      "emailLabel": "Электронная почта",
+      "emailPlaceholder": "user@example.com",
+      "emailRequired": "Введите электронную почту",
+      "emailInvalid": "Введите корректный email",
+      "passwordLabel": "Пароль",
+      "passwordRequired": "Введите пароль",
+      "submit": "Войти",
+      "noAccount": "Нет аккаунта?",
+      "register": "Зарегистрироваться",
+      "errorFallback": "Неверный email или пароль. Попробуйте снова."
+    }
+  },
+
+  "dashboard": {
+    "title": "Ваш портфель",
+    "activePositions_one": "{{count}} активная позиция",
+    "activePositions_few": "{{count}} активных позиции",
+    "activePositions_many": "{{count}} активных позиций",
+    "totalEarned": "доход {{amount}}",
+    "actions": {
+      "swap": "Обменять",
+      "pools": "В пулы"
+    },
+    "tiles": {
+      "totalBalance": "Общий баланс",
+      "activePositions": "Активные позиции",
+      "unclaimedFees": "Незабранные комиссии",
+      "totalEarned": "Всего заработано"
+    },
+    "tokens": {
+      "title": "Мои токены",
+      "symbol": "Токен",
+      "available": "Доступно",
+      "locked": "Заблокировано",
+      "price": "Цена",
+      "value": "Стоимость"
+    },
+    "transactions": {
+      "title": "Последние транзакции",
+      "empty": "Транзакций пока нет",
+      "allHistory": "Вся история",
+      "date": "Дата",
+      "type": "Тип",
+      "amount": "Сумма",
+      "status": "Статус"
+    }
+  },
+
+  "swap": {
+    "title": "Обмен",
+    "subtitle": "Мгновенный своп между токенами через DLMM-пулы",
+    "from": "Вы отдаёте",
+    "to": "Вы получаете",
+    "available": "Доступно",
+    "max": "MAX",
+    "tokenPlaceholder": "Токен",
+    "amountPlaceholder": "0.0",
+    "swapDirection": "Поменять направление",
+    "settings": "Настройки проскальзывания",
+    "slippageTitle": "Допуск проскальзывания",
+    "slippageCustom": "свой",
+    "quote": {
+      "loading": "Расчёт маршрута…",
+      "rate": "Курс",
+      "priceImpact": "Влияние на цену",
+      "fee": "Комиссия",
+      "minReceived": "Мин. к получению",
+      "via": "через пул {{pair}}",
+      "tolerance": "допуск {{value}}%"
+    },
+    "cta": {
+      "selectTokens": "Выберите токены",
+      "enterAmount": "Введите сумму",
+      "noPool": "Пул недоступен",
+      "executing": "Выполняется обмен…",
+      "swap": "Обменять"
+    },
+    "alerts": {
+      "noPool": "Нет активного пула для выбранной пары",
+      "success": "Обмен выполнен успешно!",
+      "errorFallback": "Ошибка при выполнении обмена"
+    }
+  },
+
+  "hedge": {
+    "title": "Хедж FX",
+    "openHedges": "Открытые хеджи",
+    "closeAll": "Закрыть всё",
+    "close": "Закрыть",
+    "confirmClose": {
+      "title": "Закрыть хедж?",
+      "body": "Будет выполнен обратный своп {{amount}} единиц обратно в SRUB.",
+      "expected": "Ориентировочно получите ~{{amount}} SRUB; фактическая сумма зависит от курса на момент исполнения.",
+      "okText": "Закрыть хедж"
+    },
+    "errors": {
+      "unwindFallback": "Не удалось закрыть хедж"
+    }
+  },
+
+  "pools": {
+    "title": "Пулы ликвидности",
+    "subtitle_one": "{{count}} пара доступна для торговли и предоставления ликвидности",
+    "subtitle_few": "{{count}} пары доступны для торговли и предоставления ликвидности",
+    "subtitle_many": "{{count}} пар доступны для торговли и предоставления ликвидности",
+    "searchPlaceholder": "Найти пару (SBER, GAZP, SRUB…)",
+    "card": {
+      "tvl": "TVL",
+      "volume24h": "Объём 24ч",
+      "apy": "APY",
+      "binStep": "bin step {{value}}",
+      "fee": "fee {{value}} bps",
+      "addLiquidity": "Добавить ликвидность"
+    },
+    "status": {
+      "ACTIVE": "Активен",
+      "PAUSED": "Пауза",
+      "SHUTDOWN": "Остановлен",
+      "PENDING": "Ожидание"
+    },
+    "empty": {
+      "noResults": "Пары \"{{query}}\" не найдены",
+      "noPools": "Пулы пока не созданы"
+    }
+  }
+}
