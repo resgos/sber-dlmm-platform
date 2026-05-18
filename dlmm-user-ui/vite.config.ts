@@ -24,5 +24,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: true,
+    // Vitest unit tests live under src/. Playwright e2e specs under e2e/
+    // would otherwise be discovered and fail with "test.describe not allowed".
+    exclude: ['node_modules', 'dist', 'e2e/**'],
   },
 })

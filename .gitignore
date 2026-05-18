@@ -16,6 +16,11 @@ dlmm-admin-ui/dist/
 dlmm-user-ui/node_modules/
 dlmm-user-ui/dist/
 
+# Playwright e2e
+dlmm-user-ui/test-results/
+dlmm-user-ui/playwright-report/
+dlmm-user-ui/playwright/.cache/
+
 # Worktree-local config
 .claude/launch.json
 
