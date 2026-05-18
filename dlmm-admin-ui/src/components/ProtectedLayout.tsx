@@ -56,10 +56,20 @@ const menuItems = [
   },
 ]
 
-/* Sber-style checkmark logo SVG */
+/* Sber-style checkmark logo SVG. Decorative — title text alongside
+   announces "СБЕР DLMM"; mark this aria-hidden to avoid redundant
+   screen-reader output (Sprint 8 UX-A11Y-1). */
 function SberLogo({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 28 28"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+      focusable="false"
+    >
       <circle cx="14" cy="14" r="14" fill="#21A038" />
       <path
         d="M7.5 14.5L11.5 18.5L20.5 9.5"
@@ -195,14 +205,23 @@ export default function ProtectedLayout() {
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={() => setCollapsed(!collapsed)}
               style={{ fontSize: 16, color: '#6B7280' }}
+              aria-label={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
+              aria-expanded={!collapsed}
+              aria-controls="admin-sider-navigation"
             />
           </Space>
 
           <Space size={16}>
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-              <Space style={{ cursor: 'pointer' }}>
+              <Space
+                style={{ cursor: 'pointer' }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Меню администратора ${user?.email || 'Администратор'}`}
+                aria-haspopup="menu"
+              >
                 <Avatar
-                  icon={<UserOutlined />}
+                  icon={<UserOutlined aria-hidden />}
                   style={{ backgroundColor: '#21A038', width: 36, height: 36, lineHeight: '36px' }}
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>

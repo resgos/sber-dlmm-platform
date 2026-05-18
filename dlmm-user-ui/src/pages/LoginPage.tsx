@@ -11,7 +11,7 @@ function SberLogoLarge() {
   // Logo lockup is now a CSS gradient pill so it picks up brand tokens — see
   // .sber-brand-mark / --grad-brand. The SVG inside is just the checkmark.
   return (
-    <div className="sber-brand-mark">
+    <div className="sber-brand-mark" aria-hidden>
       <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M9 17L14.5 22.5L25 12" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       </svg>

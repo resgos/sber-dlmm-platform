@@ -170,15 +170,24 @@ export default function UserLayout() {
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={() => setCollapsed(!collapsed)}
               style={{ fontSize: 16, color: '#6B7280' }}
+              aria-label={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
+              aria-expanded={!collapsed}
+              aria-controls="sider-navigation"
             />
           </Space>
 
           <Space size={20}>
             <NotificationBell />
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-              <Space style={{ cursor: 'pointer' }}>
+              <Space
+                style={{ cursor: 'pointer' }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Меню пользователя ${user?.email || 'Пользователь'}`}
+                aria-haspopup="menu"
+              >
                 <Avatar
-                  icon={<UserOutlined />}
+                  icon={<UserOutlined aria-hidden />}
                   style={{ backgroundColor: '#21A038', width: 36, height: 36, lineHeight: '36px' }}
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>

@@ -208,7 +208,13 @@ export default function SwapPage() {
           <Text type="secondary">Мгновенный своп между токенами через DLMM-пулы</Text>
         </div>
         <Popover content={slippageMenu} trigger="click" placement="bottomRight">
-          <Button shape="circle" icon={<SettingOutlined />} size="large" />
+          <Button
+            shape="circle"
+            icon={<SettingOutlined aria-hidden />}
+            size="large"
+            aria-label="Настройки проскальзывания"
+            aria-haspopup="dialog"
+          />
         </Popover>
       </div>
 
@@ -260,7 +266,12 @@ export default function SwapPage() {
             </div>
           )}
           {quote && !quoteLoading && (
-            <div className="sber-swap-quote">
+            <div
+              className="sber-swap-quote"
+              role="region"
+              aria-label="Параметры обмена"
+              aria-live="polite"
+            >
               <div className="sber-swap-quote__row">
                 <Text type="secondary">Курс</Text>
                 <Text strong>

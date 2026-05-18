@@ -172,7 +172,16 @@ export default function NotificationBell() {
       placement="bottomRight"
     >
       <Badge count={unreadCount} size="small" offset={[-2, 2]}>
-        <BellOutlined style={{ fontSize: 20, color: '#6B7280', cursor: 'pointer' }} />
+        {/* Sprint 8 UX-A11Y-1 — icon-only trigger needs an accessible name */}
+        {/* and a button role so screen readers + keyboard navigation work. */}
+        <BellOutlined
+          style={{ fontSize: 20, color: '#6B7280', cursor: 'pointer' }}
+          role="button"
+          tabIndex={0}
+          aria-label={unreadCount > 0 ? `Уведомления (${unreadCount} непрочитанных)` : 'Уведомления'}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+        />
       </Badge>
     </Popover>
   )
