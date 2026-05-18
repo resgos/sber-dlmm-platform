@@ -35,11 +35,16 @@ public class JwtValidationFilter implements GlobalFilter, Ordered {
     private static final String HEADER_USER_ID = "X-User-Id";
     private static final String HEADER_USER_ROLE = "X-User-Role";
     private static final String HEADER_KYC_STATUS = "X-Kyc-Status";
+    /** Sprint 9 #6.6 — propagated downstream + consumed by TierKeyResolver. */
+    public static final String HEADER_API_TIER = "X-Api-Tier";
 
     private static final List<String> SKIP_PATHS = List.of(
             "/api/v1/auth/login",
             "/api/v1/auth/register",
             "/api/v1/auth/refresh",
+            // Sprint 9 R-M-33 — Public Data API tiers. No auth required;
+            // rate-limit applies via the IP-fallback path in TierKeyResolver.
+            "/api/v1/public/**",
             "/actuator/**"
     );
 
@@ -77,11 +82,19 @@ public class JwtValidationFilter implements GlobalFilter, Ordered {
             String userId = claims.getSubject();
             String userRole = claims.get("role", String.class);
             String kycStatus = claims.get("kycStatus", String.class);
+            // Sprint 9 #6.6 — tier claim. Default FREE for any token without
+            // one (pre-Sprint-9 tokens). Header is consumed by TierKeyResolver
+            // and propagated downstream so per-tier feature gating can work.
+            String tier = claims.get("tier", String.class);
+            if (tier == null || tier.isBlank()) {
+                tier = "FREE";
+            }
 
             ServerHttpRequest mutatedRequest = request.mutate()
                     .header(HEADER_USER_ID, userId != null ? userId : "")
                     .header(HEADER_USER_ROLE, userRole != null ? userRole : "")
                     .header(HEADER_KYC_STATUS, kycStatus != null ? kycStatus : "")
+                    .header(HEADER_API_TIER, tier)
                     .build();
 
             return chain.filter(exchange.mutate().request(mutatedRequest).build());

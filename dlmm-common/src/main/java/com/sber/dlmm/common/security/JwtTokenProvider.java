@@ -86,6 +86,15 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Sprint 9 #6.6 — API tier claim. Returns the raw string ("FREE" / "PRO"
+     * / "ENTERPRISE") or null if absent. Callers parse via
+     * {@code ApiTier.fromClaim(...)} which defaults to FREE on null.
+     */
+    public String getTier(String token) {
+        return parseClaims(token).get("tier", String.class);
+    }
+
+    /**
      * Returns the {@code jti} claim — the JWT ID. Used by Sprint 8 AU-3
      * revocation denylist. Returns null for legacy tokens issued before AU-3
      * (which didn't carry jti); callers must treat null as "not in denylist".

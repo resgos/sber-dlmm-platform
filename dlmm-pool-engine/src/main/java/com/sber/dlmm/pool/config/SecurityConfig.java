@@ -38,6 +38,9 @@ public class SecurityConfig {
                         .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/pools", "/api/v1/pools/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/pools/swap/quote").permitAll()
+                        // Sprint 9 R-M-33 — Public Data API tiers. No auth;
+                        // gateway rate-limits by IP per the public tier config.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/public/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

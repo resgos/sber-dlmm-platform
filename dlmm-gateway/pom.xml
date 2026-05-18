@@ -15,6 +15,16 @@
     <description>API Gateway for Sber DLMM Platform</description>
 
     <dependencies>
+        <!-- Sprint 9 #6.6 — needs ApiTier enum from dlmm-common for tier-aware
+             rate limiting. dlmm-common's heavy deps (JPA, Kafka, security)
+             are marked <optional>true</optional> in its pom so this dependency
+             only pulls what gateway actually uses (jakarta.validation,
+             spring-web, jackson-annotations, prometheus-registry-runtime). -->
+        <dependency>
+            <groupId>com.sber.dlmm</groupId>
+            <artifactId>dlmm-common</artifactId>
+        </dependency>
+
         <!-- Spring Cloud Gateway (reactive) -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>

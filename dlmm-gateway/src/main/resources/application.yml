@@ -56,12 +56,19 @@ spring:
           uri: ${ADMIN_BFF_URL:http://localhost:8088}
           predicates:
             - Path=/api/v1/admin/**
-      default-filters:
-        - name: RequestRateLimiter
-          args:
-            redis-rate-limiter.replenishRate: 100
-            redis-rate-limiter.burstCapacity: 150
-            key-resolver: "#{@userKeyResolver}"
+        # Sprint 9 R-M-33 — Public Data API. No auth required (JwtValidationFilter
+        # skip-prefix). Reaches pool-engine's PublicDataController.
+        - id: public-data
+          uri: ${POOL_ENGINE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/public/**
+      # Sprint 9 #6.6 — rate limiting moved from a default-filters RequestRateLimiter
+      # (which applied a single global 100/150 rps for all users / all routes) to
+      # TierBasedRateLimitFilter (custom GlobalFilter, Ordered=-50). The new filter
+      # picks freeRateLimiter / proRateLimiter / enterpriseRateLimiter based on
+      # the X-Api-Tier header that JwtValidationFilter sets from the JWT.
+      # Public Data API (/api/v1/public/**) skips both filters and falls back to
+      # the IP-keyed userKeyResolver path (FREE tier limits via implicit default).
   data:
     redis:
       host: ${REDIS_HOST:localhost}
