@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 5 #5.7 — B2B billing engine: monthly invoices per issuer.
+
+        Pricing model (configurable via dlmm.b2b.billing.*):
+          - listing_fee: one-time on KYB-APPROVED (charged in first invoice)
+          - monthly_retainer: recurring per period (BASIC/PRO/ENTERPRISE differ)
+          - volume_fee_bps: % of pool volume routed through issuer's tokens
+
+        Scheduler runs 1st of each month, computes period N-1 invoice
+        for every APPROVED issuer. Unique constraint on
+        (issuer_id, period_start) prevents double-billing if the scheduler
+        re-runs.
+
+        НДС split mirrors Sprint 5 #5.12 b2b_settlements pattern: gross =
+        net + vat (стандартная ставка 20%).
+    -->
+    <changeSet id="007-create-b2b-invoices-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="b2b_invoices"/></not>
+        </preConditions>
+        <createTable tableName="b2b_invoices">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="issuer_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="period_start" type="DATE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="period_end" type="DATE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="listing_fee" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="retainer_fee" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="volume_fee" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="gross_total" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="vat_amount" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="net_total" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="vat_rate_pct" type="SMALLINT" defaultValueNumeric="20">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)" defaultValue="ISSUED">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="paid_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <addUniqueConstraint tableName="b2b_invoices"
+                             columnNames="issuer_id, period_start"
+                             constraintName="uq_b2b_invoices_issuer_period"/>
+
+        <createIndex indexName="idx_b2b_invoices_issuer" tableName="b2b_invoices">
+            <column name="issuer_id"/>
+            <column name="period_start"/>
+        </createIndex>
+        <createIndex indexName="idx_b2b_invoices_status" tableName="b2b_invoices">
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

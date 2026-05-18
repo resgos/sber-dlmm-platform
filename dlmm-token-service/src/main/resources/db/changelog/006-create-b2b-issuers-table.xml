@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 5 #5.6 — B2B portal MVP: issuer registration + KYB workflow.
+
+        Corporate clients who want to issue their own token on DLMM
+        (M#11 monetization) flow through:
+            register → KYB pending → admin reviews → APPROVED / REJECTED
+            → APPROVED issuer can call POST /tokens with their issuer_id.
+
+        For the prototype, KYB approval is a single admin action. Production
+        will integrate Sber's existing KYB pipeline (СберКорп Биометрия,
+        ЕГРЮЛ check, sanctions screening) — Sprint 7+ track.
+    -->
+    <changeSet id="006-create-b2b-issuers-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="b2b_issuers"/></not>
+        </preConditions>
+        <createTable tableName="b2b_issuers">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <!-- ИНН — primary Russian legal entity identifier. Unique
+                 platform-wide (one corp = one issuer record). -->
+            <column name="inn" type="VARCHAR(12)">
+                <constraints unique="true" nullable="false"/>
+            </column>
+            <!-- Legal name as in ЕГРЮЛ -->
+            <column name="legal_name" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Display name shown in the catalog (often shorter / brand-style) -->
+            <column name="display_name" type="VARCHAR(128)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="contact_email" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="contact_phone" type="VARCHAR(32)"/>
+            <!-- Pricing tier: BASIC / PRO / ENTERPRISE — drives the
+                 billing engine (#5.7). Default BASIC at registration. -->
+            <column name="tier" type="VARCHAR(20)" defaultValue="BASIC">
+                <constraints nullable="false"/>
+            </column>
+            <!-- KYB lifecycle: PENDING → APPROVED | REJECTED -->
+            <column name="kyb_status" type="VARCHAR(20)" defaultValue="PENDING">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Admin user who approved/rejected (audit) -->
+            <column name="reviewed_by" type="UUID"/>
+            <column name="reviewed_at" type="TIMESTAMP"/>
+            <column name="rejection_reason" type="TEXT"/>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_b2b_issuers_status" tableName="b2b_issuers">
+            <column name="kyb_status"/>
+        </createIndex>
+        <createIndex indexName="idx_b2b_issuers_tier" tableName="b2b_issuers">
+            <column name="tier"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
