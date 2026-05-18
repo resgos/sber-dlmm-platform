@@ -292,39 +292,114 @@ See `docs/SPRINT-7-KICKOFF.md` §7 for full checklist.
 
 ---
 
-## Sprint 8 — "OTC desk + money market + Public Data API"
+## Sprint 8 — "UX Hardening Sprint" (rebalanced 2026-06-23 per AU-1)
 
-**Tentative theme** (firm scope at Sprint 7 close): institutional layer
-(OTC + RFQ) + tokenized money market launch (YSRUB) + Public Data API
-tiers (M-33) bundled with API access paid tiers (6.6).
+**Theme**: One-sprint pause on the commercial roadmap to close the
+critical gap surfaced by the system audit (`docs/SYSTEM-AUDIT-2026-06-17.md`):
+**backend quality 9/10, frontend quality 6/10**. Sprint 7 mid-rebalance
+absorbed the first 3.5d of safety-rail work (dedup, e2e, test honesty);
+Sprint 8 makes the rest systemic.
 
-### Code work — initial backlog (~32 person-days, fits 30d if Sprint 7
-hits 25d+ realized)
+> **AU-1 decision (PO + IT-lead, 2026-06-23)**: Option B — "UX Hardening
+> Sprint 8" — adopted over Option A (status quo commercial). Trade-off
+> noted in audit §6: ~1-month delay on ~150M ₽/yr of OTC + money market
+> features. Designer's prior verdict ("frontend execution lags badly")
+> + Sprint 7 mid-rebalance absorption confirm UX investment now is
+> the right call.
+>
+> Full daily plan: `docs/SPRINT-8-KICKOFF.md`.
+
+### Code work — backlog (~28 person-days vs 27d realised-capacity ceiling)
+
+**Sprint 7 carry-overs (~2.5d):**
+- UX-042 SwapPage mobile breakpoint fix (1d, Frontend)
+- UX-016 Hedge unwind quote language fix (0.5d, Frontend)
+- R-Pangolin-1 BIGINT InvariantTest divergence (0.5d, SRE)
+- R-UX-035 SelfRestrictionPanel "Cancel set" undo (0.5d, Frontend)
+
+**Security / audit-track (~5.5d):**
+- **AU-2** Stylelint `color-no-hex` pre-commit hook (0.5d, SRE+FE)
+- **AU-3** JWT revocation: Redis denylist by `jti` + `/auth/logout` + filter check (2d, Backend dev 2)
+- **AU-4** Admin audit log: `admin_audit_log` table + `@AdminAudit` AOP (3d, Backend lead)
+
+**Test coverage (~5d):**
+- **C-7** Admin-UI vitest setup + first 10 component tests (3d, Frontend)
+- **C-9** SwapPage vitest coverage (slippage, flip, MAX, alerts, quote refresh) (2d, Frontend)
+
+**Designer pass + accessibility wave 1 (~5d):**
+- **UX-DS-1** Design tokens audit + top-10 inline-style sweep (2d, Designer+FE)
+- **UX-A11Y-1** Accessibility wave: 20+ aria + semantic HTML on Dashboard/Swap/Pools/Login (2d, FE)
+- **UX-MOBILE-1** Mobile sweep — `@media` for Dashboard/Pools/Positions (1d, FE)
+
+**i18n foundation (~3d):**
+- **C-4** `react-i18next` setup + RU extraction from top 5 pages (3d, FE)
+
+**UX-Major block first wave (~5d):**
+- M-2 LoginPage "Forgot password?" + stub reset flow (1.5d, BE+FE)
+- M-3 RegisterPage 2-step wizard (1.5d, FE)
+- M-4 Dashboard stat tiles → drill-down (1d, FE)
+- M-5 PoolsPage filter+sort (1d, FE)
+
+**SRE / observability (~2d):**
+- **AU-8** RISK-REGISTER.md refresh (1d, SA)
+- **C-10** Resilience4j wiring on fee-service + admin-bff + transaction-service (1d, BE dev 3)
+
+**Sprint 8 acceptance criteria** (preview — full list in kickoff):
+- Stylelint pre-commit blocks new `#hex` in `.tsx`
+- JWT revocation: logout adds `jti` to Redis; revoked token → 401
+- Admin audit log captures last 5 admin mutations
+- Admin-UI has first 10 vitest cases green in CI
+- aria-label count ≥ 20 across user-ui pages (grep-verified)
+- Dashboard / Pools / Positions render at 320px width
+- `locales/ru.json` extracts top 5 pages' Cyrillic strings
+
+### Deferred from Sprint 8 to Sprint 9 (commercial backlog slide)
+
+Per AU-1 trade-off:
+- 6.1 OTC desk admin workflow (6d) → Sprint 9
+- 6.2 RFQ API for VIP clients (4d) → Sprint 9
+- 6.6 API access paid tiers (3d) → Sprint 9
+- R-M-33 Public Data API tiers (3d) → Sprint 9
+- 7.1 Tokenized money market YSRUB (8d) → Sprint 9-10
+- 7.2 Yield distribution engine (5d) → Sprint 9-10
+- R-h CBR spread alert subscription (4d) → Sprint 10
+- 7.6 YSRUB reserve health attestation (3d) → Sprint 10
+
+---
+
+## Sprint 9 — "OTC desk + RFQ + money market + API tiers" (shifted from Sprint 8 per AU-1)
+
+**Theme** (rebalanced 2026-06-23): the commercial backlog originally
+planned for Sprint 8 — institutional layer + tokenized money market
+launch + Public Data API tiers — slid one sprint to make room for the
+UX Hardening Sprint. Index funds + 152-ФЗ + Spasibo write-back further
+slid to Sprint 10.
+
+### Code work — initial backlog (~31 person-days vs 27 ceiling = +15% over; cut
+last 1-2 if velocity confirms ceiling)
 
 | # | Task | Source | Owner | Effort |
 |---|---|---|---|---|
-| 6.1 | OTC desk admin workflow | M#7, Sprint 6→7→8 carry | Backend + Admin UI | 6d |
+| 6.1 | OTC desk admin workflow | M#7, Sprint 6→7→8→9 carry | Backend + Admin UI | 6d |
 | 6.2 | RFQ API for VIP clients | M#7 | Backend | 4d |
 | 6.6 | API access paid tiers at gateway | M#20 | SRE + Backend | 3d |
 | R-M-33 | Public Data API tiers (extension of 6.6) | Revenue research | Backend | 3d |
 | 7.1 | Tokenized money market fund (YSRUB) — daily yield outbox | M#9 | Backend | 8d |
 | 7.2 | Yield distribution engine (overnight + spread) | M#9 | Backend | 5d |
-| R-h | CBR spread alert subscription | Revenue research | Backend | 4d |
-| 7.6 | Reserve health for YSRUB (daily attestation) | M#9 | Backend + Compliance | 3d |
+| Spasibo write-back impl | Per #6.16, Sprint 8 contract dep (8.C) | Backend | 8d (cut if 8.C slips) |
 
-**Sprint 8 acceptance criteria** (preview):
+**Sprint 9 acceptance criteria** (preview):
 - 1 OTC block trade settled (≥ 10M ₽ notional)
 - YSRUB mint/burn cycle works end-to-end with daily yield credited
 - API access tiers (Free/Pro/Enterprise) live at gateway
-- CBR spread subscription has first paying user (or test-mode)
+- Spasibo cashback first real credit (if 8.C lands)
 
 ---
 
-## Sprint 9 — "Index funds + 152-ФЗ audit start + Spasibo write-back"
+## Sprint 10 — "Index funds + 152-ФЗ audit + reserve health + UX Major wave 2"
 
-**Tentative theme**: retail-side index basket + start of compliance
-battery cascade + Spasibo write-back implementation (gated on 7.A
-contract).
+**Theme** (rebalanced 2026-06-23): retail-side index basket + start of
+compliance battery cascade + close-out items from money-market launch.
 
 ### Code work — initial backlog (~28 person-days)
 
@@ -333,15 +408,16 @@ contract).
 | 7.3 | Index basket token (SBER10) | M#15 | Backend | 5d |
 | 7.4 | Index rebalance scheduler (drift > 2%) | M#15 | Backend | 4d |
 | 7.5 | Index dashboard on user-ui | M#15 | Frontend | 4d |
-| Spasibo write-back impl | Per #6.16 design, Sprint 8 contract dep | Backend | 8d |
+| 7.6 | YSRUB reserve health attestation (carried from Sprint 8) | M#9 | Backend + Compliance | 3d |
+| R-h | CBR spread alert subscription | Revenue research | Backend | 4d |
 | 7.X | 152-ФЗ ПДн audit + encryption-at-rest verification | RU-R1 | Backend + Compliance | 5d |
-| UX Major block first half | UX-REVIEW Sprint 8 row | Frontend | 4-5d |
+| UX Major block second wave | UX-REVIEW Sprint 8 row | Frontend | 4-5d |
 
-**Sprint 9 acceptance criteria** (preview):
+**Sprint 10 acceptance criteria** (preview):
 - SBER10 basket token tradeable in dedicated pool
 - Daily rebalance produces correct allocations
 - 152-ФЗ audit checklist 80% green
-- Spasibo write-back first real cashback credited
+- YSRUB reserve health daily attestation visible in admin dashboard
 
 ---
 
@@ -442,9 +518,14 @@ how aggressive 161-ФЗ + СБП-rail compliance must be.
 | Quarter | Stack at end-of-quarter | Run-rate (₽/year) |
 |---|---|---:|
 | Q3 2026 (Sprint 3-4 close) | protocol fee + exit + custody + Treasury LP + FX hedge pilot + B2B settlement v1 + sponsored pools | **300-500M** |
-| Q4 2026 (Sprint 5-6 close) | + SberSpasibo + OTC desk + MM rebate + DLMM-as-Service (3-5 issuers) | **800M-1.2B** |
-| Q1 2027 (Sprint 7+) | + Money market + index funds | **1.5-2B** |
-| Q2 2027+ | + Tokenized bonds pilot (if Q4 legal review goes well) | **3-4B** |
+| Q4 2026 (Sprint 5-7 close) | + SberSpasibo + MM rebate launched + DLMM-as-Service (3-5 issuers) | **700M-1.0B** ⤓ (Sprint 8 UX-Hardening trade) |
+| Q1 2027 (Sprint 8-9 close) | + OTC desk + RFQ + API tiers + Money market (UX Hardening Sprint 8 pushed commercials by 1 sprint) | **1.3-1.8B** ⤓ |
+| Q2 2027 (Sprint 10-11) | + Index funds + Spasibo write-back + reserve health attestation | **1.7-2.3B** |
+| Q3 2027+ | + Tokenized bonds pilot (if Q4 legal review goes well) | **3-4B** |
+
+> **Audit-induced AU-1 trade-off**: ~150-200M ₽/yr Q1 2027 dip vs original
+> plan; compensated by reduced FE-bug rate post-hardening (measure at
+> Sprint 9 retro). Net 2027 H2+ target unchanged.
 
 ---
 
@@ -481,5 +562,14 @@ Sprint 2). After integrating BA's monetization strategy + discovery:
 
 ---
 
-*Last updated: 2026-05-16 (post BA discovery + monetization). Owner: IT-lead.
-Update at every sprint close.*
+*Last updated: 2026-06-23 (Sprint 7 mid-rebalance + Sprint 8 = "UX Hardening Sprint"
+per audit AU-1). Owner: IT-lead. Update at every sprint close.*
+
+**Changelog**
+- 2026-05-16: initial plan (post BA discovery + monetization)
+- 2026-06-02: Sprint 6 mid-rebalance (OTC + MM moved to Sprint 7)
+- 2026-06-17: Sprint 7 kickoff post-second-rebalance; original carry-overs
+- 2026-06-23: **Sprint 7 mid-rebalance** (3.5d safety-rail absorbed, 2.5d cut →
+  Sprint 8); **Sprint 8 = "UX Hardening Sprint"** per AU-1; commercial backlog
+  (OTC + MM + money market) slid Sprint 8 → 9; index funds + 152-ФЗ slid
+  Sprint 9 → 10. See `SPRINT-7-MID-REBALANCE.md` + `SPRINT-8-KICKOFF.md`.
