@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 4 #4.3 — audit trail of margin-call events fired by the
+        MarginWatchService scheduler. Each row records the precise state
+        at the moment of the check (active bin, range bounds, distance)
+        so risk-committee post-mortems can reconstruct what was visible
+        when an alert was sent.
+
+        Dedup is enforced in service code via a (position_id, event_type)
+        cooldown window rather than a DB constraint — we want history of
+        repeated alerts kept, not silently dropped.
+
+        position_id is NOT a FK in this changeset on purpose: the same
+        preConditions-MARK_RAN convention has bitten us when init-db.sql
+        and Liquibase race on existence checks. A logical reference is
+        enough for the prototype.
+    -->
+    <changeSet id="008-create-margin-call-events-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="margin_call_events"/></not>
+        </preConditions>
+        <createTable tableName="margin_call_events">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="position_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="pool_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_type" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="active_bin_id" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="range_min" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="range_max" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <!--
+                Signed integer distance from the nearest range boundary.
+                Negative => active bin is OUTSIDE the range (the magnitude
+                is how many bins out). Positive => INSIDE (the magnitude
+                is how many bins safely deep). Storing the sign lets us
+                trend "how close to MARGIN_CALL" without re-deriving from
+                bin_id at query time.
+            -->
+            <column name="distance_from_boundary" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_margin_events_position" tableName="margin_call_events">
+            <column name="position_id"/>
+            <column name="created_at"/>
+        </createIndex>
+        <createIndex indexName="idx_margin_events_user" tableName="margin_call_events">
+            <column name="user_id"/>
+            <column name="created_at"/>
+        </createIndex>
+        <createIndex indexName="idx_margin_events_pool" tableName="margin_call_events">
+            <column name="pool_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

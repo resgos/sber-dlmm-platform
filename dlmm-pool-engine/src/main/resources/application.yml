@@ -72,6 +72,15 @@ dlmm:
       url: ${TOKEN_SERVICE_URL:http://localhost:8082}
     user-service:
       url: ${USER_SERVICE_URL:http://localhost:8081}
+  # Sprint 4 #4.3 — MarginWatchScheduler tunables. Override via env in
+  # docker-compose (DLMM_MARGIN_*). Disable wholesale for k6 load tests.
+  margin:
+    enabled: ${DLMM_MARGIN_ENABLED:true}
+    scan-interval-ms: ${DLMM_MARGIN_SCAN_INTERVAL_MS:300000}    # 5 min
+    initial-delay-ms: ${DLMM_MARGIN_INITIAL_DELAY_MS:60000}     # 1 min after boot
+    warning-bin-distance: ${DLMM_MARGIN_WARNING_DISTANCE:3}     # bins to boundary
+    event-cooldown-hours: ${DLMM_MARGIN_COOLDOWN_HOURS:6}       # dedupe window
+    page-size: ${DLMM_MARGIN_PAGE_SIZE:500}                     # positions per page
 
 logging:
   level:

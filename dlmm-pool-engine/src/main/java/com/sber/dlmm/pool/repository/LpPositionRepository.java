@@ -21,4 +21,11 @@ public interface LpPositionRepository extends JpaRepository<LpPosition, UUID> {
     Page<LpPosition> findByPoolId(UUID poolId, Pageable pageable);
 
     long countByIsActiveTrue();
+
+    /**
+     * Sprint 4 #4.3 — page through all active positions for the margin-call
+     * scanner. Pageable so a 100k-position prod load doesn't get loaded
+     * into memory in one shot; scanner walks pages of 500.
+     */
+    Page<LpPosition> findByIsActiveTrue(Pageable pageable);
 }
