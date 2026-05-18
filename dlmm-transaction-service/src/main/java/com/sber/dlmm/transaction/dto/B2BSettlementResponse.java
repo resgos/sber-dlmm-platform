@@ -22,7 +22,14 @@ public record B2BSettlementResponse(
         String notes,
         String errorMessage,
         LocalDateTime createdAt,
-        LocalDateTime completedAt
+        LocalDateTime completedAt,
+        // Sprint 5 #5.12 — fee + НДС split (Russian B2B "fee includes НДС"
+        // convention). All four shown so accountant can reconcile against
+        // 1С standalone fee entries and ФНС НДС-обязательство bookings.
+        long grossFeeAmount,
+        long vatAmount,
+        long netFeeAmount,
+        short vatRatePct
 ) {
     public static B2BSettlementResponse from(B2BSettlement s) {
         return new B2BSettlementResponse(
@@ -36,7 +43,11 @@ public record B2BSettlementResponse(
                 s.getNotes(),
                 s.getErrorMessage(),
                 s.getCreatedAt(),
-                s.getCompletedAt()
+                s.getCompletedAt(),
+                s.getGrossFeeAmount(),
+                s.getVatAmount(),
+                s.getNetFeeAmount(),
+                s.getVatRatePct()
         );
     }
 }

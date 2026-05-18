@@ -87,6 +87,24 @@ public class B2BSettlement {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    /**
+     * Sprint 5 #5.12 — fee + НДС split. Russian B2B fees follow "fee includes
+     * НДС" convention. gross = total charged; vat = НДС component (must
+     * remit to ФНС); net = DLMM-revenue side. See
+     * {@code B2BSettlementService.computeFeeSplit()} for the formula.
+     */
+    @Column(name = "gross_fee_amount", nullable = false)
+    private long grossFeeAmount;
+
+    @Column(name = "vat_amount", nullable = false)
+    private long vatAmount;
+
+    @Column(name = "net_fee_amount", nullable = false)
+    private long netFeeAmount;
+
+    @Column(name = "vat_rate_pct", nullable = false)
+    private short vatRatePct;
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();

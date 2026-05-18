@@ -7,5 +7,6 @@
 
     <include file="001-create-transactions-table.xml" relativeToChangelogFile="true"/>
     <include file="002-create-b2b-settlements-table.xml" relativeToChangelogFile="true"/>
+    <include file="003-add-vat-split-to-b2b-settlements.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

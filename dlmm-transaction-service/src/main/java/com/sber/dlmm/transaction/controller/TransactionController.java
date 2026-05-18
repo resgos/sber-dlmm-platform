@@ -6,6 +6,7 @@ import com.sber.dlmm.common.enums.TransactionType;
 import com.sber.dlmm.common.exception.ForbiddenException;
 import com.sber.dlmm.transaction.dto.TransactionResponse;
 import com.sber.dlmm.transaction.entity.Transaction;
+import com.sber.dlmm.transaction.export.OneCExchangeFormatter;
 import com.sber.dlmm.transaction.service.TransactionService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -88,12 +89,20 @@ public class TransactionController {
     }
 
     /**
-     * Sprint 4 #4.4 — settlement-report CSV download for corp accountants.
+     * Sprint 4 #4.4 + Sprint 5 #5.11 — settlement-report download for
+     * corp accountants. Two output formats:
+     * <ul>
+     *   <li><b>format=csv</b> (default) — spreadsheet-friendly CSV, 14
+     *       columns, header frozen for ETL stability.</li>
+     *   <li><b>format=1c</b> — 1CClientBankExchange v1.03 text format
+     *       (Windows-1251), imports straight into 1С Бухгалтерия 8.3.
+     *       Russian accountant lives in 1С; see #5.11 javadoc on
+     *       {@link OneCExchangeFormatter} for the spec.</li>
+     * </ul>
      *
-     * GET /api/v1/transactions/report?userId=...&from=...&to=...
+     * GET /api/v1/transactions/report?userId=...&from=...&to=...&format=csv|1c
      *
-     * Returns confirmed swap history in spreadsheet-friendly format for
-     * 1С / SAP reconciliation. Caller restrictions:
+     * Caller restrictions:
      *   - regular users can ONLY pull their own report (userId param
      *     ignored, falls back to JWT subject)
      *   - ADMIN / SUPER_ADMIN can pull any user's via userId param
@@ -102,12 +111,13 @@ public class TransactionController {
      * should be paginated by date window — this endpoint is for
      * monthly / quarterly batches, not full audit dumps.
      */
-    @GetMapping(value = "/report", produces = "text/csv")
+    @GetMapping(value = "/report")
     public void downloadReport(
             Authentication authentication,
             @RequestParam(required = false) UUID userId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false, defaultValue = "csv") String format,
             HttpServletResponse response) throws IOException {
 
         UUID callerId = (UUID) authentication.getPrincipal();
@@ -119,8 +129,18 @@ public class TransactionController {
 
         List<Transaction> rows = transactionService.findForReport(target, from, to);
 
-        // Filename includes user prefix + date range so multiple
-        // downloads don't overwrite each other in the accountant's folder.
+        if ("1c".equalsIgnoreCase(format) || "1с".equalsIgnoreCase(format)) {
+            writeOneCReport(target, rows, from, to, response);
+        } else {
+            writeCsvReport(target, rows, from, to, response);
+        }
+    }
+
+    private static void writeCsvReport(UUID target,
+                                        List<Transaction> rows,
+                                        LocalDateTime from,
+                                        LocalDateTime to,
+                                        HttpServletResponse response) throws IOException {
         String filename = String.format("dlmm-transactions-%s-%s-to-%s.csv",
                 target.toString().substring(0, 8),
                 from != null ? from.toLocalDate() : "all",
@@ -151,6 +171,37 @@ public class TransactionController {
                 );
             }
         }
+    }
+
+    /**
+     * Sprint 5 #5.11 — 1CClientBankExchange v1.03 export. Filename uses
+     * .txt extension (1С doesn't require a specific extension; .txt is
+     * convention). Charset is Windows-1251 — the spec mandates it, and
+     * 1С import wizard reads the {@code Кодировка=Windows} header line
+     * to pick the decoder.
+     */
+    private static void writeOneCReport(UUID target,
+                                         List<Transaction> rows,
+                                         LocalDateTime from,
+                                         LocalDateTime to,
+                                         HttpServletResponse response) throws IOException {
+        String filename = String.format("dlmm-1c-%s-%s-to-%s.txt",
+                target.toString().substring(0, 8),
+                from != null ? from.toLocalDate() : "all",
+                to != null ? to.toLocalDate() : "now");
+        // Use text/plain because 1С doesn't define a custom mime;
+        // charset=Windows-1251 per spec.
+        response.setContentType("text/plain; charset=windows-1251");
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+
+        String body = OneCExchangeFormatter.format(
+                target, rows,
+                from != null ? from.toLocalDate() : null,
+                to != null ? to.toLocalDate() : null,
+                LocalDateTime.now());
+        // Manual write of Windows-1251 bytes — bypass Servlet's default UTF-8.
+        response.getOutputStream().write(body.getBytes(java.nio.charset.Charset.forName("Windows-1251")));
+        response.getOutputStream().flush();
     }
 
     private static String nullable(Object v) { return v == null ? "" : v.toString(); }

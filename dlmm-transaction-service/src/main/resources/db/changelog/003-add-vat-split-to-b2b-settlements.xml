@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 5 #5.12 — В2В settlement fee + НДС split.
+
+        Sprint 4 #4.6 shipped the b2b_settlements table without a fee
+        component — the prototype just routed the gross amount from→to.
+        Compliance asks: "you charge for this service, where's the НДС?"
+        Reality is: yes, the service fee is taxable per 21-FZ ст. 146.
+
+        Russian B2B fees follow "fee includes НДС" convention. We store
+        three numbers per settlement:
+          - gross_fee_amount   = bps × amount     (what we charged total)
+          - vat_amount         = gross × 20/120   (НДС from gross-to-net)
+          - net_fee_amount     = gross - vat      (DLMM-revenue side)
+
+        Standard 20% rate is the only one DLMM uses today. Льготная
+        ставка (10%) applies to some specific commodity classes that
+        DLMM doesn't serve. Storing vat_rate_pct anyway in case the
+        list grows (или регуляторика поменяется — это РФ).
+
+        Nullable + default 0 so existing rows from Sprint 4 don't break:
+        old rows have gross=net=vat=0 (no fee was charged in prototype).
+        Production rows start populating from this changeset's apply date.
+    -->
+    <changeSet id="003-add-vat-split-to-b2b-settlements" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <tableExists tableName="b2b_settlements"/>
+                <not><columnExists tableName="b2b_settlements" columnName="gross_fee_amount"/></not>
+            </and>
+        </preConditions>
+
+        <addColumn tableName="b2b_settlements">
+            <column name="gross_fee_amount" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="vat_amount" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="net_fee_amount" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="vat_rate_pct" type="SMALLINT" defaultValueNumeric="20">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

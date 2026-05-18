@@ -11,6 +11,7 @@ import com.sber.dlmm.transaction.dto.B2BSettlementResponse;
 import com.sber.dlmm.transaction.entity.B2BSettlement;
 import com.sber.dlmm.transaction.repository.B2BSettlementRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -61,6 +62,22 @@ public class B2BSettlementService {
     private final TokenServiceClient tokenClient;
     private final TransactionTemplate txTemplate;
 
+    /**
+     * Sprint 5 #5.12 — fee in basis points charged ON the transferred
+     * amount. Default 5 bps (= 0.05%) per Sprint 4 #4.6 kickoff
+     * commercial promise.
+     */
+    @Value("${dlmm.b2b.fee-bps:5}")
+    private int feeBps;
+
+    /**
+     * Sprint 5 #5.12 — НДС rate (percent). Default 20 (стандартная ставка).
+     * Льготная 10% / 0% reserved for future commodity-class expansion that
+     * doesn't apply to current DLMM-served operations.
+     */
+    @Value("${dlmm.b2b.vat-rate-pct:20}")
+    private short vatRatePct;
+
     public B2BSettlementService(B2BSettlementRepository repository,
                                 TokenServiceClient tokenClient,
                                 PlatformTransactionManager txManager) {
@@ -72,6 +89,36 @@ public class B2BSettlementService {
         // separate session, so we don't want any enclosing context.
         this.txTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
+
+    /**
+     * Sprint 5 #5.12 — fee + НДС split. Russian B2B "fee includes НДС"
+     * convention: customer sees and pays {@code grossFeeAmount}; we split
+     * that gross into НДС (must remit to ФНС) and net (DLMM revenue).
+     *
+     * <p>Formula:
+     * <pre>
+     *   gross = floor(amount × feeBps / 10000)
+     *   vat   = floor(gross × vatRatePct / (100 + vatRatePct))
+     *   net   = gross - vat
+     * </pre>
+     *
+     * <p>floor on each step is intentional — accountant prefers
+     * "we collected exactly N kopecks" over "rounding sometimes adds 0.01"
+     * because every rounding-up requires a corrective ФНС entry.
+     *
+     * <p>Package-private static so unit tests can hit it directly without
+     * Spring wiring. Returns a record with the three numbers; caller
+     * persists them into the entity.
+     */
+    static FeeSplit computeFeeSplit(long amount, int feeBps, short vatRatePct) {
+        if (amount <= 0 || feeBps <= 0) return new FeeSplit(0, 0, 0);
+        long gross = amount * feeBps / 10_000L;
+        long vat = gross * vatRatePct / (100L + vatRatePct);
+        long net = gross - vat;
+        return new FeeSplit(gross, vat, net);
+    }
+
+    record FeeSplit(long gross, long vat, long net) {}
 
     /**
      * Idempotent submit. Returns the final state after the deduct/credit
@@ -93,6 +140,9 @@ public class B2BSettlementService {
             return B2BSettlementResponse.from(existing.get());
         }
 
+        // Sprint 5 #5.12 — compute fee split before persisting.
+        FeeSplit split = computeFeeSplit(req.amount(), feeBps, vatRatePct);
+
         B2BSettlement pending = txTemplate.execute(status -> {
             B2BSettlement row = B2BSettlement.builder()
                     .fromUserId(initiator)
@@ -103,13 +153,17 @@ public class B2BSettlementService {
                     .status(B2BSettlementStatus.PENDING)
                     .notes(req.notes())
                     .requestedBy(initiator)
+                    .grossFeeAmount(split.gross())
+                    .vatAmount(split.vat())
+                    .netFeeAmount(split.net())
+                    .vatRatePct(vatRatePct)
                     .build();
             return repository.save(row);
         });
 
-        log.info("B2B settlement PENDING id={} reference={} from={} to={} token={} amount={}",
+        log.info("B2B settlement PENDING id={} reference={} from={} to={} token={} amount={} fee={}/НДС{}/net{}",
                 pending.getId(), req.reference(), initiator, req.counterpartyUserId(),
-                req.tokenId(), req.amount());
+                req.tokenId(), req.amount(), split.gross(), split.vat(), split.net());
 
         return execute(pending);
     }
