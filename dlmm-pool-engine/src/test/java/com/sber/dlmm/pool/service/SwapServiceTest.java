@@ -470,13 +470,18 @@ class SwapServiceTest {
         }
 
         /**
-         * Sprint 6 #3.2 — protocol-fee split accumulation. Default seed
-         * pool sets protocolFeePct=20 (Sprint 1 init-db). Verify that
-         * after a swap, totalProtocolFee gets fee×20% and totalFeesCollected
-         * gets the full gross. Pre-#3.2 the protocol slice was lost.
+         * Sprint 6 #3.2 — protocol-fee split accumulation. EXACT-AMOUNT
+         * assertions (Sprint 7 test-quality review hardened this from
+         * the original "≥0, ≤gross" for-the-badge bounds).
+         *
+         * <p>Math: baseFeeBps=30 (setUp default), VA=0 (no prior swap),
+         * actualAmountIn=10_000 (fits in single bin with ample liquidity).
+         * fee = 30 × 10000 / 10000 = 30.
+         * protocol = floor(30 × 5 / 100) = 1.
+         * LP = 30 - 1 = 29.
          */
         @Test
-        @DisplayName("protocol fee 5% split accumulates separately into totalProtocolFeeX/Y")
+        @DisplayName("protocol fee 5% split: 30 fee → 1 protocol + 29 LP (exact)")
         void protocolFeeSplitAccumulates() {
             pool.setProtocolFeePct(5);
             pool.setTotalFeesCollectedX(0L);
@@ -485,21 +490,51 @@ class SwapServiceTest {
             when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
             when(poolBinRepository.findByPoolIdAndBinId(POOL_ID, 0)).thenReturn(Optional.of(bin));
 
-            // Swap that produces a measurable fee — 10_000 in × 30 bps = 30 fee.
             SwapRequest req = new SwapRequest(POOL_ID, TOKEN_X_ID, 10_000, 0, "key-pfee-x");
             SwapResponse resp = swapService.swap(req, USER_ID);
 
-            assertNotNull(resp);
-            assertTrue(resp.feeAmount() > 0);
-            // Gross fee in totalFeesCollectedX
-            assertTrue(pool.getTotalFeesCollectedX() > 0,
-                    "gross fee must accumulate in totalFeesCollectedX (back-compat)");
-            // Protocol slice = floor(gross × 5 / 100). For 30 fee that's floor(1.5)=1.
-            // The exact value depends on fee calc but it MUST be ≥0 and ≤ gross.
-            assertTrue(pool.getTotalProtocolFeeX() >= 0,
-                    "protocol slice non-negative");
+            // Exact fee = baseFeeBps × amount / 10000 = 30 × 10000 / 10000 = 30
+            assertEquals(30L, resp.feeAmount(),
+                    "fee must equal baseFeeBps×amountIn/10000 = 30");
+            assertEquals(30L, pool.getTotalFeesCollectedX(),
+                    "gross fee must accumulate exactly (not just >0)");
+            // Exact protocol slice = floor(30 × 5 / 100) = 1
+            assertEquals(1L, pool.getTotalProtocolFeeX(),
+                    "protocol slice must equal floor(gross × pct / 100) = 1");
+            // Invariant: gross = protocol + LP-distributed (verified indirectly via bin.feeGrowth)
             assertTrue(pool.getTotalProtocolFeeX() <= pool.getTotalFeesCollectedX(),
-                    "protocol slice cannot exceed gross fee");
+                    "invariant: protocol slice ≤ gross");
+        }
+
+        /**
+         * Sprint 7 test-quality hardening — added explicit "no double-counting"
+         * check: two swaps with protocolFeePct=5 → totalProtocolFeeX grows by
+         * exactly 1 each time, not 2 (which would indicate accidental double
+         * accumulation in the fee accumulation path).
+         */
+        @Test
+        @DisplayName("protocol fee accumulates additively across swaps (no double-counting)")
+        void protocolFeeAdditive() {
+            pool.setProtocolFeePct(5);
+            pool.setTotalFeesCollectedX(0L);
+            pool.setTotalProtocolFeeX(0L);
+            PoolBin bin = createBin(0, 500_000, 500_000, 1_000_000);
+            when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
+            when(poolBinRepository.findByPoolIdAndBinId(POOL_ID, 0)).thenReturn(Optional.of(bin));
+
+            swapService.swap(new SwapRequest(POOL_ID, TOKEN_X_ID, 10_000, 0, "key-add-1"), USER_ID);
+            long afterFirst = pool.getTotalProtocolFeeX();
+            assertEquals(1L, afterFirst, "first swap: 1");
+
+            // Reset bin so second swap finds liquidity (mock returns the same bin object
+            // which mutated during first swap — re-stub with fresh state).
+            PoolBin freshBin = createBin(0, 500_000, 500_000, 1_000_000);
+            when(poolBinRepository.findByPoolIdAndBinId(POOL_ID, 0)).thenReturn(Optional.of(freshBin));
+
+            swapService.swap(new SwapRequest(POOL_ID, TOKEN_X_ID, 10_000, 0, "key-add-2"), USER_ID);
+            long afterSecond = pool.getTotalProtocolFeeX();
+            assertEquals(2L, afterSecond,
+                    "second swap: must be 1+1=2, not 1+2 (no double-counting) or 1 (no overwrite)");
         }
 
         /**
