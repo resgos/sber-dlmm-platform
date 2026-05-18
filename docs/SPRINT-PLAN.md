@@ -259,36 +259,91 @@ moved out of Sprint 6 (capacity over-flow) and the original Sprint 7
 money-market + index-funds backlog. Cross-functional MM/OTC contracts
 ripen during Sprint 6 so code lands ready-for-go in Sprint 7.
 
-### Code work — OTC + MM (moved from Sprint 6)
+> **Re-rebalanced 2026-06-17** post Sprint 6 acceptance — 3 carry-overs
+> (5.13 + 5.6-FE + 6.8 = 17d) + revenue T1 picks (~3d code) + UX Critical
+> block (~4-5d) overflow 30d capacity at +80%. OTC (6.1-6.2) + remaining
+> MM (6.6) + money market (7.1-7.2) + index funds (7.3-7.6) move into
+> Sprint 8/9. See `docs/SPRINT-7-KICKOFF.md` for full daily plan.
+
+### Code work — Sprint 7 actual (after second rebalance)
 
 | # | Task | Source | Owner | Effort |
 |---|---|---|---|---|
-| 6.1 | OTC desk admin workflow (manual RFQ entry, principal-side execution) | M#7 | Backend + Admin UI | 6d |
-| 6.2 | RFQ API (POST /api/v1/rfq, GET /api/v1/rfq/{id}) for VIP | M#7 | Backend | 4d |
-| 6.3 | MM rebate scheduler — daily top-10 LP, distributes 80% protocol fee | M#10 | Backend | 4d |
-| 6.4 | MM tier table (Bronze/Silver/Gold) + config rebate % | M#10 | Backend | 2d |
-| 6.5 | MM onboarding workflow + rebate report | M#10 | Backend + Admin UI | 4d |
-| 6.6 | API access paid tiers (Free/Pro/Enterprise rate-limit at gateway) | M#20 | SRE + Backend | 3d |
+| **5.13** | SBBOL OIDC handoff — stub-against-defaults (per SBBOL-INTEGRATION-DESIGN §2.3) | Sprint 6 carry | Backend | 8d |
+| **5.6-FE** | B2B portal frontend (D-01 mockups in hand) | Sprint 5/6 carry | Frontend | 4d |
+| **6.8** | ЕСИА (Госуслуги) OIDC — second provider on shared bus | Sprint 6 carry | Backend | 5-6d |
+| **6.3** | MM rebate scheduler (was Sprint 6 originally) | M#10 | Backend | 4d |
+| **6.4** | MM tier table (Bronze/Silver/Gold) | M#10 | Backend | 2d |
+| **6.5** | MM onboarding workflow + admin endpoints | M#10 | Backend + Admin UI | 4d |
+| **R-d** | B2B integration fee on KYB-approve | Revenue research | Backend | 2d |
+| **R-m** | NDS transparency badge | Revenue research | Frontend | 1d |
+| **UX Critical block** | UX-003 + UX-007 + UX-016 + UX-037 + UX-042 + UX-008 (7 items) | UX-REVIEW | Frontend (+ backend for UX-008) | 4-5d |
+| **R-UX-035** | SelfRestrictionPanel "Cancel set" undo | Sprint 6 BA | Frontend | 3h |
+| **R-UX-036** | PositionsPage `?highlight=` param consumption | Sprint 6 BA | Frontend | 1h |
+| **R-Pangolin-1** | Pangolin 1.5 BIGINT InvariantTest divergence | Sprint 6 SRE | SRE | 0.5d |
 
-### Code work — Money market + index funds (original Sprint 7)
+**Total Sprint 7: ~35 person-days vs 30 capacity = ~17% over.** Plan-B in
+kickoff §8: UX Critical block items are individually small (0.5-1d each),
+cut last 2 if needed.
 
-### Code work
+### Sprint 7 acceptance criteria
+
+See `docs/SPRINT-7-KICKOFF.md` §7 for full checklist.
+
+---
+
+## Sprint 8 — "OTC desk + money market + Public Data API"
+
+**Tentative theme** (firm scope at Sprint 7 close): institutional layer
+(OTC + RFQ) + tokenized money market launch (YSRUB) + Public Data API
+tiers (M-33) bundled with API access paid tiers (6.6).
+
+### Code work — initial backlog (~32 person-days, fits 30d if Sprint 7
+hits 25d+ realized)
 
 | # | Task | Source | Owner | Effort |
 |---|---|---|---|---|
-| 7.1 | **Tokenized money market fund** — new YSRUB token, daily yield distribution via outbox event | M#9 | Backend lead | 8d |
-| 7.2 | **Yield distribution engine** — accrue from idle treasury overnight deposit + spread | M#9 dep | Backend lead | 5d |
-| 7.3 | **Index basket token (SBER10 first)** — token represents 10% each of SBER, GAZP, LKOH, GMKN, ROSN, MGNT, YNDX, TATN, NLMK, VTBR | M#15 | Backend lead | 5d |
-| 7.4 | **Index rebalance scheduler** — daily check, rebalance when drift > 2% from target weights | M#15 dep | Backend lead | 4d |
-| 7.5 | **Index dashboard on user-ui** — show composition, NAV, performance vs MOEX | M#15 dep | Frontend | 4d |
-| 7.6 | **Reserve health for YSRUB** — daily attestation that backing assets cover circulating supply | M#9 dep | Backend + Compliance | 3d |
+| 6.1 | OTC desk admin workflow | M#7, Sprint 6→7→8 carry | Backend + Admin UI | 6d |
+| 6.2 | RFQ API for VIP clients | M#7 | Backend | 4d |
+| 6.6 | API access paid tiers at gateway | M#20 | SRE + Backend | 3d |
+| R-M-33 | Public Data API tiers (extension of 6.6) | Revenue research | Backend | 3d |
+| 7.1 | Tokenized money market fund (YSRUB) — daily yield outbox | M#9 | Backend | 8d |
+| 7.2 | Yield distribution engine (overnight + spread) | M#9 | Backend | 5d |
+| R-h | CBR spread alert subscription | Revenue research | Backend | 4d |
+| 7.6 | Reserve health for YSRUB (daily attestation) | M#9 | Backend + Compliance | 3d |
 
-### Sprint 7 acceptance
-
+**Sprint 8 acceptance criteria** (preview):
+- 1 OTC block trade settled (≥ 10M ₽ notional)
 - YSRUB mint/burn cycle works end-to-end with daily yield credited
+- API access tiers (Free/Pro/Enterprise) live at gateway
+- CBR spread subscription has first paying user (or test-mode)
+
+---
+
+## Sprint 9 — "Index funds + 152-ФЗ audit start + Spasibo write-back"
+
+**Tentative theme**: retail-side index basket + start of compliance
+battery cascade + Spasibo write-back implementation (gated on 7.A
+contract).
+
+### Code work — initial backlog (~28 person-days)
+
+| # | Task | Source | Owner | Effort |
+|---|---|---|---|---|
+| 7.3 | Index basket token (SBER10) | M#15 | Backend | 5d |
+| 7.4 | Index rebalance scheduler (drift > 2%) | M#15 | Backend | 4d |
+| 7.5 | Index dashboard on user-ui | M#15 | Frontend | 4d |
+| Spasibo write-back impl | Per #6.16 design, Sprint 8 contract dep | Backend | 8d |
+| 7.X | 152-ФЗ ПДн audit + encryption-at-rest verification | RU-R1 | Backend + Compliance | 5d |
+| UX Major block first half | UX-REVIEW Sprint 8 row | Frontend | 4-5d |
+
+**Sprint 9 acceptance criteria** (preview):
 - SBER10 basket token tradeable in dedicated pool
 - Daily rebalance produces correct allocations
-- Reserve attestation surfaces on public status page
+- 152-ФЗ audit checklist 80% green
+- Spasibo write-back first real cashback credited
+
+---
 
 ---
 
