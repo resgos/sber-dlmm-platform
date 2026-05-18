@@ -183,3 +183,49 @@ as the "ceiling we currently can't break", not the floor we ship at.
   feeds in Sprint 4.
 * Soak (8 h+) tests — current run tops out at minutes. Memory leak detection
   is on the Sprint 3 list.
+
+
+---
+
+## Sprint 5 #5.F — single-pool re-baseline (post Sprint 4 #4.7 optimistic lock)
+
+**Goal:** verify that the @Version optimistic-lock + bounded retry loop
+shipped in Sprint 4 #4.7 actually delivers linear scaling under same-pool
+contention. Pre-fix observed in Sprint 2 #2.7 baseline: ~33% swap_errors
+on a single-pool hammer because of `liquidity_pools` row-lock
+serialisation. Post-fix expected: retry counter increments visibly in
+pool-engine logs but throughput stays close to linear with VU count.
+
+### Run
+
+```bash
+# Stack must include #4.7 (commit 7ae2252 or newer)
+docker run --rm -i --network=host -v $(pwd)/loadtest:/scripts     grafana/k6 run -e VUS=50 -e DURATION=120s     /scripts/single-pool-lock.js
+```
+
+### Acceptance thresholds (Sprint 4 carry-over into Sprint 5)
+
+| Metric | Threshold | Rationale |
+|---|---|---|
+| `swap_errors` rate | < 5% on single pool | down from ~33% pre-#4.7 |
+| `swap_5xx` rate | < 1% | server-side failures should be rare |
+| `swap_latency` p99 | < 1500 ms | retry adds 50-100ms p99; loose to allow infra noise |
+| Pool-engine logs | `OptimisticLockingFailureException` retries visible but bounded (< MAX_SWAP_ATTEMPTS=5) | proves the retry loop is exercised AND bounded |
+
+### Expected results (record here when run lands)
+
+> Last run: **PENDING — run by SRE on shared staging stack.**
+> Expected from local smoke (10 VUs / 30s on dev laptop): swap_errors < 2%,
+> p99 ~600ms, retry rate ~15% of swap calls (one retry per ~6 swaps).
+
+### Sprint 5 close gate
+
+Sign-off requires:
+- [ ] Run completed on staging, results pasted above
+- [ ] `swap_errors` rate confirmed < 5%
+- [ ] Retry-loop logs sample attached to commit
+- [ ] If any threshold violated → R#28 ("retry-loop tail latency") promoted
+      to Sprint 6 backlog with proposed mitigation
+
+After acceptance, deletes "single-pool row lock" from RISK-REGISTER as
+closed (Sprint 4 #4.7 + this verification close the loop).

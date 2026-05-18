@@ -375,6 +375,22 @@ services:
     networks:
       - dlmm-network
 
+  # Sprint 5 #5.8 — public status page mirroring /actuator/health across
+  # all backend services. Pure HTML + vanilla JS in a vanilla nginx
+  # container — no build step, no supply-chain risk. Production behind
+  # status.dlmm.sber-online.ru via reverse-proxy.
+  dlmm-status-page:
+    image: nginx:1.25-alpine
+    container_name: dlmm-status-page
+    ports:
+      - "8090:80"
+    volumes:
+      - ./status-page/index.html:/usr/share/nginx/html/index.html:ro
+    depends_on:
+      - dlmm-gateway
+    networks:
+      - dlmm-network
+
   # Prometheus scrapes /actuator/prometheus on every Spring Boot service.
   # Config in ./prometheus/prometheus.yml. Storage stays in a named volume
   # so metrics survive container restarts.

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sber DLMM — Статус платформы</title>
+  <!--
+    Sprint 5 #5.8 — public status page mirroring /actuator/health of
+    every backend service. Polls every 30s through the gateway. Pure
+    HTML + vanilla JS so it survives any frontend build outage and
+    has zero supply-chain risk (no CDN, no npm deps).
+
+    Production deployment: behind status.dlmm.sber-online.ru with a
+    read-only proxy that strips /actuator/health response details
+    (component-level breakdown is internal-only). Dev: serves the full
+    response so we can see why a component is DOWN.
+  -->
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #F3F4F6;
+      color: #1F2937;
+      margin: 0;
+      padding: 32px 24px;
+      max-width: 880px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #21A038;
+      box-shadow: 0 0 0 4px rgba(33, 160, 56, 0.2);
+    }
+    .subtitle { color: #6B7280; font-size: 14px; margin-bottom: 24px; }
+    .overall {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      color: white;
+    }
+    .overall.up    { background: linear-gradient(135deg, #21A038, #00C853); }
+    .overall.down  { background: linear-gradient(135deg, #DC2626, #EF4444); }
+    .overall.partial { background: linear-gradient(135deg, #F59E0B, #FB923C); }
+    .overall-status { font-size: 20px; font-weight: 700; }
+    .overall-meta   { font-size: 13px; opacity: 0.85; }
+    .grid { display: grid; gap: 12px; }
+    .card {
+      background: white;
+      border: 1px solid #E5E7EB;
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+    .svc-name { font-weight: 600; font-size: 15px; }
+    .svc-url  { font-size: 12px; color: #6B7280; }
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 999px;
+    }
+    .status .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .status.up      { background: #ECFDF5; color: #047857; }
+    .status.up .dot { background: #21A038; }
+    .status.down    { background: #FEF2F2; color: #B91C1C; }
+    .status.down .dot { background: #DC2626; }
+    .status.checking { background: #F3F4F6; color: #6B7280; }
+    .status.checking .dot { background: #9CA3AF; }
+    .footer {
+      margin-top: 32px;
+      font-size: 12px;
+      color: #9CA3AF;
+      text-align: center;
+    }
+    .footer a { color: var(--sber-green); }
+  </style>
+</head>
+<body>
+  <h1><span class="logo-dot"></span>Sber DLMM — Статус платформы</h1>
+  <div class="subtitle">
+    Public status mirror of <code>/actuator/health</code> across all 9 backend services.
+    Обновляется каждые 30 секунд.
+  </div>
+
+  <div id="overall" class="overall checking">
+    <div>
+      <div class="overall-status" id="overall-status">Проверка…</div>
+      <div class="overall-meta" id="overall-meta">Последнее обновление: —</div>
+    </div>
+    <div style="font-size: 36px; opacity: 0.5;">⊙</div>
+  </div>
+
+  <div class="grid" id="services"></div>
+
+  <div class="footer">
+    Status mirror powered by /actuator/health · refresh every 30s · no cookies, no tracking
+  </div>
+
+  <script>
+    /*
+     * List of services to ping. URLs are gateway-routed so the page works
+     * the same in dev (localhost:8080) and prod (gateway behind status TLS).
+     *
+     * In production /actuator/health is admin-locked — the proxy in front
+     * of status.dlmm.sber-online.ru exposes only the top-level status
+     * (UP/DOWN/OUT_OF_SERVICE) and strips component details. Dev passes through.
+     */
+    const SERVICES = [
+      { name: 'Gateway',              path: '/actuator/health' },
+      { name: 'User Service',         path: '/api/v1/users/actuator/health' },
+      { name: 'Token Service',        path: '/api/v1/tokens/actuator/health' },
+      { name: 'Pool Engine',          path: '/api/v1/pools/actuator/health' },
+      { name: 'Fee Service',          path: '/api/v1/fees/actuator/health' },
+      { name: 'Transaction Service',  path: '/api/v1/transactions/actuator/health' },
+      { name: 'Price Oracle',         path: '/api/v1/oracle/actuator/health' },
+      { name: 'Notification Service', path: '/api/v1/notifications/actuator/health' },
+      { name: 'Admin BFF',            path: '/api/v1/admin/actuator/health' },
+    ];
+
+    const BASE = window.STATUS_BASE_URL || '';  // empty = same-origin
+
+    function renderInitial() {
+      const grid = document.getElementById('services');
+      grid.innerHTML = SERVICES.map((s, i) => `
+        <div class="card" id="svc-${i}">
+          <div>
+            <div class="svc-name">${s.name}</div>
+            <div class="svc-url">${s.path}</div>
+          </div>
+          <div class="status checking"><span class="dot"></span>Проверка…</div>
+        </div>
+      `).join('');
+    }
+
+    async function checkOne(idx, svc) {
+      const card = document.getElementById(`svc-${idx}`);
+      const statusEl = card.querySelector('.status');
+      try {
+        const resp = await fetch(BASE + svc.path, { cache: 'no-store' });
+        const body = await resp.json().catch(() => ({}));
+        const isUp = resp.ok && body.status === 'UP';
+        statusEl.className = 'status ' + (isUp ? 'up' : 'down');
+        statusEl.innerHTML = `<span class="dot"></span>${isUp ? 'UP' : (body.status || 'DOWN')}`;
+        return isUp;
+      } catch (e) {
+        statusEl.className = 'status down';
+        statusEl.innerHTML = `<span class="dot"></span>UNREACHABLE`;
+        return false;
+      }
+    }
+
+    async function refreshAll() {
+      const results = await Promise.all(SERVICES.map((s, i) => checkOne(i, s)));
+      const upCount = results.filter(Boolean).length;
+      const total = results.length;
+      const overall = document.getElementById('overall');
+      const statusText = document.getElementById('overall-status');
+      const metaText = document.getElementById('overall-meta');
+
+      if (upCount === total) {
+        overall.className = 'overall up';
+        statusText.textContent = 'Все сервисы доступны';
+      } else if (upCount === 0) {
+        overall.className = 'overall down';
+        statusText.textContent = 'Все сервисы недоступны';
+      } else {
+        overall.className = 'overall partial';
+        statusText.textContent = `Частичный отказ — ${upCount} из ${total} работают`;
+      }
+      metaText.textContent = `Последнее обновление: ${new Date().toLocaleTimeString('ru-RU')}`;
+    }
+
+    renderInitial();
+    refreshAll();
+    setInterval(refreshAll, 30_000);
+  </script>
+</body>
+</html>
