@@ -225,6 +225,30 @@ public class PoolService {
     }
 
     /**
+     * Sprint 6 #3.1 — admin sets per-pool protocol fee percent.
+     *
+     * <p>Range 0-5 enforced by DTO validation per Sprint 5 #5.G legal memo
+     * verdict ("≤5% stays within internal-clearing reg-frame"). At 0%
+     * the pool runs in pure-LP mode (Sprint 1-2 behaviour pre-#3.2).
+     * At 5% one in twenty units of each fee accrues to the protocol
+     * treasury via {@code totalProtocolFeeX/Y} accumulators.
+     */
+    @Transactional
+    public PoolResponse updateProtocolFeePct(UUID poolId, int protocolFeePct) {
+        if (protocolFeePct < 0 || protocolFeePct > 5) {
+            throw new IllegalArgumentException(
+                    "protocolFeePct must be in [0..5] per 3.A legal memo, got " + protocolFeePct);
+        }
+        LiquidityPool pool = poolRepository.findById(poolId)
+                .orElseThrow(() -> new PoolNotFoundException("Pool not found: " + poolId));
+        int previous = pool.getProtocolFeePct();
+        pool.setProtocolFeePct(protocolFeePct);
+        poolRepository.save(pool);
+        log.info("Pool protocol fee updated: pool={} {}%→{}%", poolId, previous, protocolFeePct);
+        return toPoolResponse(pool, null, null);
+    }
+
+    /**
      * Sprint 4 #4.2 — admin sets per-pool single-swap counterparty caps.
      *
      * Either field may be null. Null = "no cap" (full pre-Sprint-4 behaviour).

@@ -13,5 +13,6 @@
     <include file="006-add-version-to-liquidity-pools.xml" relativeToChangelogFile="true"/>
     <include file="007-add-counterparty-limits-to-pools.xml" relativeToChangelogFile="true"/>
     <include file="008-create-margin-call-events-table.xml" relativeToChangelogFile="true"/>
+    <include file="009-add-protocol-fee-accumulators.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

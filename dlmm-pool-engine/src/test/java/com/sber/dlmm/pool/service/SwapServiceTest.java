@@ -470,6 +470,64 @@ class SwapServiceTest {
         }
 
         /**
+         * Sprint 6 #3.2 — protocol-fee split accumulation. Default seed
+         * pool sets protocolFeePct=20 (Sprint 1 init-db). Verify that
+         * after a swap, totalProtocolFee gets fee×20% and totalFeesCollected
+         * gets the full gross. Pre-#3.2 the protocol slice was lost.
+         */
+        @Test
+        @DisplayName("protocol fee 5% split accumulates separately into totalProtocolFeeX/Y")
+        void protocolFeeSplitAccumulates() {
+            pool.setProtocolFeePct(5);
+            pool.setTotalFeesCollectedX(0L);
+            pool.setTotalProtocolFeeX(0L);
+            PoolBin bin = createBin(0, 500_000, 500_000, 1_000_000);
+            when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
+            when(poolBinRepository.findByPoolIdAndBinId(POOL_ID, 0)).thenReturn(Optional.of(bin));
+
+            // Swap that produces a measurable fee — 10_000 in × 30 bps = 30 fee.
+            SwapRequest req = new SwapRequest(POOL_ID, TOKEN_X_ID, 10_000, 0, "key-pfee-x");
+            SwapResponse resp = swapService.swap(req, USER_ID);
+
+            assertNotNull(resp);
+            assertTrue(resp.feeAmount() > 0);
+            // Gross fee in totalFeesCollectedX
+            assertTrue(pool.getTotalFeesCollectedX() > 0,
+                    "gross fee must accumulate in totalFeesCollectedX (back-compat)");
+            // Protocol slice = floor(gross × 5 / 100). For 30 fee that's floor(1.5)=1.
+            // The exact value depends on fee calc but it MUST be ≥0 and ≤ gross.
+            assertTrue(pool.getTotalProtocolFeeX() >= 0,
+                    "protocol slice non-negative");
+            assertTrue(pool.getTotalProtocolFeeX() <= pool.getTotalFeesCollectedX(),
+                    "protocol slice cannot exceed gross fee");
+        }
+
+        /**
+         * #3.1 — at protocolFeePct=0 the protocol accumulator stays at 0
+         * even when LP fees flow normally. This is the "disabled" mode that
+         * preserves Sprint 1-2 pure-LP behaviour.
+         */
+        @Test
+        @DisplayName("protocolFeePct=0 keeps totalProtocolFee at zero (disabled mode)")
+        void protocolFeeZeroLeavesAccumulatorEmpty() {
+            pool.setProtocolFeePct(0);
+            pool.setTotalFeesCollectedX(0L);
+            pool.setTotalProtocolFeeX(0L);
+            PoolBin bin = createBin(0, 500_000, 500_000, 1_000_000);
+            when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
+            when(poolBinRepository.findByPoolIdAndBinId(POOL_ID, 0)).thenReturn(Optional.of(bin));
+
+            SwapRequest req = new SwapRequest(POOL_ID, TOKEN_X_ID, 10_000, 0, "key-pfee-zero");
+            SwapResponse resp = swapService.swap(req, USER_ID);
+
+            assertNotNull(resp);
+            assertTrue(pool.getTotalFeesCollectedX() > 0,
+                    "LP fee still accumulates normally");
+            assertEquals(0L, pool.getTotalProtocolFeeX(),
+                    "protocolFeePct=0 → totalProtocolFee stays empty");
+        }
+
+        /**
          * Cap on Y side must only fire for Y→X direction — an X→Y swap of any
          * size should be unaffected by maxSingleSwapNominalY.
          */

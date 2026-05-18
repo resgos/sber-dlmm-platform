@@ -79,6 +79,19 @@ public class LiquidityPool {
     private long totalFeesCollectedY;
 
     /**
+     * Sprint 6 #3.2 — protocol-side fee accumulator (separate from
+     * {@code totalFeesCollectedX/Y} which conflated LP + protocol pre-#3.2).
+     * Populated each swap with {@code fee × protocolFeePct / 100}.
+     * Protocol treasury sweep job (Sprint 7+) drains this into the
+     * treasury account.
+     */
+    @Column(name = "total_protocol_fee_x", nullable = false)
+    private long totalProtocolFeeX;
+
+    @Column(name = "total_protocol_fee_y", nullable = false)
+    private long totalProtocolFeeY;
+
+    /**
      * Sprint 4 #4.2 — per-pool counterparty limits.
      * Maximum amount_in for a single swap on the X-side (NULL = no cap).
      * Admin sets per pool based on liquidity depth + risk appetite.

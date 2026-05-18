@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 6 #3.2 — separate protocol-fee accumulation from LP-fee.
+
+        Sprint 1 init-db.sql already shipped `protocol_fee_pct` column on
+        liquidity_pools with default 20 (= 20% of fee goes to protocol).
+        Sprint 1 SwapService.java already computes
+            protocolFee = fee × protocolFeePct / 100
+            lpFee = fee - protocolFee
+        and routes lpFee into bin.feeGrowthX/Y (LP distribution path).
+        BUT it does NOT separately track protocolFee — instead the WHOLE
+        fee (LP + protocol) gets added to total_fees_collected_x/y, which
+        conflates the two for reporting.
+
+        Sprint 3 #3.1 + #3.2 were blocked since 3.A legal memo not
+        returned. Sprint 5 #5.G chase landed memo with verdict:
+        "protocol_fee_pct >0 stays within internal-clearing reg-frame
+        ≤5%; >5% requires broker-dealer reg re-evaluation".
+
+        This changeset adds the dedicated accumulators so the protocol
+        treasury sweep (Sprint 7+) has an unambiguous source.
+
+        Default 0 + NOT NULL so existing pools start fresh; the legal
+        memo cap is enforced in service-layer validation, not DB.
+    -->
+    <changeSet id="009-add-protocol-fee-accumulators" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <tableExists tableName="liquidity_pools"/>
+                <not><columnExists tableName="liquidity_pools" columnName="total_protocol_fee_x"/></not>
+            </and>
+        </preConditions>
+
+        <addColumn tableName="liquidity_pools">
+            <column name="total_protocol_fee_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_protocol_fee_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

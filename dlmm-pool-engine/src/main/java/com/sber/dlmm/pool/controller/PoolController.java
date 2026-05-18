@@ -18,6 +18,7 @@ import com.sber.dlmm.pool.dto.SwapResponse;
 import com.sber.dlmm.pool.dto.CreatePoolRequest;
 import com.sber.dlmm.pool.dto.UpdateCounterpartyLimitsRequest;
 import com.sber.dlmm.pool.dto.UpdateFeeParamsRequest;
+import com.sber.dlmm.pool.dto.UpdateProtocolFeeRequest;
 import com.sber.dlmm.pool.service.LiquidityService;
 import com.sber.dlmm.pool.service.PoolService;
 import com.sber.dlmm.pool.service.SwapService;
@@ -119,6 +120,23 @@ public class PoolController {
         requireAdmin(getCurrentUser());
         return ResponseEntity.ok(poolService.updateFeeParams(id,
                 request.baseFeeBps(), request.maxVariableFeeBps(), request.decayPeriodSeconds()));
+    }
+
+    /**
+     * Sprint 6 #3.1 — admin tunes per-pool protocol fee share.
+     *
+     * <p>Range 0-5 percent (Sprint 5 #5.G legal memo verdict).
+     * Toggle to activate revenue accumulation on a pool (default 0
+     * means pure-LP). Existing accumulators ({@code totalProtocolFeeX/Y})
+     * grow on each subsequent swap; doesn't retro-charge past swaps.
+     */
+    @PutMapping("/{id}/protocol-fee-pct")
+    @Operation(summary = "Update pool protocol fee % (0-5, ADMIN only)")
+    public ResponseEntity<PoolResponse> updateProtocolFeePct(
+            @PathVariable UUID id,
+            @Valid @RequestBody UpdateProtocolFeeRequest request) {
+        requireAdmin(getCurrentUser());
+        return ResponseEntity.ok(poolService.updateProtocolFeePct(id, request.protocolFeePct()));
     }
 
     /**

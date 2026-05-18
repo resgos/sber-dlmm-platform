@@ -362,11 +362,20 @@ public class SwapService {
 
             poolBinRepository.save(bin);
 
-            // Accumulate pool-level fee stats
+            // Accumulate pool-level fee stats.
+            // Sprint 6 #3.2 — protocol-side split. Pre-#3.2 the WHOLE fee
+            // was lumped into totalFeesCollected — conflating LP and protocol
+            // for reporting. Now we accumulate the protocol slice separately
+            // so the treasury sweep (Sprint 7+) has an unambiguous source.
+            // Note: totalFeesCollected still tracks GROSS fee (LP + protocol)
+            // so existing dashboards keep their meaning; protocol slice is
+            // additive metadata.
             if (swapXtoY) {
                 pool.setTotalFeesCollectedX(pool.getTotalFeesCollectedX() + fee);
+                pool.setTotalProtocolFeeX(pool.getTotalProtocolFeeX() + protocolFee);
             } else {
                 pool.setTotalFeesCollectedY(pool.getTotalFeesCollectedY() + fee);
+                pool.setTotalProtocolFeeY(pool.getTotalProtocolFeeY() + protocolFee);
             }
 
             totalAmountOut += amountOut;
