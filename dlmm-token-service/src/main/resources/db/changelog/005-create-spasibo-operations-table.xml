@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 5 #5.3 + #5.4 — idempotency + audit log for SberSpasibo
+        operations. Both the webhook (SberSpasibo BU → DLMM mint SSPAS)
+        and the user-initiated conversion (SSPAS → SRUB) anchor on
+        `reference` for deterministic dedup. Same reference replay
+        returns the existing row without re-executing the balance move.
+    -->
+    <changeSet id="005-create-spasibo-operations-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="spasibo_operations"/></not>
+        </preConditions>
+        <createTable tableName="spasibo_operations">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="op_type" type="VARCHAR(20)">
+                <!-- MINT (from webhook) or CONVERT (user → RUB) -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="points" type="BIGINT">
+                <!-- For MINT: SSPAS units credited; for CONVERT: SSPAS units burned -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="rub_amount" type="BIGINT">
+                <!-- Populated only for CONVERT: SRUB credited at conversion-rate -->
+            </column>
+            <column name="reference" type="VARCHAR(128)">
+                <!-- Idempotency anchor. For MINT: usually `spasibo-{external-event-id}`.
+                     For CONVERT: client-generated UUID or `convert-{uuid}`. -->
+                <constraints unique="true" nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)" defaultValue="COMPLETED">
+                <constraints nullable="false"/>
+            </column>
+            <column name="error_message" type="TEXT"/>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_spasibo_operations_user" tableName="spasibo_operations">
+            <column name="user_id"/>
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

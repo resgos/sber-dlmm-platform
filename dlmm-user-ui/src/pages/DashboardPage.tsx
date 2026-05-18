@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { balances, pools, fees, transactions, oracle } from '@/api/services'
 import StatCard, { formatRub } from '@/components/StatCard'
+import SpasiboWidget from '@/components/SpasiboWidget'
 import type { TokenBalance, Position, Transaction, TokenPrice } from '@/api/types'
 import dayjs from 'dayjs'
 
@@ -122,6 +123,15 @@ export default function DashboardPage() {
         <Col xs={24} sm={12} lg={6}>
           <StatCard title="Всего заработано" value={feeSummary?.totalClaimed ?? 0} icon={<TrophyOutlined />}
             iconBg="#E8F5E9" iconColor="#21A038" formatter={formatRub} />
+        </Col>
+      </Row>
+
+      {/* Sprint 5 #5.5 — SberSpasibo conversion widget. Promo card */}
+      {/* placement so the loyalty path is the first thing the user sees */}
+      {/* after the stat tiles. */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} md={10} lg={8}>
+          <SpasiboWidget />
         </Col>
       </Row>
 

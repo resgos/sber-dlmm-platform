@@ -21,6 +21,7 @@ services:
       - ./init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql
       - ./02-extended-assets.sql:/docker-entrypoint-initdb.d/02-extended-assets.sql
       - ./03-seed-trading-history.sql:/docker-entrypoint-initdb.d/03-seed-trading-history.sql
+      - ./04-spasibo-seed.sql:/docker-entrypoint-initdb.d/04-spasibo-seed.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dlmm -d dlmm"]
       interval: 10s
