@@ -85,6 +85,19 @@
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
 
+        <!-- Sprint 8 C-10 (R#33) — circuit breaker + retry + timeout on the
+             outbound TokenServiceClient call. Without it, a slow or down
+             token-service cascades into B2B settlement timeouts. -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+        </dependency>
+        <!-- spring-boot-starter-aop is required by Resilience4j annotation processing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

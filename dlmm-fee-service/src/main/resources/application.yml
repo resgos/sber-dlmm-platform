@@ -52,3 +52,33 @@ management:
       show-details: always
       probes:
         enabled: true
+
+# Sprint 8 C-10 (R#33) — circuit breaker + retry for outbound credit calls
+# to token-service from TokenServiceClient. Mirrors pool-engine reference
+# tuning so the same alert rules/dashboards apply across services.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 20
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      token-service:
+        base-config: default
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 200ms
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.reactive.function.client.WebClientRequestException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+    instances:
+      token-service:
+        base-config: default

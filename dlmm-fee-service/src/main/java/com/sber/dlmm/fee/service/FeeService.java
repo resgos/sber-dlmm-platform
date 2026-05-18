@@ -7,6 +7,7 @@ import com.sber.dlmm.fee.dto.ClaimFeesResponse;
 import com.sber.dlmm.fee.dto.FeeAccrualDto;
 import com.sber.dlmm.fee.dto.FeesSummaryResponse;
 import com.sber.dlmm.fee.dto.PoolFeeSummary;
+import com.sber.dlmm.fee.client.TokenServiceClient;
 import com.sber.dlmm.fee.entity.FeeAccrual;
 import com.sber.dlmm.fee.event.FeeClaimedEvent;
 import com.sber.dlmm.fee.repository.FeeAccrualRepository;
@@ -18,7 +19,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -41,7 +41,10 @@ public class FeeService {
 
     private final FeeAccrualRepository feeAccrualRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final WebClient tokenServiceClient;
+    // Sprint 8 C-10 — was an inline WebClient; extracted to TokenServiceClient
+    // so @CircuitBreaker + @Retry can be applied (AOP needs a public method on
+    // a separate bean — same-class private calls aren't intercepted).
+    private final TokenServiceClient tokenServiceClient;
 
     private final Set<String> processedIdempotencyKeys = ConcurrentHashMap.newKeySet();
 
@@ -135,9 +138,9 @@ public class FeeService {
 
         UUID poolId = unclaimedAccruals.get(0).getPoolId();
 
-        creditUserBalance(userId, tokenXId, claimedX);
+        tokenServiceClient.credit(userId, tokenXId, claimedX);
         if (tokenYId != null && claimedY > 0) {
-            creditUserBalance(userId, tokenYId, claimedY);
+            tokenServiceClient.credit(userId, tokenYId, claimedY);
         }
 
         FeeClaimedEvent event = new FeeClaimedEvent(
@@ -195,28 +198,4 @@ public class FeeService {
         );
     }
 
-    private void creditUserBalance(UUID userId, UUID tokenId, long amount) {
-        if (tokenId == null || amount <= 0) {
-            return;
-        }
-
-        try {
-            Map<String, Object> creditRequest = new HashMap<>();
-            creditRequest.put("userId", userId.toString());
-            creditRequest.put("tokenId", tokenId.toString());
-            creditRequest.put("amount", amount);
-
-            tokenServiceClient.post()
-                    .uri("/api/v1/internal/credit")
-                    .bodyValue(creditRequest)
-                    .retrieve()
-                    .toBodilessEntity()
-                    .block();
-
-            log.info("Credited {} of token {} to user {}", amount, tokenId, userId);
-        } catch (Exception e) {
-            log.error("Failed to credit user balance: userId={}, tokenId={}, amount={}", userId, tokenId, amount, e);
-            throw new RuntimeException("Failed to credit user balance via token-service", e);
-        }
-    }
 }

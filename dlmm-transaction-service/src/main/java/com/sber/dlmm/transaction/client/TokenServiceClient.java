@@ -1,6 +1,8 @@
 package com.sber.dlmm.transaction.client;
 
 import com.sber.dlmm.common.exception.InsufficientBalanceException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,14 +37,18 @@ import java.util.UUID;
  * for WebClient, just inline because the WebClient variant doesn't apply
  * to RestTemplate.
  *
- * <p>Not wrapping in Resilience4j yet — token-service uptime is fine in
- * dev/staging and adding it requires a yaml block per service. Promotion
- * is Sprint 5+ work once we have B2B traffic to tune the breaker against.
+ * <p>Sprint 8 #C-10: wrapped in Resilience4j (circuit breaker + retry).
+ * Tuning lives in application.yml under {@code resilience4j.*.instances.token-service},
+ * mirroring the pool-engine reference. Note: timelimiter is NOT applied —
+ * RestTemplate already enforces a 5s read timeout via the builder above,
+ * and resilience4j-timelimiter requires CompletableFuture return types
+ * which this synchronous client doesn't use.
  */
 @Component
 public class TokenServiceClient {
 
     private static final Logger log = LoggerFactory.getLogger(TokenServiceClient.class);
+    private static final String CB_NAME = "token-service";
 
     private final RestTemplate restTemplate;
     private final String tokenServiceUrl;
@@ -64,6 +70,8 @@ public class TokenServiceClient {
      *         (we treat all 4xx on this endpoint as caller-side; the only
      *         expected 4xx is insufficient balance).
      */
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "deductFallback")
+    @Retry(name = CB_NAME)
     public void deduct(UUID userId, UUID tokenId, long amount) {
         InternalBalanceRequest body = new InternalBalanceRequest(userId, tokenId, amount);
         try {
@@ -88,12 +96,41 @@ public class TokenServiceClient {
      * mark the settlement FAILED with a loud diagnostic so an operator
      * can reconcile manually. Saga / compensating-action design is Sprint 5+.
      */
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "creditFallback")
+    @Retry(name = CB_NAME)
     public void credit(UUID userId, UUID tokenId, long amount) {
         InternalBalanceRequest body = new InternalBalanceRequest(userId, tokenId, amount);
         restTemplate.exchange(tokenServiceUrl + "/api/v1/tokens/internal/credit",
                 HttpMethod.POST,
                 new HttpEntity<>(body, jsonHeaders()),
                 Void.class);
+    }
+
+    /**
+     * Fallback for {@link #deduct(UUID, UUID, long)} — when token-service is
+     * circuit-OPEN or all retries exhausted. Re-throws the underlying business
+     * exception (insufficient balance) so callers see the correct error;
+     * wraps unknown errors as IllegalStateException so the surrounding
+     * B2B settlement transaction rolls back instead of silently passing.
+     */
+    @SuppressWarnings("unused")
+    private void deductFallback(UUID userId, UUID tokenId, long amount, Throwable ex) {
+        if (ex instanceof InsufficientBalanceException ibe) throw ibe;
+        log.error("Token-service circuit OPEN or call failed on deduct user={} token={} amount={}: {}",
+                userId, tokenId, amount, ex.toString());
+        throw new IllegalStateException("Token service unavailable for deduct: " + ex.getMessage(), ex);
+    }
+
+    /**
+     * Fallback for {@link #credit(UUID, UUID, long)}. Same pattern; credit
+     * failure is the more dangerous case (already deducted, can't credit) so
+     * the loud log entry is doubly important — an operator must reconcile.
+     */
+    @SuppressWarnings("unused")
+    private void creditFallback(UUID userId, UUID tokenId, long amount, Throwable ex) {
+        log.error("Token-service circuit OPEN or call failed on CREDIT user={} token={} amount={}: {} — "
+                + "MANUAL RECONCILIATION required if a prior deduct succeeded", userId, tokenId, amount, ex.toString());
+        throw new IllegalStateException("Token service unavailable for credit: " + ex.getMessage(), ex);
     }
 
     private static HttpHeaders jsonHeaders() {
