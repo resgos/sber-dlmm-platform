@@ -24,6 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Verifies the contract of the consolidated servlet JWT filter:
@@ -112,6 +113,82 @@ class JwtAuthenticationFilterTest {
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verify(chain).doFilter(request, response);
+    }
+
+    @Test
+    void revokedJti_isRejected_butChainContinues() throws Exception {
+        // Sprint 8 AU-3 — revoked tokens must not authenticate.
+        UUID userId = UUID.randomUUID();
+        String jti = UUID.randomUUID().toString();
+        String token = Jwts.builder()
+                .id(jti)
+                .subject(userId.toString())
+                .claim("role", "USER")
+                .claim("kycStatus", "VERIFIED")
+                .issuedAt(new Date())
+                .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(30))))
+                .signWith(KEY)
+                .compact();
+
+        JwtRevocationService revocation = mock(JwtRevocationService.class);
+        when(revocation.isRevoked(jti)).thenReturn(true);
+        JwtAuthenticationFilter revocationAwareFilter =
+                new JwtAuthenticationFilter(new JwtTokenProvider(SECRET), revocation);
+
+        MockHttpServletRequest request = bearer(token);
+        revocationAwareFilter.doFilter(request, response, chain);
+
+        // Auth must NOT be populated — token was on the denylist.
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(chain).doFilter(request, response);
+        verify(revocation).isRevoked(jti);
+    }
+
+    @Test
+    void nonRevokedJti_isAccepted() throws Exception {
+        // Counterpoint to the above — same setup but isRevoked returns false.
+        UUID userId = UUID.randomUUID();
+        String jti = UUID.randomUUID().toString();
+        String token = Jwts.builder()
+                .id(jti)
+                .subject(userId.toString())
+                .claim("role", "USER")
+                .claim("kycStatus", "VERIFIED")
+                .issuedAt(new Date())
+                .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(30))))
+                .signWith(KEY)
+                .compact();
+
+        JwtRevocationService revocation = mock(JwtRevocationService.class);
+        when(revocation.isRevoked(jti)).thenReturn(false);
+        JwtAuthenticationFilter revocationAwareFilter =
+                new JwtAuthenticationFilter(new JwtTokenProvider(SECRET), revocation);
+
+        MockHttpServletRequest request = bearer(token);
+        revocationAwareFilter.doFilter(request, response, chain);
+
+        // Auth populated — revocation service was consulted and returned false.
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal())
+                .isEqualTo(userId.toString());
+        verify(revocation).isRevoked(jti);
+    }
+
+    @Test
+    void legacyTokenWithoutJti_isAccepted_andRevocationCheckedWithNull() throws Exception {
+        // Tokens minted before Sprint 8 AU-3 don't carry jti. They must keep
+        // working until expiry — NoopJwtRevocationService.isRevoked(null) is false.
+        UUID userId = UUID.randomUUID();
+        // Note: NO .id(...) — legacy shape.
+        String token = accessToken(userId, "USER", "VERIFIED");
+
+        MockHttpServletRequest request = bearer(token);
+        filter.doFilter(request, response, chain);  // default ctor → Noop revocation
+
+        // Legacy token still authenticates.
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal())
+                .isEqualTo(userId.toString());
     }
 
     @Test

@@ -14,6 +14,7 @@ import {
   MenuUnfoldOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
+import { auth } from '@/api/services'
 import NotificationBell from './NotificationBell'
 
 const { Header, Sider, Content } = Layout
@@ -60,7 +61,13 @@ export default function UserLayout() {
     navigate(key)
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Sprint 8 AU-3 — fire server-side revocation BEFORE wiping local
+    // tokens. The api/auth.logout call uses the Bearer header to extract
+    // the jti and write it to the Redis denylist. Best-effort: failures
+    // are swallowed in auth.logout itself so we always reach navigate().
+    const refresh = authStore.getRefreshToken()
+    await auth.logout(refresh ?? undefined)
     authStore.logout()
     navigate('/login')
   }

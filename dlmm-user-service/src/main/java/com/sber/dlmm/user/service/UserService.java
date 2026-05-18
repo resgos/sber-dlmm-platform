@@ -21,6 +21,7 @@ import com.sber.dlmm.user.event.UserBlockedEvent;
 import com.sber.dlmm.user.event.UserCreatedEvent;
 import com.sber.dlmm.user.event.UserKycVerifiedEvent;
 import com.sber.dlmm.user.repository.UserRepository;
+import com.sber.dlmm.common.security.JwtRevocationService;
 import com.sber.dlmm.user.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final KafkaProducerService kafkaProducerService;
+    private final JwtRevocationService jwtRevocationService;
 
     @Transactional
     public AuthResponse register(RegisterRequest req) {
@@ -127,6 +129,51 @@ public class UserService {
                 jwtTokenProvider.getAccessTokenExpirySeconds(),
                 toProfileResponse(user)
         );
+    }
+
+    /**
+     * Sprint 8 AU-3 — revoke the supplied access token (and refresh token if
+     * provided) so subsequent presentations are rejected by
+     * {@code JwtAuthenticationFilter}'s denylist check.
+     *
+     * <p>Idempotent: re-calling logout with the same tokens is a no-op (Redis
+     * SET overwrites with the same TTL).
+     *
+     * @param accessToken  the Bearer token from the logout request (required)
+     * @param refreshToken optional refresh token (null = client can't supply
+     *                     one, e.g. SSO sessions). If supplied, also revoked
+     *                     so the user can't refresh their way back in.
+     */
+    public void logout(String accessToken, String refreshToken) {
+        revokeIfValid(accessToken, "access");
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            revokeIfValid(refreshToken, "refresh");
+        }
+    }
+
+    private void revokeIfValid(String token, String label) {
+        if (!jwtTokenProvider.validateToken(token)) {
+            // Don't 500 on a malformed token — client already wants to log out;
+            // just log and move on. A malformed token has no jti to revoke anyway.
+            log.debug("Logout: skipping malformed {} token", label);
+            return;
+        }
+        try {
+            String jti = jwtTokenProvider.parseClaims(token).getId();
+            if (jti == null || jti.isBlank()) {
+                log.debug("Logout: {} token has no jti (legacy pre-AU-3 token); skipping denylist write", label);
+                return;
+            }
+            long expEpoch = jwtTokenProvider.parseClaims(token).getExpiration().toInstant().getEpochSecond();
+            long nowEpoch = java.time.Instant.now().getEpochSecond();
+            long ttl = expEpoch - nowEpoch;
+            jwtRevocationService.revoke(jti, ttl);
+            log.info("Logout: revoked {} jti={} (TTL {}s)", label, jti, ttl);
+        } catch (Exception ex) {
+            // Parsing failed even though validateToken returned true — should
+            // not happen, but log loudly so we notice if it ever does.
+            log.error("Logout: failed to revoke {} token: {}", label, ex.getMessage());
+        }
     }
 
     @Transactional(readOnly = true)

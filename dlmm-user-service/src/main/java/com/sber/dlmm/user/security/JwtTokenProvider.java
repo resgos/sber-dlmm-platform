@@ -42,7 +42,10 @@ public class JwtTokenProvider {
         Instant now = Instant.now();
         Instant expiry = now.plus(Duration.ofMinutes(accessTokenExpiryMinutes));
 
+        // Sprint 8 AU-3 — jti enables denylist on logout. Without it, revocation
+        // would have no key to write against (Redis SET membership keyed by jti).
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(userId.toString())
                 .claim("role", role.name())
                 .claim("kycStatus", kycStatus.name())
@@ -56,7 +59,10 @@ public class JwtTokenProvider {
         Instant now = Instant.now();
         Instant expiry = now.plus(Duration.ofDays(refreshTokenExpiryDays));
 
+        // Sprint 8 AU-3 — refresh tokens also carry jti so logout can revoke
+        // them (otherwise a logged-out user could refresh their way back in).
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(userId.toString())
                 .claim("type", "refresh")
                 .issuedAt(Date.from(now))

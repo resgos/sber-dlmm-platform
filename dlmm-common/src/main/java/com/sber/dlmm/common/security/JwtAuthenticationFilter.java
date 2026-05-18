@@ -34,9 +34,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtRevocationService revocationService;
 
+    /**
+     * Test-friendly ctor that wires a {@link NoopJwtRevocationService} — only
+     * for callers that don't care about Sprint 8 AU-3 (i.e. legacy tests).
+     * Production wiring goes via {@link DlmmJwtAutoConfiguration} which
+     * picks the Redis-backed impl when available.
+     */
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
+        this(jwtTokenProvider, new NoopJwtRevocationService());
+    }
+
+    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
+                                    JwtRevocationService revocationService) {
         this.jwtTokenProvider = jwtTokenProvider;
+        this.revocationService = revocationService;
     }
 
     @Override
@@ -48,6 +61,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = header.substring(BEARER_PREFIX.length());
             try {
                 if (jwtTokenProvider.validateToken(token) && !jwtTokenProvider.isRefreshToken(token)) {
+                    // Sprint 8 AU-3 — denylist check. jti may be null for legacy
+                    // tokens issued before this commit; isRevoked handles that.
+                    String jti = jwtTokenProvider.getJti(token);
+                    if (revocationService.isRevoked(jti)) {
+                        log.debug("Rejecting revoked JWT jti={}", jti);
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
                     String userId = jwtTokenProvider.getUserIdAsString(token);
                     String kycStatus = jwtTokenProvider.getKycStatus(token);
                     List<String> roles = jwtTokenProvider.getRoles(token);

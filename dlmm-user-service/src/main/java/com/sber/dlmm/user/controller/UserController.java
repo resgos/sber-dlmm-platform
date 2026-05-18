@@ -15,6 +15,7 @@ import com.sber.dlmm.user.entity.UserSelfRestriction;
 import com.sber.dlmm.user.service.SelfRestrictionService;
 import com.sber.dlmm.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +57,34 @@ public class UserController {
     public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         return ResponseEntity.ok(userService.refresh(request));
     }
+
+    /**
+     * Sprint 8 AU-3 — JWT revocation (audit C-5).
+     *
+     * <p>Extracts the Bearer access token from the Authorization header and
+     * adds its jti to the Redis denylist for the remaining lifetime. If the
+     * client also supplies a refresh token in the body, that's revoked too —
+     * otherwise the user could refresh their way back in.
+     *
+     * <p>Returns 204 always (idempotent) — even on malformed input we don't
+     * leak whether the token was valid. Audit-relevant outcomes are logged.
+     */
+    @PostMapping("/auth/logout")
+    @Operation(summary = "Log out — revoke the presented access (and optionally refresh) token")
+    public ResponseEntity<Void> logout(HttpServletRequest request,
+                                        @RequestBody(required = false) LogoutRequest body) {
+        String header = request.getHeader("Authorization");
+        String accessToken = (header != null && header.startsWith("Bearer "))
+                ? header.substring("Bearer ".length())
+                : null;
+        String refreshToken = body != null ? body.refreshToken() : null;
+        if (accessToken != null) {
+            userService.logout(accessToken, refreshToken);
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    public record LogoutRequest(String refreshToken) {}
 
     @GetMapping("/users/me")
     public ResponseEntity<UserProfileResponse> getMyProfile(Authentication authentication) {

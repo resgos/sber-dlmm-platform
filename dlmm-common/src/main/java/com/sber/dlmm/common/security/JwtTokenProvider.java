@@ -84,4 +84,21 @@ public class JwtTokenProvider {
     public String getKycStatus(String token) {
         return parseClaims(token).get("kycStatus", String.class);
     }
+
+    /**
+     * Returns the {@code jti} claim — the JWT ID. Used by Sprint 8 AU-3
+     * revocation denylist. Returns null for legacy tokens issued before AU-3
+     * (which didn't carry jti); callers must treat null as "not in denylist".
+     */
+    public String getJti(String token) {
+        return parseClaims(token).getId();
+    }
+
+    /**
+     * Returns the expiration in epoch seconds, for callers (logout endpoint)
+     * that need to set a Redis TTL matching the remaining JWT lifetime.
+     */
+    public long getExpiryEpochSeconds(String token) {
+        return parseClaims(token).getExpiration().toInstant().getEpochSecond();
+    }
 }
