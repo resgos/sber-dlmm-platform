@@ -3,6 +3,7 @@ import { Card, Row, Col, Tag, Typography, Space, Button, Input, Empty, Paginatio
 import { SearchOutlined, ArrowRightOutlined, ThunderboltFilled } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { pools } from '@/api/services'
 import type { Pool } from '@/api/types'
 import { formatRub } from '@/components/StatCard'
@@ -17,12 +18,7 @@ const statusColors: Record<string, string> = {
   PENDING: 'processing',
 }
 
-const statusLabels: Record<string, string> = {
-  ACTIVE: 'Активен',
-  PAUSED: 'Пауза',
-  SHUTDOWN: 'Остановлен',
-  PENDING: 'Ожидание',
-}
+// Sprint 8 C-4 (rest) — labels resolved at render via t('pools.status.<KEY>').
 
 // Sprint 7 dedup — pairAccent extracted to @/components/TokenChip (was
 // duplicated here AND in SwapPage). PoolsPage uses just the function for
@@ -33,6 +29,7 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
   onOpen: () => void
   onAddLiquidity: () => void
 }) {
+  const { t } = useTranslation()
   const x = pool.tokenXSymbol || '???'
   const y = pool.tokenYSymbol || '???'
   const accentX = pairAccent(x)
@@ -52,25 +49,27 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
           </div>
           <div className="sber-pool-pair__label">
             <Text strong style={{ fontSize: 15 }}>{x}/{y}</Text>
-            <Text type="secondary" style={{ fontSize: 12 }}>bin step {pool.binStep} · fee {pool.baseFeeBps} bps</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {t('pools.card.binStep', { value: pool.binStep })} · {t('pools.card.fee', { value: pool.baseFeeBps })}
+            </Text>
           </div>
         </div>
         <Tag color={statusColors[pool.status] || 'default'} style={{ borderRadius: 999, padding: '2px 10px' }}>
-          {statusLabels[pool.status] || pool.status}
+          {t(`pools.status.${pool.status}`, { defaultValue: pool.status })}
         </Tag>
       </div>
 
       <div className="sber-pool-card__metrics">
         <div className="sber-pool-metric">
-          <div className="sber-pool-metric__label">TVL</div>
+          <div className="sber-pool-metric__label">{t('pools.card.tvl')}</div>
           <div className="sber-pool-metric__value">{formatRub(tvl)}</div>
         </div>
         <div className="sber-pool-metric">
-          <div className="sber-pool-metric__label">Объём 24ч</div>
+          <div className="sber-pool-metric__label">{t('pools.card.volume24h')}</div>
           <div className="sber-pool-metric__value">{formatRub(pool.volume24h ?? 0)}</div>
         </div>
         <div className="sber-pool-metric">
-          <div className="sber-pool-metric__label">APY</div>
+          <div className="sber-pool-metric__label">{t('pools.card.apy')}</div>
           <div className="sber-pool-metric__value sber-pool-metric__value--accent">
             <ThunderboltFilled style={{ fontSize: 12, marginRight: 4 }} />
             {apy.toFixed(2)}%
@@ -85,7 +84,7 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
           block
           onClick={(e) => { e.stopPropagation(); onAddLiquidity() }}
         >
-          Добавить ликвидность
+          {t('pools.card.addLiquidity')}
         </Button>
         <Button
           type="text"
@@ -93,7 +92,7 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
           onClick={(e) => { e.stopPropagation(); onOpen() }}
           style={{ color: 'var(--text-secondary)' }}
         >
-          Подробнее <ArrowRightOutlined />
+          {t('common.details')} <ArrowRightOutlined />
         </Button>
       </div>
     </Card>
@@ -101,6 +100,7 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
 }
 
 export default function PoolsPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
   const [search, setSearch] = useState('')
@@ -125,13 +125,13 @@ export default function PoolsPage() {
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <Title level={4} className="sber-page-title">Пулы ликвидности</Title>
-          <Text type="secondary">{filtered.length} пар доступны для торговли и предоставления ликвидности</Text>
+          <Title level={4} className="sber-page-title">{t('pools.title')}</Title>
+          <Text type="secondary">{t('pools.subtitle', { count: filtered.length })}</Text>
         </div>
         <Input
           allowClear
           prefix={<SearchOutlined style={{ color: '#9CA3AF' }} />}
-          placeholder="Найти пару (SBER, GAZP, SRUB…)"
+          placeholder={t('pools.searchPlaceholder')}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(0) }}
           style={{ width: 320, height: 40, borderRadius: 10 }}
@@ -147,7 +147,7 @@ export default function PoolsPage() {
           ))}
         </Row>
       ) : pagePools.length === 0 ? (
-        <Empty description={search ? `Пары "${search}" не найдены` : 'Пулы пока не созданы'} />
+        <Empty description={search ? t('pools.empty.noResults', { query: search }) : t('pools.empty.noPools')} />
       ) : (
         <>
           <Row gutter={[16, 16]}>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Form, Input, Button, Card, Typography, Alert, Space } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { auth } from '@/api/services'
 import { authStore } from '@/store/authStore'
 
@@ -20,6 +21,7 @@ function SberLogoLarge() {
 }
 
 export default function LoginPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +42,7 @@ export default function LoginPage() {
       navigate('/', { replace: true })
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { message?: string } } }
-      setError(axiosError?.response?.data?.message || 'Неверный email или пароль. Попробуйте снова.')
+      setError(axiosError?.response?.data?.message || t('auth.login.errorFallback'))
     } finally {
       setLoading(false)
     }
@@ -52,9 +54,9 @@ export default function LoginPage() {
         <Space direction="vertical" size={12} style={{ width: '100%', marginBottom: 32, textAlign: 'center' }}>
           <SberLogoLarge />
           <Title level={3} className="sber-brand-title" style={{ margin: 0 }}>
-            СБЕР <span className="sber-brand-title-accent">DLMM</span>
+            {t('brand.sber')} <span className="sber-brand-title-accent">{t('brand.product')}</span>
           </Title>
-          <Text style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Платформа ликвидности нового поколения</Text>
+          <Text style={{ color: 'var(--text-secondary)', fontSize: 14 }}>{t('auth.login.subtitle')}</Text>
         </Space>
 
         {error && (
@@ -71,15 +73,15 @@ export default function LoginPage() {
         <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off" size="large">
           <Form.Item
             name="email"
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Электронная почта</span>}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('auth.login.emailLabel')}</span>}
             rules={[
-              { required: true, message: 'Введите электронную почту' },
-              { type: 'email', message: 'Введите корректный email' },
+              { required: true, message: t('auth.login.emailRequired') },
+              { type: 'email', message: t('auth.login.emailInvalid') },
             ]}
           >
             <Input
               prefix={<UserOutlined style={{ color: '#9CA3AF' }} />}
-              placeholder="user@example.com"
+              placeholder={t('auth.login.emailPlaceholder')}
               autoComplete="email"
               style={{ height: 44, borderRadius: 8 }}
             />
@@ -87,8 +89,8 @@ export default function LoginPage() {
 
           <Form.Item
             name="password"
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Пароль</span>}
-            rules={[{ required: true, message: 'Введите пароль' }]}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('auth.login.passwordLabel')}</span>}
+            rules={[{ required: true, message: t('auth.login.passwordRequired') }]}
           >
             <Input.Password
               prefix={<LockOutlined style={{ color: '#9CA3AF' }} />}
@@ -106,16 +108,16 @@ export default function LoginPage() {
               block
               style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 10 }}
             >
-              Войти
+              {t('auth.login.submit')}
             </Button>
           </Form.Item>
         </Form>
 
         <div style={{ textAlign: 'center' }}>
           <Text style={{ color: '#6B7280' }}>
-            Нет аккаунта?{' '}
+            {t('auth.login.noAccount')}{' '}
             <Link to="/register" style={{ color: '#21A038', fontWeight: 500 }}>
-              Зарегистрироваться
+              {t('auth.login.register')}
             </Link>
           </Text>
         </div>
