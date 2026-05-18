@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Typography, Space, Button, Alert, Modal, Input, Tag, Timeline, Tooltip } from 'antd'
+import { Card, Typography, Space, Button, Alert, Modal, Input, Tag, Timeline, Tooltip, Checkbox } from 'antd'
 import { LockOutlined, UnlockOutlined, ExclamationCircleOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { selfRestriction } from '@/api/services'
@@ -25,6 +25,12 @@ export default function SelfRestrictionPanel() {
   const queryClient = useQueryClient()
   const [setModalOpen, setSetModalOpen] = useState(false)
   const [reason, setReason] = useState('')
+  // Sprint 7 #R-UX-035 — guard checkbox. User research (Sprint 6 acceptance
+  // §6.7) showed 1 of 4 users wanted a "Cancel set" undo button. We can't
+  // offer a real undo without violating the 115-ФЗ 7-day cooling rule, so
+  // we instead make accidental clicks harder by requiring an explicit
+  // acknowledgement of the cooling period before "Подтвердить" enables.
+  const [acknowledged, setAcknowledged] = useState(false)
 
   const { data: status, isLoading } = useQuery({
     queryKey: ['selfRestriction'],
@@ -36,6 +42,7 @@ export default function SelfRestrictionPanel() {
     onSuccess: () => {
       setSetModalOpen(false)
       setReason('')
+      setAcknowledged(false)
       queryClient.invalidateQueries({ queryKey: ['selfRestriction'] })
     },
   })
@@ -205,11 +212,17 @@ export default function SelfRestrictionPanel() {
           </Space>
         }
         open={setModalOpen}
-        onCancel={() => { setSetModalOpen(false); setReason('') }}
+        onCancel={() => { setSetModalOpen(false); setReason(''); setAcknowledged(false) }}
         onOk={() => setMut.mutate(reason)}
-        okText="Подтвердить"
+        okText="Установить самозапрет"
         cancelText="Отмена"
-        okButtonProps={{ danger: true, loading: setMut.isPending }}
+        okButtonProps={{
+          danger: true,
+          loading: setMut.isPending,
+          // Sprint 7 #R-UX-035 — guard against misclick. User must
+          // explicitly acknowledge the 7-day cooling rule before OK enables.
+          disabled: !acknowledged,
+        }}
       >
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           <Alert
@@ -225,6 +238,19 @@ export default function SelfRestrictionPanel() {
             rows={3}
             maxLength={500}
           />
+          {/* Sprint 7 #R-UX-035 — confirmation checkbox. Required to enable OK
+              button. This is the regulatory-clean alternative to a "Cancel set"
+              undo (115-ФЗ 7-day cooling rule is not bypassable). */}
+          <Checkbox
+            checked={acknowledged}
+            onChange={(e) => setAcknowledged(e.target.checked)}
+            style={{ marginTop: 4 }}
+          >
+            <Text>
+              Я понимаю, что снятие самозапрета потребует
+              <b> 7-дневного периода охлаждения</b> (требование ЦБ РФ).
+            </Text>
+          </Checkbox>
         </Space>
       </Modal>
     </Card>

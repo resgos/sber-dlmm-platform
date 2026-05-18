@@ -285,16 +285,23 @@ export default function HedgePage() {
   })
 
   const confirmUnwind = (hedge: Transaction) => {
+    // Sprint 7 #UX-016 — softer language per UX-REVIEW spec.
+    // Was: "Минимальный объём не задан — курс на момент исполнения."
+    // That phrasing alarmed treasurers (sounded like no protection at all).
+    // New copy: matter-of-fact expected-receive + neutral note about
+    // execution-time rate. Same operation, calmer reading.
+    const expectedRubBack = hedge.amountIn?.toLocaleString('ru-RU') ?? '?'
     Modal.confirm({
       title: 'Закрыть хедж?',
       content: (
         <Space direction="vertical">
           <Text>
             Будет выполнен обратный своп {hedge.amountOut?.toLocaleString('ru-RU')} единиц
-            обратно в SRUB по текущему курсу.
+            обратно в SRUB.
           </Text>
-          <Text type="warning" style={{ fontSize: 12 }}>
-            Минимальный объём не задан — курс на момент исполнения.
+          <Text>
+            Ориентировочно получите <b>~{expectedRubBack} SRUB</b>;
+            фактическая сумма зависит от курса на момент исполнения.
           </Text>
         </Space>
       ),
@@ -324,12 +331,12 @@ export default function HedgePage() {
             на общую сумму <b>{totalHedged.toLocaleString('ru-RU')} SRUB</b>.
           </Text>
           <Text type="warning" style={{ fontSize: 12 }}>
-            Операция необратима. Каждое закрытие = swap по текущему курсу;
-            проскальзывание не ограничено.
+            Операция необратима. Каждое закрытие выполняется как обычный
+            своп по текущему курсу.
           </Text>
           <Text type="secondary" style={{ fontSize: 11 }}>
-            Хеджи закрываются по очереди, не параллельно — это даёт более
-            предсказуемое влияние на цены пулов.
+            Хеджи закрываются последовательно — это даёт более предсказуемое
+            влияние на цены пулов, чем параллельное исполнение.
           </Text>
         </Space>
       ),
