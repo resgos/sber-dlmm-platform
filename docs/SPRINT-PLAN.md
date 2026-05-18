@@ -367,32 +367,53 @@ Per AU-1 trade-off:
 
 ---
 
-## Sprint 9 — "OTC desk + RFQ + money market + API tiers" (shifted from Sprint 8 per AU-1)
+## Sprint 9 — "Commercial expansion" (kicked off 2026-07-16)
 
-**Theme** (rebalanced 2026-06-23): the commercial backlog originally
-planned for Sprint 8 — institutional layer + tokenized money market
-launch + Public Data API tiers — slid one sprint to make room for the
-UX Hardening Sprint. Index funds + 152-ФЗ + Spasibo write-back further
-slid to Sprint 10.
+**Theme**: OTC desk + Money market (YSRUB) + API tiers — the deferred
+commercial backlog from Sprint 8 lands. **First commercial-heavy
+sprint since Sprint 7 — recovers run-rate trajectory.**
 
-### Code work — initial backlog (~31 person-days vs 27 ceiling = +15% over; cut
-last 1-2 if velocity confirms ceiling)
+> Full plan: `docs/SPRINT-9-KICKOFF.md` (daily plan + capacity discipline).
+> Companion: `docs/SYSTEM-REVIEW-2026-07-08.md` (audit hypothesis
+> confirmed — quality baseline solid, commercial = new bottleneck).
+> New menu: `docs/NEW-FEATURES-BACKLOG-2026-07-08.md` (Sprint 10+ ideas).
+> Demo: `docs/SPRINT-9-DEMO-PLAN.md` (2026-07-29).
 
-| # | Task | Source | Owner | Effort |
-|---|---|---|---|---|
-| 6.1 | OTC desk admin workflow | M#7, Sprint 6→7→8→9 carry | Backend + Admin UI | 6d |
-| 6.2 | RFQ API for VIP clients | M#7 | Backend | 4d |
-| 6.6 | API access paid tiers at gateway | M#20 | SRE + Backend | 3d |
-| R-M-33 | Public Data API tiers (extension of 6.6) | Revenue research | Backend | 3d |
-| 7.1 | Tokenized money market fund (YSRUB) — daily yield outbox | M#9 | Backend | 8d |
-| 7.2 | Yield distribution engine (overnight + spread) | M#9 | Backend | 5d |
-| Spasibo write-back impl | Per #6.16, Sprint 8 contract dep (8.C) | Backend | 8d (cut if 8.C slips) |
+### Code work — backlog (post-discipline cut: ~30d with Spasibo, ~22d without)
 
-**Sprint 9 acceptance criteria** (preview):
-- 1 OTC block trade settled (≥ 10M ₽ notional)
-- YSRUB mint/burn cycle works end-to-end with daily yield credited
-- API access tiers (Free/Pro/Enterprise) live at gateway
-- Spasibo cashback first real credit (if 8.C lands)
+**Commercial anchors (19d):**
+- 6.1 OTC desk admin workflow (6d, Backend lead + Admin UI). Wires AU-4.
+- 6.2 RFQ API for VIP clients (4d, Backend dev 2)
+- 7.1 YSRUB mint/burn (8d, Backend dev 3) ─┬ serial pair
+- 7.2 Yield distribution engine (5d) ─────┘  same owner
+
+**API tiers (6d):**
+- 6.6 API tiers at gateway (3d, SRE + Backend)
+- R-M-33 Public Data API tiers (3d, Backend)
+
+**Spasibo write-back (8d, CONDITIONAL on Sprint 8 8.C contract):**
+- 6.16-impl per design memo. Plan-B if 8.C slips: F-13 SLA MM contract
+  paper + F-21 KYC re-verify (frees the 8d).
+
+**Sprint 8 carry (5d, post-cut):**
+- M-4 Dashboard tile drill-down (1d, FE)
+- M-5 PoolsPage filter+sort (1d, FE)
+- C-10-bff: 2 more admin-bff WebClients extracted (1d, Backend dev 3 last 2d)
+- UX-A11Y-2 wave 2: skip-to-content + aria-current on Sider (2d, FE)
+
+**Cuts to Sprint 10**: M-2 LoginPage "Forgot password?" + M-3 RegisterPage
+2-step wizard + C-4-rest (4-page translation) + BinLiquidityChart hex
+sweep + EN translation + workspaces refactor.
+
+**Sprint 9 acceptance criteria** (preview, full list in kickoff):
+- 1 OTC block trade settled, ≥ 10M ₽ notional, visible in admin audit log
+- YSRUB mint→yield→burn round-trip works end-to-end
+- API tiers (Free 10rps / Pro 100rps / Enterprise) live + k6-verified
+- Public Data API tiers (R-M-33) reachable
+- Dashboard tile drill-downs work
+- admin-bff: 3/6 WebClients now circuit-broken
+- skip-to-content link + aria-current on Sider in both UIs
+- (Stretch) Spasibo first real cashback if 8.C lands
 
 ---
 
@@ -411,13 +432,29 @@ compliance battery cascade + close-out items from money-market launch.
 | 7.6 | YSRUB reserve health attestation (carried from Sprint 8) | M#9 | Backend + Compliance | 3d |
 | R-h | CBR spread alert subscription | Revenue research | Backend | 4d |
 | 7.X | 152-ФЗ ПДн audit + encryption-at-rest verification | RU-R1 | Backend + Compliance | 5d |
-| UX Major block second wave | UX-REVIEW Sprint 8 row | Frontend | 4-5d |
+| UX Major block second wave (M-2, M-3) | UX-REVIEW + Sprint 9 cut | Frontend | 3d |
+| **F-13** | SLA MM contract paper (cross-functional, no code) | NEW-FEATURES F-13 | PO + Legal | (no code) |
+| **F-25** | SberID SSO design + Sber Online BU contract negotiation | NEW-FEATURES F-25 | PO + Backend dev 2 | 3d code if sandbox lands |
+| **F-01** | Telegram bot MVP — notification-service consumer | NEW-FEATURES F-01 | Backend dev 3 | 3d |
+| **F-07** | Portfolio rebalancer wizard UI | NEW-FEATURES F-07 | FE | 2d |
+| **F-15** | API key usage analytics dashboard | NEW-FEATURES F-15 | SRE + FE | 2d |
+| **AU-5** | Distributed tracing (Sleuth + Zipkin) | Audit AU-5 | SRE | 3-5d |
+| Carry: admin-bff WebClients (3-4 remaining) | R#33 | Backend dev 3 | 3d |
+| Carry: EN translation | Sprint 9 cut | FE + Marketing | 3d |
+| Carry: workspaces refactor (`dlmm-ui-common`) | R#39 | FE | 3d |
+
+> **Sprint 10 backlog deliberately over-stuffed** to allow PO discretion
+> at kickoff. Top picks (F-13, F-25, F-01) per `NEW-FEATURES-BACKLOG-2026-07-08.md`
+> §7. Index funds vs new-features trade-off resolved at Sprint 9 retro.
 
 **Sprint 10 acceptance criteria** (preview):
 - SBER10 basket token tradeable in dedicated pool
 - Daily rebalance produces correct allocations
 - 152-ФЗ audit checklist 80% green
 - YSRUB reserve health daily attestation visible in admin dashboard
+- F-13 SLA contract first signed (cross-functional, gates revenue)
+- F-25 SberID integration sandbox access secured
+- F-01 Telegram bot live (≥ 1 user receiving notifications)
 
 ---
 
@@ -519,13 +556,15 @@ how aggressive 161-ФЗ + СБП-rail compliance must be.
 |---|---|---:|
 | Q3 2026 (Sprint 3-4 close) | protocol fee + exit + custody + Treasury LP + FX hedge pilot + B2B settlement v1 + sponsored pools | **300-500M** |
 | Q4 2026 (Sprint 5-7 close) | + SberSpasibo + MM rebate launched + DLMM-as-Service (3-5 issuers) | **700M-1.0B** ⤓ (Sprint 8 UX-Hardening trade) |
-| Q1 2027 (Sprint 8-9 close) | + OTC desk + RFQ + API tiers + Money market (UX Hardening Sprint 8 pushed commercials by 1 sprint) | **1.3-1.8B** ⤓ |
-| Q2 2027 (Sprint 10-11) | + Index funds + Spasibo write-back + reserve health attestation | **1.7-2.3B** |
-| Q3 2027+ | + Tokenized bonds pilot (if Q4 legal review goes well) | **3-4B** |
+| Q3 2026 close (Sprint 9) | + OTC desk + RFQ + API tiers + Money market YSRUB | **800M-1.1B** (recovery sprint) |
+| Q4 2026 (Sprint 10-11) | + SLA MM contracts (F-13) + SberID SSO + Telegram bot + Index funds | **1.5-2.0B** ↑ (NEW-FEATURES F-13 + F-25 uplift) |
+| Q1 2027 (Sprint 12) | + AML SAR auto-file moat + Market surveillance + Tax export | **2.2-2.8B** ↑ (compliance moat unlocks enterprise) |
+| Q2 2027+ | + Multi-sig + DLMM SDK + Tokenized bonds pilot (if Q4 legal review goes well) | **3.5-4.5B** ↑ |
 
 > **Audit-induced AU-1 trade-off**: ~150-200M ₽/yr Q1 2027 dip vs original
-> plan; compensated by reduced FE-bug rate post-hardening (measure at
-> Sprint 9 retro). Net 2027 H2+ target unchanged.
+> plan; **NEW-FEATURES-BACKLOG-2026-07-08.md** §9 recovery: F-13 SLA contracts
+> + F-25 SberID drive Q4 uplift past original forecast. Net Q3 2027+ target
+> uplifted from 3-4B to 3.5-4.5B.
 
 ---
 
@@ -573,3 +612,9 @@ per audit AU-1). Owner: IT-lead. Update at every sprint close.*
   Sprint 8); **Sprint 8 = "UX Hardening Sprint"** per AU-1; commercial backlog
   (OTC + MM + money market) slid Sprint 8 → 9; index funds + 152-ФЗ slid
   Sprint 9 → 10. See `SPRINT-7-MID-REBALANCE.md` + `SPRINT-8-KICKOFF.md`.
+- 2026-07-08: **Sprint 8 close — all 9 of 9 hard gates closed**; audit hypothesis
+  confirmed (`SYSTEM-REVIEW-2026-07-08.md`). **Sprint 9 = "Commercial
+  expansion"** (OTC + YSRUB + API tiers). Sprint 10 absorbs new-features
+  picks from `NEW-FEATURES-BACKLOG-2026-07-08.md` (F-13 SLA, F-25 SberID,
+  F-01 Telegram bot). Cumulative-revenue Q4 2026+ uplifted vs Sprint 8
+  forecast. See `SPRINT-9-KICKOFF.md` + `SPRINT-9-DEMO-PLAN.md`.
