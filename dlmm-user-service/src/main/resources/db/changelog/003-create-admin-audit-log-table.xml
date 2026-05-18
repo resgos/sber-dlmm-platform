@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 8 #AU-4 — admin audit log (audit C-6 critical).
+
+        Before this table, every admin mutation (user block, KYC update,
+        role change, pool pause) hit the DB with no provenance trail.
+        "Who paused pool X at 03:00 on Tuesday?" had no answer.
+
+        Schema is append-only — no updates, no soft-deletes. Compliance
+        replay relies on this being immutable.
+
+        Wide-ish row by design — at write-time we don't know which
+        columns analysts will need at query-time. Disk is cheap;
+        re-instrumenting later is not.
+    -->
+    <changeSet id="003-create-admin-audit-log-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="admin_audit_log"/></not>
+        </preConditions>
+        <createTable tableName="admin_audit_log">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <!-- Who -->
+            <column name="actor_user_id" type="UUID">
+                <!-- null only for system-issued audits (none today; reserved) -->
+            </column>
+            <column name="actor_role" type="VARCHAR(40)">
+                <!-- ROLE_ADMIN | ROLE_SUPER_ADMIN. Pulled from JWT at write time. -->
+            </column>
+
+            <!-- What -->
+            <column name="action" type="VARCHAR(60)">
+                <!-- e.g. USER_BLOCK, USER_UNBLOCK, USER_KYC_UPDATE, USER_ROLE_UPDATE -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="target_type" type="VARCHAR(40)">
+                <!-- USER | POOL | TOKEN — coarse-grained categorisation for filters -->
+            </column>
+            <column name="target_id" type="VARCHAR(120)">
+                <!-- Stringified UUID, symbol, or composite ID — wide enough for any kind -->
+            </column>
+
+            <!-- Outcome -->
+            <column name="status" type="VARCHAR(20)">
+                <!-- SUCCESS | FAILED — captured even on exception -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="error_message" type="VARCHAR(500)">
+                <!-- Truncated exception message on FAILED; null on SUCCESS -->
+            </column>
+
+            <!-- Provenance -->
+            <column name="method_signature" type="VARCHAR(200)">
+                <!-- Class.method — useful when same action label fires from
+                     multiple call sites -->
+            </column>
+            <column name="ip_address" type="VARCHAR(45)">
+                <!-- IPv4 or IPv6 — pulled from X-Forwarded-For or RemoteAddr -->
+            </column>
+
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Most queries are "what did this admin do" + "what happened to
+             this target" + "show me the last N audits". Cover all three
+             access patterns. -->
+        <createIndex indexName="idx_admin_audit_actor" tableName="admin_audit_log">
+            <column name="actor_user_id"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <createIndex indexName="idx_admin_audit_target" tableName="admin_audit_log">
+            <column name="target_type"/>
+            <column name="target_id"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <createIndex indexName="idx_admin_audit_created" tableName="admin_audit_log">
+            <column name="created_at" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

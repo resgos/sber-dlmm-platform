@@ -1,5 +1,6 @@
 package com.sber.dlmm.user.controller;
 
+import com.sber.dlmm.common.audit.AdminAudit;
 import com.sber.dlmm.common.dto.PageResponse;
 import com.sber.dlmm.common.enums.KycStatus;
 import com.sber.dlmm.common.enums.UserRole;
@@ -11,7 +12,9 @@ import com.sber.dlmm.user.dto.UpdateKycRequest;
 import com.sber.dlmm.user.dto.UpdateProfileRequest;
 import com.sber.dlmm.user.dto.UpdateRoleRequest;
 import com.sber.dlmm.user.dto.UserProfileResponse;
+import com.sber.dlmm.user.entity.AdminAuditLog;
 import com.sber.dlmm.user.entity.UserSelfRestriction;
+import com.sber.dlmm.user.service.AdminAuditService;
 import com.sber.dlmm.user.service.SelfRestrictionService;
 import com.sber.dlmm.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,6 +44,7 @@ public class UserController {
 
     private final UserService userService;
     private final SelfRestrictionService selfRestrictionService;
+    private final AdminAuditService adminAuditService;
 
     @PostMapping("/auth/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -107,6 +111,7 @@ public class UserController {
 
     @PutMapping("/users/{id}/kyc")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @AdminAudit(action = "USER_KYC_UPDATE", targetType = "USER", targetIdParam = "id")
     public ResponseEntity<UserProfileResponse> updateKycStatus(@PathVariable UUID id,
                                                                 @Valid @RequestBody UpdateKycRequest request) {
         return ResponseEntity.ok(userService.updateKycStatus(id, request));
@@ -114,6 +119,7 @@ public class UserController {
 
     @PutMapping("/users/{id}/role")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @AdminAudit(action = "USER_ROLE_UPDATE", targetType = "USER", targetIdParam = "id")
     public ResponseEntity<UserProfileResponse> updateRole(@PathVariable UUID id,
                                                            @Valid @RequestBody UpdateRoleRequest request) {
         return ResponseEntity.ok(userService.updateRole(id, request));
@@ -132,6 +138,7 @@ public class UserController {
 
     @PostMapping("/users/{id}/block")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @AdminAudit(action = "USER_BLOCK", targetType = "USER", targetIdParam = "id")
     public ResponseEntity<Void> blockUser(@PathVariable UUID id) {
         userService.blockUser(id);
         return ResponseEntity.noContent().build();
@@ -139,9 +146,43 @@ public class UserController {
 
     @PostMapping("/users/{id}/unblock")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @AdminAudit(action = "USER_UNBLOCK", targetType = "USER", targetIdParam = "id")
     public ResponseEntity<Void> unblockUser(@PathVariable UUID id) {
         userService.unblockUser(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // ── Sprint 8 #AU-4 — admin audit log read API ──
+
+    /**
+     * Paged audit log. SUPER_ADMIN-only — same admins who can change roles
+     * shouldn't be able to inspect each other's actions freely (compliance
+     * isolation). Optional {@code actorUserId} / {@code targetType}+{@code targetId}
+     * filters for drill-down from the admin UI.
+     */
+    @GetMapping("/admin/audit")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Operation(summary = "Admin audit log (Sprint 8 AU-4) — paged, optionally filtered by actor or target")
+    public ResponseEntity<PageResponse<AdminAuditLog>> getAuditLog(
+            @RequestParam(required = false) UUID actorUserId,
+            @RequestParam(required = false) String targetType,
+            @RequestParam(required = false) String targetId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        org.springframework.data.domain.Page<AdminAuditLog> result;
+        if (actorUserId != null) {
+            result = adminAuditService.byActor(actorUserId, page, size);
+        } else if (targetType != null && targetId != null) {
+            result = adminAuditService.byTarget(targetType, targetId, page, size);
+        } else {
+            result = adminAuditService.recent(page, size);
+        }
+        return ResponseEntity.ok(new PageResponse<>(
+                result.getContent(),
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages()));
     }
 
     /**
