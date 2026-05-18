@@ -70,6 +70,7 @@ the slower test/build matrix spends minutes.
 |---|---|---|---|
 | Day 1 (baseline) | 34 | 243 | — |
 | Day 4 (UX-DS-1 first sweep) | 32 | 207 | −14.8% |
+| Day 5 (UX-DS-1 wave 2) | 31 | 165 | −32.1% |
 
 **Day 1 top 5 offenders:**
 - `dlmm-admin-ui/src/components/BinLiquidityChart.tsx` (22)

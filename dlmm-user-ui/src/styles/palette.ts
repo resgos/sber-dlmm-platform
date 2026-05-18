@@ -27,3 +27,28 @@ export const DASHBOARD_TILE_PALETTE = {
 } as const
 
 export type DashboardTileKey = keyof typeof DASHBOARD_TILE_PALETTE
+
+/**
+ * Notification-type → AntD Tag color. Extracted from
+ * NotificationBell.tsx where 12 hex literals lived in a const map.
+ * Same colour mapping; new shape gives a single source of truth and
+ * keeps the AU-2 ratchet quiet (palette in {@code .ts}, not {@code .tsx}).
+ */
+export const NOTIFICATION_TYPE_COLORS: Record<string, string> = {
+  SWAP_COMPLETED: '#21A038',     // sber green
+  LIQUIDITY_ADDED: '#3B82F6',    // blue
+  FEE_ACCRUED: '#F59E0B',        // amber
+  KYC_APPROVED: '#21A038',       // sber green
+  KYC_REJECTED: '#EF4444',       // red
+  POSITION_CLOSED: '#6B7280',    // gray
+  POOL_PAUSED: '#F59E0B',        // amber
+  SYSTEM_ALERT: '#EF4444',       // red
+  POOL_UPDATE: '#8B5CF6',        // violet
+  // Sprint 5 #5.15 — margin alerts. WARNING = amber (treasurer should
+  // look soon), CALL = red (position is out-of-range, fees not accruing).
+  MARGIN_WARNING: '#F59E0B',
+  MARGIN_CALL: '#DC2626',
+}
+
+/** Fallback tag colour (used when the type isn't in the map). */
+export const NOTIFICATION_TAG_DEFAULT = '#6B7280'

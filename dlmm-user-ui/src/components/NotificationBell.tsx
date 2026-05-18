@@ -4,6 +4,7 @@ import { BellOutlined, CheckOutlined, ArrowRightOutlined } from '@ant-design/ico
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { notifications as notificationsApi } from '@/api/services'
+import { NOTIFICATION_TYPE_COLORS, NOTIFICATION_TAG_DEFAULT } from '@/styles/palette'
 import type { Notification as NotifType } from '@/api/types'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -14,21 +15,9 @@ dayjs.locale('ru')
 
 const { Text } = Typography
 
-const typeColors: Record<string, string> = {
-  SWAP_COMPLETED: '#21A038',
-  LIQUIDITY_ADDED: '#3B82F6',
-  FEE_ACCRUED: '#F59E0B',
-  KYC_APPROVED: '#21A038',
-  KYC_REJECTED: '#EF4444',
-  POSITION_CLOSED: '#6B7280',
-  POOL_PAUSED: '#F59E0B',
-  SYSTEM_ALERT: '#EF4444',
-  POOL_UPDATE: '#8B5CF6',
-  // Sprint 5 #5.15 — margin alerts. WARNING = amber (treasurer should
-  // look soon), CALL = red (position is out-of-range, fees not accruing).
-  MARGIN_WARNING: '#F59E0B',
-  MARGIN_CALL: '#DC2626',
-}
+// Sprint 8 UX-DS-1 — typeColors moved to @/styles/palette so the 12 hex
+// literals don't count against the AU-2 ratchet baseline. Same mapping,
+// single source of truth across the notification system.
 
 const typeRussianLabels: Record<string, string> = {
   SWAP_COMPLETED: 'Своп',
@@ -119,7 +108,7 @@ export default function NotificationBell() {
             <List.Item
               style={{
                 padding: '10px 0',
-                background: item.isRead ? 'transparent' : '#F0FFF4',
+                background: item.isRead ? 'transparent' : 'var(--sber-green-light)',
                 borderRadius: 8,
                 paddingLeft: 8,
                 paddingRight: 8,
@@ -131,7 +120,7 @@ export default function NotificationBell() {
             >
               <Space direction="vertical" size={2} style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Tag color={typeColors[item.type] || '#6B7280'} style={{ fontSize: 11 }}>
+                  <Tag color={NOTIFICATION_TYPE_COLORS[item.type] || NOTIFICATION_TAG_DEFAULT} style={{ fontSize: 11 }}>
                     {typeRussianLabels[item.type] || item.type.replace(/_/g, ' ')}
                   </Tag>
                   <Text type="secondary" style={{ fontSize: 11 }}>
@@ -175,7 +164,7 @@ export default function NotificationBell() {
         {/* Sprint 8 UX-A11Y-1 — icon-only trigger needs an accessible name */}
         {/* and a button role so screen readers + keyboard navigation work. */}
         <BellOutlined
-          style={{ fontSize: 20, color: '#6B7280', cursor: 'pointer' }}
+          style={{ fontSize: 20, color: 'var(--text-secondary)', cursor: 'pointer' }}
           role="button"
           tabIndex={0}
           aria-label={unreadCount > 0 ? `Уведомления (${unreadCount} непрочитанных)` : 'Уведомления'}

@@ -92,7 +92,7 @@ export default function UserLayout() {
         collapsed={collapsed}
         className="sber-sidebar"
         style={{
-          background: '#FFFFFF',
+          background: 'var(--bg-sidebar)',
           overflow: 'auto',
           height: '100vh',
           position: 'fixed',
@@ -100,7 +100,7 @@ export default function UserLayout() {
           top: 0,
           bottom: 0,
           zIndex: 100,
-          borderRight: '1px solid #F0F0F0',
+          borderRight: '1px solid var(--border-sidebar)',
         }}
         width={240}
         collapsedWidth={64}
@@ -112,7 +112,7 @@ export default function UserLayout() {
             alignItems: 'center',
             justifyContent: collapsed ? 'center' : 'flex-start',
             padding: collapsed ? '0' : '0 20px',
-            borderBottom: '1px solid #F0F0F0',
+            borderBottom: '1px solid var(--border-sidebar)',
             gap: 10,
           }}
         >
@@ -123,14 +123,14 @@ export default function UserLayout() {
                 style={{
                   fontWeight: 700,
                   fontSize: 15,
-                  color: '#1F2937',
+                  color: 'var(--text-primary)',
                   whiteSpace: 'nowrap',
                   letterSpacing: '-0.2px',
                 }}
               >
-                СБЕР <span style={{ color: '#21A038' }}>DLMM</span>
+                СБЕР <span style={{ color: 'var(--sber-green)' }}>DLMM</span>
               </Text>
-              <Text style={{ fontSize: 11, color: '#9CA3AF', whiteSpace: 'nowrap' }}>
+              <Text style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 Платформа ликвидности
               </Text>
             </div>
@@ -143,15 +143,15 @@ export default function UserLayout() {
           selectedKeys={[selectedKey]}
           items={menuItems}
           onClick={handleMenuClick}
-          style={{ borderRight: 0, marginTop: 8, background: '#FFFFFF' }}
+          style={{ borderRight: 0, marginTop: 8, background: 'var(--bg-sidebar)' }}
         />
       </Sider>
 
-      <Layout style={{ marginLeft: collapsed ? 64 : 240, transition: 'margin 0.2s', background: '#F3F4F6' }}>
+      <Layout style={{ marginLeft: collapsed ? 64 : 240, transition: 'margin 0.2s', background: 'var(--bg-page)' }}>
         <Header
           style={{
             padding: '0 24px',
-            background: '#FFFFFF',
+            background: 'var(--bg-card)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -160,7 +160,7 @@ export default function UserLayout() {
             zIndex: 99,
             height: 64,
             lineHeight: '64px',
-            borderBottom: '1px solid #E5E7EB',
+            borderBottom: '1px solid var(--border-light)',
             boxShadow: 'none',
           }}
         >
@@ -169,7 +169,7 @@ export default function UserLayout() {
               type="text"
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={() => setCollapsed(!collapsed)}
-              style={{ fontSize: 16, color: '#6B7280' }}
+              style={{ fontSize: 16, color: 'var(--text-secondary)' }}
               aria-label={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
               aria-expanded={!collapsed}
               aria-controls="sider-navigation"
@@ -188,13 +188,13 @@ export default function UserLayout() {
               >
                 <Avatar
                   icon={<UserOutlined aria-hidden />}
-                  style={{ backgroundColor: '#21A038', width: 36, height: 36, lineHeight: '36px' }}
+                  style={{ backgroundColor: 'var(--sber-green)', width: 36, height: 36, lineHeight: '36px' }}
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
-                  <Text strong style={{ fontSize: 13, color: '#1F2937' }}>
+                  <Text strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>
                     {user?.email || 'Пользователь'}
                   </Text>
-                  <Text style={{ fontSize: 11, color: '#9CA3AF' }}>
+                  <Text style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                     {user?.kycStatus === 'VERIFIED' ? 'Верифицирован' : 'Не верифицирован'}
                   </Text>
                 </div>
