@@ -25,8 +25,9 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-  liquibase:
-    change-log: classpath:db/changelog/master.xml
+  # NOTE: liquibase block lives above (line 18) — duplicate block here was
+  # tolerated by older snakeyaml but Spring Boot 3.2 + snakeyaml strict
+  # mode rejects it. Removed during Sprint 9 docker bring-up.
 
 server:
   port: 8084

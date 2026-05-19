@@ -780,3 +780,219 @@ body {
   outline: 2px solid var(--sber-green-dark);
   outline-offset: 2px;
 }
+
+/* ======================================================================
+   Sprint 9 — "Конфетка" design polish pass.
+
+   User feedback (mid-Sprint 9): existing surface is functional but
+   doesn't feel premium next to Sber Online / СберБизнес. This block
+   layers selective overrides on top of the existing tokens — no
+   structural changes, only refined visual depth, typography
+   confidence, and micro-interactions that match Sber Nova aesthetic.
+
+   Principles:
+     1. Hero numerics are oversized + tight letter-spacing (Sber Online pattern)
+     2. Cards have layered multi-stop shadows (not flat 1px boxes)
+     3. Hover states translate + brighten + add brand-tinted glow
+     4. Focus rings always visible + Sber-green (a11y + premium feel)
+     5. Sidebar selected state has left-accent bar (Sber Online cue)
+     6. Tables breathe more (row padding + refined zebra hover)
+     7. Premium scrollbar (thinner, refined hover)
+   ====================================================================== */
+
+/* — Hero: bigger, more confident, animated gradient — */
+.sber-hero {
+  padding: 36px 40px !important;
+  box-shadow:
+    0 20px 40px -16px rgba(33,160,56,0.25),
+    0 2px 8px rgba(15,23,42,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.18) !important;
+  background: linear-gradient(120deg, #1C8A30 0%, #21A038 35%, #00C853 70%, #00B5A1 100%) !important;
+  background-size: 180% 100%;
+  animation: sber-hero-shift 18s ease-in-out infinite alternate;
+}
+@keyframes sber-hero-shift {
+  from { background-position: 0% 50%; }
+  to   { background-position: 100% 50%; }
+}
+.sber-hero::before {
+  background:
+    radial-gradient(circle at 85% 15%, rgba(255,255,255,0.22), transparent 45%),
+    radial-gradient(circle at 15% 95%, rgba(0,0,0,0.18), transparent 55%),
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05), transparent 70%) !important;
+}
+.sber-hero-title {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: 1.2px !important;
+  opacity: 0.78 !important;
+}
+.sber-hero-value {
+  font-size: 48px !important;
+  font-weight: 800 !important;
+  letter-spacing: -1.2px !important;
+  line-height: 1.05 !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.08), 0 2px 24px rgba(0,0,0,0.12);
+}
+.sber-hero-meta { font-size: 13px !important; opacity: 0.88 !important; line-height: 1.55 !important; }
+
+@media (max-width: 414px) {
+  .sber-hero { padding: 24px 20px !important; }
+  .sber-hero-value { font-size: 32px !important; letter-spacing: -0.6px !important; }
+}
+
+/* — Cards: layered shadow + refined border + hover lift — */
+.sber-card {
+  box-shadow:
+    0 1px 2px rgba(15,23,42,0.04),
+    0 1px 0 rgba(255,255,255,0.95) inset !important;
+  transition: box-shadow 0.22s ease, transform 0.18s ease, border-color 0.2s ease;
+}
+.sber-card:hover {
+  box-shadow:
+    0 4px 12px rgba(15,23,42,0.06),
+    0 1px 0 rgba(255,255,255,0.95) inset !important;
+}
+.sber-card .ant-card-head {
+  padding: 18px 22px !important;
+  min-height: 56px !important;
+  font-size: 15px !important;
+}
+.sber-card .ant-card-body { padding: 22px !important; }
+
+/* — Stat tile (sber-bento) — bigger numerics — */
+.sber-bento .ant-statistic-content-value {
+  font-weight: 800 !important;
+  letter-spacing: -0.4px !important;
+}
+.sber-bento .ant-statistic-title {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.6px !important;
+  color: var(--text-secondary) !important;
+}
+
+/* — Pool card hover: brand-tinted glow — */
+.sber-pool-card:hover {
+  box-shadow:
+    0 12px 28px -10px rgba(33,160,56,0.20),
+    0 4px 8px rgba(15,23,42,0.04),
+    0 0 0 1px rgba(33,160,56,0.18) !important;
+}
+
+/* — Primary button: confident shadow, sharper hover — */
+.ant-btn-primary {
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.18) inset,
+    0 1px 2px rgba(33,160,56,0.30),
+    0 4px 12px -2px rgba(33,160,56,0.35) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.1px;
+}
+.ant-btn-primary:hover {
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.22) inset,
+    0 2px 4px rgba(33,160,56,0.35),
+    0 8px 24px -4px rgba(33,160,56,0.45) !important;
+}
+
+/* — Sidebar selected item: left-accent bar (Sber Online cue) — */
+.sber-sidebar .ant-menu-item-selected {
+  position: relative;
+  background: linear-gradient(90deg, rgba(33,160,56,0.10), rgba(33,160,56,0.04)) !important;
+  font-weight: 600 !important;
+}
+.sber-sidebar .ant-menu-item-selected::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--sber-green);
+}
+
+/* — Table: more breathing room, refined hover — */
+.sber-table .ant-table-tbody > tr > td {
+  padding: 16px !important;
+  border-bottom: 1px solid var(--border-light) !important;
+}
+.sber-table .ant-table-tbody > tr:hover > td {
+  background: linear-gradient(90deg, rgba(33,160,56,0.04), transparent) !important;
+}
+.sber-table .ant-table-thead > tr > th {
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.8px !important;
+  color: var(--text-muted) !important;
+  font-weight: 600 !important;
+  padding: 14px 16px !important;
+}
+
+/* — Focus rings: brand green for everything keyboard-reachable — */
+.ant-btn:focus-visible,
+.ant-input:focus-visible,
+.ant-input-number:focus-within,
+.ant-select-focused .ant-select-selector,
+a:focus-visible {
+  outline: 2px solid var(--sber-green) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px rgba(33,160,56,0.15) !important;
+}
+
+/* — Tag pills: refined padding + subtle gradient backdrops — */
+.ant-tag {
+  border-radius: 999px !important;
+  padding: 2px 12px !important;
+  font-weight: 500 !important;
+  font-size: 11px !important;
+  border: none !important;
+}
+.ant-tag-success {
+  background: linear-gradient(135deg, #E8F5E9, #DBF7E0) !important;
+  color: #0E6B1E !important;
+}
+.ant-tag-warning {
+  background: linear-gradient(135deg, #FFF4D6, #FFE8B3) !important;
+  color: #92400E !important;
+}
+.ant-tag-error {
+  background: linear-gradient(135deg, #FEE2E2, #FCA5A5) !important;
+  color: #991B1B !important;
+}
+
+/* — Premium scrollbar — */
+::-webkit-scrollbar {
+  width: 8px !important;
+  height: 8px !important;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #D1D5DB, #B5BAC1) !important;
+  border-radius: 4px !important;
+  border: 1px solid transparent !important;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, var(--sber-green), var(--sber-green-vibrant)) !important;
+  background-clip: padding-box;
+}
+
+/* — Refined dividers — */
+.ant-divider {
+  border-color: var(--border-light) !important;
+}
+
+/* — Modals: subtle border ring + bigger title — */
+.ant-modal-content {
+  border-radius: var(--radius-lg) !important;
+  box-shadow:
+    0 25px 50px -12px rgba(15,23,42,0.25),
+    0 0 0 1px rgba(15,23,42,0.05) !important;
+}
+.ant-modal-header {
+  border-bottom: 1px solid var(--border-light) !important;
+  padding: 20px 24px !important;
+}
+.ant-modal-title { font-size: 17px !important; font-weight: 700 !important; }
