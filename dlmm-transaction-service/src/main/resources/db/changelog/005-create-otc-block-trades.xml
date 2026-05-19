@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Sprint 9 #6.1 — OTC desk block-trade workflow.
+
+      M#7 — institutional desk for off-AMM block trades. Larger nominals
+      than auto-routing through the pool curve would tolerate without
+      excessive price impact. Workflow:
+
+        REQUESTED  → block-trade created by admin operator with target
+                     counterparty + nominal + token pair
+        QUOTED     → quote attached (price + expiry); waiting for
+                     counterparty acceptance (Sprint 9 admin-driven;
+                     Sprint 11 RFQ marketplace #F-11 multi-LP auction)
+        ACCEPTED   → counterparty accepted the quote; pending settlement
+        SETTLED    → atomic swap-or-transfer executed; final state
+        REJECTED   → counterparty rejected
+        EXPIRED    → quote expired before acceptance
+        CANCELLED  → admin operator cancelled
+
+      Append-only event-row pattern would be cleaner, but a single-row
+      state-machine table matches the existing B2BSettlement pattern
+      and gives admin UI a simpler query model. Audit trail comes from
+      admin_audit_log (AU-4) on every status transition endpoint.
+    -->
+
+    <changeSet id="005-create-otc-block-trades" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="otc_block_trades"/></not>
+        </preConditions>
+
+        <createTable tableName="otc_block_trades">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <!-- Parties — both corp accounts (B2B issuers from Sprint 5 #5.6). -->
+            <column name="initiator_user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="counterparty_user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Admin operator who created the trade (audit trail). -->
+            <column name="created_by_admin_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- Trade direction: initiator GIVES token_in, RECEIVES token_out. -->
+            <column name="token_in_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="token_out_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount_in" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <!-- amount_out filled by QUOTED transition (negotiation outcome). -->
+            <column name="amount_out" type="BIGINT"/>
+
+            <!-- Quote metadata — set on quoteTransition. -->
+            <column name="quoted_price_micro" type="BIGINT"/>
+            <column name="quoted_at" type="TIMESTAMP"/>
+            <column name="quote_expires_at" type="TIMESTAMP"/>
+
+            <!-- State machine. See enum + lifecycle docs above. -->
+            <column name="status" type="VARCHAR(20)" defaultValue="REQUESTED">
+                <constraints nullable="false"/>
+            </column>
+
+            <!-- Settlement — populated on SETTLED. References transactions.id
+                 (the underlying ledger entry produced by the atomic exchange). -->
+            <column name="settlement_tx_id" type="UUID"/>
+            <column name="settled_at" type="TIMESTAMP"/>
+
+            <!-- Operator commentary visible to compliance + counterparty. -->
+            <column name="notes" type="VARCHAR(1000)"/>
+
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Most queries: admin operator dashboard ("open trades I created"),
+             counterparty inbox ("trades requested with me"), and analyst
+             time-range scans. Cover all three. -->
+        <createIndex indexName="idx_otc_initiator_status"
+                     tableName="otc_block_trades">
+            <column name="initiator_user_id"/>
+            <column name="status"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <createIndex indexName="idx_otc_counterparty_status"
+                     tableName="otc_block_trades">
+            <column name="counterparty_user_id"/>
+            <column name="status"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <createIndex indexName="idx_otc_created"
+                     tableName="otc_block_trades">
+            <column name="created_at" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
