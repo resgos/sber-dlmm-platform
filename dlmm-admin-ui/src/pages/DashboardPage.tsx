@@ -1,4 +1,4 @@
-import { Row, Col, Card, Statistic, Spin, Alert, Typography, Space } from 'antd'
+import { Row, Col, Card, Statistic, Spin, Alert, Typography, Space, Table, Tag, Progress } from 'antd'
 import {
   UserOutlined,
   FundOutlined,
@@ -8,19 +8,51 @@ import {
   TransactionOutlined,
   TrophyOutlined,
   TeamOutlined,
+  ArrowRightOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
-import { admin } from '@/api/services'
+import { useNavigate } from 'react-router-dom'
+import { admin, transactions, pools as poolsApi } from '@/api/services'
 import StatCard, { formatRub } from '@/components/StatCard'
 import { ADMIN_TILE_PALETTE } from '@/styles/palette'
+import type { Pool, Transaction } from '@/api/types'
 
-const { Title } = Typography
+const { Title, Text } = Typography
+
+// Sprint 9 — pulled from the Claude Design admin-dashboard mockup at
+// docs/design/admin-dashboard-claude-design/. The mockup taught us that
+// what was missing here wasn't "more KPI tiles" — it was "evidence of
+// life": a recent-operations feed and a top-pools list make the
+// dashboard read as a live system instead of a frozen snapshot. Both
+// hit existing endpoints (/admin/transactions, /admin/pools) so this
+// is a UI-only change. KPI tiles + hero stay as-is for this pass; a
+// future iteration can lift the sparkline-equipped KPI cards from
+// the mockup once we have a time-series endpoint to drive them.
+const TX_STATUS_COLOR: Record<string, string> = {
+  CONFIRMED: 'success',
+  PENDING: 'processing',
+  FAILED: 'error',
+  REVERTED: 'warning',
+}
+const TX_STATUS_LABEL: Record<string, string> = {
+  CONFIRMED: 'Исполнен',
+  PENDING: 'В обработке',
+  FAILED: 'Ошибка',
+  REVERTED: 'Отклонён',
+}
+const TX_TYPE_LABEL: Record<string, string> = {
+  SWAP: 'Своп',
+  ADD_LIQUIDITY: 'Добавление',
+  REMOVE_LIQUIDITY: 'Выход',
+  CLAIM_FEE: 'Сбор комиссии',
+}
 
 // Sprint 7 dedup — StatCard + formatRub extracted to @/components/StatCard.
 // Was inline in this file AND in user-ui's components/StatCard.tsx (cross-app
 // dup remains for now; needs Sprint 9+ workspaces / dlmm-ui-common package).
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const {
     data: dashboard,
     isLoading,
@@ -30,6 +62,31 @@ export default function DashboardPage() {
     queryFn: admin.getDashboard,
     refetchInterval: 60000,
   })
+
+  // Sprint 9 — recent-ops + top-pools feeds for the live-system feel.
+  // Both refetch on the same 60s cadence as the dashboard summary.
+  const { data: recentTx } = useQuery({
+    queryKey: ['recent-transactions'],
+    queryFn: () => transactions.getTransactions(0, 8),
+    refetchInterval: 60000,
+  })
+  const { data: poolList } = useQuery({
+    queryKey: ['dashboard-top-pools'],
+    queryFn: () => poolsApi.getPools(0, 100),
+    refetchInterval: 60000,
+  })
+
+  const topPoolsByVolume: Pool[] = (poolList?.content ?? [])
+    .slice()
+    .sort((a, b) => (b.volume24h ?? 0) - (a.volume24h ?? 0))
+    .slice(0, 5)
+
+  // Total 24h volume across the visible pool catalog — used to render
+  // each pool's share-of-volume bar.
+  const totalVolumeForShare = topPoolsByVolume.reduce(
+    (acc, p) => acc + (p.volume24h ?? 0),
+    0,
+  ) || 1
 
   if (isLoading) {
     return (
@@ -164,7 +221,10 @@ export default function DashboardPage() {
         </Col>
       </Row>
 
-      {/* Row 3: Additional metrics */}
+      {/* Row 3 — health summary tiles (Активные позиции / KYC).
+          Pre-Sprint-9 these were the entire bottom half and felt
+          empty; now they share the page with the live feeds below
+          so the dashboard reads as a working system. Kept narrow. */}
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12}>
           <Card
@@ -196,6 +256,148 @@ export default function DashboardPage() {
               valueStyle={{ color: 'var(--sber-green)', fontSize: 36, fontWeight: 700 }}
               prefix={<CheckCircleOutlined />}
             />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Row 4 — live feeds. Last 8 swaps + top-5 pools by 24h volume.
+          Both came from the Claude Design admin-dashboard mockup
+          (docs/design/admin-dashboard-claude-design/) — the diagnosis
+          was "dashboard reads as frozen because there's no movement"
+          and these two sections are the cheapest way to show it. */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={14}>
+          <Card
+            className="sber-card"
+            style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+            styles={{ body: { padding: 0 } }}
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Последние операции</div>
+                  <Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
+                    Свопы и операции с ликвидностью в реальном времени
+                  </Text>
+                </div>
+                <a
+                  onClick={() => navigate('/transactions')}
+                  style={{ color: 'var(--sber-green)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                >
+                  Все транзакции <ArrowRightOutlined style={{ fontSize: 11 }} />
+                </a>
+              </div>
+            }
+          >
+            <Table<Transaction>
+              dataSource={recentTx?.content ?? []}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              showHeader={false}
+              onRow={(record) => ({
+                onClick: () => navigate(`/transactions/${record.id}`),
+                style: { cursor: 'pointer' },
+              })}
+              columns={[
+                {
+                  key: 'time',
+                  dataIndex: 'createdAt',
+                  width: 110,
+                  render: (v: string) => (
+                    <Text type="secondary" style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}>
+                      {v ? new Date(v).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
+                    </Text>
+                  ),
+                },
+                {
+                  key: 'type',
+                  width: 110,
+                  render: (_, r) => (
+                    <Text style={{ fontSize: 13, fontWeight: 500 }}>{TX_TYPE_LABEL[r.txType] || r.txType}</Text>
+                  ),
+                },
+                {
+                  key: 'amount',
+                  dataIndex: 'amountIn',
+                  align: 'right',
+                  render: (v: number) => (
+                    <span style={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                      {(v ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 })}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'status',
+                  dataIndex: 'status',
+                  align: 'right',
+                  width: 120,
+                  render: (s: string) => (
+                    <Tag color={TX_STATUS_COLOR[s] || 'default'} style={{ borderRadius: 999, padding: '0 10px' }}>
+                      {TX_STATUS_LABEL[s] || s}
+                    </Tag>
+                  ),
+                },
+              ]}
+              locale={{ emptyText: 'Нет недавних операций — система простаивает' }}
+            />
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={10}>
+          <Card
+            className="sber-card"
+            style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Топ-5 пулов по объёму</div>
+                  <Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
+                    За последние 24 часа
+                  </Text>
+                </div>
+                <a
+                  onClick={() => navigate('/pools?sort=volume24h')}
+                  style={{ color: 'var(--sber-green)', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                >
+                  Все пулы <ArrowRightOutlined style={{ fontSize: 11 }} />
+                </a>
+              </div>
+            }
+          >
+            <Space direction="vertical" size={14} style={{ width: '100%' }}>
+              {topPoolsByVolume.length === 0 && (
+                <Text type="secondary">Нет данных об объёме</Text>
+              )}
+              {topPoolsByVolume.map((p) => {
+                const share = ((p.volume24h ?? 0) / totalVolumeForShare) * 100
+                return (
+                  <div
+                    key={p.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/pools/${p.id}`)}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <Text style={{ fontWeight: 500, fontSize: 13 }}>
+                        {p.tokenXSymbol}/{p.tokenYSymbol}
+                      </Text>
+                      <Text style={{ fontWeight: 500, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
+                        {formatRub(p.volume24h ?? 0)}
+                      </Text>
+                    </div>
+                    <Progress
+                      percent={share}
+                      showInfo={false}
+                      strokeColor="var(--sber-green)"
+                      trailColor="rgba(33,160,56,0.08)"
+                      size={['100%', 6]}
+                    />
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      {share.toFixed(1)}% от объёма
+                    </Text>
+                  </div>
+                )
+              })}
+            </Space>
           </Card>
         </Col>
       </Row>
