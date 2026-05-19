@@ -157,14 +157,16 @@ export default function PoolDetailPage() {
                 </Descriptions.Item>
                 <Descriptions.Item label="Шаг цены между бинами">{bpsToPercent(pool.binStep)}</Descriptions.Item>
                 <Descriptions.Item label="Базовая комиссия">{bpsToPercent(pool.baseFeeBps)}</Descriptions.Item>
-                <Descriptions.Item label="ID активного бина">{pool.activeBinId}</Descriptions.Item>
                 <Descriptions.Item label="Текущая цена">
                   {pool.currentPrice.toLocaleString('ru-RU', { maximumFractionDigits: 6 })}
+                  <span style={{ marginLeft: 8, color: 'var(--text-secondary)', fontSize: 12 }}>
+                    {pool.tokenYSymbol} за 1 {pool.tokenXSymbol}
+                  </span>
                 </Descriptions.Item>
-                <Descriptions.Item label="Общий TVL (X)">
+                <Descriptions.Item label={`Резерв ${pool.tokenXSymbol}`}>
                   {pool.totalTvlX.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
                 </Descriptions.Item>
-                <Descriptions.Item label="Общий TVL (Y)">
+                <Descriptions.Item label={`Резерв ${pool.tokenYSymbol}`}>
                   {pool.totalTvlY.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
                 </Descriptions.Item>
                 <Descriptions.Item label="Объём за 24ч">
@@ -189,18 +191,23 @@ export default function PoolDetailPage() {
                     </span>
                   )}
                 </Descriptions.Item>
-                <Descriptions.Item label="Аккумулятор волатильности">
+                <Descriptions.Item label="Индекс волатильности">
                   {pool.volatilityAccumulator}
                 </Descriptions.Item>
-                <Descriptions.Item label="Собрано комиссий (X)">
+                <Descriptions.Item label={`Собрано комиссий в ${pool.tokenXSymbol}`}>
                   {pool.totalFeesCollectedX.toLocaleString('ru-RU', {
                     maximumFractionDigits: 4,
                   })}
                 </Descriptions.Item>
-                <Descriptions.Item label="Собрано комиссий (Y)">
+                <Descriptions.Item label={`Собрано комиссий в ${pool.tokenYSymbol}`}>
                   {pool.totalFeesCollectedY.toLocaleString('ru-RU', {
                     maximumFractionDigits: 4,
                   })}
+                </Descriptions.Item>
+                <Descriptions.Item label="Внутренний ID бина">
+                  <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-muted)' }}>
+                    {pool.activeBinId}
+                  </span>
                 </Descriptions.Item>
               </Descriptions>
             </Card>

@@ -126,18 +126,36 @@ export default function PoolsPage() {
       render: (val: number) => val.toLocaleString('ru-RU', { maximumFractionDigits: 6 }),
     },
     {
-      title: 'TVL (X)',
+      // Sprint 9 — column title is dynamic per-row via render rather than
+      // a fixed "(X)". Header stays generic "Резерв 1-го токена" so the
+      // column header makes sense across all pools; cell value is suffixed
+      // with the actual symbol from that row.
+      title: 'Резерв 1-го токена',
       dataIndex: 'totalTvlX',
       key: 'totalTvlX',
       align: 'right',
-      render: (val: number) => val.toLocaleString('ru-RU', { maximumFractionDigits: 2 }),
+      render: (val: number, row: Pool) => (
+        <>
+          {val.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+          <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>
+            {row.tokenXSymbol}
+          </span>
+        </>
+      ),
     },
     {
-      title: 'TVL (Y)',
+      title: 'Резерв 2-го токена',
       dataIndex: 'totalTvlY',
       key: 'totalTvlY',
       align: 'right',
-      render: (val: number) => val.toLocaleString('ru-RU', { maximumFractionDigits: 2 }),
+      render: (val: number, row: Pool) => (
+        <>
+          {val.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+          <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>
+            {row.tokenYSymbol}
+          </span>
+        </>
+      ),
     },
     {
       title: 'Объём 24ч',

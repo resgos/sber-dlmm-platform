@@ -47,8 +47,10 @@ function getBinColor(side: 'left' | 'active' | 'right', distance: number, maxDis
   return `rgba(${r},${g},${b},${opacity})`
 }
 
-// Кастомный tooltip
-const CustomTooltip = ({ active, payload, label }: any) => {
+// Sprint 9 — tooltip uses real token symbols instead of opaque X/Y.
+// Factory pattern: makeTooltip(xSym, ySym) returns the actual component
+// closure so the chart can wire the active pool's symbols at render time.
+const makeTooltip = (xSym: string, ySym: string) => ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null
   const d: ChartDataPoint = payload[0]?.payload
   return (
@@ -61,14 +63,13 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
     }}>
       <div style={{ fontWeight: 600, marginBottom: 4, color: d?.isActive ? '#F59E0B' : '#111827' }}>
-        Бин #{label}{d?.isActive ? ' ★ Активный' : ''}
+        {d?.isActive ? '★ Текущая цена' : 'Цена'}: {d?.price}
       </div>
-      <div style={{ color: '#6B7280' }}>Цена: {d?.price}</div>
       <div style={{ color: '#3B82F6' }}>
-        Резерв Y: {Number(d?.reserveY ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
+        Резерв {ySym}: {Number(d?.reserveY ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
       </div>
       <div style={{ color: '#21A038' }}>
-        Резерв X: {Number(d?.reserveX ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
+        Резерв {xSym}: {Number(d?.reserveX ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
       </div>
       <div style={{ color: '#9CA3AF', marginTop: 4 }}>
         Ликвидность: {Number(d?.liquidity ?? 0).toLocaleString('ru-RU')}
@@ -142,6 +143,11 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
     } as any
   })
 
+  // Sprint 9 — tooltip closure with real token symbols.
+  const xSym = pool.tokenXSymbol || 'токен X'
+  const ySym = pool.tokenYSymbol || 'токен Y'
+  const Tooltip2 = makeTooltip(xSym, ySym)
+
   return (
     <div>
       {/* Легенда — Sprint 9: real token symbols + current price marker */}
@@ -186,7 +192,7 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
               return String(v)
             }}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+          <Tooltip content={Tooltip2} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
           <ReferenceLine
             x={pool.activeBinId}
             stroke="#F59E0B"
