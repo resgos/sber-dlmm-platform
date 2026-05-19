@@ -2,11 +2,9 @@ package com.sber.dlmm.common.security;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
-import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
  * Auto-registers {@link JwtTokenProvider} and {@link JwtAuthenticationFilter}
@@ -18,10 +16,16 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * silently skip this auto-config instead of crashing with
  * ClassNotFoundException at startup.
  *
- * The Bearer-forwarding {@link org.springframework.boot.web.reactive.function.client.WebClientCustomizer}
- * lives in {@link DlmmWebClientAutoConfiguration} so that services without
- * spring-webflux on the classpath (e.g. user-service) don't fail bean
- * introspection.
+ * <p>The Redis-backed {@link JwtRevocationService} bean lives in a
+ * separate {@link DlmmJwtRedisRevocationAutoConfiguration} class — its
+ * own @ConditionalOnClass gates the entire class so services without
+ * spring-data-redis on the classpath don't try to introspect a method
+ * signature referencing {@code StringRedisTemplate}. The Noop fallback
+ * stays here so it always registers (any service without the Redis
+ * bean gets Noop instead of a startup crash).
+ *
+ * <p>The Bearer-forwarding {@code WebClientCustomizer} lives in
+ * {@link DlmmWebClientAutoConfiguration} for the same isolation reason.
  */
 @AutoConfiguration
 @ConditionalOnClass(name = {
@@ -44,19 +48,12 @@ public class DlmmJwtAutoConfiguration {
     }
 
     /**
-     * Sprint 8 AU-3 — Redis-backed JWT denylist if Redis is on the classpath
-     * AND a {@link StringRedisTemplate} bean is configured by the Spring Boot
-     * Redis auto-config. Otherwise falls back to {@link NoopJwtRevocationService}
-     * (logs WARN at first call so prod can't silently lose revocation).
+     * Fallback {@link JwtRevocationService} for services without Redis.
+     * Always registered if no other {@link JwtRevocationService} bean
+     * already exists ({@link DlmmJwtRedisRevocationAutoConfiguration}
+     * registers its Redis-backed variant first when Redis is on the
+     * classpath, so this one is the actual fallback).
      */
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnClass(StringRedisTemplate.class)
-    @ConditionalOnBean(StringRedisTemplate.class)
-    public JwtRevocationService dlmmRedisJwtRevocationService(StringRedisTemplate redis) {
-        return new RedisJwtRevocationService(redis);
-    }
-
     @Bean
     @ConditionalOnMissingBean
     public JwtRevocationService dlmmNoopJwtRevocationService() {
