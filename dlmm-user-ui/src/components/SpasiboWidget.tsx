@@ -108,7 +108,14 @@ export default function SpasiboWidget() {
             style={{ borderRadius: 8 }} />
         )}
 
-        <Space.Compact style={{ width: '100%' }}>
+        {/* Sprint 9 — was Space.Compact which inherited the 42px input
+            override but kept the button at default 38px; AntD's Compact
+            collapses negative margins to fuse borders and that gap
+            misaligned the button vertically + visually covered the input
+            on the dashboard card. Plain flex with explicit gap renders
+            both children at the same 40px height regardless of the
+            theme-level input/button overrides. */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
           <InputNumber
             placeholder="Сколько баллов?"
             value={pointsToConvert}
@@ -116,7 +123,7 @@ export default function SpasiboWidget() {
             min={0}
             max={available}
             controls={false}
-            style={{ width: '100%' }}
+            style={{ flex: 1, minWidth: 0, height: 40 }}
           />
           <Button
             type="primary"
@@ -129,11 +136,13 @@ export default function SpasiboWidget() {
               color: 'var(--sber-green)',
               fontWeight: 600,
               borderColor: 'white',
+              height: 40,
+              flexShrink: 0,
             }}
           >
             В рубли
           </Button>
-        </Space.Compact>
+        </div>
       </Space>
     </Card>
   )

@@ -16,13 +16,13 @@ import java.time.Duration;
  * shows up as a section under /actuator/health, so operators can see
  * exactly which downstream is failing without log-grepping.
  *
- * Probe is intentionally short (1s) so the parent /actuator/health
- * stays snappy even if one downstream wedges — k8s liveness probes
- * typically have a 5-10s budget for the whole check.
+ * Probe budget — bumped from 1s to 3s on 2026-05-19, see twin in
+ * admin-bff for the rationale (cold-start Hibernate + Lettuce round-trip
+ * routinely takes 1.5s and we don't want spurious DOWN cascades).
  */
 public class DownstreamHealthIndicator implements HealthIndicator {
 
-    private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(1);
+    private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(3);
 
     private final String name;
     private final String baseUrl;

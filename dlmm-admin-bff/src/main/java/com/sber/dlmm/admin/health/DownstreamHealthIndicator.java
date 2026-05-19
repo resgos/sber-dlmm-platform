@@ -15,13 +15,17 @@ import java.time.Duration;
  * so operators can see exactly which downstream is failing without
  * grepping logs.
  *
- * Probe budget is intentionally tight (1s) so the parent /actuator/health
- * stays snappy even if one downstream wedges — admin-bff fans out to five
- * services and we don't want the whole probe to stall on a single slow one.
+ * Probe budget — bumped from 1s to 3s on 2026-05-19. With JVM heap caps
+ * + cold start after rebuild, the actuator-health round-trip on
+ * pool-engine routinely takes 1.2-2s (Hibernate session boot + Redis
+ * Lettuce handshake during the probe). 1s mis-classified pool-engine
+ * as DOWN, which cascaded into admin-bff DOWN, which made the admin-ui
+ * dashboard hang waiting for /admin/dashboard. 3s still keeps the parent
+ * /actuator/health under 3s even when 5 downstreams all fail.
  */
 public class DownstreamHealthIndicator implements HealthIndicator {
 
-    private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(1);
+    private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(3);
 
     private final String name;
     private final String baseUrl;

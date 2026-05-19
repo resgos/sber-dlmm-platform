@@ -22,9 +22,17 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-  redis:
-    host: ${REDIS_HOST:localhost}
-    port: 6379
+  # Sprint 9 — Spring Boot 3.2 renamed spring.redis.* → spring.data.redis.*.
+  # Servlet LettuceConnectionFactory honored the deprecated path so login
+  # cache worked, but RedisReactiveHealthIndicator only reads the new path
+  # and was probing localhost:6379 → /actuator/health returned 503 →
+  # pool-engine + admin-bff cascaded into DOWN cascades. The other 4
+  # services (gateway, pool-engine, token, fee, transaction) already
+  # use spring.data.redis.* — user-service was the last lagging one.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
   liquibase:
     change-log: classpath:db/changelog/master.xml
 

@@ -462,7 +462,22 @@ export default function HedgePage() {
                               Текущая котировка
                             </Text>
                             <div style={{ fontSize: 15, fontWeight: 600 }}>
-                              1 {c.baseToken.symbol} ≈ {c.pool.currentPrice.toFixed(6)} {c.hedgeToken.symbol}
+                              {/* Sprint 9 quote-flip fix — DLMM stores
+                                  currentPrice as "1 tokenX = N tokenY".
+                                  We always show the foreign currency as the
+                                  base ("1 USD = 95 RUB") because that's the
+                                  treasurer's native reading.
+                                    - baseIsX=false → SRUB is tokenY, hedge
+                                      is tokenX, currentPrice IS already
+                                      "1 hedge = N SRUB" → use as-is.
+                                    - baseIsX=true  → SRUB is tokenX, hedge
+                                      is tokenY, currentPrice is
+                                      "1 SRUB = N hedge" → invert. */}
+                              {(() => {
+                                const p = c.pool.currentPrice
+                                const priceInBase = c.baseIsX ? 1 / p : p
+                                return `1 ${c.hedgeToken.symbol} ≈ ${priceInBase.toFixed(4)} ${c.baseToken.symbol}`
+                              })()}
                             </div>
                           </div>
                         </Col>
@@ -566,8 +581,14 @@ export default function HedgePage() {
                       <Col span={12} style={{ textAlign: 'right' }}>
                         <Text type="secondary" style={{ fontSize: 11 }}>Эффективный курс</Text>
                         <div style={{ fontSize: 14, fontWeight: 600 }}>
-                          1 {selectedCandidate.baseToken.symbol} ≈{' '}
-                          {effectiveHedgeRate(quote.amountIn, quote.amountOut).toFixed(6)}
+                          {/* Same "foreign currency first" convention as
+                              the quote display above — "1 USDT ≈ N SRUB"
+                              not "1 SRUB ≈ 0.0105 USDT". Effective rate
+                              already factors in slippage + fees. */}
+                          {(() => {
+                            const eff = effectiveHedgeRate(quote.amountIn, quote.amountOut)
+                            return `1 ${selectedCandidate.hedgeToken.symbol} ≈ ${(1 / eff).toFixed(4)} ${selectedCandidate.baseToken.symbol}`
+                          })()}
                         </div>
                       </Col>
                       <Col span={12}>
