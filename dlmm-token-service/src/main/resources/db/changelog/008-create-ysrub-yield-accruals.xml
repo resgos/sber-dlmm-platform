@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Sprint 9 #7.1 + #7.2 — Tokenized money market (YSRUB).
+
+      YSRUB balance lives in the existing user_balances table (composite
+      key userId + tokenId). What this changeset adds:
+
+      1. ysrub_yield_accruals — append-only history of yield credits.
+         One row per (user, accrual_day). Used by:
+           - #7.2 YieldDistributionScheduler — write path, idempotent via
+             unique constraint on (user_id, accrual_day)
+           - GET /tokens/ysrub/me — read path for "total yield received"
+             attribution
+           - Compliance/audit replay
+
+      2. ysrub_reserve_movements — tracks the SRUB locked into the reserve
+         when users mint YSRUB. Separate from user_balances to keep the
+         reserve account auditable independent of any single user row.
+
+      Per DB-MIGRATION-CONVENTION.md: new CREATE TABLE wrapped in
+      preCondition so it coexists with greenfield init-db.sql.
+    -->
+
+    <changeSet id="008-create-ysrub-yield-accruals" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="ysrub_yield_accruals"/></not>
+        </preConditions>
+        <createTable tableName="ysrub_yield_accruals">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <!-- YSRUB principal balance at the moment of accrual. The yield
+                 amount = principal × (overnight_rate + spread_bps/10000) / 365. -->
+            <column name="principal_at_accrual" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="yield_amount" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Two rates broken out for compliance replay — we need to be
+                 able to answer "what CBR overnight rate was used on day X". -->
+            <column name="overnight_rate_bps" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="spread_bps" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="accrual_day" type="DATE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <!-- Idempotency: one accrual per user per day. The scheduler's UPSERT
+             with ON CONFLICT DO NOTHING relies on this. -->
+        <addUniqueConstraint
+                tableName="ysrub_yield_accruals"
+                columnNames="user_id, accrual_day"
+                constraintName="uq_ysrub_yield_user_day"/>
+
+        <createIndex indexName="idx_ysrub_yield_user_created"
+                     tableName="ysrub_yield_accruals">
+            <column name="user_id"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="008b-create-ysrub-reserve-movements" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="ysrub_reserve_movements"/></not>
+        </preConditions>
+        <createTable tableName="ysrub_reserve_movements">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <!-- DEPOSIT (mint) | WITHDRAWAL (burn). Append-only. -->
+            <column name="direction" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="srub_amount" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ysrub_amount" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <!-- Conversion ratio at time of operation. Today always 1.0;
+                 future: as yield accrues, burn redemption uses an
+                 ever-rising ratio (yield-adjusted unit value). -->
+            <column name="ratio_micro" type="BIGINT" defaultValueNumeric="1000000">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="VARCHAR(120)"/>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint
+                tableName="ysrub_reserve_movements"
+                columnNames="idempotency_key"
+                constraintName="uq_ysrub_reserve_idempotency"/>
+
+        <createIndex indexName="idx_ysrub_reserve_user_created"
+                     tableName="ysrub_reserve_movements">
+            <column name="user_id"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="008c-seed-ysrub-token" author="dlmm-platform">
+        <!-- Insert the YSRUB token row. ON CONFLICT DO NOTHING so re-runs
+             on existing DBs (e.g. after a Sprint 10 yield-adjusted ratio
+             column add) don't double-insert. -->
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">SELECT COUNT(*) FROM tokens WHERE symbol = 'YSRUB'</sqlCheck>
+        </preConditions>
+        <sql>
+            INSERT INTO tokens (id, name, symbol, decimals, total_supply, max_supply, token_type,
+                                underlying_asset, price_oracle_id, mintable, burnable, active, created_by)
+            VALUES ('b0000000-0000-0000-0000-000000000007',
+                    'YSRUB Money Market',
+                    'YSRUB',
+                    2,
+                    0,
+                    1000000000000,
+                    'FIAT_BACKED',
+                    'RUB',
+                    'CBR_OVERNIGHT',
+                    true,
+                    true,
+                    true,
+                    'a0000000-0000-0000-0000-000000000001');
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>
