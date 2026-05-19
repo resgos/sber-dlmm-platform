@@ -1,15 +1,40 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col } from 'antd'
 import { DollarOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { pools, fees } from '@/api/services'
-import type { Position, FeeHistoryEntry } from '@/api/types'
+import type { Position, Pool, FeeHistoryEntry } from '@/api/types'
 import StatCard, { formatRub } from '@/components/StatCard'
 import { PieChartOutlined, TrophyOutlined, WalletOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
+
+// Sprint 9 — DLMM bins are evenly-spaced on a log scale: price at binId =
+// basePrice * (1 + binStepBps/10000)^(binId - activeBinId). We render the
+// raw bin range as a human-readable price range (in tokenY per 1 tokenX)
+// because nobody outside the engineering team can mentally translate
+// "8388603 — 8388613" into a price range. Falls back to the raw numbers
+// if we don't have the surrounding pool's current price yet (first paint).
+function formatBinPriceRange(
+  binMin: number,
+  binMax: number,
+  activeBinId: number | null | undefined,
+  binStepBps: number | null | undefined,
+  currentPrice: number | null | undefined,
+  quoteSymbol: string,
+): string {
+  if (!activeBinId || !binStepBps || !currentPrice) {
+    return `${binMin} — ${binMax}`
+  }
+  const r = 1 + binStepBps / 10000
+  const lo = currentPrice * Math.pow(r, binMin - activeBinId)
+  const hi = currentPrice * Math.pow(r, binMax - activeBinId)
+  const fmt = (n: number) =>
+    n.toLocaleString('ru-RU', { maximumFractionDigits: n >= 100 ? 2 : 4 })
+  return `${fmt(lo)} — ${fmt(hi)} ${quoteSymbol}`
+}
 
 export default function PositionsPage() {
   const navigate = useNavigate()
@@ -21,6 +46,22 @@ export default function PositionsPage() {
     queryKey: ['myPositions'],
     queryFn: pools.getMyPositions,
   })
+
+  // Sprint 9 — backend Position DTO doesn't carry tokenXSymbol /
+  // tokenYSymbol / binStep / currentPrice / activeBinId, so the page
+  // was rendering "/" for the pair and raw bin IDs for the range.
+  // Pull the whole pool catalog (cheap, server-paginated) and join
+  // by poolId on the client. The catalog is already cached by other
+  // pages so this is usually a free read.
+  const { data: poolPage } = useQuery({
+    queryKey: ['pools', 0, 100],
+    queryFn: () => pools.getPools(0, 100),
+  })
+  const poolById = useMemo(() => {
+    const map = new Map<string, Pool>()
+    for (const p of poolPage?.content ?? []) map.set(p.id, p)
+    return map
+  }, [poolPage])
 
   const { data: feeSummary } = useQuery({
     queryKey: ['myFeeSummary'],
@@ -100,25 +141,72 @@ export default function PositionsPage() {
             {
               title: 'Пул',
               key: 'pool',
-              render: (_: unknown, r: Position) => <Text strong>{r.tokenXSymbol}/{r.tokenYSymbol}</Text>,
+              render: (_: unknown, r: Position) => {
+                // Sprint 9 — join Position with Pool to get pair symbols
+                // (Position DTO doesn't carry them). Fall back to a
+                // truncated poolId so the cell never shows just "/".
+                const pool = poolById.get(r.poolId)
+                if (pool) {
+                  return (
+                    <Text strong>
+                      {pool.tokenXSymbol}/{pool.tokenYSymbol}
+                    </Text>
+                  )
+                }
+                return <Text type="secondary">пул {r.poolId.slice(0, 6)}…</Text>
+              },
             },
             { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="blue">{s}</Tag> },
             {
-              title: 'Диапазон бинов',
+              title: 'Диапазон цен',
               key: 'range',
-              render: (_: unknown, r: Position) => `${r.binRangeMin} — ${r.binRangeMax}`,
+              render: (_: unknown, r: Position) => {
+                const pool = poolById.get(r.poolId)
+                return (
+                  <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>
+                    {formatBinPriceRange(
+                      r.binRangeMin,
+                      r.binRangeMax,
+                      pool?.activeBinId,
+                      pool?.binStep,
+                      pool?.currentPrice,
+                      pool?.tokenYSymbol ?? '',
+                    )}
+                  </span>
+                )
+              },
             },
             {
-              title: 'Незабранные X',
-              dataIndex: 'unclaimedFeeX',
+              title: 'Незабранные комиссии',
+              key: 'unclaimed',
               align: 'right' as const,
-              render: (v: number) => v > 0 ? <Text type="success">{v.toLocaleString('ru-RU')}</Text> : '—',
-            },
-            {
-              title: 'Незабранные Y',
-              dataIndex: 'unclaimedFeeY',
-              align: 'right' as const,
-              render: (v: number) => v > 0 ? <Text type="success">{v.toLocaleString('ru-RU')}</Text> : '—',
+              render: (_: unknown, r: Position) => {
+                // Sprint 9 — was two columns ("Незабранные X", "Незабранные Y")
+                // with raw numbers and no unit. Now one column showing the
+                // actual token symbols. Renders "—" only when BOTH legs
+                // are zero so a user sees "+120M SUSDT" even when only
+                // one side has accrued fees.
+                const pool = poolById.get(r.poolId)
+                const xSym = pool?.tokenXSymbol ?? 'X'
+                const ySym = pool?.tokenYSymbol ?? 'Y'
+                if (r.unclaimedFeeX === 0 && r.unclaimedFeeY === 0) {
+                  return <Text type="secondary">—</Text>
+                }
+                return (
+                  <Space size={6} wrap style={{ justifyContent: 'flex-end' }}>
+                    {r.unclaimedFeeX > 0 && (
+                      <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px', fontVariantNumeric: 'tabular-nums' }}>
+                        +{r.unclaimedFeeX.toLocaleString('ru-RU')} {xSym}
+                      </Tag>
+                    )}
+                    {r.unclaimedFeeY > 0 && (
+                      <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px', fontVariantNumeric: 'tabular-nums' }}>
+                        +{r.unclaimedFeeY.toLocaleString('ru-RU')} {ySym}
+                      </Tag>
+                    )}
+                  </Space>
+                )
+              },
             },
             {
               title: 'Создана',
@@ -189,7 +277,14 @@ export default function PositionsPage() {
         okButtonProps={{ danger: true }}
       >
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          <Text>Какой процент ликвидности удалить из позиции {removeModalPos?.tokenXSymbol}/{removeModalPos?.tokenYSymbol}?</Text>
+          <Text>
+            Какой процент ликвидности удалить из позиции{' '}
+            {(() => {
+              const pool = removeModalPos ? poolById.get(removeModalPos.poolId) : undefined
+              return pool ? `${pool.tokenXSymbol}/${pool.tokenYSymbol}` : ''
+            })()}
+            ?
+          </Text>
           <Slider min={1} max={100} value={removePercent} onChange={setRemovePercent}
             marks={{ 25: '25%', 50: '50%', 75: '75%', 100: '100%' }} />
           <Text strong style={{ textAlign: 'center', display: 'block', fontSize: 24, color: '#EF4444' }}>
