@@ -1,5 +1,6 @@
 import { Card } from 'antd'
 import React from 'react'
+import { Link } from 'react-router-dom'
 
 /**
  * Sprint 7 dedup — extracted from inline definition in DashboardPage.tsx
@@ -17,6 +18,13 @@ export interface StatCardProps {
   iconBg: string
   iconColor: string
   formatter?: (value: number) => string
+  /**
+   * Sprint 9 #M-4 (UX-001) — drill-down link. When set, the entire
+   * tile becomes a clickable router Link to {@code to}. Audit M-4
+   * fix: dashboard tiles used to be inert; now they navigate to a
+   * filtered list view per tile (e.g. "Verified" tile → /users?kycStatus=VERIFIED).
+   */
+  to?: string
 }
 
 export default function StatCard({
@@ -26,8 +34,9 @@ export default function StatCard({
   iconBg,
   iconColor,
   formatter,
+  to,
 }: StatCardProps) {
-  return (
+  const inner = (
     <Card
       className="sber-card"
       hoverable
@@ -63,6 +72,19 @@ export default function StatCard({
       </div>
     </Card>
   )
+
+  if (to) {
+    return (
+      <Link
+        to={to}
+        style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
+        aria-label={`${title}: ${formatter ? formatter(value) : value.toLocaleString('ru-RU')} — открыть подробнее`}
+      >
+        {inner}
+      </Link>
+    )
+  }
+  return inner
 }
 
 /**

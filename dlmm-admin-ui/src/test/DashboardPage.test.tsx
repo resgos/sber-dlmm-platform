@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 
 const getDashboardMock = vi.fn()
 
@@ -10,11 +11,17 @@ vi.mock('@/api/services', () => ({
 
 import DashboardPage from '../pages/DashboardPage'
 
+// Sprint 9 #M-4 — StatCard now wraps tiles in <Link> when `to` is set.
+// MemoryRouter is required for any DashboardPage render.
 function withQuery(node: React.ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+  return (
+    <MemoryRouter>
+      <QueryClientProvider client={client}>{node}</QueryClientProvider>
+    </MemoryRouter>
+  )
 }
 
 describe('DashboardPage (admin-ui)', () => {

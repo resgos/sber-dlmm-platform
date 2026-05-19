@@ -82,6 +82,7 @@ export default function DashboardPage() {
             icon={<UserOutlined />}
             iconBg={ADMIN_TILE_PALETTE.users.bg}
             iconColor={ADMIN_TILE_PALETTE.users.fg}
+            to="/users"
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -91,6 +92,7 @@ export default function DashboardPage() {
             icon={<CheckCircleOutlined />}
             iconBg={ADMIN_TILE_PALETTE.verified.bg}
             iconColor={ADMIN_TILE_PALETTE.verified.fg}
+            to="/users?kycStatus=VERIFIED"
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -100,6 +102,7 @@ export default function DashboardPage() {
             icon={<FundOutlined />}
             iconBg={ADMIN_TILE_PALETTE.pools.bg}
             iconColor={ADMIN_TILE_PALETTE.pools.fg}
+            to="/pools"
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -109,6 +112,7 @@ export default function DashboardPage() {
             icon={<TeamOutlined />}
             iconBg={ADMIN_TILE_PALETTE.poolsActive.bg}
             iconColor={ADMIN_TILE_PALETTE.poolsActive.fg}
+            to="/pools?status=ACTIVE"
           />
         </Col>
       </Row>
@@ -123,6 +127,7 @@ export default function DashboardPage() {
             iconBg={ADMIN_TILE_PALETTE.tvl.bg}
             iconColor={ADMIN_TILE_PALETTE.tvl.fg}
             formatter={formatRub}
+            to="/pools?sort=tvl"
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -133,6 +138,7 @@ export default function DashboardPage() {
             iconBg={ADMIN_TILE_PALETTE.volume.bg}
             iconColor={ADMIN_TILE_PALETTE.volume.fg}
             formatter={formatRub}
+            to="/pools?sort=volume24h"
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -143,6 +149,7 @@ export default function DashboardPage() {
             iconBg={ADMIN_TILE_PALETTE.verified.bg}
             iconColor={ADMIN_TILE_PALETTE.verified.fg}
             formatter={formatRub}
+            to="/transactions?txType=CLAIM_FEE"
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
@@ -152,6 +159,7 @@ export default function DashboardPage() {
             icon={<TransactionOutlined />}
             iconBg={ADMIN_TILE_PALETTE.users.bg}
             iconColor={ADMIN_TILE_PALETTE.users.fg}
+            to="/transactions?date=today"
           />
         </Col>
       </Row>
