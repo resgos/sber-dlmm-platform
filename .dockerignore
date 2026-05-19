@@ -1,0 +1,45 @@
+# Sprint 9 Day 3 — added after fee-service kept booting stale classes.
+# Without this, `docker build` COPY . . pulls every local target/ and
+# node_modules/, and Maven inside the image re-uses those compiled
+# classes instead of rebuilding from source. Caught when fee-service
+# kept crashing with the pre-fix DlmmJwtAutoConfiguration even after
+# the source fix had landed.
+
+# Maven build output (must always rebuild from source in image)
+**/target/
+**/*.class
+
+# Frontend build artefacts (image's Dockerfile re-runs npm ci + build)
+**/node_modules/
+**/dist/
+
+# IDE + OS junk that shouldn't be in build context
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Git metadata (image doesn't need git history)
+.git/
+.gitignore
+.gitattributes
+
+# Claude worktree state (orchestration metadata)
+.claude/
+
+# Docs are not needed at runtime
+docs/
+*.md
+!Dockerfile*.md
+
+# Test/load artefacts
+loadtest/results/
+**/test-results/
+**/playwright-report/
+**/coverage/
+
+# Env / secret files
+.env
+.env.*
+!.env.example
