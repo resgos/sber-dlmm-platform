@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Table,
   Space,
@@ -7,15 +7,27 @@ import {
   Typography,
   Card,
   Button,
+  Select,
   TablePaginationConfig,
 } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { PlusOutlined, FilterOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { pools as poolService } from '@/api/services'
 import type { Pool, PoolStatus } from '@/api/types'
 
-const { Title } = Typography
+const { Title, Text } = Typography
+
+// Sprint 9 #M-5 — sort options consumed via URL ?sort= (set by Dashboard
+// drill-down per #M-4). Each maps to a Pool field name; "none" returns
+// data in API order (page-default).
+type SortKey = 'none' | 'tvl' | 'volume24h' | 'apy'
+const SORT_LABELS: Record<SortKey, string> = {
+  none: 'По умолчанию',
+  tvl: 'TVL (по убыванию)',
+  volume24h: 'Объём 24ч (по убыванию)',
+  apy: 'APY (по убыванию)',
+}
 
 const poolStatusColor: Record<PoolStatus, string> = {
   ACTIVE: 'green',
@@ -33,6 +45,14 @@ const poolStatusLabel: Record<PoolStatus, string> = {
 
 export default function PoolsPage() {
   const navigate = useNavigate()
+  // Sprint 9 #M-5 — URL-driven filter+sort. Status comes from Dashboard
+  // drill-down (?status=ACTIVE → "Активные пулы" tile); sort from
+  // ?sort=tvl / volume24h / apy (Dashboard TVL/Volume tiles). URL is
+  // the source of truth so the user can bookmark a filtered view.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const statusFilter = (searchParams.get('status') as PoolStatus | null) ?? null
+  const sortKey: SortKey = (searchParams.get('sort') as SortKey | null) ?? 'none'
+
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(20)
 
@@ -40,6 +60,38 @@ export default function PoolsPage() {
     queryKey: ['pools', page, pageSize],
     queryFn: () => poolService.getPools(page, pageSize),
   })
+
+  // Client-side filter+sort. Backend pagination still fetches a full page;
+  // when the catalog grows past a few thousand pools, swap this for
+  // server-side ?status=&sort= params. Today (22 pools) client filter is
+  // fine and avoids a backend API change for this iteration.
+  const filteredPools = useMemo(() => {
+    const all = data?.content ?? []
+    const filtered = statusFilter ? all.filter((p) => p.status === statusFilter) : all
+    if (sortKey === 'none') return filtered
+    const sorted = [...filtered]
+    sorted.sort((a, b) => {
+      switch (sortKey) {
+        case 'tvl':
+          return ((b.totalTvlX ?? 0) + (b.totalTvlY ?? 0)) - ((a.totalTvlX ?? 0) + (a.totalTvlY ?? 0))
+        case 'volume24h':
+          return (b.volume24h ?? 0) - (a.volume24h ?? 0)
+        case 'apy':
+          return (b.estimatedApy ?? 0) - (a.estimatedApy ?? 0)
+        default:
+          return 0
+      }
+    })
+    return sorted
+  }, [data, statusFilter, sortKey])
+
+  const updateParam = (key: string, value: string | null) => {
+    const next = new URLSearchParams(searchParams)
+    if (value === null || value === '') next.delete(key)
+    else next.set(key, value)
+    setSearchParams(next, { replace: true })
+    setPage(0)
+  }
 
   const columns: ColumnsType<Pool> = [
     {
@@ -135,16 +187,72 @@ export default function PoolsPage() {
         </Button>
       </div>
 
-      <Card className="sber-card sber-table" style={{ borderRadius: 12, border: '1px solid #E5E7EB' }}>
+      {/* Sprint 9 #M-5 — filter+sort row. URL-bound so Dashboard #M-4
+          tile drill-downs (?status=ACTIVE / ?sort=tvl) reach the right
+          state automatically. */}
+      <Card
+        className="sber-card"
+        style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+        styles={{ body: { padding: '12px 16px' } }}
+      >
+        <Space size={16} wrap>
+          <Space size={6}>
+            <FilterOutlined aria-hidden style={{ color: 'var(--text-secondary)' }} />
+            <Text strong style={{ fontSize: 13 }}>Статус:</Text>
+            <Select<PoolStatus | 'ALL'>
+              size="middle"
+              style={{ minWidth: 160 }}
+              value={(statusFilter ?? 'ALL') as PoolStatus | 'ALL'}
+              onChange={(v) => updateParam('status', v === 'ALL' ? null : v)}
+              aria-label="Фильтр по статусу пула"
+              options={[
+                { value: 'ALL', label: 'Все' },
+                { value: 'ACTIVE', label: poolStatusLabel.ACTIVE },
+                { value: 'PAUSED', label: poolStatusLabel.PAUSED },
+                { value: 'SHUTDOWN', label: poolStatusLabel.SHUTDOWN },
+                { value: 'PENDING', label: poolStatusLabel.PENDING },
+              ]}
+            />
+          </Space>
+          <Space size={6}>
+            <Text strong style={{ fontSize: 13 }}>Сортировка:</Text>
+            <Select<SortKey>
+              size="middle"
+              style={{ minWidth: 220 }}
+              value={sortKey}
+              onChange={(v) => updateParam('sort', v === 'none' ? null : v)}
+              aria-label="Сортировка пулов"
+              options={(Object.keys(SORT_LABELS) as SortKey[]).map((k) => ({
+                value: k,
+                label: SORT_LABELS[k],
+              }))}
+            />
+          </Space>
+          {(statusFilter || sortKey !== 'none') && (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => setSearchParams({}, { replace: true })}
+            >
+              Сбросить
+            </Button>
+          )}
+          <Text type="secondary" style={{ marginLeft: 'auto', fontSize: 12 }}>
+            {filteredPools.length} {data?.totalElements ? `из ${data.totalElements}` : ''}
+          </Text>
+        </Space>
+      </Card>
+
+      <Card className="sber-card sber-table" style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}>
         <Table<Pool>
           columns={columns}
-          dataSource={data?.content}
+          dataSource={filteredPools}
           rowKey="id"
           loading={isLoading}
           pagination={{
             current: page + 1,
             pageSize,
-            total: data?.totalElements,
+            total: filteredPools.length,
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total) => `Всего ${total} пулов`,

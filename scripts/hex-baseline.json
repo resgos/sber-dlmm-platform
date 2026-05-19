@@ -6,7 +6,7 @@
   "dlmm-admin-ui/src/pages/LoginPage.tsx": 4,
   "dlmm-admin-ui/src/pages/PoolCreatePage.tsx": 4,
   "dlmm-admin-ui/src/pages/PoolDetailPage.tsx": 14,
-  "dlmm-admin-ui/src/pages/PoolsPage.tsx": 3,
+  "dlmm-admin-ui/src/pages/PoolsPage.tsx": 2,
   "dlmm-admin-ui/src/pages/SettingsPage.tsx": 8,
   "dlmm-admin-ui/src/pages/SuspiciousTransactionsPage.tsx": 3,
   "dlmm-admin-ui/src/pages/TokenCreatePage.tsx": 2,
