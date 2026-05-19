@@ -128,22 +128,22 @@ export default function SettingsPage() {
       >
         <Row gutter={[32, 16]}>
           <Col xs={12} sm={8} md={6}>
-            <Statistic title="Мин. шаг бина (bps)" value={1} />
+            <Statistic title="Мин. шаг между бинами" value="0.01%" />
           </Col>
           <Col xs={12} sm={8} md={6}>
-            <Statistic title="Макс. шаг бина (bps)" value={10000} />
+            <Statistic title="Макс. шаг между бинами" value="100%" />
           </Col>
           <Col xs={12} sm={8} md={6}>
-            <Statistic title="Макс. базовая комиссия (bps)" value={10000} />
+            <Statistic title="Макс. базовая комиссия" value="100%" />
           </Col>
           <Col xs={12} sm={8} md={6}>
-            <Statistic title="Макс. комиссия протокола (%)" value={100} />
+            <Statistic title="Макс. комиссия протокола" value="100%" />
           </Col>
           <Col xs={12} sm={8} md={6}>
-            <Statistic title="Затухание по умолч. (сек)" value={3600} />
+            <Statistic title="Затухание по умолч." value="60 мин" />
           </Col>
           <Col xs={12} sm={8} md={6}>
-            <Statistic title="Макс. переменная комиссия (bps)" value={100} />
+            <Statistic title="Макс. переменная комиссия" value="1%" />
           </Col>
         </Row>
       </Card>

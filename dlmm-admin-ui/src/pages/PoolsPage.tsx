@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { pools as poolService } from '@/api/services'
 import type { Pool, PoolStatus } from '@/api/types'
+import { bpsToPercent } from '@/utils/format'
 
 const { Title, Text } = Typography
 
@@ -108,14 +109,14 @@ export default function PoolsPage() {
       dataIndex: 'binStep',
       key: 'binStep',
       align: 'right',
-      render: (val: number) => `${val} bps`,
+      render: (val: number) => bpsToPercent(val),
     },
     {
       title: 'Базовая комиссия',
       dataIndex: 'baseFeeBps',
       key: 'baseFeeBps',
       align: 'right',
-      render: (val: number) => `${val} bps`,
+      render: (val: number) => bpsToPercent(val),
     },
     {
       title: 'Текущая цена',

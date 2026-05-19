@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { pools } from '@/api/services'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
 import StatCard, { formatRub } from '@/components/StatCard'
+import { bpsToPercent } from '@/utils/format'
 import {
   DollarOutlined,
   BarChartOutlined,
@@ -74,14 +75,37 @@ export default function PoolDetailPage() {
 
       <Card className="sber-card" title={<Text strong>Параметры пула</Text>}>
         <Descriptions bordered column={{ xs: 1, sm: 2 }} size="small">
-          <Descriptions.Item label="Шаг бина">{pool.binStep} bps</Descriptions.Item>
-          <Descriptions.Item label="Активный бин">#{pool.activeBinId}</Descriptions.Item>
-          <Descriptions.Item label="Базовая комиссия">{pool.baseFeeBps} bps</Descriptions.Item>
-          <Descriptions.Item label="Динамическая комиссия">{pool.currentDynamicFeeBps} bps</Descriptions.Item>
-          <Descriptions.Item label="Аккумулятор волатильности">{pool.volatilityAccumulator}</Descriptions.Item>
-          <Descriptions.Item label="Комиссии X собрано">{pool.totalFeesCollectedX.toLocaleString('ru-RU')}</Descriptions.Item>
-          <Descriptions.Item label="Комиссии Y собрано">{pool.totalFeesCollectedY.toLocaleString('ru-RU')}</Descriptions.Item>
+          <Descriptions.Item
+            label="Шаг цены между бинами"
+            contentStyle={{ fontWeight: 600 }}
+          >
+            {bpsToPercent(pool.binStep)}
+          </Descriptions.Item>
+          <Descriptions.Item label="Текущая цена">
+            <Text strong>{pool.currentPrice.toLocaleString('ru-RU', { maximumFractionDigits: 6 })}</Text>
+            <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+              {pool.tokenYSymbol} за 1 {pool.tokenXSymbol}
+            </Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="Базовая комиссия">{bpsToPercent(pool.baseFeeBps)}</Descriptions.Item>
+          <Descriptions.Item label="Текущая комиссия">
+            {bpsToPercent(pool.currentDynamicFeeBps)}
+            {pool.currentDynamicFeeBps > pool.baseFeeBps && (
+              <Text type="warning" style={{ marginLeft: 8, fontSize: 12 }}>
+                ↑ повышена из-за волатильности
+              </Text>
+            )}
+          </Descriptions.Item>
+          <Descriptions.Item label={`Комиссии собрано в ${pool.tokenXSymbol}`}>
+            {pool.totalFeesCollectedX.toLocaleString('ru-RU')}
+          </Descriptions.Item>
+          <Descriptions.Item label={`Комиссии собрано в ${pool.tokenYSymbol}`}>
+            {pool.totalFeesCollectedY.toLocaleString('ru-RU')}
+          </Descriptions.Item>
           <Descriptions.Item label="Дата создания">{new Date(pool.createdAt).toLocaleDateString('ru-RU')}</Descriptions.Item>
+          <Descriptions.Item label="Внутренний ID">
+            <Text code style={{ fontSize: 11, color: 'var(--text-muted)' }}>{pool.id.slice(0, 8)}…</Text>
+          </Descriptions.Item>
         </Descriptions>
       </Card>
     </Space>

@@ -144,19 +144,19 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
 
   return (
     <div>
-      {/* Легенда */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 12, fontSize: 12, color: '#6B7280' }}>
+      {/* Легенда — Sprint 9: real token symbols + current price marker */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 12, fontSize: 12, color: '#6B7280', flexWrap: 'wrap' }}>
         <span>
           <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#3B82F6', marginRight: 6, verticalAlign: 'middle' }} />
-          Токен Y (ниже цены)
+          Резерв {pool.tokenYSymbol || 'Y'} (ниже цены)
         </span>
         <span>
           <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#F59E0B', marginRight: 6, verticalAlign: 'middle' }} />
-          Активный бин #{pool.activeBinId}
+          Текущая цена{pool.currentPrice != null ? `: ${pool.currentPrice.toFixed(4)}` : ''}
         </span>
         <span>
           <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#21A038', marginRight: 6, verticalAlign: 'middle' }} />
-          Токен X (выше цены)
+          Резерв {pool.tokenXSymbol || 'X'} (выше цены)
         </span>
         <span style={{ marginLeft: 'auto', color: '#9CA3AF' }}>
           Автообновление каждые 10 с
@@ -174,7 +174,7 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
             dataKey="binId"
             tick={false}
             axisLine={{ stroke: '#E5E7EB' }}
-            label={{ value: '← Токен Y   |   Активный   |   Токен X →', position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 11 }}
+            label={{ value: '← ниже цены   |   текущая   |   выше цены →', position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 11 }}
           />
           <YAxis
             tick={{ fontSize: 11, fill: '#9CA3AF' }}

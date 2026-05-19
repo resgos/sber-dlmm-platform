@@ -8,6 +8,7 @@ import { pools } from '@/api/services'
 import type { Pool } from '@/api/types'
 import { formatRub } from '@/components/StatCard'
 import { pairAccent } from '@/components/TokenChip'
+import { bpsToPercent } from '@/utils/format'
 
 const { Title, Text } = Typography
 
@@ -50,7 +51,7 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
           <div className="sber-pool-pair__label">
             <Text strong style={{ fontSize: 15 }}>{x}/{y}</Text>
             <Text type="secondary" style={{ fontSize: 12 }}>
-              {t('pools.card.binStep', { value: pool.binStep })} · {t('pools.card.fee', { value: pool.baseFeeBps })}
+              {t('pools.card.binStep', { value: bpsToPercent(pool.binStep) })} · {t('pools.card.fee', { value: bpsToPercent(pool.baseFeeBps) })}
             </Text>
           </div>
         </div>

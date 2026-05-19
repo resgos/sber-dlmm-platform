@@ -31,7 +31,10 @@ public class TokenServiceClient {
     private static final String CB_NAME = "token-service";
     private static final Duration CALL_TIMEOUT = Duration.ofSeconds(3);
 
-    private final WebClient tokenServiceClient;
+    // Injected by bean name — see WebClientConfig.tokenServiceWebClient.
+    // Field renamed alongside the bean to keep the same wiring intent
+    // (resolve naming clash with this @Component class).
+    private final WebClient tokenServiceWebClient;
 
     /**
      * POST /api/v1/internal/credit. Wrapped in CB + Retry. On exhaustion
@@ -51,7 +54,7 @@ public class TokenServiceClient {
         body.put("tokenId", tokenId.toString());
         body.put("amount", amount);
 
-        tokenServiceClient.post()
+        tokenServiceWebClient.post()
                 .uri("/api/v1/internal/credit")
                 .bodyValue(body)
                 .retrieve()

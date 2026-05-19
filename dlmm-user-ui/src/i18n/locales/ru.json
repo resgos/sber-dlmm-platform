@@ -139,8 +139,8 @@
       "tvl": "TVL",
       "volume24h": "Объём 24ч",
       "apy": "APY",
-      "binStep": "bin step {{value}}",
-      "fee": "fee {{value}} bps",
+      "binStep": "шаг {{value}}",
+      "fee": "комиссия {{value}}",
       "addLiquidity": "Добавить ликвидность"
     },
     "status": {

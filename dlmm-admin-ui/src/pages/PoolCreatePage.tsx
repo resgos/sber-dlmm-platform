@@ -108,7 +108,7 @@ export default function PoolCreatePage() {
                 <Form.Item
                   name="binStep"
                   label={<span style={{ fontWeight: 500 }}>Шаг бина (bps)</span>}
-                  tooltip="Шаг цены между соседними бинами в базисных пунктах"
+                  tooltip="Шаг цены между соседними бинами в базисных пунктах (100 bps = 1%, 25 bps = 0.25%)"
                   rules={[
                     { required: true, message: 'Шаг бина обязателен' },
                     { type: 'number', min: 1, max: 10000, message: 'Должно быть от 1 до 10000' },
@@ -121,7 +121,7 @@ export default function PoolCreatePage() {
                 <Form.Item
                   name="baseFeeBps"
                   label={<span style={{ fontWeight: 500 }}>Базовая комиссия (bps)</span>}
-                  tooltip="Базовая торговая комиссия в базисных пунктах"
+                  tooltip="Базовая торговая комиссия в базисных пунктах (30 bps = 0.3%, 100 bps = 1%)"
                   rules={[
                     { required: true, message: 'Базовая комиссия обязательна' },
                     { type: 'number', min: 0, max: 10000, message: 'Должно быть от 0 до 10000' },
@@ -154,7 +154,7 @@ export default function PoolCreatePage() {
                 <Form.Item
                   name="maxVariableFeeBps"
                   label={<span style={{ fontWeight: 500 }}>Макс. переменная комиссия (bps)</span>}
-                  tooltip="Максимальная переменная комиссия в базисных пунктах"
+                  tooltip="Максимальная переменная комиссия в базисных пунктах (надбавка к базовой при высокой волатильности)"
                   rules={[
                     { required: true, message: 'Макс. переменная комиссия обязательна' },
                     { type: 'number', min: 0, max: 10000, message: 'Должно быть от 0 до 10000' },

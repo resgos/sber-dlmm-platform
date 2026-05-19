@@ -375,8 +375,9 @@ describe('SwapPage — quote panel formatting', () => {
     await userEvent.type(amountInInput(), '100')
 
     expect(await screen.findByText(/через пул SRUB\/SBER/)).toBeInTheDocument()
-    // Pool meta: "30 bps · допуск 0.5%"
-    expect(screen.getByText(/30 bps/)).toBeInTheDocument()
+    // Sprint 9 — Pool meta now reads "комиссия 0.3% · допуск 0.5%"
+    // (was "30 bps · допуск 0.5%"). User-friendly per UX feedback.
+    expect(screen.getByText(/комиссия 0\.3%/)).toBeInTheDocument()
     expect(screen.getByText(/допуск 0\.5%/)).toBeInTheDocument()
   })
 

@@ -139,7 +139,8 @@ export default function LiquidityPage() {
               />
             </Space>
             <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>
-              Активный бин: #{pool.activeBinId}. Рекомендуемый диапазон: {pool.activeBinId - 10} — {pool.activeBinId + 10}
+              Текущая цена в бине #{pool.activeBinId}. Рекомендуемый диапазон концентрации:
+              {' '}±10 бинов вокруг текущей цены (узкий диапазон = выше комиссии, но риск выхода из диапазона).
             </div>
           </div>
 

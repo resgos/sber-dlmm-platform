@@ -35,6 +35,7 @@ import {
 import { pools as poolService } from '@/api/services'
 import type { PoolStatus } from '@/api/types'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
+import { bpsToPercent } from '@/utils/format'
 import dayjs from 'dayjs'
 
 const { Title } = Typography
@@ -154,8 +155,8 @@ export default function PoolDetailPage() {
                 <Descriptions.Item label="Символ токена Y">
                   <strong>{pool.tokenYSymbol}</strong>
                 </Descriptions.Item>
-                <Descriptions.Item label="Шаг бина">{pool.binStep} bps</Descriptions.Item>
-                <Descriptions.Item label="Базовая комиссия">{pool.baseFeeBps} bps</Descriptions.Item>
+                <Descriptions.Item label="Шаг цены между бинами">{bpsToPercent(pool.binStep)}</Descriptions.Item>
+                <Descriptions.Item label="Базовая комиссия">{bpsToPercent(pool.baseFeeBps)}</Descriptions.Item>
                 <Descriptions.Item label="ID активного бина">{pool.activeBinId}</Descriptions.Item>
                 <Descriptions.Item label="Текущая цена">
                   {pool.currentPrice.toLocaleString('ru-RU', { maximumFractionDigits: 6 })}
@@ -180,8 +181,13 @@ export default function PoolDetailPage() {
                 <Descriptions.Item label="Дата создания">
                   {dayjs(pool.createdAt).format('YYYY-MM-DD HH:mm:ss')}
                 </Descriptions.Item>
-                <Descriptions.Item label="Динамическая комиссия">
-                  {pool.currentDynamicFeeBps} bps
+                <Descriptions.Item label="Текущая комиссия">
+                  {bpsToPercent(pool.currentDynamicFeeBps)}
+                  {pool.currentDynamicFeeBps > pool.baseFeeBps && (
+                    <span style={{ marginLeft: 8, color: '#F59E0B', fontSize: 12 }}>
+                      ↑ повышена из-за волатильности
+                    </span>
+                  )}
                 </Descriptions.Item>
                 <Descriptions.Item label="Аккумулятор волатильности">
                   {pool.volatilityAccumulator}

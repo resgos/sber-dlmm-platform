@@ -27,6 +27,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, tokens, balances, transactions } from '@/api/services'
 import type { Pool, Token, TokenBalance, Transaction } from '@/api/types'
+import { bpsToPercent } from '@/utils/format'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -467,7 +468,7 @@ export default function HedgePage() {
                         </Col>
                         <Col>
                           <Tag style={{ borderRadius: 999, fontSize: 11 }}>
-                            {c.pool.baseFeeBps} bps
+                            комиссия {bpsToPercent(c.pool.baseFeeBps)}
                           </Tag>
                         </Col>
                       </Row>

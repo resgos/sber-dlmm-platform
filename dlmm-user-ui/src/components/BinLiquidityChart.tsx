@@ -32,7 +32,11 @@ function getBinColor(side: 'left' | 'active' | 'right', distance: number, maxDis
   return `rgba(33,${g},56,${opacity})`
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+// Sprint 9 — tooltip uses real token symbols (tokenX/tokenYSymbol) instead
+// of opaque "Резерв X / Y". Bin ID hidden — user sees price, not the
+// internal index. "Активный" labelled "Текущая цена" because that's what
+// the bin actually means to a non-quant user.
+const makeTooltip = (xSym: string, ySym: string) => ({ active, payload }: any) => {
   if (!active || !payload?.length) return null
   const d: ChartDataPoint = payload[0]?.payload
   return (
@@ -41,14 +45,13 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       padding: '10px 14px', fontSize: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
     }}>
       <div style={{ fontWeight: 600, marginBottom: 4, color: d?.isActive ? '#F59E0B' : '#111827' }}>
-        Бин #{label}{d?.isActive ? ' ★ Активный' : ''}
+        {d?.isActive ? '★ Текущая цена' : 'Цена'}: {d?.price}
       </div>
-      <div style={{ color: '#6B7280' }}>Цена: {d?.price}</div>
       <div style={{ color: '#3B82F6' }}>
-        Резерв Y: {Number(d?.reserveY ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
+        Резерв {ySym}: {Number(d?.reserveY ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
       </div>
       <div style={{ color: '#21A038' }}>
-        Резерв X: {Number(d?.reserveX ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
+        Резерв {xSym}: {Number(d?.reserveX ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
       </div>
       <div style={{ color: '#9CA3AF', marginTop: 4 }}>
         Ликвидность: {Number(d?.liquidity ?? 0).toLocaleString('ru-RU')}
@@ -97,21 +100,29 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
     } as any
   })
 
+  // Sprint 9 — replace "Токен X/Y" jargon with real symbols.
+  const xSym = pool.tokenXSymbol || 'токен X'
+  const ySym = pool.tokenYSymbol || 'токен Y'
+  const activePrice = pool.bins.find((b) => b.binId === pool.activeBinId)?.price
+  const Tooltip2 = makeTooltip(xSym, ySym)
+
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 12, fontSize: 12, color: '#6B7280' }}>
-        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#3B82F6', marginRight: 6, verticalAlign: 'middle' }} />Токен Y</span>
-        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#F59E0B', marginRight: 6, verticalAlign: 'middle' }} />Активный бин #{pool.activeBinId}</span>
-        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#21A038', marginRight: 6, verticalAlign: 'middle' }} />Токен X</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 12, fontSize: 12, color: '#6B7280', flexWrap: 'wrap' }}>
+        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#3B82F6', marginRight: 6, verticalAlign: 'middle' }} />Резерв {ySym}</span>
+        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#F59E0B', marginRight: 6, verticalAlign: 'middle' }} />
+          Текущая цена{activePrice != null ? `: ${activePrice.toFixed(4)}` : ''}
+        </span>
+        <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#21A038', marginRight: 6, verticalAlign: 'middle' }} />Резерв {xSym}</span>
       </div>
       <ResponsiveContainer width="100%" height={320}>
         <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }} barCategoryGap="4%">
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
           <XAxis dataKey="binId" tick={false} axisLine={{ stroke: '#E5E7EB' }}
-            label={{ value: '← Токен Y   |   Активный   |   Токен X →', position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 11 }} />
+            label={{ value: `← ниже цены   |   ${activePrice != null ? activePrice.toFixed(4) : 'текущая цена'}   |   выше цены →`, position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false}
             tickFormatter={(v) => { if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`; if (v >= 1000) return `${(v / 1000).toFixed(0)}K`; return String(v) }} />
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
+          <Tooltip content={Tooltip2} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
           <ReferenceLine x={pool.activeBinId} stroke="#F59E0B" strokeWidth={2} strokeDasharray="5 3" />
           <Bar dataKey="liquidity" radius={[3, 3, 0, 0]} maxBarSize={18}>
             {chartData.map((entry: any, index: number) => (

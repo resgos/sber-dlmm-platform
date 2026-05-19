@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { tokens, pools, balances } from '@/api/services'
 import type { Token, Pool, TokenBalance } from '@/api/types'
 import TokenChip from '@/components/TokenChip'
+import { bpsToPercent } from '@/utils/format'
 
 const { Title, Text } = Typography
 
@@ -302,7 +303,7 @@ export default function SwapPage() {
                     через пул {selectedPool.tokenXSymbol}/{selectedPool.tokenYSymbol}
                   </Tag>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    {selectedPool.baseFeeBps} bps · допуск {effectiveSlippage}%
+                    комиссия {bpsToPercent(selectedPool.baseFeeBps)} · допуск {effectiveSlippage}%
                   </Text>
                 </div>
               )}
