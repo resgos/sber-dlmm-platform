@@ -22,8 +22,18 @@ public interface YsrubReserveMovementRepository extends JpaRepository<YsrubReser
      * Total SRUB currently held in the reserve = sum of all DEPOSITS minus
      * sum of all WITHDRAWALS. Used by the daily reserve-health attestation
      * (Sprint 10 #7.6) to prove 1:1 backing.
+     *
+     * <p>Implementation note: native SQL because Hibernate's HQL parser
+     * cannot resolve qualified inner-enum constants (the previous
+     * {@code m.direction = ...YsrubReserveMovement.Direction.DEPOSIT}
+     * form fails with SemanticException at repository init). The
+     * direction column is persisted as its name() string via
+     * {@code @Enumerated(EnumType.STRING)} so the SQL literal matches
+     * exactly. Casting to bigint matches the {@code BIGINT srub_amount}
+     * column type and the {@code long} return.
      */
-    @Query("SELECT COALESCE(SUM(CASE WHEN m.direction = com.sber.dlmm.token.entity.YsrubReserveMovement.Direction.DEPOSIT THEN m.srubAmount ELSE -m.srubAmount END), 0) "
-         + "FROM YsrubReserveMovement m")
+    @Query(value = "SELECT COALESCE(SUM(CASE WHEN direction = 'DEPOSIT' THEN srub_amount ELSE -srub_amount END), 0) "
+                 + "FROM ysrub_reserve_movements",
+           nativeQuery = true)
     long totalReserveSrub();
 }

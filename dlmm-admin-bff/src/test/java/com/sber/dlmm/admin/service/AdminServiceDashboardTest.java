@@ -54,8 +54,13 @@ class AdminServiceDashboardTest {
         WebClient txClient = stubClient(txResponse);
         WebClient noopClient = stubClient(new AtomicReference<>(Mono.error(new IllegalStateException("not used"))));
 
+        // Sprint 9 #M-4 — PoolEngineClient was added to AdminService for the
+        // active-positions count tile. Test doesn't exercise that path so a
+        // null reference is fine; the existing dashboard assertions touch
+        // user/pool/transaction WebClients only.
         adminService = new AdminService(
                 WebClient.builder(),
+                null,
                 "http://noop", "http://noop", "http://noop",
                 "http://noop", "http://noop", "http://noop"
         );

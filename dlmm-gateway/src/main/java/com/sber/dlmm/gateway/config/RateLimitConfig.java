@@ -84,8 +84,19 @@ public class RateLimitConfig {
         };
     }
 
-    /** Free tier — 10 rps sustained, 15 burst. */
+    /**
+     * Free tier — 10 rps sustained, 15 burst.
+     *
+     * <p>Marked {@link Primary} so Spring Cloud Gateway's
+     * {@code requestRateLimiterGatewayFilterFactory} auto-injection picks
+     * a deterministic default when a route doesn't specify
+     * {@code rate-limiter:} explicitly via SpEL. Without this,
+     * application startup fails with NoUniqueBeanDefinitionException
+     * (3 RedisRateLimiter candidates). FREE is the safest default —
+     * unauthenticated / no-tier requests get the strictest bucket.
+     */
     @Bean("freeRateLimiter")
+    @Primary
     public RedisRateLimiter freeRateLimiter() {
         return new RedisRateLimiter(
                 ApiTier.FREE.getReplenishRate(),

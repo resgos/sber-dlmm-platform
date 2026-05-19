@@ -32,6 +32,12 @@ server:
 dlmm:
   jwt:
     secret: ${JWT_SECRET:?JWT_SECRET env var is required (≥32 bytes)}
+  # Sprint 6 #6.9 — transaction-service publishes AML alerts to Kafka via
+  # the shared outbox (dlmm-common DlmmOutboxAutoConfiguration activates
+  # only when this property is set). Without it AmlScannerScheduler fails
+  # to wire and the whole context refuses to start.
+  outbox:
+    service-name: transaction-service
   # Sprint 4 #4.6 — B2B settlement endpoint calls token-service via
   # RestTemplate. Bearer-token forwarding is wired in TokenServiceClient.
   services:
