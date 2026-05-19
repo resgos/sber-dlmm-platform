@@ -12,6 +12,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  ShopOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 
@@ -48,6 +49,11 @@ const menuItems = [
     key: '/transactions/suspicious',
     icon: <WarningOutlined />,
     label: 'Подозрительные',
+  },
+  {
+    key: '/otc',
+    icon: <ShopOutlined />,
+    label: 'OTC desk',
   },
   {
     key: '/settings',
@@ -114,6 +120,13 @@ export default function ProtectedLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
+      {/* Sprint 9 UX-A11Y-2 wave 2 — skip-to-content link. Visible only on
+          keyboard focus (`:focus` reveals it from off-screen). Lets
+          screen-reader + keyboard users bypass the Sider navigation tree
+          and jump straight to <main id="main-content">. */}
+      <a href="#main-content" className="sber-skip-link">
+        Перейти к содержимому
+      </a>
       <Sider
         trigger={null}
         collapsible
@@ -172,14 +185,20 @@ export default function ProtectedLayout() {
           )}
         </div>
 
-        <Menu
-          theme="light"
-          mode="inline"
-          selectedKeys={[selectedKey]}
-          items={menuItems}
-          onClick={handleMenuClick}
-          style={{ borderRight: 0, marginTop: 8, background: 'var(--bg-sidebar)' }}
-        />
+        {/* Sprint 9 UX-A11Y-2 wave 2 — semantic <nav> wrap + id for
+            aria-controls target. selectedKeys already drives aria-current=true
+            via AntD Menu's internal aria, but we add the nav landmark
+            so screen-readers see "navigation region". */}
+        <nav id="admin-sider-navigation" aria-label="Основная навигация">
+          <Menu
+            theme="light"
+            mode="inline"
+            selectedKeys={[selectedKey]}
+            items={menuItems}
+            onClick={handleMenuClick}
+            style={{ borderRight: 0, marginTop: 8, background: 'var(--bg-sidebar)' }}
+          />
+        </nav>
       </Sider>
 
       <Layout style={{ marginLeft: collapsed ? 64 : 240, transition: 'margin 0.2s', background: 'var(--bg-page)' }}>
@@ -240,6 +259,12 @@ export default function ProtectedLayout() {
         </Header>
 
         <Content
+          // Sprint 9 UX-A11Y-2 wave 2 — main landmark + id target for the
+          // skip-to-content link above. tabIndex=-1 makes it focusable
+          // programmatically but not via Tab cycle.
+          id="main-content"
+          role="main"
+          tabIndex={-1}
           style={{
             margin: '24px',
             minHeight: 280,

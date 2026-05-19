@@ -758,3 +758,25 @@ body {
     padding: 16px 12px;
   }
 }
+
+/* Sprint 9 UX-A11Y-2 wave 2 — skip-to-content link. Off-screen until
+   keyboard focus reveals it. Lets screen-reader / keyboard users
+   bypass the navigation tree and jump to the main content region. */
+.sber-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 1000;
+  padding: 8px 16px;
+  background: var(--sber-green);
+  color: var(--bg-card);
+  border-radius: 6px;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 14px;
+}
+.sber-skip-link:focus {
+  left: 8px;
+  outline: 2px solid var(--sber-green-dark);
+  outline-offset: 2px;
+}

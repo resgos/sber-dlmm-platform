@@ -86,6 +86,12 @@ export default function UserLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
+      {/* Sprint 9 UX-A11Y-2 wave 2 — skip-to-content link. Off-screen
+          until focused; lets keyboard / screen-reader users bypass the
+          Sider navigation tree. */}
+      <a href="#main-content" className="sber-skip-link">
+        Перейти к содержимому
+      </a>
       <Sider
         trigger={null}
         collapsible
@@ -137,14 +143,18 @@ export default function UserLayout() {
           )}
         </div>
 
-        <Menu
-          theme="light"
-          mode="inline"
-          selectedKeys={[selectedKey]}
-          items={menuItems}
-          onClick={handleMenuClick}
-          style={{ borderRight: 0, marginTop: 8, background: 'var(--bg-sidebar)' }}
-        />
+        {/* Sprint 9 UX-A11Y-2 wave 2 — semantic <nav> landmark + id
+            for aria-controls target. */}
+        <nav id="sider-navigation" aria-label="Основная навигация">
+          <Menu
+            theme="light"
+            mode="inline"
+            selectedKeys={[selectedKey]}
+            items={menuItems}
+            onClick={handleMenuClick}
+            style={{ borderRight: 0, marginTop: 8, background: 'var(--bg-sidebar)' }}
+          />
+        </nav>
       </Sider>
 
       <Layout style={{ marginLeft: collapsed ? 64 : 240, transition: 'margin 0.2s', background: 'var(--bg-page)' }}>
@@ -203,7 +213,13 @@ export default function UserLayout() {
           </Space>
         </Header>
 
-        <Content style={{ margin: '24px', minHeight: 280 }}>
+        <Content
+          // Sprint 9 UX-A11Y-2 wave 2 — main landmark + skip-link target.
+          id="main-content"
+          role="main"
+          tabIndex={-1}
+          style={{ margin: '24px', minHeight: 280 }}
+        >
           <Outlet />
         </Content>
       </Layout>

@@ -340,6 +340,28 @@ body {
   color: var(--text-secondary);
 }
 
+/* Sprint 9 UX-A11Y-2 wave 2 — skip-to-content link. Off-screen by
+   default; pops back into view on keyboard focus so screen-reader +
+   keyboard users can bypass the Sider navigation tree. */
+.sber-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 1000;
+  padding: 8px 16px;
+  background: var(--sber-green);
+  color: var(--bg-card);
+  border-radius: 6px;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 14px;
+}
+.sber-skip-link:focus {
+  left: 8px;
+  outline: 2px solid var(--sber-green-dark);
+  outline-offset: 2px;
+}
+
 /* ======================================================================
    Sprint 8 UX-MOBILE-1 — mobile breakpoint sweep (admin-ui).
 
