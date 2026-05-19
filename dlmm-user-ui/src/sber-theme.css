@@ -996,3 +996,209 @@ a:focus-visible {
   padding: 20px 24px !important;
 }
 .ant-modal-title { font-size: 17px !important; font-weight: 700 !important; }
+
+/* ======================================================================
+   Sprint 9 Day 4 — Premium buttons + inputs pass.
+   User feedback: "кнопки и окна ввода нужны более красивые". The earlier
+   polish was too subtle. This block is more aggressive — visible at
+   a glance.
+   ====================================================================== */
+
+/* ─── Buttons: refined size + gradient primary + confident hover ─── */
+
+.ant-btn {
+  height: 38px !important;
+  font-weight: 500 !important;
+  border-radius: 10px !important;
+  padding: 0 16px !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  font-size: 14px !important;
+  letter-spacing: 0.1px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  border-width: 1.5px !important;
+}
+
+.ant-btn-sm { height: 30px !important; padding: 0 12px !important; font-size: 13px !important; border-radius: 8px !important; }
+.ant-btn-lg { height: 48px !important; padding: 0 24px !important; font-size: 15px !important; font-weight: 600 !important; border-radius: 12px !important; }
+
+/* Primary — full gradient + layered shadow + lift on hover */
+.ant-btn-primary {
+  background: linear-gradient(135deg, #21A038 0%, #1C8A30 100%) !important;
+  border-color: transparent !important;
+  color: #FFFFFF !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.18) inset,
+    0 2px 4px rgba(33,160,56,0.18),
+    0 6px 16px -4px rgba(33,160,56,0.32) !important;
+  font-weight: 600 !important;
+}
+.ant-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #21A038 0%, #00C853 60%, #00B5A1 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.24) inset,
+    0 4px 8px rgba(33,160,56,0.25),
+    0 12px 28px -6px rgba(33,160,56,0.45) !important;
+}
+.ant-btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98) !important;
+  box-shadow:
+    0 1px 2px rgba(33,160,56,0.20),
+    0 2px 6px -2px rgba(33,160,56,0.25) !important;
+}
+.ant-btn-primary:disabled {
+  background: #F3F4F6 !important;
+  color: var(--text-muted) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Default (secondary) — clean white with refined border + hover halo */
+.ant-btn-default {
+  background: #FFFFFF !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04) !important;
+}
+.ant-btn-default:hover:not(:disabled) {
+  background: var(--sber-green-light) !important;
+  border-color: var(--sber-green) !important;
+  color: var(--sber-green-dark) !important;
+  transform: translateY(-1px) !important;
+  box-shadow:
+    0 4px 8px rgba(33,160,56,0.08),
+    0 0 0 1px rgba(33,160,56,0.15) !important;
+}
+
+/* Danger — same gradient/lift treatment but red */
+.ant-btn-dangerous.ant-btn-primary,
+.ant-btn-dangerous.ant-btn-default:hover {
+  background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%) !important;
+  color: #FFFFFF !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.18) inset,
+    0 2px 4px rgba(220,38,38,0.18),
+    0 6px 16px -4px rgba(220,38,38,0.32) !important;
+}
+
+/* Link-style buttons (table actions, alert close) — refined hover */
+.ant-btn-link {
+  color: var(--sber-green) !important;
+  font-weight: 500 !important;
+}
+.ant-btn-link:hover:not(:disabled) {
+  color: var(--sber-green-dark) !important;
+  background: rgba(33,160,56,0.06) !important;
+}
+
+/* Text button — used for icon-only triggers (menu collapse, etc.) */
+.ant-btn-text:hover:not(:disabled) {
+  background: rgba(33,160,56,0.06) !important;
+}
+
+/* ─── Inputs: bigger touch targets + premium focus state ─── */
+
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-input-number-input-wrap,
+.ant-picker {
+  height: 42px !important;
+  border-radius: 10px !important;
+  border-width: 1.5px !important;
+  border-color: var(--border-light) !important;
+  background: #FFFFFF !important;
+  transition: all 0.15s ease !important;
+  font-size: 14px !important;
+}
+
+.ant-input-affix-wrapper .ant-input,
+.ant-input-number .ant-input-number-input {
+  height: auto !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+.ant-input-affix-wrapper > .ant-input-prefix {
+  margin-right: 8px !important;
+}
+
+/* Hover — subtle green tint border */
+.ant-input:hover:not(:disabled):not(.ant-input-disabled),
+.ant-input-affix-wrapper:hover:not(.ant-input-affix-wrapper-disabled),
+.ant-input-number:hover,
+.ant-picker:hover {
+  border-color: var(--sber-green) !important;
+}
+
+/* Focus — green border + soft glow ring */
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper-focused,
+.ant-input-number-focused,
+.ant-picker-focused {
+  border-color: var(--sber-green) !important;
+  box-shadow: 0 0 0 4px rgba(33,160,56,0.12) !important;
+  outline: none !important;
+}
+
+/* Larger size for hero inputs (e.g. login form, swap amount) */
+.ant-input-lg,
+.ant-input-affix-wrapper-lg {
+  height: 48px !important;
+  font-size: 15px !important;
+  border-radius: 12px !important;
+}
+
+/* Placeholder — softer color */
+.ant-input::placeholder,
+.ant-input-number-input::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 0.85 !important;
+}
+
+/* Select — same treatment */
+.ant-select-selector {
+  height: 42px !important;
+  border-radius: 10px !important;
+  border-width: 1.5px !important;
+  border-color: var(--border-light) !important;
+  display: flex !important;
+  align-items: center !important;
+  padding: 0 14px !important;
+  background: #FFFFFF !important;
+  transition: all 0.15s ease !important;
+}
+.ant-select:hover .ant-select-selector {
+  border-color: var(--sber-green) !important;
+}
+.ant-select-focused .ant-select-selector {
+  border-color: var(--sber-green) !important;
+  box-shadow: 0 0 0 4px rgba(33,160,56,0.12) !important;
+}
+.ant-select-selection-item {
+  font-size: 14px !important;
+  line-height: 42px !important;
+}
+
+/* Form item labels — heavier weight, better hierarchy */
+.ant-form-item-label > label {
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  color: var(--text-primary) !important;
+}
+
+/* Required asterisk in green */
+.ant-form-item-required::before {
+  color: var(--sber-green) !important;
+}
+
+/* Form item validation message */
+.ant-form-item-explain-error {
+  font-size: 12px !important;
+  color: #DC2626 !important;
+  padding-top: 4px !important;
+}

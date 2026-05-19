@@ -19,8 +19,11 @@ import java.util.List;
  * copies. On a valid access token, populates the {@link SecurityContextHolder}
  * with a {@link UsernamePasswordAuthenticationToken} where:
  * <ul>
- *   <li>principal = userId (String — preserves callers that read it as String;
- *       UUID-typed callers can use {@link JwtTokenProvider#getUserId(String)} directly)</li>
+ *   <li>principal = userId as {@link java.util.UUID} — every JWT subject in
+ *       this platform is a UUID (users.id column type). Most controllers
+ *       cast to UUID directly; storing as String would break them with
+ *       ClassCastException at runtime. String-typed callers can call
+ *       {@code auth.getPrincipal().toString()}.</li>
  *   <li>credentials = kycStatus (or null if absent)</li>
  *   <li>authorities = ROLE_* derived from the {@code role} or {@code roles} claim</li>
  * </ul>
@@ -69,7 +72,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         filterChain.doFilter(request, response);
                         return;
                     }
-                    String userId = jwtTokenProvider.getUserIdAsString(token);
+                    String userIdRaw = jwtTokenProvider.getUserIdAsString(token);
+                    // Sprint 9 fix — principal is UUID, not String. Most
+                    // controllers do `(UUID) auth.getPrincipal()` and were
+                    // crashing with ClassCastException after the Sprint 6
+                    // dedup consolidation. UUID parse falls back to the
+                    // raw String when subject isn't a UUID (defensive).
+                    Object principal;
+                    try {
+                        principal = java.util.UUID.fromString(userIdRaw);
+                    } catch (IllegalArgumentException ex) {
+                        principal = userIdRaw;
+                    }
                     String kycStatus = jwtTokenProvider.getKycStatus(token);
                     List<String> roles = jwtTokenProvider.getRoles(token);
 
@@ -78,11 +92,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             .toList();
 
                     UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(userId, kycStatus, authorities);
+                            new UsernamePasswordAuthenticationToken(principal, kycStatus, authorities);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
 
                     if (log.isDebugEnabled()) {
-                        log.debug("JWT authenticated user={} roles={}", userId, roles);
+                        log.debug("JWT authenticated user={} roles={}", userIdRaw, roles);
                     }
                 }
             } catch (Exception ex) {

@@ -67,7 +67,7 @@ class JwtAuthenticationFilterTest {
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         assertThat(auth).isNotNull();
-        assertThat(auth.getPrincipal()).isEqualTo(userId.toString());
+        assertThat(auth.getPrincipal()).isEqualTo(userId);
         assertThat(auth.getCredentials()).isEqualTo("VERIFIED");
         assertThat(auth.getAuthorities())
                 .extracting(GrantedAuthority::getAuthority)
@@ -170,7 +170,7 @@ class JwtAuthenticationFilterTest {
         // Auth populated — revocation service was consulted and returned false.
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal())
-                .isEqualTo(userId.toString());
+                .isEqualTo(userId);
         verify(revocation).isRevoked(jti);
     }
 
@@ -188,7 +188,7 @@ class JwtAuthenticationFilterTest {
         // Legacy token still authenticates.
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal())
-                .isEqualTo(userId.toString());
+                .isEqualTo(userId);
     }
 
     @Test
