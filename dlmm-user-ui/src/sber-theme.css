@@ -19,7 +19,11 @@
                   radial-gradient(at 50% 100%, rgba(110,91,255,0.10), transparent 60%);
   --grad-night: linear-gradient(135deg, #0E6B1E 0%, #006B3F 50%, #003B49 100%);
 
-  --bg-page: #F3F4F6;
+  /* Sprint 9 — warm off-white from the Claude Design mockup. #F3F4F6 was a
+     cool grey and felt clinical; #FAFAF8 is the same brightness but with
+     a hint of warmth, which reads as "premium private-banking" rather
+     than "compliance dashboard". */
+  --bg-page: #FAFAF8;
   --bg-card: #FFFFFF;
   --bg-sidebar: #FFFFFF;
   --border-light: #E5E7EB;
@@ -42,7 +46,20 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Sprint 9 — Onest is the typeface Claude Design picked for our
+     Хедж FX mockup (see docs/design/hedge-position-card-claude-design/).
+     It's Cyrillic-friendly and was designed for fintech. Inter is the
+     final fallback so existing screenshots stay close until users see
+     the Onest webfont load.
+
+     tabular-nums is the single most useful financial-UI font feature:
+     every digit gets the same width, so columns of numbers in tables
+     stop jittering between rows. Applying it body-wide is safe because
+     proportional digits only matter in body copy, and our body copy is
+     mostly labels. */
+  font-family: 'Onest', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'ss01', 'cv11';
   background: var(--bg-page);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
