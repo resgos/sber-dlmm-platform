@@ -30,7 +30,20 @@ export interface User {
 }
 
 // Token
-export type TokenType = 'STABLE_TOKEN' | 'EQUITY_TOKEN' | 'LP_TOKEN' | 'GOVERNANCE_TOKEN'
+// Sprint 9 — Sprint 6 extended the backend enum (TokenTypeTest pins
+// these values). The UI was missing four of them, so seed tokens like
+// SUSDT (FIAT_BACKED) rendered as raw enum strings in the catalogue.
+// Keep in sync with
+// dlmm-common/src/main/java/com/sber/dlmm/common/enums/TokenType.java.
+export type TokenType =
+  | 'STABLE_TOKEN'
+  | 'EQUITY_TOKEN'
+  | 'LP_TOKEN'
+  | 'GOVERNANCE_TOKEN'
+  | 'FIAT_BACKED'
+  | 'COMMODITY_BACKED'
+  | 'UTILITY'
+  | 'INDEX_TOKEN'
 
 export interface Token {
   id: string

@@ -22,18 +22,29 @@ import type { Token, TokenType, MintBurnRequest } from '@/api/types'
 
 const { Title } = Typography
 
+// Sprint 9 — keep these maps aligned with TokensPage. Was missing the
+// four Sprint 6 enum extensions which made TokenDetailPage refuse to
+// type-check after we widened the TokenType union.
 const tokenTypeColor: Record<TokenType, string> = {
   STABLE_TOKEN: 'blue',
   EQUITY_TOKEN: 'gold',
   LP_TOKEN: 'cyan',
   GOVERNANCE_TOKEN: 'purple',
+  FIAT_BACKED: 'green',
+  COMMODITY_BACKED: 'orange',
+  UTILITY: 'geekblue',
+  INDEX_TOKEN: 'magenta',
 }
 
 const tokenTypeLabel: Record<TokenType, string> = {
   STABLE_TOKEN: 'Стейблкоин',
-  EQUITY_TOKEN: 'Товарный',
+  EQUITY_TOKEN: 'Акция',
   LP_TOKEN: 'LP-токен',
   GOVERNANCE_TOKEN: 'Управление',
+  FIAT_BACKED: 'Валюта',
+  COMMODITY_BACKED: 'Сырьё',
+  UTILITY: 'Утилитарный',
+  INDEX_TOKEN: 'Индекс',
 }
 
 type ModalMode = 'mint' | 'burn' | null

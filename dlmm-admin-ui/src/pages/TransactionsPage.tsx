@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Table,
   Space,
@@ -11,20 +11,22 @@ import {
   TablePaginationConfig,
   Tooltip,
 } from 'antd'
-import { DownloadOutlined, FilterOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FilterOutlined, SwapOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { RangePickerProps } from 'antd/es/date-picker'
-import { transactions as txService } from '@/api/services'
+import { transactions as txService, tokens as tokensApi, pools as poolsApi } from '@/api/services'
 import type {
   Transaction,
   TxType,
   TxStatus,
   TransactionFilters,
+  Token,
+  Pool,
 } from '@/api/types'
 import dayjs from 'dayjs'
 
-const { Title } = Typography
+const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
 const txStatusColor: Record<TxStatus, string> = {
@@ -136,77 +138,162 @@ export default function TransactionsPage() {
     queryFn: () => txService.getTransactions(page, pageSize, appliedFilters),
   })
 
+  // Sprint 9 — same client-side join applied on user-ui TransactionsPage:
+  // Transaction DTOs carry tokenInId / tokenOutId / poolId but no symbols.
+  // Without these, an admin looking at the global ledger sees "104 037 396"
+  // and has no idea which token moved. Pull the catalogues once, join here.
+  const { data: tokenPage } = useQuery({
+    queryKey: ['tokens'],
+    queryFn: () => tokensApi.getTokens(0, 200),
+  })
+  const { data: poolPage } = useQuery({
+    queryKey: ['admin-pools', 0, 100],
+    queryFn: () => poolsApi.getPools(0, 100),
+  })
+  const symbolByTokenId = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const t of tokenPage?.content ?? []) m.set(t.id, t.symbol)
+    return m
+  }, [tokenPage])
+  const pairByPoolId = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const p of poolPage?.content ?? []) m.set(p.id, `${p.tokenXSymbol}/${p.tokenYSymbol}`)
+    return m
+  }, [poolPage])
+
+  // Sprint 9 — render the last 6 chars of an ID instead of the first 8.
+  // The seed leaves identical prefixes ("88000000…" / "a0000000…") which
+  // made every row look identical at a glance; the tail is unique.
+  const renderShortId = (id: string) => (
+    <Tooltip title={id}>
+      <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
+        …{id.slice(-6)}
+      </span>
+    </Tooltip>
+  )
+
   const columns: ColumnsType<Transaction> = [
     {
       title: 'ID',
       dataIndex: 'id',
       key: 'id',
-      width: 120,
-      render: (id: string) => (
-        <Tooltip title={id}>
-          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
-            {id.slice(0, 8)}...
-          </span>
-        </Tooltip>
-      ),
+      width: 90,
+      render: renderShortId,
     },
     {
       title: 'Тип',
       dataIndex: 'txType',
       key: 'txType',
+      width: 160,
       render: (type: TxType) => (
         <Tag color={txTypeColor[type] || 'default'}>{txTypeLabel[type] || type}</Tag>
       ),
     },
     {
+      // Sprint 9 — was the missing piece that made this table read as
+      // "list of random numbers". Same join as user-ui TransactionsPage:
+      // tokenIn/Out → symbols for swaps, pool.pair for liquidity ops.
+      title: 'Пара / направление',
+      key: 'pair',
+      render: (_: unknown, r: Transaction) => {
+        const inSym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
+        const outSym = r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null
+        if (inSym && outSym) {
+          return (
+            <Space size={6}>
+              <Text strong style={{ fontSize: 13 }}>{inSym}</Text>
+              <SwapOutlined style={{ color: 'var(--text-muted, #9CA3AF)', fontSize: 11 }} />
+              <Text strong style={{ fontSize: 13 }}>{outSym}</Text>
+            </Space>
+          )
+        }
+        if (r.poolId) {
+          const pair = pairByPoolId.get(r.poolId)
+          if (pair) return <Text strong style={{ fontSize: 13 }}>{pair}</Text>
+        }
+        return <Text type="secondary">—</Text>
+      },
+    },
+    {
       title: 'Статус',
       dataIndex: 'status',
       key: 'status',
+      width: 130,
       render: (status: TxStatus) => (
         <Tag color={txStatusColor[status]}>{txStatusLabel[status] || status}</Tag>
       ),
     },
     {
-      title: 'ID пользователя',
+      title: 'Пользователь',
       dataIndex: 'userId',
       key: 'userId',
-      render: (id: string) => (
-        <Tooltip title={id}>
-          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
-            {id.slice(0, 8)}...
-          </span>
-        </Tooltip>
-      ),
+      width: 110,
+      render: renderShortId,
     },
     {
       title: 'Сумма входа',
       dataIndex: 'amountIn',
       key: 'amountIn',
       align: 'right',
-      render: (val: number | null) =>
-        val !== null ? val.toLocaleString('ru-RU', { maximumFractionDigits: 4 }) : '—',
+      render: (val: number | null, r: Transaction) => {
+        if (val === null) return <Text type="secondary">—</Text>
+        const sym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
+        return (
+          <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {val.toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
+            {sym && (
+              <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>{sym}</Text>
+            )}
+          </span>
+        )
+      },
     },
     {
       title: 'Сумма выхода',
       dataIndex: 'amountOut',
       key: 'amountOut',
       align: 'right',
-      render: (val: number | null) =>
-        val !== null ? val.toLocaleString('ru-RU', { maximumFractionDigits: 4 }) : '—',
+      render: (val: number | null, r: Transaction) => {
+        if (val === null) return <Text type="secondary">—</Text>
+        const sym = r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null
+        return (
+          <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {val.toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
+            {sym && (
+              <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>{sym}</Text>
+            )}
+          </span>
+        )
+      },
     },
     {
       title: 'Комиссия',
       dataIndex: 'feeAmount',
       key: 'feeAmount',
       align: 'right',
-      render: (val: number | null) =>
-        val !== null ? val.toLocaleString('ru-RU', { maximumFractionDigits: 6 }) : '—',
+      render: (val: number | null, r: Transaction) => {
+        if (val === null) return <Text type="secondary">—</Text>
+        const sym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
+        return (
+          <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {val.toLocaleString('ru-RU', { maximumFractionDigits: 6 })}
+            {sym && (
+              <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>{sym}</Text>
+            )}
+          </span>
+        )
+      },
     },
     {
       title: 'Дата создания',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm'),
+      width: 140,
+      render: (date: string) => (
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>
+          {dayjs(date).format('DD.MM.YYYY HH:mm')}
+        </span>
+      ),
       sorter: (a, b) => dayjs(a.createdAt).unix() - dayjs(b.createdAt).unix(),
     },
   ]

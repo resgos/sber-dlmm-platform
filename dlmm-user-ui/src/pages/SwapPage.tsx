@@ -162,13 +162,51 @@ export default function SwapPage() {
       <div className="sber-swap-box__head">
         <Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>{opts.label}</Text>
         {opts.showBalance && inBalance && (
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Доступно: {inBalance.available.toLocaleString('ru-RU')}{' '}
-            <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 12, height: 'auto' }}
-              onClick={() => setAmountIn(inBalance.available)}>
+          <Space size={6} style={{ alignItems: 'center' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Доступно:{' '}
+              <Text strong style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                {inBalance.available.toLocaleString('ru-RU')}
+              </Text>
+            </Text>
+            {/* Sprint 9 — quick-percent shortcuts. The MAX-only button
+                left every smaller trade as a typing exercise. 25/50/75
+                covers the common "rebalance a fraction" flow, MAX
+                stays for "exit position". Floor so we don't accidentally
+                send 100.0000001% and fail the balance check. */}
+            {[0.25, 0.5, 0.75].map((pct) => (
+              <Button
+                key={pct}
+                type="text"
+                size="small"
+                style={{
+                  padding: '0 6px',
+                  fontSize: 11,
+                  height: 22,
+                  color: 'var(--sber-green)',
+                  fontWeight: 600,
+                }}
+                onClick={() => setAmountIn(Math.floor(inBalance.available * pct))}
+              >
+                {Math.round(pct * 100)}%
+              </Button>
+            ))}
+            <Button
+              type="text"
+              size="small"
+              style={{
+                padding: '0 6px',
+                fontSize: 11,
+                height: 22,
+                color: 'var(--sber-green)',
+                fontWeight: 700,
+                letterSpacing: 0.3,
+              }}
+              onClick={() => setAmountIn(inBalance.available)}
+            >
               MAX
             </Button>
-          </Text>
+          </Space>
         )}
       </div>
       <div className="sber-swap-box__row">
