@@ -89,9 +89,21 @@ export default function StatCard({
 
 /**
  * Russian-locale rouble formatter — used across stat tiles, dashboards,
- * report headings. Bucketed into B / M / k / raw for readability.
+ * report headings. Bucketed into квд / трлн / млрд / млн / k / raw.
+ *
+ * Sprint 9 — added квадриллион + триллион steps. The admin dashboard
+ * was rendering platform TVL as "1810439.42 млрд ₽" — a wall of digits
+ * because the seed data has trillion-rouble pools. Capping at квд keeps
+ * the headline number readable; the proper fix (realistic seed amounts)
+ * is tracked separately.
  */
 export function formatRub(value: number): string {
+  if (value >= 1_000_000_000_000_000) {
+    return `${(value / 1_000_000_000_000_000).toFixed(2)} квд ₽`
+  }
+  if (value >= 1_000_000_000_000) {
+    return `${(value / 1_000_000_000_000).toFixed(2)} трлн ₽`
+  }
   if (value >= 1_000_000_000) {
     return `${(value / 1_000_000_000).toFixed(2)} млрд ₽`
   }

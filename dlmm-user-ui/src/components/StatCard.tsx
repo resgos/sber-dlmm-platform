@@ -51,7 +51,14 @@ export default function StatCard({ title, value, icon, iconBg, iconColor, format
   )
 }
 
+// Sprint 9 — added квадриллион + триллион steps. Seed data has
+// inflated reserves (multi-trillion-rouble pools) and the previous
+// version rendered them as "1810439.42 млрд ₽" — а wall of digits
+// that nobody can read. квд/трлн caps keep the headline readable
+// until the seed gets a proper realism pass (tracked separately).
 export function formatRub(value: number): string {
+  if (value >= 1_000_000_000_000_000) return `${(value / 1_000_000_000_000_000).toFixed(2)} квд ₽`
+  if (value >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(2)} трлн ₽`
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} млрд ₽`
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} млн ₽`
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)} тыс ₽`

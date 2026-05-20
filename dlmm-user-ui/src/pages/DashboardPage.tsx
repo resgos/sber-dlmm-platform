@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Row, Col, Card, Table, Tag, Space, Typography, Spin, Alert, Button } from 'antd'
 import {
   WalletOutlined,
@@ -5,17 +6,26 @@ import {
   DollarOutlined,
   TrophyOutlined,
   ArrowRightOutlined,
+  SwapOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { balances, pools, fees, transactions, oracle } from '@/api/services'
+import { balances, pools, fees, transactions, oracle, tokens as tokensApi } from '@/api/services'
 import StatCard, { formatRub } from '@/components/StatCard'
 import SpasiboWidget from '@/components/SpasiboWidget'
 import { DASHBOARD_TILE_PALETTE } from '@/styles/palette'
-import type { TokenBalance, Position, Transaction, TokenPrice } from '@/api/types'
+import type { TokenBalance, Position, Transaction, TokenPrice, Pool, Token } from '@/api/types'
 import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
+
+// Sprint 9 — anchor of all rub-pricing. Every other token's RUB value
+// comes from the SRUB-paired DLMM pool's currentPrice. price-oracle
+// is wired but doesn't cover the full catalogue in dev, so portfolio
+// totals were rendering as 0₽ even when the user held millions of
+// SUSDT. Pool-derived prices are always live for any token that
+// trades against SRUB, which is the whole catalogue today.
+const BASE_SYMBOL = 'SRUB'
 
 const txTypeLabels: Record<string, { text: string; color: string }> = {
   SWAP: { text: 'Обмен', color: 'blue' },
@@ -63,10 +73,65 @@ export default function DashboardPage() {
     refetchInterval: 30000,
   })
 
-  const priceMap = new Map((prices || []).map((p: TokenPrice) => [p.symbol, p]))
+  // Sprint 9 — pull pools + tokens so we can (a) join Position/Transaction
+  // to pair symbols (same fix as elsewhere in the audit), and (b) derive
+  // RUB prices from pool.currentPrice when the oracle is silent.
+  const { data: poolPage } = useQuery({
+    queryKey: ['pools', 0, 100],
+    queryFn: () => pools.getPools(0, 100),
+  })
+  const { data: tokenPage } = useQuery({
+    queryKey: ['tokens'],
+    queryFn: () => tokensApi.getTokens(0, 200),
+  })
+
+  const poolById = useMemo(() => {
+    const m = new Map<string, Pool>()
+    for (const p of poolPage?.content ?? []) m.set(p.id, p)
+    return m
+  }, [poolPage])
+  const symbolByTokenId = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const t of tokenPage?.content ?? []) m.set(t.id, t.symbol)
+    return m
+  }, [tokenPage])
+  const pairByPoolId = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const p of poolPage?.content ?? []) m.set(p.id, `${p.tokenXSymbol}/${p.tokenYSymbol}`)
+    return m
+  }, [poolPage])
+
+  // Sprint 9 — derive per-token RUB price from the SRUB-paired pool when
+  // the oracle is silent. For a pool tokenX/SRUB the on-chain currentPrice
+  // is "1 tokenX = N SRUB", which is exactly what we need. Falls back to
+  // the oracle, then to 1 if the token IS SRUB.
+  const oraclePriceMap = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of prices ?? []) m.set(p.symbol, p.price)
+    return m
+  }, [prices])
+  const rubPriceBySymbol = useMemo(() => {
+    const m = new Map<string, number>()
+    m.set(BASE_SYMBOL, 1)
+    for (const pool of poolPage?.content ?? []) {
+      if (pool.tokenYSymbol === BASE_SYMBOL) {
+        // tokenX is the foreign asset, currentPrice = SRUB per 1 tokenX.
+        m.set(pool.tokenXSymbol, pool.currentPrice)
+      } else if (pool.tokenXSymbol === BASE_SYMBOL) {
+        // SRUB is tokenX, so 1 tokenY = 1/currentPrice SRUB.
+        if (pool.currentPrice > 0) {
+          m.set(pool.tokenYSymbol, 1 / pool.currentPrice)
+        }
+      }
+    }
+    // Oracle wins for any token it actually covers (some have ЦБ РФ /
+    // MOEX feeds the pool doesn't reflect yet).
+    for (const [sym, price] of oraclePriceMap) m.set(sym, price)
+    return m
+  }, [poolPage, oraclePriceMap])
 
   const totalBalanceRub = (myBalances || []).reduce((sum: number, b: TokenBalance) => {
-    const price = priceMap.get(b.symbol)?.price || 0
+    const price = rubPriceBySymbol.get(b.symbol) ?? 0
     return sum + (b.available + b.locked) * price
   }, 0)
 
@@ -186,8 +251,15 @@ export default function DashboardPage() {
               key: 'price',
               align: 'right' as const,
               render: (_: unknown, row: TokenBalance) => {
-                const p = priceMap.get(row.symbol)
-                return p ? `${p.price.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽` : '—'
+                const price = rubPriceBySymbol.get(row.symbol)
+                if (price == null) return <Text type="secondary">—</Text>
+                return (
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {price.toLocaleString('ru-RU', {
+                      maximumFractionDigits: price >= 100 ? 2 : 4,
+                    })} ₽
+                  </span>
+                )
               },
             },
             {
@@ -195,10 +267,10 @@ export default function DashboardPage() {
               key: 'value',
               align: 'right' as const,
               render: (_: unknown, row: TokenBalance) => {
-                const p = priceMap.get(row.symbol)
-                if (!p) return '—'
-                const val = (row.available + row.locked) * p.price
-                return <Text strong>{formatRub(val)}</Text>
+                const price = rubPriceBySymbol.get(row.symbol)
+                if (price == null) return <Text type="secondary">—</Text>
+                const val = (row.available + row.locked) * price
+                return <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>{formatRub(val)}</Text>
               },
             },
           ]}
@@ -219,7 +291,14 @@ export default function DashboardPage() {
               {
                 title: 'Пул',
                 key: 'pool',
-                render: (_: unknown, r: Position) => <Text strong>{r.tokenXSymbol}/{r.tokenYSymbol}</Text>,
+                render: (_: unknown, r: Position) => {
+                  // Sprint 9 — Position DTO has no tokenXSymbol/tokenYSymbol,
+                  // join via poolById (same fix as PositionsPage). Renders
+                  // "SBER/SRUB" instead of "/" or "undefined/undefined".
+                  const pool = poolById.get(r.poolId)
+                  if (pool) return <Text strong>{pool.tokenXSymbol}/{pool.tokenYSymbol}</Text>
+                  return <Text type="secondary">пул {r.poolId.slice(0, 6)}…</Text>
+                },
               },
               {
                 title: 'Стратегия',
@@ -227,21 +306,51 @@ export default function DashboardPage() {
                 render: (s: string) => <Tag color="blue">{s}</Tag>,
               },
               {
-                title: 'Диапазон бинов',
+                title: 'Диапазон цен',
                 key: 'range',
-                render: (_: unknown, r: Position) => `${r.binRangeMin} — ${r.binRangeMax}`,
+                render: (_: unknown, r: Position) => {
+                  const pool = poolById.get(r.poolId)
+                  if (!pool || !pool.activeBinId || !pool.binStep || !pool.currentPrice) {
+                    return `${r.binRangeMin} — ${r.binRangeMax}`
+                  }
+                  const ratio = 1 + pool.binStep / 10000
+                  const lo = pool.currentPrice * Math.pow(ratio, r.binRangeMin - pool.activeBinId)
+                  const hi = pool.currentPrice * Math.pow(ratio, r.binRangeMax - pool.activeBinId)
+                  const fmt = (n: number) =>
+                    n.toLocaleString('ru-RU', { maximumFractionDigits: n >= 100 ? 2 : 4 })
+                  return (
+                    <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>
+                      {fmt(lo)} — {fmt(hi)} {pool.tokenYSymbol}
+                    </span>
+                  )
+                },
               },
               {
                 title: 'Незабранные комиссии',
                 key: 'fees',
                 align: 'right' as const,
-                render: (_: unknown, r: Position) => (
-                  <Text type="success">
-                    {r.unclaimedFeeX > 0 && `X: ${r.unclaimedFeeX.toLocaleString('ru-RU')} `}
-                    {r.unclaimedFeeY > 0 && `Y: ${r.unclaimedFeeY.toLocaleString('ru-RU')}`}
-                    {r.unclaimedFeeX === 0 && r.unclaimedFeeY === 0 && '—'}
-                  </Text>
-                ),
+                render: (_: unknown, r: Position) => {
+                  const pool = poolById.get(r.poolId)
+                  const xSym = pool?.tokenXSymbol ?? 'X'
+                  const ySym = pool?.tokenYSymbol ?? 'Y'
+                  if (r.unclaimedFeeX === 0 && r.unclaimedFeeY === 0) {
+                    return <Text type="secondary">—</Text>
+                  }
+                  return (
+                    <Space size={6} wrap style={{ justifyContent: 'flex-end' }}>
+                      {r.unclaimedFeeX > 0 && (
+                        <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px' }}>
+                          +{r.unclaimedFeeX.toLocaleString('ru-RU')} {xSym}
+                        </Tag>
+                      )}
+                      {r.unclaimedFeeY > 0 && (
+                        <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px' }}>
+                          +{r.unclaimedFeeY.toLocaleString('ru-RU')} {ySym}
+                        </Tag>
+                      )}
+                    </Space>
+                  )
+                },
               },
             ]}
             onRow={(record) => ({
@@ -268,7 +377,11 @@ export default function DashboardPage() {
               {
                 title: 'Дата',
                 dataIndex: 'createdAt',
-                render: (d: string) => dayjs(d).format('DD.MM.YYYY HH:mm'),
+                render: (d: string) => (
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>
+                    {dayjs(d).format('DD.MM.YYYY HH:mm')}
+                  </span>
+                ),
               },
               {
                 title: 'Тип',
@@ -279,12 +392,41 @@ export default function DashboardPage() {
                 },
               },
               {
+                title: 'Пара',
+                key: 'pair',
+                render: (_: unknown, r: Transaction) => {
+                  const inSym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
+                  const outSym = r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null
+                  if (inSym && outSym) {
+                    return (
+                      <Space size={6}>
+                        <Text strong style={{ fontSize: 13 }}>{inSym}</Text>
+                        <SwapOutlined style={{ color: 'var(--text-muted, #9CA3AF)', fontSize: 11 }} />
+                        <Text strong style={{ fontSize: 13 }}>{outSym}</Text>
+                      </Space>
+                    )
+                  }
+                  if (r.poolId) {
+                    const pair = pairByPoolId.get(r.poolId)
+                    if (pair) return <Text strong style={{ fontSize: 13 }}>{pair}</Text>
+                  }
+                  return <Text type="secondary">—</Text>
+                },
+              },
+              {
                 title: 'Сумма',
                 key: 'amount',
                 align: 'right' as const,
-                render: (_: unknown, r: Transaction) => (
-                  <Text>{r.amountIn?.toLocaleString('ru-RU') ?? '—'}</Text>
-                ),
+                render: (_: unknown, r: Transaction) => {
+                  if (r.amountIn == null) return <Text type="secondary">—</Text>
+                  const sym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
+                  return (
+                    <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                      {r.amountIn.toLocaleString('ru-RU')}
+                      {sym && <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>{sym}</Text>}
+                    </span>
+                  )
+                },
               },
               {
                 title: 'Статус',
