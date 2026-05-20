@@ -11,7 +11,14 @@ import {
   TablePaginationConfig,
   Tooltip,
 } from 'antd'
-import { DownloadOutlined, FilterOutlined, SwapOutlined } from '@ant-design/icons'
+import {
+  DownloadOutlined,
+  FilterOutlined,
+  FundOutlined,
+  RiseOutlined,
+  TeamOutlined,
+  WarningOutlined,
+} from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { RangePickerProps } from 'antd/es/date-picker'
@@ -25,8 +32,10 @@ import type {
   Pool,
 } from '@/api/types'
 import dayjs from 'dayjs'
+import { KpiRow, PageHeader, TokenPairChip, UserChip } from '@/components/sber'
+import { formatTokenAmount, shortId } from '@/lib/format'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { RangePicker } = DatePicker
 
 const txStatusColor: Record<TxStatus, string> = {
@@ -167,10 +176,23 @@ export default function TransactionsPage() {
   const renderShortId = (id: string) => (
     <Tooltip title={id}>
       <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
-        …{id.slice(-6)}
+        {shortId(id)}
       </span>
     </Tooltip>
   )
+
+  // Sprint 9 (post-DS) — KPI tiles. Computed from the current page slice
+  // (cheap, no extra fetch). If a user wants global aggregates they can
+  // export CSV or hit /actuator/metrics — this stays a "what's on screen
+  // right now" summary so it always agrees with the table below.
+  const today = dayjs().startOf('day')
+  const txToday = (data?.content ?? []).filter((t) => dayjs(t.createdAt).isAfter(today))
+  const swapsToday = txToday.filter((t) => t.txType === 'SWAP').length
+  const distinctUsersToday = new Set(txToday.map((t) => t.userId).filter(Boolean)).size
+  const failuresToday = txToday.filter((t) => t.status === 'FAILED').length
+  const volumeToday = txToday
+    .filter((t) => t.txType === 'SWAP' && t.amountIn)
+    .reduce((acc, t) => acc + (t.amountIn ?? 0), 0)
 
   const columns: ColumnsType<Transaction> = [
     {
@@ -198,18 +220,15 @@ export default function TransactionsPage() {
       render: (_: unknown, r: Transaction) => {
         const inSym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
         const outSym = r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null
-        if (inSym && outSym) {
-          return (
-            <Space size={6}>
-              <Text strong style={{ fontSize: 13 }}>{inSym}</Text>
-              <SwapOutlined style={{ color: 'var(--text-muted, #9CA3AF)', fontSize: 11 }} />
-              <Text strong style={{ fontSize: 13 }}>{outSym}</Text>
-            </Space>
-          )
+        if (inSym || outSym) {
+          return <TokenPairChip x={inSym} y={outSym} />
         }
         if (r.poolId) {
           const pair = pairByPoolId.get(r.poolId)
-          if (pair) return <Text strong style={{ fontSize: 13 }}>{pair}</Text>
+          if (pair) {
+            const [px, py] = pair.split('/')
+            return <TokenPairChip x={px} y={py} />
+          }
         }
         return <Text type="secondary">—</Text>
       },
@@ -227,8 +246,8 @@ export default function TransactionsPage() {
       title: 'Пользователь',
       dataIndex: 'userId',
       key: 'userId',
-      width: 110,
-      render: renderShortId,
+      width: 220,
+      render: (userId: string) => <UserChip userId={userId} />,
     },
     {
       title: 'Сумма входа',
@@ -320,19 +339,50 @@ export default function TransactionsPage() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} className="sber-page-title">
-          Транзакции
-        </Title>
-        <Button
-          icon={<DownloadOutlined />}
-          onClick={handleExport}
-          disabled={!data?.content?.length}
-          style={{ borderRadius: 8 }}
-        >
-          Экспорт CSV
-        </Button>
-      </div>
+      <PageHeader
+        title="Транзакции"
+        subtitle="Все операции платформы — свопы, добавление/снятие ликвидности, выпуск и сжигание токенов"
+        actions={
+          <Button
+            icon={<DownloadOutlined />}
+            onClick={handleExport}
+            disabled={!data?.content?.length}
+            style={{ borderRadius: 8 }}
+          >
+            Экспорт CSV
+          </Button>
+        }
+      />
+
+      <KpiRow
+        tiles={[
+          {
+            label: 'Транзакций сегодня',
+            value: txToday.length.toLocaleString('ru-RU'),
+            sub: `${swapsToday} обмен${swapsToday === 1 ? '' : swapsToday < 5 ? 'а' : 'ов'}`,
+            icon: <FundOutlined style={{ color: 'var(--sber-green)' }} />,
+          },
+          {
+            label: 'Объём свопов 24ч',
+            value: formatTokenAmount(volumeToday, undefined, { compact: true, maxFractionDigits: 0 }),
+            sub: 'сумма по amountIn',
+            icon: <RiseOutlined style={{ color: '#296AE3' }} />,
+          },
+          {
+            label: 'Уникальных пользователей',
+            value: distinctUsersToday.toLocaleString('ru-RU'),
+            sub: 'за сегодня',
+            icon: <TeamOutlined style={{ color: '#9B59B6' }} />,
+          },
+          {
+            label: 'Ошибок сегодня',
+            value: failuresToday.toLocaleString('ru-RU'),
+            sub: failuresToday === 0 ? 'всё проведено успешно' : 'требуют разбора',
+            icon: <WarningOutlined style={{ color: failuresToday > 0 ? '#D14D00' : 'var(--text-muted)' }} />,
+            accent: failuresToday > 0 ? '#D14D00' : undefined,
+          },
+        ]}
+      />
 
       <Card
         className="sber-card sber-table"

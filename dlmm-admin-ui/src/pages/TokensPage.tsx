@@ -10,13 +10,23 @@ import {
   Select,
   TablePaginationConfig,
 } from 'antd'
-import { PlusOutlined, BankOutlined, FilterOutlined } from '@ant-design/icons'
+import {
+  PlusOutlined,
+  BankOutlined,
+  FilterOutlined,
+  AppstoreOutlined,
+  GoldOutlined,
+  DollarOutlined,
+  CheckCircleOutlined,
+} from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { tokens as tokenService } from '@/api/services'
 import type { Token, TokenType } from '@/api/types'
+import { KpiRow, PageHeader } from '@/components/sber'
+import { formatCompact } from '@/lib/format'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 // Sprint 9 — full coverage of the backend enum. Was missing the four
 // Sprint 6 extensions (FIAT_BACKED / COMMODITY_BACKED / UTILITY /
@@ -111,17 +121,11 @@ export default function TokensPage() {
       align: 'right',
       render: (val: number | undefined) => (
         <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {(val ?? 0).toLocaleString('ru-RU')}
+          {formatCompact(val ?? 0)}
         </span>
       ),
     },
     {
-      // Sprint 9 — was "В обращении" tied to circulatingSupply, but the
-      // backend doesn't compute that field, so every row rendered "—"
-      // and the column was dead weight. Swapped to maxSupply, which IS
-      // in the DTO and is the right "ceiling" stat to sit next to total
-      // emission. Tokens with no cap (mintable === true and no maxSupply)
-      // show "—".
       title: 'Макс. эмиссия',
       dataIndex: 'maxSupply',
       key: 'maxSupply',
@@ -129,10 +133,10 @@ export default function TokensPage() {
       render: (val: number | undefined) =>
         typeof val === 'number' && val > 0 ? (
           <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {val.toLocaleString('ru-RU')}
+            {formatCompact(val)}
           </span>
         ) : (
-          <Text type="secondary">—</Text>
+          <Text type="secondary">∞</Text>
         ),
     },
     {
@@ -150,21 +154,59 @@ export default function TokensPage() {
     setPageSize(pagination.pageSize ?? 20)
   }
 
+  // Sprint 9-DS — KPI tile aggregates over current page slice.
+  const all = data?.content ?? []
+  const activeCount = all.filter((t) => t.active).length
+  const fiatBackedCount = all.filter((t) => t.tokenType === 'FIAT_BACKED').length
+  const equityCount = all.filter((t) => t.tokenType === 'EQUITY_TOKEN').length
+  const commodityCount = all.filter((t) => t.tokenType === 'COMMODITY_BACKED').length
+
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} className="sber-page-title">
-          Токены
-        </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => navigate('/tokens/create')}
-          style={{ borderRadius: 8 }}
-        >
-          Создать токен
-        </Button>
-      </div>
+      <PageHeader
+        title="Токены"
+        subtitle="Каталог активов платформы — стейблкоины, акции, сырьё, индексы"
+        actions={
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => navigate('/tokens/create')}
+            style={{ borderRadius: 8 }}
+          >
+            Создать токен
+          </Button>
+        }
+      />
+
+      <KpiRow
+        tiles={[
+          {
+            label: 'Всего токенов',
+            value: (data?.totalElements ?? all.length).toLocaleString('ru-RU'),
+            sub: `${activeCount} активн${activeCount === 1 ? 'ый' : activeCount < 5 ? 'ых' : 'ых'}`,
+            icon: <AppstoreOutlined style={{ color: 'var(--sber-green)' }} />,
+          },
+          {
+            label: 'Валютные',
+            value: fiatBackedCount.toLocaleString('ru-RU'),
+            sub: 'FIAT_BACKED',
+            icon: <DollarOutlined style={{ color: '#296AE3' }} />,
+          },
+          {
+            label: 'Акции',
+            value: equityCount.toLocaleString('ru-RU'),
+            sub: 'торгуемые на MOEX',
+            icon: <BankOutlined style={{ color: '#9B59B6' }} />,
+          },
+          {
+            label: 'Сырьё / индексы',
+            value: (commodityCount + all.filter((t) => t.tokenType === 'INDEX_TOKEN').length)
+              .toLocaleString('ru-RU'),
+            sub: 'commodity + indexes',
+            icon: <GoldOutlined style={{ color: '#F2994A' }} />,
+          },
+        ]}
+      />
 
       <Card
         className="sber-card sber-table"

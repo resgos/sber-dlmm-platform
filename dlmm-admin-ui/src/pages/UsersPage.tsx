@@ -11,14 +11,23 @@ import {
   Select,
   TablePaginationConfig,
 } from 'antd'
-import { SearchOutlined, UserOutlined, FilterOutlined } from '@ant-design/icons'
+import {
+  SearchOutlined,
+  UserOutlined,
+  FilterOutlined,
+  TeamOutlined,
+  SafetyCertificateOutlined,
+  StopOutlined,
+  ClockCircleOutlined,
+} from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { users as userService } from '@/api/services'
 import type { User, KycStatus, UserRole } from '@/api/types'
 import dayjs from 'dayjs'
+import { KpiRow, PageHeader } from '@/components/sber'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { Search } = Input
 
 const kycStatusColor: Record<KycStatus, string> = {
@@ -164,13 +173,12 @@ export default function UsersPage() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} className="sber-page-title">
-          Пользователи
-        </Title>
-        <Space>
+      <PageHeader
+        title="Пользователи"
+        subtitle="Управление учётными записями платформы, KYC-статусы, права доступа"
+        actions={
           <Search
-            placeholder="Поиск по email..."
+            placeholder="Поиск по email…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onSearch={handleSearch}
@@ -179,29 +187,42 @@ export default function UsersPage() {
             prefix={<SearchOutlined />}
             enterButton={<Button type="primary" icon={<SearchOutlined />}>Найти</Button>}
           />
-        </Space>
-      </div>
+        }
+      />
 
-      {/* Sprint 9 — KYC funnel summary chips, before the filter row. */}
-      <Space size={20} wrap style={{ padding: '4px 4px 8px' }}>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          Всего: <Text strong style={{ fontSize: 13 }}>{summary.total}</Text>
-        </Text>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          Верифицировано:{' '}
-          <Text strong style={{ fontSize: 13, color: '#21A038' }}>{summary.verified}</Text>
-        </Text>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          На проверке:{' '}
-          <Text strong style={{ fontSize: 13, color: '#D97706' }}>{summary.pending}</Text>
-        </Text>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          Заблокировано:{' '}
-          <Text strong style={{ fontSize: 13, color: summary.blocked > 0 ? '#DC2626' : undefined }}>
-            {summary.blocked}
-          </Text>
-        </Text>
-      </Space>
+      {/* Sprint 9-DS — replaced the inline chip strip with proper KPI tiles.
+          Same numbers, but consistent with Pools / Transactions / OTC. */}
+      <KpiRow
+        tiles={[
+          {
+            label: 'Всего пользователей',
+            value: summary.total.toLocaleString('ru-RU'),
+            sub: 'на текущей странице',
+            icon: <TeamOutlined style={{ color: '#296AE3' }} />,
+          },
+          {
+            label: 'Верифицировано',
+            value: summary.verified.toLocaleString('ru-RU'),
+            sub: 'KYC пройден',
+            icon: <SafetyCertificateOutlined style={{ color: 'var(--sber-green)' }} />,
+            accent: 'var(--sber-green)',
+          },
+          {
+            label: 'На проверке',
+            value: summary.pending.toLocaleString('ru-RU'),
+            sub: summary.pending === 0 ? 'нет ожидающих' : 'требуют разбора',
+            icon: <ClockCircleOutlined style={{ color: '#D97706' }} />,
+            accent: summary.pending > 0 ? '#D97706' : undefined,
+          },
+          {
+            label: 'Заблокировано',
+            value: summary.blocked.toLocaleString('ru-RU'),
+            sub: summary.blocked === 0 ? 'все активны' : 'без доступа',
+            icon: <StopOutlined style={{ color: summary.blocked > 0 ? '#DC2626' : 'var(--text-muted)' }} />,
+            accent: summary.blocked > 0 ? '#DC2626' : undefined,
+          },
+        ]}
+      />
 
       <Card
         className="sber-card sber-table"

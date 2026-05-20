@@ -222,40 +222,89 @@ export default function DashboardPage() {
       </Row>
 
       {/* Row 3 — health summary tiles (Активные позиции / KYC).
-          Pre-Sprint-9 these were the entire bottom half and felt
-          empty; now they share the page with the live feeds below
-          so the dashboard reads as a working system. Kept narrow. */}
+          Sprint 9-DS — converted from two huge Statistic cards (36px
+          values, 50% page width each) to compact horizontal cards with
+          the value, a sub-line, and progress context. Less wasted real
+          estate, same operator info. */}
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12}>
           <Card
             className="sber-card"
             style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
-            title={<span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Активные позиции</span>}
+            styles={{ body: { padding: 18 } }}
           >
-            <Statistic
-              value={dashboard?.activePositions ?? 0}
-              valueStyle={{ color: 'var(--sber-green)', fontSize: 36, fontWeight: 700 }}
-              prefix={<FundOutlined />}
-              suffix="позиций"
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div
+                aria-hidden
+                style={{
+                  width: 56, height: 56, borderRadius: 12,
+                  background: 'rgba(33,160,56,0.12)', color: 'var(--sber-green)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 26, flexShrink: 0,
+                }}
+              >
+                <FundOutlined />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500, marginBottom: 2 }}>
+                  Активные позиции
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
+                  {(dashboard?.activePositions ?? 0).toLocaleString('ru-RU')}
+                </div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Открытых LP-позиций пользователей
+                </Text>
+              </div>
+            </div>
           </Card>
         </Col>
         <Col xs={24} sm={12}>
           <Card
             className="sber-card"
             style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
-            title={<span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Уровень верификации KYC</span>}
+            styles={{ body: { padding: 18 } }}
           >
-            <Statistic
-              value={
-                dashboard?.totalUsers
-                  ? ((dashboard.verifiedUsers / dashboard.totalUsers) * 100).toFixed(1)
-                  : 0
-              }
-              suffix="%"
-              valueStyle={{ color: 'var(--sber-green)', fontSize: 36, fontWeight: 700 }}
-              prefix={<CheckCircleOutlined />}
-            />
+            {(() => {
+              const verifiedPct = dashboard?.totalUsers
+                ? Math.round((dashboard.verifiedUsers / dashboard.totalUsers) * 100)
+                : 0
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div
+                    aria-hidden
+                    style={{
+                      width: 56, height: 56, borderRadius: 12,
+                      background: 'rgba(41,106,227,0.12)', color: '#296AE3',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 26, flexShrink: 0,
+                    }}
+                  >
+                    <CheckCircleOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500, marginBottom: 2 }}>
+                      Уровень верификации KYC
+                    </div>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>
+                      {verifiedPct}<span style={{ fontSize: 18, fontWeight: 500, marginLeft: 2 }}>%</span>
+                    </div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {dashboard?.verifiedUsers ?? 0} из {dashboard?.totalUsers ?? 0} прошли проверку
+                    </Text>
+                    <div style={{
+                      marginTop: 8, height: 4, borderRadius: 2,
+                      background: 'rgba(229,231,235,0.7)', overflow: 'hidden',
+                    }}>
+                      <div style={{
+                        width: `${verifiedPct}%`, height: '100%',
+                        background: 'var(--sber-green)', transition: 'width 0.3s',
+                      }} />
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
           </Card>
         </Col>
       </Row>

@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query'
 import { transactions, tokens as tokensApi, pools as poolsApi } from '@/api/services'
 import type { Transaction, TxType, TxStatus, TransactionFilters, Token, Pool } from '@/api/types'
 import dayjs from 'dayjs'
+import { TokenPairChip } from '@/components/sber'
+import { formatTokenAmount } from '@/lib/format'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -157,78 +159,48 @@ export default function TransactionsPage() {
             render: (_: unknown, r: Transaction) => {
               const inSym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
               const outSym = r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null
-              if (inSym && outSym) {
-                return (
-                  <Space size={6}>
-                    <Text strong style={{ fontSize: 13 }}>{inSym}</Text>
-                    <SwapOutlined style={{ color: 'var(--text-muted, #9CA3AF)', fontSize: 11 }} />
-                    <Text strong style={{ fontSize: 13 }}>{outSym}</Text>
-                  </Space>
-                )
-              }
+              if (inSym || outSym) return <TokenPairChip x={inSym} y={outSym} />
               if (r.poolId) {
                 const pair = pairByPoolId.get(r.poolId)
-                if (pair) return <Text strong style={{ fontSize: 13 }}>{pair}</Text>
+                if (pair) {
+                  const [px, py] = pair.split('/')
+                  return <TokenPairChip x={px} y={py} />
+                }
               }
               return <Text type="secondary">—</Text>
             },
           },
           {
+            // Sprint 9-DS — switched amount columns to formatTokenAmount
+            // (compact above 10k). Same data, half the visual noise.
             title: 'Сумма входа',
             dataIndex: 'amountIn',
             align: 'right' as const,
-            render: (v: number | null, r: Transaction) => {
-              if (v == null) return <Text type="secondary">—</Text>
-              const sym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
-              return (
-                <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                  {v.toLocaleString('ru-RU')}
-                  {sym && (
-                    <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
-                      {sym}
-                    </Text>
-                  )}
-                </span>
-              )
-            },
+            render: (v: number | null, r: Transaction) => (
+              <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                {formatTokenAmount(v, r.tokenInId ? symbolByTokenId.get(r.tokenInId) : undefined)}
+              </span>
+            ),
           },
           {
             title: 'Сумма выхода',
             dataIndex: 'amountOut',
             align: 'right' as const,
-            render: (v: number | null, r: Transaction) => {
-              if (v == null) return <Text type="secondary">—</Text>
-              const sym = r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null
-              return (
-                <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                  {v.toLocaleString('ru-RU')}
-                  {sym && (
-                    <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
-                      {sym}
-                    </Text>
-                  )}
-                </span>
-              )
-            },
+            render: (v: number | null, r: Transaction) => (
+              <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                {formatTokenAmount(v, r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : undefined)}
+              </span>
+            ),
           },
           {
             title: 'Комиссия',
             dataIndex: 'feeAmount',
             align: 'right' as const,
-            render: (v: number | null, r: Transaction) => {
-              if (v == null) return <Text type="secondary">—</Text>
-              const sym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
-              return (
-                <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                  {v.toLocaleString('ru-RU')}
-                  {sym && (
-                    <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>
-                      {sym}
-                    </Text>
-                  )}
-                </span>
-              )
-            },
+            render: (v: number | null, r: Transaction) => (
+              <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                {formatTokenAmount(v, r.tokenInId ? symbolByTokenId.get(r.tokenInId) : undefined, { maxFractionDigits: 6 })}
+              </span>
+            ),
           },
           {
             title: 'Статус',

@@ -28,6 +28,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, tokens, balances, transactions } from '@/api/services'
 import type { Pool, Token, TokenBalance, Transaction } from '@/api/types'
 import { bpsToPercent } from '@/utils/format'
+import { formatCompact, formatTokenAmount } from '@/lib/format'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -383,30 +384,44 @@ export default function HedgePage() {
         </Paragraph>
       </div>
 
-      {/* Exposure summary — anchors the whole UX in "how many rubles do I have?" */}
+      {/* Exposure summary — anchors the whole UX in "how many rubles do I have?".
+          Sprint 9-DS — switched from a raw `Statistic` (which printed
+          "18 412 237 226 516 SRUB" — fourteen digits, unreadable) to
+          `formatCompact` ("18.41 трлн SRUB"). The full number is still
+          available in a tooltip for anyone who needs the exact figure. */}
       <Card className="sber-card" style={{ marginBottom: 20 }}>
         <Row align="middle" gutter={24}>
           <Col xs={24} sm={12}>
-            <Statistic
-              title={
-                <Space>
-                  <Text type="secondary" style={{ fontSize: 13 }}>Подверженность валютному риску</Text>
-                  <Tooltip title="Сумма доступных рублей, которые можно конвертировать в иностранную валюту в качестве хеджа.">
-                    <InfoCircleOutlined style={{ color: 'var(--text-muted)' }} />
-                  </Tooltip>
-                </Space>
-              }
-              value={srubBalance?.available ?? 0}
-              suffix="SRUB"
-              valueStyle={{ color: 'var(--sber-green-deep)', fontSize: 28, fontWeight: 700 }}
-              groupSeparator=" "
-            />
+            <Space size={6}>
+              <Text type="secondary" style={{ fontSize: 13 }}>Подверженность валютному риску</Text>
+              <Tooltip title="Сумма доступных рублей, которые можно конвертировать в иностранную валюту в качестве хеджа.">
+                <InfoCircleOutlined style={{ color: 'var(--text-muted)' }} />
+              </Tooltip>
+            </Space>
+            <Tooltip title={`${(srubBalance?.available ?? 0).toLocaleString('ru-RU')} SRUB`}>
+              <div style={{
+                color: 'var(--sber-green-deep)',
+                fontSize: 28,
+                fontWeight: 700,
+                fontVariantNumeric: 'tabular-nums',
+                marginTop: 4,
+              }}>
+                {formatCompact(srubBalance?.available ?? 0)} <span style={{ fontSize: 18, fontWeight: 500 }}>SRUB</span>
+              </div>
+            </Tooltip>
           </Col>
           <Col xs={24} sm={12} style={{ textAlign: 'right' }}>
             <Text type="secondary" style={{ fontSize: 12 }}>В заморозке</Text>
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>
-              {(srubBalance?.locked ?? 0).toLocaleString('ru-RU')} SRUB
-            </div>
+            <Tooltip title={`${(srubBalance?.locked ?? 0).toLocaleString('ru-RU')} SRUB`}>
+              <div style={{
+                fontSize: 16,
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {formatCompact(srubBalance?.locked ?? 0)} SRUB
+              </div>
+            </Tooltip>
           </Col>
         </Row>
       </Card>
@@ -574,9 +589,14 @@ export default function HedgePage() {
                     <Row gutter={[8, 8]}>
                       <Col span={12}>
                         <Text type="secondary" style={{ fontSize: 11 }}>Получите</Text>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--sber-green-deep)' }}>
-                          {quote.amountOut.toLocaleString('ru-RU')} {selectedCandidate.hedgeToken.symbol}
-                        </div>
+                        <Tooltip title={`${quote.amountOut.toLocaleString('ru-RU')} ${selectedCandidate.hedgeToken.symbol}`}>
+                          <div style={{
+                            fontSize: 22, fontWeight: 700, color: 'var(--sber-green-deep)',
+                            fontVariantNumeric: 'tabular-nums',
+                          }}>
+                            {formatTokenAmount(quote.amountOut, selectedCandidate.hedgeToken.symbol, { compact: true, maxFractionDigits: 2 })}
+                          </div>
+                        </Tooltip>
                       </Col>
                       <Col span={12} style={{ textAlign: 'right' }}>
                         <Text type="secondary" style={{ fontSize: 11 }}>Эффективный курс</Text>

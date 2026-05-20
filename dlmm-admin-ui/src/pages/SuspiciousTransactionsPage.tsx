@@ -1,22 +1,36 @@
+import { useMemo } from 'react'
 import {
   Table,
   Space,
   Tag,
-  Typography,
   Card,
   Alert,
   Spin,
   Tooltip,
 } from 'antd'
-import { WarningOutlined } from '@ant-design/icons'
+import {
+  WarningOutlined,
+  SafetyOutlined,
+  CheckCircleOutlined,
+  RiseOutlined,
+} from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { transactions as txService } from '@/api/services'
 import type { SuspiciousTransaction } from '@/api/types'
 import dayjs from 'dayjs'
+import { KpiRow, PageHeader, UserChip } from '@/components/sber'
+import { formatCompact, shortId } from '@/lib/format'
 
-const { Title } = Typography
-
+/**
+ * Sprint 9-DS — Suspicious transactions page refactor.
+ * - replaced raw "id.slice(0,8)" with shared `shortId` helper
+ * - userId column now renders the avatar/email UserChip
+ * - added 4-up KPI strip (Total, today, big-ticket >1M, distinct users)
+ * - empty state moved into the table component (Empty fallback) so the
+ *   green success banner doesn't shout when there's genuinely nothing
+ *   to look at
+ */
 export default function SuspiciousTransactionsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['suspiciousTransactions'],
@@ -24,16 +38,25 @@ export default function SuspiciousTransactionsPage() {
     refetchInterval: 30000,
   })
 
+  const summary = useMemo(() => {
+    const list = data ?? []
+    const today = dayjs().startOf('day')
+    const todayCount = list.filter((t) => dayjs(t.timestamp).isAfter(today)).length
+    const bigTicket = list.filter((t) => t.amount > 1_000_000).length
+    const distinctUsers = new Set(list.map((t) => t.userId)).size
+    return { total: list.length, today: todayCount, bigTicket, distinctUsers }
+  }, [data])
+
   const columns: ColumnsType<SuspiciousTransaction> = [
     {
       title: 'ID',
       dataIndex: 'id',
       key: 'id',
-      width: 130,
+      width: 110,
       render: (id: string) => (
         <Tooltip title={id}>
-          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
-            {id.slice(0, 8)}...
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
+            {shortId(id)}
           </span>
         </Tooltip>
       ),
@@ -42,29 +65,26 @@ export default function SuspiciousTransactionsPage() {
       title: 'Тип',
       dataIndex: 'type',
       key: 'type',
+      width: 120,
       render: (type: string) => <Tag color="blue">{type}</Tag>,
     },
     {
-      title: 'ID пользователя',
+      title: 'Пользователь',
       dataIndex: 'userId',
       key: 'userId',
-      render: (id: string) => (
-        <Tooltip title={id}>
-          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
-            {id.slice(0, 8)}...
-          </span>
-        </Tooltip>
-      ),
+      width: 220,
+      render: (id: string) => <UserChip userId={id} />,
     },
     {
       title: 'ID пула',
       dataIndex: 'poolId',
       key: 'poolId',
+      width: 120,
       render: (id: string | null) =>
         id ? (
           <Tooltip title={id}>
-            <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
-              {id.slice(0, 8)}...
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
+              {shortId(id)}
             </span>
           </Tooltip>
         ) : (
@@ -77,8 +97,8 @@ export default function SuspiciousTransactionsPage() {
       key: 'amount',
       align: 'right',
       render: (val: number) => (
-        <span style={{ fontWeight: 600 }}>
-          {val.toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
+        <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          {formatCompact(val)}
         </span>
       ),
       sorter: (a, b) => a.amount - b.amount,
@@ -90,7 +110,7 @@ export default function SuspiciousTransactionsPage() {
       render: (reason: string) => (
         <Tooltip title={reason}>
           <Tag color="red" icon={<WarningOutlined />}>
-            {reason.length > 40 ? `${reason.slice(0, 40)}...` : reason}
+            {reason.length > 40 ? `${reason.slice(0, 40)}…` : reason}
           </Tag>
         </Tooltip>
       ),
@@ -99,7 +119,12 @@ export default function SuspiciousTransactionsPage() {
       title: 'Время',
       dataIndex: 'timestamp',
       key: 'timestamp',
-      render: (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm:ss'),
+      width: 150,
+      render: (date: string) => (
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>
+          {dayjs(date).format('DD.MM.YYYY HH:mm')}
+        </span>
+      ),
       sorter: (a, b) => dayjs(a.timestamp).unix() - dayjs(b.timestamp).unix(),
       defaultSortOrder: 'descend',
     },
@@ -126,37 +151,54 @@ export default function SuspiciousTransactionsPage() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} className="sber-page-title">
-          <WarningOutlined style={{ color: '#EF4444', marginRight: 8 }} />
-          Подозрительные транзакции
-        </Title>
-        {data && data.length > 0 && (
-          <Tag color="red" style={{ fontSize: 13, padding: '4px 12px', borderRadius: 12 }}>
-            {data.length} выявлено
-          </Tag>
-        )}
-      </div>
-
-      {data?.length === 0 && (
-        <Alert
-          message="Подозрительных транзакций не обнаружено"
-          description="На данный момент система не выявила подозрительных транзакций."
-          type="success"
-          showIcon
-          style={{ borderRadius: 8 }}
-        />
-      )}
-
-      <Card
-        className="sber-card sber-table"
-        style={{ borderRadius: 12, border: '1px solid #E5E7EB' }}
-        extra={
-          <span style={{ color: '#9CA3AF', fontSize: 12 }}>
-            Автообновление каждые 30 секунд
-          </span>
+      <PageHeader
+        title="Подозрительные транзакции"
+        subtitle="Автоматически выявленные операции с признаками аномалий — обновляется каждые 30 сек"
+        status={
+          summary.total > 0 ? (
+            <Tag color="red" style={{ borderRadius: 12, padding: '2px 10px', fontWeight: 600 }}>
+              {summary.total} выявлено
+            </Tag>
+          ) : (
+            <Tag color="green" style={{ borderRadius: 12, padding: '2px 10px', fontWeight: 600 }}>
+              <CheckCircleOutlined /> чисто
+            </Tag>
+          )
         }
-      >
+      />
+
+      <KpiRow
+        tiles={[
+          {
+            label: 'Всего флагов',
+            value: summary.total.toLocaleString('ru-RU'),
+            sub: 'за последние 24ч',
+            icon: <SafetyOutlined style={{ color: summary.total > 0 ? '#D14D00' : 'var(--text-muted)' }} />,
+            accent: summary.total > 0 ? '#D14D00' : undefined,
+          },
+          {
+            label: 'Сегодня',
+            value: summary.today.toLocaleString('ru-RU'),
+            sub: summary.today === 0 ? 'новых нет' : 'требуют разбора',
+            icon: <WarningOutlined style={{ color: summary.today > 0 ? '#DC2626' : 'var(--text-muted)' }} />,
+            accent: summary.today > 0 ? '#DC2626' : undefined,
+          },
+          {
+            label: 'Крупные (>1M)',
+            value: summary.bigTicket.toLocaleString('ru-RU'),
+            sub: 'high-value alerts',
+            icon: <RiseOutlined style={{ color: summary.bigTicket > 0 ? '#9B59B6' : 'var(--text-muted)' }} />,
+          },
+          {
+            label: 'Затронуто пользователей',
+            value: summary.distinctUsers.toLocaleString('ru-RU'),
+            sub: 'уникальных аккаунтов',
+            icon: <CheckCircleOutlined style={{ color: '#296AE3' }} />,
+          },
+        ]}
+      />
+
+      <Card className="sber-card sber-table" style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}>
         <Table<SuspiciousTransaction>
           columns={columns}
           dataSource={data}
@@ -165,13 +207,25 @@ export default function SuspiciousTransactionsPage() {
           pagination={{
             pageSize: 20,
             showSizeChanger: true,
-            showTotal: (total) => `Всего ${total} подозрительных транзакций`,
+            showTotal: (total) => `Всего ${total} флагов`,
           }}
           rowClassName={(record) =>
             record.amount > 1000000 ? 'ant-table-row-danger' : ''
           }
+          locale={{
+            emptyText: (
+              <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                <CheckCircleOutlined style={{ fontSize: 32, color: 'var(--sber-green)', marginBottom: 8 }} />
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+                  Подозрительных транзакций не обнаружено
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  Платформа работает в штатном режиме. Автообновление каждые 30 сек.
+                </div>
+              </div>
+            ),
+          }}
           size="middle"
-          scroll={{ x: 800 }}
         />
       </Card>
     </Space>

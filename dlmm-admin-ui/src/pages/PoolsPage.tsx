@@ -10,14 +10,23 @@ import {
   Select,
   TablePaginationConfig,
 } from 'antd'
-import { PlusOutlined, FilterOutlined } from '@ant-design/icons'
+import {
+  PlusOutlined,
+  FilterOutlined,
+  DollarOutlined,
+  RiseOutlined,
+  PercentageOutlined,
+  AppstoreOutlined,
+} from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { pools as poolService } from '@/api/services'
 import type { Pool, PoolStatus } from '@/api/types'
 import { bpsToPercent } from '@/utils/format'
+import { KpiRow, PageHeader, TokenPairChip } from '@/components/sber'
+import { formatCompact, formatRub } from '@/lib/format'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 // Sprint 9 #M-5 — sort options consumed via URL ?sort= (set by Dashboard
 // drill-down per #M-4). Each maps to a Pool field name; "none" returns
@@ -94,14 +103,26 @@ export default function PoolsPage() {
     setPage(0)
   }
 
+  // Sprint 9 (post-DS) — aggregates over the currently-loaded page.
+  // Backend doesn't yet expose a /pools/aggregate endpoint; client-side
+  // aggregation matches what the operator sees in the table below.
+  const allPools = data?.content ?? []
+  const totalTvl = allPools.reduce(
+    (acc, p) => acc + (p.totalTvlX ?? 0) + (p.totalTvlY ?? 0),
+    0,
+  )
+  const totalVolume24h = allPools.reduce((acc, p) => acc + (p.volume24h ?? 0), 0)
+  const activeCount = allPools.filter((p) => p.status === 'ACTIVE').length
+  const apyVals = allPools.map((p) => p.estimatedApy ?? 0).filter((v) => v > 0)
+  const avgApy = apyVals.length > 0 ? apyVals.reduce((a, b) => a + b, 0) / apyVals.length : 0
+
   const columns: ColumnsType<Pool> = [
     {
       title: 'Пара',
       key: 'pair',
+      width: 200,
       render: (_, record) => (
-        <strong style={{ color: '#1F2937' }}>
-          {record.tokenXSymbol}/{record.tokenYSymbol}
-        </strong>
+        <TokenPairChip x={record.tokenXSymbol} y={record.tokenYSymbol} />
       ),
     },
     {
@@ -127,34 +148,35 @@ export default function PoolsPage() {
     },
     {
       // Sprint 9 — column title is dynamic per-row via render rather than
-      // a fixed "(X)". Header stays generic "Резерв 1-го токена" so the
-      // column header makes sense across all pools; cell value is suffixed
-      // with the actual symbol from that row.
-      title: 'Резерв 1-го токена',
+      // a fixed "(X)". Header stays generic; cell value is suffixed with
+      // the actual symbol from that row. Sprint 9-DS — switched from raw
+      // toLocaleString (which gave us "1 944 006 221 000") to formatCompact
+      // ("1.94 трлн") for readability.
+      title: 'Резерв X',
       dataIndex: 'totalTvlX',
       key: 'totalTvlX',
       align: 'right',
       render: (val: number, row: Pool) => (
-        <>
-          {val.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {formatCompact(val)}
           <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>
             {row.tokenXSymbol}
           </span>
-        </>
+        </span>
       ),
     },
     {
-      title: 'Резерв 2-го токена',
+      title: 'Резерв Y',
       dataIndex: 'totalTvlY',
       key: 'totalTvlY',
       align: 'right',
       render: (val: number, row: Pool) => (
-        <>
-          {val.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {formatCompact(val)}
           <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>
             {row.tokenYSymbol}
           </span>
-        </>
+        </span>
       ),
     },
     {
@@ -162,7 +184,9 @@ export default function PoolsPage() {
       dataIndex: 'volume24h',
       key: 'volume24h',
       align: 'right',
-      render: (val: number) => val.toLocaleString('ru-RU', { maximumFractionDigits: 2 }),
+      render: (val: number) => (
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCompact(val)}</span>
+      ),
     },
     {
       title: 'Расч. APY',
@@ -192,19 +216,51 @@ export default function PoolsPage() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} className="sber-page-title">
-          Пулы ликвидности
-        </Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => navigate('/pools/create')}
-          style={{ borderRadius: 8 }}
-        >
-          Создать пул
-        </Button>
-      </div>
+      <PageHeader
+        title="Пулы ликвидности"
+        subtitle="Бин-ориентированные AMM-пулы платформы — резервы, объёмы, доходность"
+        actions={
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => navigate('/pools/create')}
+            style={{ borderRadius: 8 }}
+          >
+            Создать пул
+          </Button>
+        }
+      />
+
+      <KpiRow
+        tiles={[
+          {
+            label: 'Активных пулов',
+            value: `${activeCount} / ${allPools.length}`,
+            sub: `доступно для торговли`,
+            icon: <AppstoreOutlined style={{ color: 'var(--sber-green)' }} />,
+          },
+          {
+            label: 'Совокупный TVL',
+            value: formatRub(totalTvl),
+            sub: 'сумма резервов обоих токенов',
+            icon: <DollarOutlined style={{ color: '#F2994A' }} />,
+          },
+          {
+            label: 'Объём за 24ч',
+            value: formatCompact(totalVolume24h),
+            sub: 'свопов на платформе',
+            icon: <RiseOutlined style={{ color: '#296AE3' }} />,
+          },
+          {
+            label: 'Средний APY',
+            value: avgApy > 0 ? `${avgApy.toFixed(2)}%` : '—',
+            sub: avgApy > 0 ? 'по пулам с фактическим объёмом' : 'недостаточно данных',
+            icon: <PercentageOutlined style={{ color: '#9B59B6' }} />,
+            accent: avgApy > 0 ? 'var(--sber-green)' : undefined,
+          },
+        ]}
+      />
+
 
       {/* Sprint 9 #M-5 — filter+sort row. URL-bound so Dashboard #M-4
           tile drill-downs (?status=ACTIVE / ?sort=tvl) reach the right
