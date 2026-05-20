@@ -19,18 +19,52 @@
                   radial-gradient(at 50% 100%, rgba(110,91,255,0.10), transparent 60%);
   --grad-night: linear-gradient(135deg, #0E6B1E 0%, #006B3F 50%, #003B49 100%);
 
-  /* Sprint 9 — warm off-white from the Claude Design mockup. #F3F4F6 was a
-     cool grey and felt clinical; #FAFAF8 is the same brightness but with
-     a hint of warmth, which reads as "premium private-banking" rather
-     than "compliance dashboard". */
+  /* Sprint 9 — Plasma (Sber's open-source design system) tokens.
+     We keep the warm #FAFAF8 page background instead of Plasma's
+     #F5F5F5 because the warmer cast reads as "private banking" and
+     the brief is treasury-grade UX. Everything else is lifted from
+     @salutejs/plasma-tokens-web@1.69 (the b2c web theme) so colours,
+     surfaces, and text-on-background contrast match a real Sber product.
+
+     Plasma's reference theme uses a blue accent (#296AE3) for primary
+     CTAs and reserves green for "success" semantics. We do the inverse
+     for DLMM (the platform is green-first by brand instinct) but expose
+     both palettes so warning/critical/info components have proper
+     Plasma colours. */
   --bg-page: #FAFAF8;
   --bg-card: #FFFFFF;
   --bg-sidebar: #FFFFFF;
-  --border-light: #E5E7EB;
-  --border-sidebar: #F0F0F0;
-  --text-primary: #1F2937;
-  --text-secondary: #6B7280;
-  --text-muted: #9CA3AF;
+
+  /* Plasma surface scale — used for nested cards, hover backgrounds,
+     ghost-button fills. surfaceSolid01 = #FAFAFA is essentially our
+     page bg, so we promote it to "the layer above the card". */
+  --surface-1: #FAFAFA;
+  --surface-2: #F0F0F0;
+  --surface-3: #E1E1E1;
+
+  /* Plasma uses opacity-on-black instead of fixed greys for text colour
+     ramps; this gives consistent contrast across any background tint. */
+  --border-light: rgba(8, 8, 8, 0.10);
+  --border-strong: rgba(8, 8, 8, 0.16);
+  --border-sidebar: rgba(8, 8, 8, 0.06);
+  --text-primary: #080808;
+  --text-secondary: rgba(8, 8, 8, 0.56);
+  --text-paragraph: rgba(8, 8, 8, 0.80);
+  --text-muted: rgba(8, 8, 8, 0.28);
+
+  /* Plasma semantic colours. Names match @salutejs/plasma-tokens-web
+     so future component code can read them by Plasma name. */
+  --plasma-accent: #296AE3;
+  --plasma-link: #2A72F8;
+  --plasma-link-hover: #4D89F9;
+  --plasma-link-active: #0859F1;
+  --plasma-success: #0D8523;
+  --plasma-success-button: #148F2B;
+  --plasma-warning: #D14D00;
+  --plasma-warning-button: #E35502;
+  --plasma-critical: #E31227;
+  --plasma-critical-button: #F31B30;
+  --plasma-input-border-focus: #5993FF;
 
   /* Modern shadow ramp */
   --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
@@ -46,18 +80,12 @@
 }
 
 body {
-  /* Sprint 9 — Onest is the typeface Claude Design picked for our
-     Хедж FX mockup (see docs/design/hedge-position-card-claude-design/).
-     It's Cyrillic-friendly and was designed for fintech. Inter is the
-     final fallback so existing screenshots stay close until users see
-     the Onest webfont load.
-
-     tabular-nums is the single most useful financial-UI font feature:
-     every digit gets the same width, so columns of numbers in tables
-     stop jittering between rows. Applying it body-wide is safe because
-     proportional digits only matter in body copy, and our body copy is
-     mostly labels. */
-  font-family: 'Onest', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Sprint 9 — Plasma's house typeface is SB Sans Text. Loaded from
+     the official Sber CDN in index.html, with Onest as the
+     Cyrillic-friendly fallback (in case the Sber CDN is blocked) and
+     Inter as the final OS fallback. tabular-nums + ss01/cv11 stay
+     for legible columns of digits. */
+  font-family: 'SB Sans Text', 'Onest', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'ss01', 'cv11';
   background: var(--bg-page);

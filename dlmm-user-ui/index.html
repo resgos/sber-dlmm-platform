@@ -5,14 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>СБЕР DLMM — Платформа ликвидности</title>
-    <!-- Sprint 9 — Onest is a Cyrillic-friendly fintech sans designed
-         for RU/EN; picked by Claude Design when it generated the Хедж FX
-         mockup (docs/design/hedge-position-card-claude-design/). preconnect
-         shaves ~150ms off first paint by warming the TLS handshake before
-         the stylesheet request lands. JetBrains Mono is for transaction
-         IDs / refs so they don't blend with the body copy. -->
+    <!-- Sprint 9 — Plasma (Sber's open-source design system) typography.
+         SB Sans Text is Sber's house sans; it's the typeface every Sber
+         product ships with. Loaded from the official Sber CDN so we get
+         the proper RU + EN cuts, ligatures, and tabular-num kerning
+         without bundling 4× woff2 files ourselves. Onest stays as the
+         secondary fallback (Cyrillic-friendly, in case the Sber CDN is
+         blocked on a client network), Inter as the final OS fallback.
+         JetBrains Mono is reserved for IDs / refs so they don't blend
+         with the body copy. preconnect warms the TLS handshake on each
+         host. -->
+    <link rel="preconnect" href="https://cdn-app.sberdevices.ru" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdn-app.sberdevices.ru/shared-static/0.0.0/styles/SBSansText.0.2.0.css"
+    />
     <link
       href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"

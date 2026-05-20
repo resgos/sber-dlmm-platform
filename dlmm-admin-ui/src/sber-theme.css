@@ -18,17 +18,38 @@
                   radial-gradient(at 50% 100%, rgba(110,91,255,0.10), transparent 60%);
   --grad-night: linear-gradient(135deg, #0E6B1E 0%, #006B3F 50%, #003B49 100%);
 
-  /* Sprint 9 — keep admin and user UIs synchronised: warm off-white
-     from the Claude Design palette (see
-     docs/design/hedge-position-card-claude-design/). */
+  /* Sprint 9 — Plasma (Sber open-source) tokens. See twin in
+     dlmm-user-ui/src/sber-theme.css for the full rationale. Lifted
+     verbatim from @salutejs/plasma-tokens-web@1.69 except the page
+     bg, which stays warm #FAFAF8 (private-banking feel) instead of
+     Plasma's cool #F5F5F5. */
   --bg-page: #FAFAF8;
   --bg-card: #FFFFFF;
   --bg-sidebar: #FFFFFF;
-  --border-light: #E5E7EB;
-  --border-sidebar: #F0F0F0;
-  --text-primary: #1F2937;
-  --text-secondary: #6B7280;
-  --text-muted: #9CA3AF;
+
+  --surface-1: #FAFAFA;
+  --surface-2: #F0F0F0;
+  --surface-3: #E1E1E1;
+
+  --border-light: rgba(8, 8, 8, 0.10);
+  --border-strong: rgba(8, 8, 8, 0.16);
+  --border-sidebar: rgba(8, 8, 8, 0.06);
+  --text-primary: #080808;
+  --text-secondary: rgba(8, 8, 8, 0.56);
+  --text-paragraph: rgba(8, 8, 8, 0.80);
+  --text-muted: rgba(8, 8, 8, 0.28);
+
+  --plasma-accent: #296AE3;
+  --plasma-link: #2A72F8;
+  --plasma-link-hover: #4D89F9;
+  --plasma-link-active: #0859F1;
+  --plasma-success: #0D8523;
+  --plasma-success-button: #148F2B;
+  --plasma-warning: #D14D00;
+  --plasma-warning-button: #E35502;
+  --plasma-critical: #E31227;
+  --plasma-critical-button: #F31B30;
+  --plasma-input-border-focus: #5993FF;
 
   --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
   --shadow-sm: 0 2px 8px rgba(15,23,42,0.05);
@@ -43,11 +64,9 @@
 }
 
 body {
-  /* Sprint 9 — Onest + tabular-nums, see twin in dlmm-user-ui for
-     the full rationale. tabular-nums is critical here because the
-     admin dashboard is mostly tables of numbers (pools, transactions,
-     users) and the columns now stop jittering between rows. */
-  font-family: 'Onest', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Sprint 9 — Plasma's SB Sans Text via Sber CDN with Onest + Inter
+     as progressive fallbacks. See twin in dlmm-user-ui for rationale. */
+  font-family: 'SB Sans Text', 'Onest', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'ss01', 'cv11';
   background: var(--bg-page);

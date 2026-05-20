@@ -144,67 +144,242 @@ export default function DashboardPage() {
   const totalEarned = (feeSummary?.totalClaimed ?? 0) + (feeSummary?.totalUnclaimed ?? 0)
   const earnedDelta = totalBalanceRub > 0 ? (totalEarned / totalBalanceRub) * 100 : 0
 
+  // Sprint 9 — compact hero spec lifted from the Claude Design
+  // user-dashboard mockup (docs/design/user-dashboard-claude-design/).
+  // The mockup folds the 4 stat tiles INTO the hero as inline
+  // sub-metrics divided by hairline borders, so the page stops with
+  // the duplicate "Общий баланс" tile that just repeats the hero
+  // number, and saves ~120px of vertical space for the live feeds
+  // below.
+  const heroSubMetric = (label: string, value: React.ReactNode, sub: React.ReactNode) => (
+    <Col
+      flex="1 1 0"
+      style={{
+        padding: '0 22px',
+        borderLeft: '1px solid rgba(255,255,255,0.22)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        gap: 4,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          color: 'rgba(255,255,255,0.7)',
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          fontWeight: 500,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 600,
+          color: 'var(--bg-card)',
+          lineHeight: 1.1,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {value}
+      </div>
+      <div
+        style={{
+          fontSize: 11,
+          color: 'rgba(255,255,255,0.65)',
+        }}
+      >
+        {sub}
+      </div>
+    </Col>
+  )
+
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
-      {/* Hero — gradient lockup with the headline portfolio number */}
-      <div className="sber-hero">
-        <Row gutter={[24, 16]} align="middle">
-          <Col xs={24} md={14}>
-            <div className="sber-hero-title">Ваш портфель</div>
-            <div className="sber-hero-value">{formatRub(totalBalanceRub)}</div>
-            <div className="sber-hero-meta" style={{ marginTop: 6 }}>
-              {activePositions.length} активн{activePositions.length === 1 ? 'ая' : 'ых'} позици
-              {activePositions.length === 1 ? 'я' : 'й'} · доход {formatRub(totalEarned)}
-              {earnedDelta > 0 && ` (+${earnedDelta.toFixed(2)}%)`}
+      {/* Hero — single bank-grade lockup. Portfolio number on the left,
+          4 inline sub-metrics on the right divided by hairline borders.
+          Replaces the previous hero + 4-up StatCard row (one of which
+          just duplicated the portfolio total). Pattern from the Claude
+          Design redesign at docs/design/user-dashboard-claude-design/. */}
+      <div className="sber-hero" style={{ padding: '20px 24px' }}>
+        <Row gutter={0} align="middle" wrap={false} style={{ flexWrap: 'wrap' }}>
+          <Col flex="0 0 320px" style={{ padding: '0 20px 0 4px', minWidth: 240 }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: 'rgba(255,255,255,0.75)',
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                fontWeight: 500,
+                marginBottom: 6,
+              }}
+            >
+              Ваш портфель
             </div>
-          </Col>
-          <Col xs={24} md={10} style={{ textAlign: 'right' }}>
-            <Space size={12} wrap>
-              <Button size="large" onClick={() => navigate('/swap')}
+            <div
+              style={{
+                fontSize: 32,
+                fontWeight: 700,
+                color: 'var(--bg-card)',
+                lineHeight: 1.05,
+                letterSpacing: '-0.015em',
+                fontVariantNumeric: 'tabular-nums',
+                marginBottom: 8,
+              }}
+            >
+              {formatRub(totalBalanceRub)}
+            </div>
+            <Space size={10}>
+              <Button size="middle" onClick={() => navigate('/swap')}
                 style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)', color: 'var(--bg-card)' }}>
                 Обменять
               </Button>
-              <Button size="large" onClick={() => navigate('/pools')}
+              <Button size="middle" onClick={() => navigate('/pools')}
                 style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-card)', color: 'var(--sber-green-dark)', fontWeight: 600 }}>
                 В пулы <ArrowRightOutlined />
               </Button>
             </Space>
           </Col>
+
+          {heroSubMetric(
+            'Активные позиции',
+            activePositions.length,
+            <span style={{ color: 'rgba(255,255,255,0.65)' }}>{activePositions.length === 1 ? 'позиция' : 'позиций'} в работе</span>,
+          )}
+          {heroSubMetric(
+            'Незабр. комиссии',
+            formatRub(feeSummary?.totalUnclaimed ?? 0),
+            (feeSummary?.totalUnclaimed ?? 0) > 0 ? (
+              <span style={{ color: 'var(--bg-card)', fontWeight: 500 }}>можно забрать сейчас</span>
+            ) : (
+              <span>пока ничего не начислено</span>
+            ),
+          )}
+          {heroSubMetric(
+            'Доход за всё время',
+            formatRub(totalEarned),
+            earnedDelta > 0 ? (
+              <span>+{earnedDelta.toFixed(2)}% к балансу</span>
+            ) : (
+              <span>начните зарабатывать в пулах</span>
+            ),
+          )}
         </Row>
       </div>
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <StatCard title="Общий баланс" value={totalBalanceRub} icon={<WalletOutlined />}
-            iconBg={DASHBOARD_TILE_PALETTE.balance.bg}
-            iconColor={DASHBOARD_TILE_PALETTE.balance.fg}
-            formatter={formatRub} />
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <StatCard title="Активные позиции" value={activePositions.length} icon={<PieChartOutlined />}
-            iconBg={DASHBOARD_TILE_PALETTE.positions.bg}
-            iconColor={DASHBOARD_TILE_PALETTE.positions.fg} />
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <StatCard title="Незабранные комиссии" value={feeSummary?.totalUnclaimed ?? 0} icon={<DollarOutlined />}
-            iconBg={DASHBOARD_TILE_PALETTE.feesPending.bg}
-            iconColor={DASHBOARD_TILE_PALETTE.feesPending.fg}
-            formatter={formatRub} />
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <StatCard title="Всего заработано" value={feeSummary?.totalClaimed ?? 0} icon={<TrophyOutlined />}
-            iconBg={DASHBOARD_TILE_PALETTE.earned.bg}
-            iconColor={DASHBOARD_TILE_PALETTE.earned.fg}
-            formatter={formatRub} />
-        </Col>
-      </Row>
-
-      {/* Sprint 5 #5.5 — SberSpasibo conversion widget. Promo card */}
-      {/* placement so the loyalty path is the first thing the user sees */}
-      {/* after the stat tiles. */}
-      <Row gutter={[16, 16]}>
-        <Col xs={24} md={10} lg={8}>
+      {/* Sprint 9 — Activity + Quick actions split row, lifted from the
+          Claude Design redesign (docs/design/user-dashboard-claude-design/).
+          Three blocks below the hero so the dashboard reads as "live
+          system" instead of "static snapshot": (1) SberSpasibo loyalty
+          stays as a narrow promo on the left, (2) Quick actions in the
+          middle — the three shortcuts a treasurer hits most often,
+          (3) Recent activity teaser on the right that's also a link to
+          the full transactions page. */}
+      <Row gutter={[16, 16]} align="stretch">
+        <Col xs={24} md={12} lg={8}>
           <SpasiboWidget />
+        </Col>
+
+        <Col xs={24} md={12} lg={8}>
+          <Card
+            className="sber-card"
+            title={<Text strong>Быстрые действия</Text>}
+            style={{ height: '100%' }}
+          >
+            <Space direction="vertical" size={10} style={{ width: '100%' }}>
+              <Button
+                type="primary"
+                size="large"
+                block
+                icon={<SwapOutlined />}
+                onClick={() => navigate('/swap')}
+                style={{ justifyContent: 'flex-start', textAlign: 'left', fontWeight: 600 }}
+              >
+                Свопнуть SUSDT → SRUB
+              </Button>
+              <Button
+                size="large"
+                block
+                icon={<DollarOutlined />}
+                onClick={() => navigate('/hedge')}
+                style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+              >
+                Открыть FX-хедж
+              </Button>
+              <Button
+                size="large"
+                block
+                icon={<PieChartOutlined />}
+                onClick={() => navigate('/pools')}
+                style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+              >
+                Добавить ликвидность
+              </Button>
+            </Space>
+          </Card>
+        </Col>
+
+        <Col xs={24} md={24} lg={8}>
+          <Card
+            className="sber-card"
+            title={<Text strong>Последние операции</Text>}
+            extra={
+              <a onClick={() => navigate('/transactions')} style={{ color: 'var(--sber-green)', fontSize: 13, cursor: 'pointer' }}>
+                Вся история <ArrowRightOutlined style={{ fontSize: 11 }} />
+              </a>
+            }
+            styles={{ body: { padding: 0 } }}
+            style={{ height: '100%' }}
+          >
+            {!recentTx?.content?.length ? (
+              <div style={{ padding: 18, color: 'var(--text-secondary)' }}>Транзакций пока нет</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {recentTx.content.slice(0, 5).map((tx: Transaction, i: number) => {
+                  const inSym = tx.tokenInId ? symbolByTokenId.get(tx.tokenInId) : null
+                  const outSym = tx.tokenOutId ? symbolByTokenId.get(tx.tokenOutId) : null
+                  const pair = inSym && outSym ? `${inSym} → ${outSym}` : (tx.poolId ? pairByPoolId.get(tx.poolId) : null)
+                  return (
+                    <div
+                      key={tx.id}
+                      onClick={() => navigate('/transactions')}
+                      style={{
+                        padding: '10px 16px',
+                        borderTop: i === 0 ? 'none' : '1px solid var(--border-light)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>
+                          {txTypeLabels[tx.txType]?.text ?? tx.txType}
+                          {pair && (
+                            <Text type="secondary" style={{ fontSize: 12, marginLeft: 6 }}>
+                              {pair}
+                            </Text>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
+                          {dayjs(tx.createdAt).format('DD.MM HH:mm')}
+                        </div>
+                      </div>
+                      <Tag
+                        color={tx.status === 'CONFIRMED' ? 'success' : tx.status === 'FAILED' ? 'error' : 'processing'}
+                        style={{ borderRadius: 999, marginInlineEnd: 0, padding: '0 8px' }}
+                      >
+                        {statusLabels[tx.status]?.text ?? tx.status}
+                      </Tag>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
         </Col>
       </Row>
 
@@ -361,85 +536,11 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Recent transactions */}
-      <Card className="sber-card" title={<Text strong>Последние транзакции</Text>}
-        extra={<Button type="link" onClick={() => navigate('/transactions')}>Вся история <ArrowRightOutlined /></Button>}>
-        {!recentTx?.content?.length ? (
-          <Text type="secondary">Транзакций пока нет</Text>
-        ) : (
-          <Table
-            className="sber-table"
-            dataSource={recentTx.content}
-            rowKey="id"
-            pagination={false}
-            size="middle"
-            columns={[
-              {
-                title: 'Дата',
-                dataIndex: 'createdAt',
-                render: (d: string) => (
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>
-                    {dayjs(d).format('DD.MM.YYYY HH:mm')}
-                  </span>
-                ),
-              },
-              {
-                title: 'Тип',
-                dataIndex: 'txType',
-                render: (t: string) => {
-                  const cfg = txTypeLabels[t] || { text: t, color: 'default' }
-                  return <Tag color={cfg.color}>{cfg.text}</Tag>
-                },
-              },
-              {
-                title: 'Пара',
-                key: 'pair',
-                render: (_: unknown, r: Transaction) => {
-                  const inSym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
-                  const outSym = r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null
-                  if (inSym && outSym) {
-                    return (
-                      <Space size={6}>
-                        <Text strong style={{ fontSize: 13 }}>{inSym}</Text>
-                        <SwapOutlined style={{ color: 'var(--text-muted, #9CA3AF)', fontSize: 11 }} />
-                        <Text strong style={{ fontSize: 13 }}>{outSym}</Text>
-                      </Space>
-                    )
-                  }
-                  if (r.poolId) {
-                    const pair = pairByPoolId.get(r.poolId)
-                    if (pair) return <Text strong style={{ fontSize: 13 }}>{pair}</Text>
-                  }
-                  return <Text type="secondary">—</Text>
-                },
-              },
-              {
-                title: 'Сумма',
-                key: 'amount',
-                align: 'right' as const,
-                render: (_: unknown, r: Transaction) => {
-                  if (r.amountIn == null) return <Text type="secondary">—</Text>
-                  const sym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
-                  return (
-                    <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                      {r.amountIn.toLocaleString('ru-RU')}
-                      {sym && <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>{sym}</Text>}
-                    </span>
-                  )
-                },
-              },
-              {
-                title: 'Статус',
-                dataIndex: 'status',
-                render: (s: string) => {
-                  const cfg = statusLabels[s] || { text: s, color: 'default' }
-                  return <Tag color={cfg.color}>{cfg.text}</Tag>
-                },
-              },
-            ]}
-          />
-        )}
-      </Card>
+      {/* Sprint 9 — bottom-of-page "Последние транзакции" full table
+          removed. The split-row teaser above shows the last 5 ops and
+          links to /transactions for the full paginated view with
+          filters; two copies of the same data made the page feel
+          cluttered. */}
     </Space>
   )
 }
