@@ -54,6 +54,11 @@ export interface Token {
   circulatingSupply: number
   decimals: number
   active: boolean
+  /** Sprint 9 — backend returns maxSupply on the catalogue endpoint; was
+   *  previously read only via `(val: number | undefined) =>` casts in
+   *  TokensPage. Declared explicitly so TokenDetailPage can read it
+   *  type-safely. */
+  maxSupply?: number
 }
 
 // Bin Data

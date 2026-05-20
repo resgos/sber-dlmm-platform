@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col } from 'antd'
-import { DollarOutlined, DeleteOutlined } from '@ant-design/icons'
+import { DollarOutlined, DeleteOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { pools, fees } from '@/api/services'
 import type { Position, Pool, FeeHistoryEntry } from '@/api/types'
-import StatCard, { formatRub } from '@/components/StatCard'
-import { PieChartOutlined, TrophyOutlined, WalletOutlined } from '@ant-design/icons'
+import { KpiRow, PageHeader, TokenPairChip } from '@/components/sber'
+import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
 import dayjs from 'dayjs'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 // Sprint 9 — DLMM bins are evenly-spaced on a log scale: price at binId =
 // basePrice * (1 + binStepBps/10000)^(binId - activeBinId). We render the
@@ -107,23 +107,35 @@ export default function PositionsPage() {
   const totalUnclaimedY = activePositions.reduce((s: number, p: Position) => s + p.unclaimedFeeY, 0)
 
   return (
-    <Space direction="vertical" size={24} style={{ width: '100%' }}>
-      <Title level={4} className="sber-page-title">Мои позиции</Title>
+    <Space direction="vertical" size={20} style={{ width: '100%' }}>
+      <PageHeader
+        title="Мои позиции"
+        subtitle="Ваши LP-позиции в DLMM-пулах — диапазоны бинов, незабранные комиссии, история выплат"
+      />
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={8}>
-          <StatCard title="Активные позиции" value={activePositions.length}
-            icon={<PieChartOutlined />} iconBg="#F3E8FF" iconColor="#8B5CF6" />
-        </Col>
-        <Col xs={24} sm={8}>
-          <StatCard title="Незабранные комиссии" value={feeSummary?.totalUnclaimed ?? 0}
-            icon={<WalletOutlined />} iconBg="#E0F2FE" iconColor="#0EA5E9" formatter={formatRub} />
-        </Col>
-        <Col xs={24} sm={8}>
-          <StatCard title="Всего заработано" value={feeSummary?.totalClaimed ?? 0}
-            icon={<TrophyOutlined />} iconBg="#E8F5E9" iconColor="#21A038" formatter={formatRub} />
-        </Col>
-      </Row>
+      <KpiRow
+        tiles={[
+          {
+            label: 'Активных позиций',
+            value: activePositions.length.toLocaleString('ru-RU'),
+            sub: activePositions.length === 0 ? 'нет открытых' : 'предоставляют ликвидность',
+            icon: <PieChartOutlined style={{ color: '#9B59B6' }} />,
+          },
+          {
+            label: 'Незабранные комиссии',
+            value: formatRub(feeSummary?.totalUnclaimed ?? 0),
+            sub: 'готовы к claim',
+            icon: <WalletOutlined style={{ color: '#296AE3' }} />,
+            accent: (feeSummary?.totalUnclaimed ?? 0) > 0 ? 'var(--sber-green)' : undefined,
+          },
+          {
+            label: 'Всего заработано',
+            value: formatRub(feeSummary?.totalClaimed ?? 0),
+            sub: 'за всё время',
+            icon: <TrophyOutlined style={{ color: '#F2994A' }} />,
+          },
+        ]}
+      />
 
       <Card className="sber-card" title={<Text strong>Позиции</Text>}>
         <Table
@@ -141,18 +153,10 @@ export default function PositionsPage() {
             {
               title: 'Пул',
               key: 'pool',
+              width: 220,
               render: (_: unknown, r: Position) => {
-                // Sprint 9 — join Position with Pool to get pair symbols
-                // (Position DTO doesn't carry them). Fall back to a
-                // truncated poolId so the cell never shows just "/".
                 const pool = poolById.get(r.poolId)
-                if (pool) {
-                  return (
-                    <Text strong>
-                      {pool.tokenXSymbol}/{pool.tokenYSymbol}
-                    </Text>
-                  )
-                }
+                if (pool) return <TokenPairChip x={pool.tokenXSymbol} y={pool.tokenYSymbol} />
                 return <Text type="secondary">пул {r.poolId.slice(0, 6)}…</Text>
               },
             },
@@ -196,12 +200,12 @@ export default function PositionsPage() {
                   <Space size={6} wrap style={{ justifyContent: 'flex-end' }}>
                     {r.unclaimedFeeX > 0 && (
                       <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px', fontVariantNumeric: 'tabular-nums' }}>
-                        +{r.unclaimedFeeX.toLocaleString('ru-RU')} {xSym}
+                        +{formatTokenAmount(r.unclaimedFeeX, xSym, { compact: true, maxFractionDigits: 4 })}
                       </Tag>
                     )}
                     {r.unclaimedFeeY > 0 && (
                       <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px', fontVariantNumeric: 'tabular-nums' }}>
-                        +{r.unclaimedFeeY.toLocaleString('ru-RU')} {ySym}
+                        +{formatTokenAmount(r.unclaimedFeeY, ySym, { compact: true, maxFractionDigits: 4 })}
                       </Tag>
                     )}
                   </Space>
@@ -250,7 +254,7 @@ export default function PositionsPage() {
                 dataIndex: 'accruedAt',
                 render: (d: string) => dayjs(d).format('DD.MM.YYYY HH:mm'),
               },
-              { title: 'Сумма', dataIndex: 'amount', align: 'right' as const, render: (v: number) => v.toLocaleString('ru-RU') },
+              { title: 'Сумма', dataIndex: 'amount', align: 'right' as const, render: (v: number) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCompact(v)}</span> },
               {
                 title: 'Статус',
                 dataIndex: 'claimed',

@@ -130,7 +130,7 @@ public class AdminProxyController {
                 .header("Authorization", auth != null ? auth : "")
                 .retrieve()
                 .bodyToMono(Void.class)
-                .onErrorReturn(null)
+                .onErrorResume(e -> reactor.core.publisher.Mono.empty())
                 .block(TIMEOUT);
         return ResponseEntity.noContent().build();
     }
@@ -145,7 +145,7 @@ public class AdminProxyController {
                 .header("Authorization", auth != null ? auth : "")
                 .retrieve()
                 .bodyToMono(Void.class)
-                .onErrorReturn(null)
+                .onErrorResume(e -> reactor.core.publisher.Mono.empty())
                 .block(TIMEOUT);
         return ResponseEntity.noContent().build();
     }
@@ -196,12 +196,18 @@ public class AdminProxyController {
     public ResponseEntity<String> getPool(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
+        // Sprint 9-DS — `.onErrorReturn(null)` was throwing
+        // `NullPointerException: fallbackValue must not be null` on every
+        // call (Reactor 3.5 hardened the null check). Switched to
+        // `.onErrorResume(e -> Mono.empty())` which is the documented way
+        // to "treat any error as no value" — `block()` then returns null
+        // and the null-check below maps to 404 as intended.
         String raw = poolEngineClient.get()
                 .uri("/api/v1/pools/{id}", id)
                 .header("Authorization", auth != null ? auth : "")
                 .retrieve()
                 .bodyToMono(String.class)
-                .onErrorReturn(null)
+                .onErrorResume(e -> reactor.core.publisher.Mono.empty())
                 .block(TIMEOUT);
         if (raw == null) return ResponseEntity.notFound().build();
         // Flatten: {pool: {...}, bins: [...], ...} → {...pool, bins: [...], ...}

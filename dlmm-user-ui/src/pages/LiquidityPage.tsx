@@ -10,6 +10,7 @@ import { pools, balances, fees } from '@/api/services'
 import type { Position, LiquidityStrategy } from '@/api/types'
 import StrategySelector from '@/components/StrategySelector'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
+import { formatCompact, formatTokenAmount } from '@/lib/format'
 
 const { Title, Text } = Typography
 
@@ -151,7 +152,7 @@ export default function LiquidityPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text>{pool.tokenXSymbol}</Text>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    Доступно: {balanceX?.available.toLocaleString('ru-RU') ?? 0}
+                    Доступно: {formatCompact(balanceX?.available ?? 0)}
                     {balanceX && (
                       <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 12 }}
                         onClick={() => setAmountX(balanceX.available)}>MAX</Button>
@@ -172,7 +173,7 @@ export default function LiquidityPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text>{pool.tokenYSymbol}</Text>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    Доступно: {balanceY?.available.toLocaleString('ru-RU') ?? 0}
+                    Доступно: {formatCompact(balanceY?.available ?? 0)}
                     {balanceY && (
                       <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 12 }}
                         onClick={() => setAmountY(balanceY.available)}>MAX</Button>
@@ -222,8 +223,24 @@ export default function LiquidityPage() {
           columns={[
             { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="blue">{s}</Tag> },
             { title: 'Диапазон', key: 'range', render: (_: unknown, r: Position) => `${r.binRangeMin} — ${r.binRangeMax}` },
-            { title: 'Незабранные X', dataIndex: 'unclaimedFeeX', align: 'right' as const, render: (v: number) => v.toLocaleString('ru-RU') },
-            { title: 'Незабранные Y', dataIndex: 'unclaimedFeeY', align: 'right' as const, render: (v: number) => v.toLocaleString('ru-RU') },
+            {
+              title: `Незабранные ${pool.tokenXSymbol}`,
+              dataIndex: 'unclaimedFeeX', align: 'right' as const,
+              render: (v: number) => (
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatTokenAmount(v, pool.tokenXSymbol, { compact: true })}
+                </span>
+              ),
+            },
+            {
+              title: `Незабранные ${pool.tokenYSymbol}`,
+              dataIndex: 'unclaimedFeeY', align: 'right' as const,
+              render: (v: number) => (
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {formatTokenAmount(v, pool.tokenYSymbol, { compact: true })}
+                </span>
+              ),
+            },
             {
               title: 'Действия',
               key: 'actions',

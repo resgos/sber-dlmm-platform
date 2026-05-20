@@ -484,9 +484,31 @@ body {
 /* ──────────────────────────────────────────────────────────────────────────
    Swap (DeFi-style) — single big card with two input boxes
    ────────────────────────────────────────────────────────────────────────── */
+/* Sprint 9-DS — two-column swap layout: form on the left, info panel
+   on the right. Above 1100px both columns side-by-side; below that the
+   info panel stacks below the form. */
+.sber-swap-layout {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(360px, 520px) minmax(280px, 360px);
+  justify-content: center;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .sber-swap-layout {
+    grid-template-columns: 1fr;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+}
+.sber-swap-info {
+  position: sticky;
+  top: 20px;
+}
+
 .sber-swap-shell {
-  max-width: 520px;
-  margin: 0 auto;
+  /* The shell is now a grid cell, no longer self-centring. */
+  width: 100%;
 }
 .sber-swap-headerline {
   display: flex;

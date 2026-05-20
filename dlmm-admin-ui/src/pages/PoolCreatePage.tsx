@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Form,
@@ -10,19 +11,111 @@ import {
   message,
   Row,
   Col,
-  Divider,
+  Steps,
+  Select,
+  Tag,
+  Tooltip,
 } from 'antd'
-import { ArrowLeftOutlined, FundOutlined } from '@ant-design/icons'
-import { useMutation } from '@tanstack/react-query'
-import { pools as poolService } from '@/api/services'
-import type { CreatePoolRequest } from '@/api/types'
+import {
+  ArrowLeftOutlined,
+  FundOutlined,
+  ArrowRightOutlined,
+  CheckCircleOutlined,
+  InfoCircleOutlined,
+  ThunderboltFilled,
+} from '@ant-design/icons'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { pools as poolService, tokens as tokensApi } from '@/api/services'
+import type { CreatePoolRequest, Token } from '@/api/types'
+import { PageHeader, TokenPairChip } from '@/components/sber'
+import { bpsToPercent } from '@/utils/format'
 
-const { Title } = Typography
+const { Text } = Typography
+
+/**
+ * Sprint 9-DS — admin PoolCreatePage refactor.
+ *
+ * <p>Was one tall form with dividers. Now a 3-step wizard:
+ *  1. Токенная пара — symbol-aware Select (drops UUID copy-paste)
+ *  2. Параметры — bin step + base fee + initial price, with preset
+ *     buttons for typical pool kinds (stable, volatile, exotic)
+ *  3. Подтверждение — token-pair hero + parameter review + Create
+ *
+ * <p>Token Select replaces the two raw "UUID токена X / Y" inputs with
+ * a searchable list joined against the token catalogue — the operator
+ * picks "GAZP" + "SRUB" and the wizard resolves the UUIDs server-side.
+ */
+
+interface PoolPreset {
+  key: string
+  label: string
+  description: string
+  binStep: number
+  baseFeeBps: number
+  maxVariableFeeBps: number
+}
+
+const PRESETS: PoolPreset[] = [
+  {
+    key: 'stable',
+    label: 'Стабильная пара',
+    description: 'SRUB/SUSDT, SRUB/SEUR — узкий шаг, низкая комиссия',
+    binStep: 5,
+    baseFeeBps: 10,
+    maxVariableFeeBps: 50,
+  },
+  {
+    key: 'major',
+    label: 'Акция / индекс',
+    description: 'GAZP/SRUB, SBER/SRUB — средний шаг, базовая комиссия',
+    binStep: 10,
+    baseFeeBps: 25,
+    maxVariableFeeBps: 150,
+  },
+  {
+    key: 'exotic',
+    label: 'Волатильная пара',
+    description: 'SBTC/SRUB, SETH/SRUB — широкий шаг, высокая комиссия',
+    binStep: 25,
+    baseFeeBps: 30,
+    maxVariableFeeBps: 300,
+  },
+]
 
 export default function PoolCreatePage() {
   const navigate = useNavigate()
   const [form] = Form.useForm<CreatePoolRequest>()
   const [messageApi, contextHolder] = message.useMessage()
+  const [step, setStep] = useState(0)
+  const [values, setValues] = useState<Partial<CreatePoolRequest>>({
+    binStep: 10,
+    baseFeeBps: 10,
+    maxVariableFeeBps: 100,
+    protocolFeePct: 20,
+    decayPeriodSeconds: 3600,
+    initialPrice: 1.0,
+  })
+
+  const { data: tokenPage } = useQuery({
+    queryKey: ['tokens'],
+    queryFn: () => tokensApi.getTokens(0, 200),
+  })
+  const tokenById = useMemo(() => {
+    const m = new Map<string, Token>()
+    for (const t of tokenPage?.content ?? []) m.set(t.id, t)
+    return m
+  }, [tokenPage])
+
+  const tokenOptions = useMemo(
+    () =>
+      (tokenPage?.content ?? [])
+        .filter((t) => t.active)
+        .map((t) => ({
+          label: `${t.symbol} — ${t.name}`,
+          value: t.id,
+        })),
+    [tokenPage],
+  )
 
   const createMutation = useMutation({
     mutationFn: (data: CreatePoolRequest) => poolService.createPool(data),
@@ -36,186 +129,362 @@ export default function PoolCreatePage() {
     },
   })
 
-  const handleSubmit = (values: CreatePoolRequest) => {
-    createMutation.mutate(values)
+  const goNext = async () => {
+    const fieldsByStep: Record<number, (keyof CreatePoolRequest)[]> = {
+      0: ['tokenXId', 'tokenYId'],
+      1: ['binStep', 'baseFeeBps', 'maxVariableFeeBps', 'initialPrice', 'protocolFeePct', 'decayPeriodSeconds'],
+    }
+    try {
+      await form.validateFields(fieldsByStep[step])
+      const snapshot = form.getFieldsValue(true)
+      setValues((v) => ({ ...v, ...snapshot }))
+      setStep((s) => s + 1)
+    } catch {
+      messageApi.warning('Заполните обязательные поля корректно')
+    }
   }
+
+  const goBack = () => setStep((s) => Math.max(0, s - 1))
+
+  const handleSubmit = () => {
+    const merged = { ...values, ...form.getFieldsValue(true) } as CreatePoolRequest
+    createMutation.mutate(merged)
+  }
+
+  const applyPreset = (preset: PoolPreset) => {
+    form.setFieldsValue({
+      binStep: preset.binStep,
+      baseFeeBps: preset.baseFeeBps,
+      maxVariableFeeBps: preset.maxVariableFeeBps,
+    })
+    setValues((v) => ({
+      ...v,
+      binStep: preset.binStep,
+      baseFeeBps: preset.baseFeeBps,
+      maxVariableFeeBps: preset.maxVariableFeeBps,
+    }))
+    messageApi.info(`Применён пресет: ${preset.label}`)
+  }
+
+  const tokenX = values.tokenXId ? tokenById.get(values.tokenXId) : null
+  const tokenY = values.tokenYId ? tokenById.get(values.tokenYId) : null
 
   return (
     <>
       {contextHolder}
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/pools')} style={{ borderRadius: 8 }}>
-            Назад
-          </Button>
-          <Title level={4} className="sber-page-title">
-            Создать пул ликвидности
-          </Title>
-        </div>
+        <Button
+          type="text"
+          icon={<ArrowLeftOutlined />}
+          onClick={() => navigate('/pools')}
+          style={{ padding: 0, color: 'var(--text-secondary)' }}
+        >
+          К списку пулов
+        </Button>
+
+        <PageHeader
+          title="Создание пула ликвидности"
+          subtitle="DLMM-пул с бин-ориентированной концентрированной ликвидностью — 3 шага: пара, параметры, подтверждение"
+        />
 
         <Card
           className="sber-card"
-          style={{
-            borderRadius: 12,
-            border: '1px solid #E5E7EB',
-            maxWidth: 800,
-          }}
-          title={
-            <Space>
-              <FundOutlined style={{ color: '#21A038' }} />
-              <span style={{ fontWeight: 600 }}>Конфигурация пула</span>
-            </Space>
-          }
+          style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+          styles={{ body: { padding: 28 } }}
         >
+          <Steps
+            current={step}
+            style={{ marginBottom: 28 }}
+            items={[
+              { title: 'Токенная пара', description: 'X и Y' },
+              { title: 'Параметры', description: 'Шаг и комиссии' },
+              { title: 'Подтверждение', description: 'Проверка и создание' },
+            ]}
+          />
+
           <Form
             form={form}
             layout="vertical"
-            onFinish={handleSubmit}
-            initialValues={{
-              binStep: 10,
-              baseFeeBps: 10,
-              maxVariableFeeBps: 100,
-              protocolFeePct: 20,
-              decayPeriodSeconds: 3600,
-            }}
+            initialValues={values}
             size="large"
+            preserve
           >
-            <Divider orientation="left" style={{ color: '#6B7280' }}>Токенная пара</Divider>
-            <Row gutter={16}>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="tokenXId"
-                  label={<span style={{ fontWeight: 500 }}>ID токена X</span>}
-                  rules={[{ required: true, message: 'ID токена X обязателен' }]}
-                >
-                  <Input placeholder="UUID токена X" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="tokenYId"
-                  label={<span style={{ fontWeight: 500 }}>ID токена Y</span>}
-                  rules={[{ required: true, message: 'ID токена Y обязателен' }]}
-                >
-                  <Input placeholder="UUID токена Y" />
-                </Form.Item>
-              </Col>
-            </Row>
+            {step === 0 && (
+              <Row gutter={[16, 16]}>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="tokenXId"
+                    label={<span style={{ fontWeight: 500 }}>Токен X</span>}
+                    rules={[{ required: true, message: 'Выберите токен X' }]}
+                    extra={<Text type="secondary" style={{ fontSize: 11 }}>Базовый актив пары</Text>}
+                  >
+                    <Select
+                      showSearch
+                      placeholder="Например: GAZP"
+                      options={tokenOptions}
+                      filterOption={(input, option) =>
+                        (option?.label as string).toLowerCase().includes(input.toLowerCase())
+                      }
+                    />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="tokenYId"
+                    label={<span style={{ fontWeight: 500 }}>Токен Y</span>}
+                    rules={[{ required: true, message: 'Выберите токен Y' }]}
+                    extra={<Text type="secondary" style={{ fontSize: 11 }}>Котировочный актив (обычно SRUB)</Text>}
+                  >
+                    <Select
+                      showSearch
+                      placeholder="Например: SRUB"
+                      options={tokenOptions}
+                      filterOption={(input, option) =>
+                        (option?.label as string).toLowerCase().includes(input.toLowerCase())
+                      }
+                    />
+                  </Form.Item>
+                </Col>
+                {tokenX && tokenY && (
+                  <Col xs={24}>
+                    <Card
+                      size="small"
+                      style={{
+                        borderRadius: 12,
+                        background: 'var(--surface-1, #FAFAFA)',
+                        border: '1px dashed var(--border-light)',
+                      }}
+                    >
+                      <Space>
+                        <Text type="secondary">Пара:</Text>
+                        <TokenPairChip x={tokenX.symbol} y={tokenY.symbol} size="md" />
+                      </Space>
+                    </Card>
+                  </Col>
+                )}
+              </Row>
+            )}
 
-            <Divider orientation="left" style={{ color: '#6B7280' }}>Параметры пула</Divider>
-            <Row gutter={16}>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="binStep"
-                  label={<span style={{ fontWeight: 500 }}>Шаг бина (bps)</span>}
-                  tooltip="Шаг цены между соседними бинами в базисных пунктах (100 bps = 1%, 25 bps = 0.25%)"
-                  rules={[
-                    { required: true, message: 'Шаг бина обязателен' },
-                    { type: 'number', min: 1, max: 10000, message: 'Должно быть от 1 до 10000' },
-                  ]}
-                >
-                  <InputNumber min={1} max={10000} style={{ width: '100%' }} />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="baseFeeBps"
-                  label={<span style={{ fontWeight: 500 }}>Базовая комиссия (bps)</span>}
-                  tooltip="Базовая торговая комиссия в базисных пунктах (30 bps = 0.3%, 100 bps = 1%)"
-                  rules={[
-                    { required: true, message: 'Базовая комиссия обязательна' },
-                    { type: 'number', min: 0, max: 10000, message: 'Должно быть от 0 до 10000' },
-                  ]}
-                >
-                  <InputNumber min={0} max={10000} style={{ width: '100%' }} />
-                </Form.Item>
-              </Col>
-            </Row>
+            {step === 1 && (
+              <>
+                <div style={{ marginBottom: 16 }}>
+                  <Text strong style={{ fontSize: 13 }}>Пресеты:</Text>
+                  <Space wrap style={{ marginLeft: 12 }}>
+                    {PRESETS.map((p) => (
+                      <Tooltip
+                        key={p.key}
+                        title={`${p.description} · bin ${bpsToPercent(p.binStep)} · fee ${bpsToPercent(p.baseFeeBps)}`}
+                      >
+                        <Button
+                          size="small"
+                          onClick={() => applyPreset(p)}
+                          icon={<ThunderboltFilled />}
+                          style={{ borderRadius: 8 }}
+                        >
+                          {p.label}
+                        </Button>
+                      </Tooltip>
+                    ))}
+                  </Space>
+                </div>
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="binStep"
+                      label={
+                        <Space>
+                          <span style={{ fontWeight: 500 }}>Шаг бина (bps)</span>
+                          <Tooltip title="Шаг цены между соседними бинами. 5 bps = 0.05% (стабильная пара), 25 bps = 0.25% (волатильная).">
+                            <InfoCircleOutlined style={{ color: 'var(--text-muted)' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                      rules={[
+                        { required: true, message: 'Обязательно' },
+                        { type: 'number', min: 1, max: 10000, message: '1–10000' },
+                      ]}
+                    >
+                      <InputNumber min={1} max={10000} style={{ width: '100%' }} addonAfter="bps" />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="baseFeeBps"
+                      label={
+                        <Space>
+                          <span style={{ fontWeight: 500 }}>Базовая комиссия (bps)</span>
+                          <Tooltip title="Минимальная торговая комиссия. 10 bps = 0.10%.">
+                            <InfoCircleOutlined style={{ color: 'var(--text-muted)' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                      rules={[
+                        { required: true, message: 'Обязательно' },
+                        { type: 'number', min: 0, max: 10000, message: '0–10000' },
+                      ]}
+                    >
+                      <InputNumber min={0} max={10000} style={{ width: '100%' }} addonAfter="bps" />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="initialPrice"
+                      label={<span style={{ fontWeight: 500 }}>Начальная цена</span>}
+                      rules={[
+                        { required: true, message: 'Обязательно' },
+                        { type: 'number', min: 0, message: 'Должна быть положительной' },
+                      ]}
+                      extra={<Text type="secondary" style={{ fontSize: 11 }}>Y за 1 X</Text>}
+                    >
+                      <InputNumber min={0} step={0.0001} style={{ width: '100%' }} placeholder="1.0" />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="maxVariableFeeBps"
+                      label={
+                        <Space>
+                          <span style={{ fontWeight: 500 }}>Макс. переменная комиссия (bps)</span>
+                          <Tooltip title="Надбавка к базовой при высокой волатильности.">
+                            <InfoCircleOutlined style={{ color: 'var(--text-muted)' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                      rules={[
+                        { required: true, message: 'Обязательно' },
+                        { type: 'number', min: 0, max: 10000, message: '0–10000' },
+                      ]}
+                    >
+                      <InputNumber min={0} max={10000} style={{ width: '100%' }} addonAfter="bps" />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="protocolFeePct"
+                      label={
+                        <Space>
+                          <span style={{ fontWeight: 500 }}>Комиссия протокола</span>
+                          <Tooltip title="Доля собранных комиссий, направляемая в Treasury протокола.">
+                            <InfoCircleOutlined style={{ color: 'var(--text-muted)' }} />
+                          </Tooltip>
+                        </Space>
+                      }
+                      rules={[
+                        { required: true, message: 'Обязательно' },
+                        { type: 'number', min: 0, max: 100, message: '0–100' },
+                      ]}
+                    >
+                      <InputNumber min={0} max={100} style={{ width: '100%' }} addonAfter="%" />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="decayPeriodSeconds"
+                      label={<span style={{ fontWeight: 500 }}>Период затухания (сек)</span>}
+                      rules={[
+                        { required: true, message: 'Обязательно' },
+                        { type: 'number', min: 1, message: '≥ 1 сек' },
+                      ]}
+                      extra={<Text type="secondary" style={{ fontSize: 11 }}>3600 = 1 час — стандартный режим</Text>}
+                    >
+                      <InputNumber min={1} style={{ width: '100%' }} addonAfter="сек" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </>
+            )}
 
-            <Row gutter={16}>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="initialPrice"
-                  label={<span style={{ fontWeight: 500 }}>Начальная цена</span>}
-                  rules={[
-                    { required: true, message: 'Начальная цена обязательна' },
-                    { type: 'number', min: 0, message: 'Цена должна быть положительной' },
-                  ]}
-                >
-                  <InputNumber
-                    min={0}
-                    style={{ width: '100%' }}
-                    placeholder="например 1.0"
-                    step={0.01}
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="maxVariableFeeBps"
-                  label={<span style={{ fontWeight: 500 }}>Макс. переменная комиссия (bps)</span>}
-                  tooltip="Максимальная переменная комиссия в базисных пунктах (надбавка к базовой при высокой волатильности)"
-                  rules={[
-                    { required: true, message: 'Макс. переменная комиссия обязательна' },
-                    { type: 'number', min: 0, max: 10000, message: 'Должно быть от 0 до 10000' },
-                  ]}
-                >
-                  <InputNumber min={0} max={10000} style={{ width: '100%' }} />
-                </Form.Item>
-              </Col>
-            </Row>
+            {step === 2 && (
+              <Card
+                style={{
+                  borderRadius: 16,
+                  background: 'linear-gradient(135deg, rgba(33,160,56,0.08) 0%, rgba(33,160,56,0.02) 100%)',
+                  border: '1px solid var(--sber-green-light)',
+                }}
+              >
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <TokenPairChip
+                      x={tokenX?.symbol}
+                      y={tokenY?.symbol}
+                      size="lg"
+                    />
+                    <Tag color="green" style={{ padding: '4px 12px', borderRadius: 999 }}>
+                      Готов к созданию
+                    </Tag>
+                  </div>
 
-            <Row gutter={16}>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="protocolFeePct"
-                  label={<span style={{ fontWeight: 500 }}>Комиссия протокола (%)</span>}
-                  tooltip="Процент комиссий, направляемых в протокол"
-                  rules={[
-                    { required: true, message: 'Процент комиссии протокола обязателен' },
-                    {
-                      type: 'number',
-                      min: 0,
-                      max: 100,
-                      message: 'Должно быть от 0 до 100',
-                    },
-                  ]}
-                >
-                  <InputNumber min={0} max={100} style={{ width: '100%' }} suffix="%" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="decayPeriodSeconds"
-                  label={<span style={{ fontWeight: 500 }}>Период затухания (сек)</span>}
-                  tooltip="Период затухания аккумулятора волатильности"
-                  rules={[
-                    { required: true, message: 'Период затухания обязателен' },
-                    { type: 'number', min: 1, message: 'Должно быть не менее 1 секунды' },
-                  ]}
-                >
-                  <InputNumber min={1} style={{ width: '100%' }} />
-                </Form.Item>
-              </Col>
-            </Row>
+                  <Row gutter={[16, 12]}>
+                    <Col xs={12} sm={8}><ReviewRow label="Шаг бина" value={bpsToPercent(values.binStep ?? 0)} /></Col>
+                    <Col xs={12} sm={8}><ReviewRow label="Базовая комиссия" value={bpsToPercent(values.baseFeeBps ?? 0)} /></Col>
+                    <Col xs={12} sm={8}><ReviewRow label="Макс. переменная" value={bpsToPercent(values.maxVariableFeeBps ?? 0)} /></Col>
+                    <Col xs={12} sm={8}>
+                      <ReviewRow
+                        label="Начальная цена"
+                        value={`${(values.initialPrice ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 })} ${tokenY?.symbol ?? 'Y'}/${tokenX?.symbol ?? 'X'}`}
+                      />
+                    </Col>
+                    <Col xs={12} sm={8}><ReviewRow label="Комиссия протокола" value={`${values.protocolFeePct ?? 0}%`} /></Col>
+                    <Col xs={12} sm={8}><ReviewRow label="Период затухания" value={`${values.decayPeriodSeconds ?? 0} сек`} /></Col>
+                  </Row>
+                </Space>
+              </Card>
+            )}
 
-            <Form.Item style={{ marginBottom: 0 }}>
+            <div
+              style={{
+                marginTop: 28,
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 8,
+                flexWrap: 'wrap',
+              }}
+            >
+              <Button onClick={() => navigate('/pools')} style={{ borderRadius: 8 }}>
+                Отмена
+              </Button>
               <Space>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  loading={createMutation.isPending}
-                  icon={<FundOutlined />}
-                  style={{ borderRadius: 8 }}
-                >
-                  Создать пул
-                </Button>
-                <Button onClick={() => navigate('/pools')} style={{ borderRadius: 8 }}>Отмена</Button>
+                {step > 0 && (
+                  <Button onClick={goBack} style={{ borderRadius: 8 }}>
+                    Назад
+                  </Button>
+                )}
+                {step < 2 && (
+                  <Button
+                    type="primary"
+                    onClick={goNext}
+                    icon={<ArrowRightOutlined />}
+                    iconPosition="end"
+                    style={{ borderRadius: 8 }}
+                  >
+                    Далее
+                  </Button>
+                )}
+                {step === 2 && (
+                  <Button
+                    type="primary"
+                    onClick={handleSubmit}
+                    loading={createMutation.isPending}
+                    icon={<CheckCircleOutlined />}
+                    style={{ borderRadius: 8 }}
+                  >
+                    Создать пул
+                  </Button>
+                )}
               </Space>
-            </Form.Item>
+            </div>
           </Form>
         </Card>
       </Space>
     </>
+  )
+}
+
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>{label}</Text>
+      <Text strong style={{ fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>{value}</Text>
+    </div>
   )
 }
