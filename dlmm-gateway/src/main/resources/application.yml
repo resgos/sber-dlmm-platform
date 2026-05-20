@@ -44,6 +44,14 @@ spring:
           uri: ${TRANSACTION_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/v1/transactions/**
+        # Sprint 9 — OTC block-trade desk lives in transaction-service
+        # (RFQ + quote + accept/reject + settle). Same upstream as the
+        # canonical transaction routes; a separate gateway route just
+        # so the path predicate matches and the upstream is selectable.
+        - id: otc-desk
+          uri: ${TRANSACTION_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/v1/otc/**
         - id: price-oracle
           uri: ${PRICE_ORACLE_URL:http://localhost:8086}
           predicates:

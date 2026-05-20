@@ -554,6 +554,15 @@ body {
   padding: 14px 16px !important;
 }
 
+/* Sprint 9 — OTC desk selected-row highlight. Used by OtcDeskPage's
+   SectionedOtcTable when an operator picks a deal to inspect in the
+   right-pane DealDetailPane. Distinct from the hover gradient so the
+   selection stays visible while the cursor moves elsewhere. */
+.sber-table .ant-table-tbody > tr.sber-otc-row-selected > td {
+  background: rgba(33,160,56,0.10) !important;
+  box-shadow: inset 3px 0 0 var(--sber-green);
+}
+
 .ant-btn:focus-visible,
 .ant-input:focus-visible,
 .ant-input-number:focus-within,
