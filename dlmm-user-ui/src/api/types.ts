@@ -164,12 +164,25 @@ export interface SwapRequest {
   idempotencyKey: string
 }
 
+/**
+ * Sprint 9-DS-r2 — aligned with backend SwapQuoteResponse record fields.
+ * The frontend was reading `amountOut`, `fee`, `priceImpact` while the
+ * pool-engine returns `estimatedAmountOut`, `estimatedFee`, `priceImpactPct`
+ * — which silently produced `undefined` → NaN → `toFixed` crash on the
+ * Swap page when a user typed in an amount. Helper getters mapped via
+ * `getSwapQuote` keep callers using the friendly names.
+ */
 export interface SwapQuote {
   poolId: string
+  tokenInId: string
+  tokenOutId: string
   amountIn: number
   amountOut: number
-  priceImpact: number
   fee: number
+  feeBps: number
+  binsCrossed: number
+  estimatedPrice: number
+  priceImpact: number
 }
 
 // Transaction

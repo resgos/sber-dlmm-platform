@@ -461,9 +461,15 @@ public class SwapService {
         // pool/bin updates and the inter-service deduct/credit calls, so
         // either everything sticks and Kafka eventually sees the event, or
         // nothing sticks and nothing gets emitted. No half-applied swaps.
+        // Sprint 9-DS-r2: event now carries txId + tokenOutId +
+        // idempotencyKey so transaction-service can persist a row in the
+        // transactions table — was previously missing, leaving every
+        // live swap balance-changing but /transactions/me empty.
         outbox.append("pool", pool.getId().toString(), "SwapExecuted", POOL_EVENTS_TOPIC,
-                new SwapExecutedEvent(pool.getId(), userId, req.tokenInId(),
-                        consumedAmountIn, totalAmountOut, totalFee, binsCrossed));
+                new SwapExecutedEvent(txId, pool.getId(), userId,
+                        req.tokenInId(), tokenOutId,
+                        consumedAmountIn, totalAmountOut, totalFee, binsCrossed,
+                        req.idempotencyKey()));
 
         log.info("Swap executed: pool={}, user={}, tx={}, in={} {}, out={}, fee={}, bins={}",
                 pool.getId(), userId, txId, consumedAmountIn,

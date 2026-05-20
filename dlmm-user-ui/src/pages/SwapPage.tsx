@@ -257,34 +257,108 @@ export default function SwapPage() {
     </div>
   )
 
+  // Sprint 9-DS-r2 — popular pairs quick-pick. Picks the top 5 most-
+  // liquid pools (by sum of reserves) so the user gets a one-click
+  // entry into the page instead of staring at empty token selects.
+  const popularPairs = useMemo(() => {
+    const list = poolList?.content ?? []
+    return [...list]
+      .filter((p: Pool) => p.status === 'ACTIVE')
+      .sort((a: Pool, b: Pool) => (b.totalTvlX + b.totalTvlY) - (a.totalTvlX + a.totalTvlY))
+      .slice(0, 5)
+  }, [poolList])
+
+  const pickPair = (p: Pool) => {
+    setTokenInId(p.tokenYSymbol === 'SRUB' ? p.tokenYId : p.tokenXId)
+    setTokenOutId(p.tokenYSymbol === 'SRUB' ? p.tokenXId : p.tokenYId)
+  }
+
   return (
-    <div className="sber-swap-layout">
-      <div className="sber-swap-shell">
-      <div className="sber-swap-headerline">
+    <Space direction="vertical" size={20} style={{ width: '100%' }}>
+      {/* Sprint 9-DS-r2 — page header hoisted out of the form column
+          (was cramped inside the 520px shell, looked orphaned on a
+          wide canvas). Settings cog stays in the right action slot. */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
         <div>
-          <Title level={4} className="sber-page-title" style={{ marginBottom: 4 }}>{t('swap.title')}</Title>
-          <Text type="secondary">{t('swap.subtitle')}</Text>
+          <Title level={4} className="sber-page-title" style={{ marginBottom: 4 }}>
+            {t('swap.title')}
+          </Title>
+          <Text type="secondary" style={{ fontSize: 13 }}>{t('swap.subtitle')}</Text>
         </div>
         <Popover content={slippageMenu} trigger="click" placement="bottomRight">
           <Button
-            shape="circle"
             icon={<SettingOutlined aria-hidden />}
-            size="large"
             aria-label={t('swap.settings')}
             aria-haspopup="dialog"
-          />
+            style={{ borderRadius: 8 }}
+          >
+            Скольжение {effectiveSlippage}%
+          </Button>
         </Popover>
       </div>
 
+      {/* Popular pairs strip — pre-fill the form in one click. Only
+          shown when there's no active selection so it doesn't compete
+          with a populated form. */}
+      {!tokenInId && !tokenOutId && popularPairs.length > 0 && (
+        <Card
+          className="sber-card"
+          style={{
+            borderRadius: 16,
+            border: '1px solid var(--border-light)',
+            background: 'linear-gradient(135deg, rgba(33,160,56,0.05) 0%, rgba(255,255,255,0) 60%)',
+          }}
+          styles={{ body: { padding: '14px 18px' } }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <Space size={6}>
+              <ThunderboltFilled style={{ color: 'var(--sber-green)' }} />
+              <Text strong style={{ fontSize: 13 }}>Популярные пары:</Text>
+            </Space>
+            {popularPairs.map((p) => (
+              <Button
+                key={p.id}
+                size="small"
+                onClick={() => pickPair(p)}
+                style={{
+                  borderRadius: 999,
+                  padding: '0 12px',
+                  height: 30,
+                  border: '1px solid var(--border-light)',
+                  background: '#fff',
+                }}
+              >
+                <Space size={4}>
+                  <TokenPairChip x={p.tokenXSymbol} y={p.tokenYSymbol} size="sm" />
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    {bpsToPercent(p.baseFeeBps)}
+                  </Text>
+                </Space>
+              </Button>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {swapSuccess && (
         <Alert message={t('swap.alerts.success')} type="success" showIcon closable
-          onClose={() => setSwapSuccess(false)} style={{ marginBottom: 16, borderRadius: 12 }} />
+          onClose={() => setSwapSuccess(false)} style={{ borderRadius: 12 }} />
       )}
       {swapError && (
         <Alert message={swapError} type="error" showIcon closable
-          onClose={() => setSwapError(null)} style={{ marginBottom: 16, borderRadius: 12 }} />
+          onClose={() => setSwapError(null)} style={{ borderRadius: 12 }} />
       )}
 
+      <div className="sber-swap-layout">
+      <div className="sber-swap-shell">
       <Card className="sber-swap-card" styles={{ body: { padding: 0 } }}>
         <div className="sber-swap-card__body">
           {renderBox({
@@ -317,7 +391,12 @@ export default function SwapPage() {
             readOnly: true,
           })}
 
-          {/* Quote summary — collapsed metadata panel */}
+          {/* Quote summary — collapsed metadata panel.
+              Sprint 9-DS-r2: full breakdown now lives in the side
+              info panel; here we keep just a tiny "loading" / "ready"
+              line so the form column doesn't double-render the same
+              data. The route tag is kept because it confirms which
+              pool will execute the trade. */}
           {quoteLoading && (
             <div className="sber-swap-quote sber-swap-quote--loading">
               <Spin size="small" /> <Text type="secondary">Расчёт маршрута…</Text>
@@ -332,21 +411,17 @@ export default function SwapPage() {
             >
               <div className="sber-swap-quote__row">
                 <Text type="secondary">Курс</Text>
-                <Text strong>
-                  1 {tokenInSymbol} ≈ {(quote.amountOut / quote.amountIn).toFixed(6)} {tokenOutSymbol}
+                <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {quote.amountIn && quote.amountIn > 0 && quote.amountOut != null
+                    ? `1 ${tokenInSymbol} ≈ ${(quote.amountOut / quote.amountIn).toFixed(6)} ${tokenOutSymbol}`
+                    : '—'}
                 </Text>
               </div>
               <div className="sber-swap-quote__row">
                 <Text type="secondary">Влияние на цену</Text>
-                <Text strong style={{ color: priceImpactColor }}>{quote.priceImpact.toFixed(2)}%</Text>
-              </div>
-              <div className="sber-swap-quote__row">
-                <Text type="secondary">Комиссия</Text>
-                <Text>{quote.fee.toLocaleString('ru-RU')} {tokenInSymbol}</Text>
-              </div>
-              <div className="sber-swap-quote__row">
-                <Text type="secondary">Мин. к получению</Text>
-                <Text>{minAmountOut.toLocaleString('ru-RU')} {tokenOutSymbol}</Text>
+                <Text strong style={{ color: priceImpactColor }}>
+                  {quote.priceImpact != null ? `${quote.priceImpact.toFixed(2)}%` : '—'}
+                </Text>
               </div>
               {selectedPool && (
                 <div className="sber-swap-quote__route">
@@ -405,9 +480,12 @@ export default function SwapPage() {
           amountIn={amountIn}
           minAmountOut={minAmountOut}
           effectiveSlippage={effectiveSlippage}
+          popularPairs={popularPairs}
+          onPickPair={pickPair}
         />
       </aside>
-    </div>
+      </div>
+    </Space>
   )
 }
 
@@ -419,6 +497,8 @@ interface SwapInfoPanelProps {
   amountIn: number | null
   minAmountOut: number
   effectiveSlippage: number
+  popularPairs: Pool[]
+  onPickPair: (p: Pool) => void
 }
 
 function SwapInfoPanel({
@@ -429,29 +509,104 @@ function SwapInfoPanel({
   amountIn,
   minAmountOut,
   effectiveSlippage,
+  popularPairs,
+  onPickPair,
 }: SwapInfoPanelProps) {
+  // Sprint 9-DS-r2 — empty-state used to be a single tiny "Готовы к
+  // обмену?" card that left half the column blank. Replace it with a
+  // useful "Топ пулов по ликвидности" mini-list so the user gets
+  // something to interact with even before picking tokens.
   if (!tokenIn && !tokenOut) {
     return (
-      <Card className="sber-card" style={{ borderRadius: 16, border: '1px solid var(--border-light)' }}>
-        <Space direction="vertical" size={12} align="center" style={{ width: '100%', padding: '20px 0' }}>
-          <div
-            aria-hidden
-            style={{
-              width: 56, height: 56, borderRadius: 14,
-              background: 'rgba(33,160,56,0.10)', color: 'var(--sber-green)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 24,
-            }}
+      <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Card
+          className="sber-card"
+          style={{
+            borderRadius: 16,
+            border: '1px solid var(--border-light)',
+            background: 'linear-gradient(135deg, rgba(33,160,56,0.06) 0%, rgba(255,255,255,0) 70%)',
+          }}
+          styles={{ body: { padding: 18 } }}
+        >
+          <Space direction="vertical" size={6} style={{ width: '100%' }}>
+            <Space size={8}>
+              <div
+                aria-hidden
+                style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: 'var(--sber-green)', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16,
+                }}
+              >
+                <InfoCircleOutlined />
+              </div>
+              <div>
+                <Text strong style={{ fontSize: 14 }}>Готовы к обмену?</Text>
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Выберите пару — увидите маршрут и влияние на цену
+                  </Text>
+                </div>
+              </div>
+            </Space>
+          </Space>
+        </Card>
+
+        {popularPairs.length > 0 && (
+          <Card
+            className="sber-card"
+            style={{ borderRadius: 16, border: '1px solid var(--border-light)' }}
+            styles={{ body: { padding: 16 } }}
           >
-            <InfoCircleOutlined />
-          </div>
-          <Text strong style={{ fontSize: 14 }}>Готовы к обмену?</Text>
-          <Text type="secondary" style={{ fontSize: 12, textAlign: 'center' }}>
-            Выберите пару токенов слева — здесь появятся параметры маршрута,
-            рыночный контекст и предварительная оценка влияния на цену.
-          </Text>
-        </Space>
-      </Card>
+            <Text
+              type="secondary"
+              style={{
+                fontSize: 11,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                fontWeight: 500,
+              }}
+            >
+              Топ пулов по ликвидности
+            </Text>
+            <div style={{ marginTop: 10 }}>
+              {popularPairs.map((p, i) => (
+                <div
+                  key={p.id}
+                  onClick={() => onPickPair(p)}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px 0',
+                    borderBottom: i < popularPairs.length - 1 ? '1px solid var(--border-light)' : 'none',
+                    cursor: 'pointer',
+                    gap: 12,
+                  }}
+                >
+                  <TokenPairChip x={p.tokenXSymbol} y={p.tokenYSymbol} size="sm" />
+                  <div style={{ textAlign: 'right', minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        fontVariantNumeric: 'tabular-nums',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      {formatCompact(p.totalTvlX + p.totalTvlY)}
+                    </div>
+                    <Text type="secondary" style={{ fontSize: 10 }}>
+                      fee {bpsToPercent(p.baseFeeBps)}
+                    </Text>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </Space>
     )
   }
 
@@ -559,13 +714,19 @@ function SwapInfoPanel({
 
             <InfoRow
               label="Эффективный курс"
-              value={`1 ${tokenIn.symbol} ≈ ${(quote.amountOut / quote.amountIn).toFixed(6)} ${tokenOut.symbol}`}
+              value={
+                quote.amountIn && quote.amountIn > 0 && quote.amountOut != null
+                  ? `1 ${tokenIn.symbol} ≈ ${(quote.amountOut / quote.amountIn).toFixed(6)} ${tokenOut.symbol}`
+                  : '—'
+              }
             />
             <InfoRow
               label="Влияние на цену"
-              value={`${quote.priceImpact.toFixed(2)}%`}
+              value={quote.priceImpact != null ? `${quote.priceImpact.toFixed(2)}%` : '—'}
               valueColour={
-                quote.priceImpact < 0.5 ? 'var(--sber-green)'
+                quote.priceImpact == null
+                  ? undefined
+                  : quote.priceImpact < 0.5 ? 'var(--sber-green)'
                   : quote.priceImpact < 2 ? '#D97706'
                   : '#DC2626'
               }

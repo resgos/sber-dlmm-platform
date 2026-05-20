@@ -22,6 +22,11 @@ spring:
     consumer:
       group-id: dlmm-transaction-service
       auto-offset-reset: earliest
+      # Sprint 9-DS-r2 — outbox sends raw JSON strings, we parse them
+      # with Jackson manually in the SwapEventConsumer. StringDeserializer
+      # avoids the JsonDeserializer trust-package dance.
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer

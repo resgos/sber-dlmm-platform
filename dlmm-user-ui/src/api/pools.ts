@@ -35,8 +35,35 @@ export const pools = {
   },
 
   getSwapQuote: async (req: Omit<SwapRequest, 'idempotencyKey' | 'minAmountOut'>): Promise<SwapQuote> => {
-    const { data } = await apiClient.post<SwapQuote>('/pools/swap/quote', req)
-    return data
+    // Sprint 9-DS-r2 — backend record uses `estimated*` field names,
+    // map to the friendlier names the UI was already assuming. The
+    // mismatch silently produced undefined → NaN → toFixed crash on
+    // the Swap page.
+    interface RawQuote {
+      poolId: string
+      tokenInId: string
+      tokenOutId: string
+      amountIn: number
+      estimatedAmountOut: number
+      estimatedFee: number
+      estimatedFeeBps: number
+      estimatedBinsCrossed: number
+      estimatedPrice: number
+      priceImpactPct: number
+    }
+    const { data } = await apiClient.post<RawQuote>('/pools/swap/quote', req)
+    return {
+      poolId: data.poolId,
+      tokenInId: data.tokenInId,
+      tokenOutId: data.tokenOutId,
+      amountIn: data.amountIn,
+      amountOut: data.estimatedAmountOut,
+      fee: data.estimatedFee,
+      feeBps: data.estimatedFeeBps,
+      binsCrossed: data.estimatedBinsCrossed,
+      estimatedPrice: data.estimatedPrice,
+      priceImpact: data.priceImpactPct,
+    }
   },
 
   executeSwap: async (req: SwapRequest): Promise<void> => {
