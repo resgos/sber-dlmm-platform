@@ -75,7 +75,16 @@ export const pools = {
   },
 
   removeLiquidity: async (req: RemoveLiquidityRequest): Promise<void> => {
-    await apiClient.post('/pools/remove-liquidity', req)
+    // Sprint 9-DS-r2 — backend expects `percentageBps` (1-10000 = 0.01%-100%);
+    // UI passes `percentage` (1-100). Multiply by 100 to convert. Without
+    // this, every Remove Liquidity call failed validation with
+    // "percentageBps must be between 1 and 10000".
+    const body = {
+      positionId: req.positionId,
+      percentageBps: Math.round(req.percentage * 100),
+      idempotencyKey: req.idempotencyKey,
+    }
+    await apiClient.post('/pools/remove-liquidity', body)
   },
 
   getMyPositions: async (): Promise<Position[]> => {

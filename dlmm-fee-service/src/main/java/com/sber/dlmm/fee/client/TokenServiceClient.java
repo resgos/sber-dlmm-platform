@@ -54,8 +54,13 @@ public class TokenServiceClient {
         body.put("tokenId", tokenId.toString());
         body.put("amount", amount);
 
+        // Sprint 9-DS-r2 — was `/api/v1/internal/credit`. Real endpoint is
+        // `/api/v1/tokens/internal/credit` (TokenController uses base
+        // `/api/v1`, method `@PostMapping("/tokens/internal/credit")`).
+        // The wrong path returned 403 because nothing matched and the
+        // security chain fell through. Every fee-claim therefore failed.
         tokenServiceWebClient.post()
-                .uri("/api/v1/internal/credit")
+                .uri("/api/v1/tokens/internal/credit")
                 .bodyValue(body)
                 .retrieve()
                 .toBodilessEntity()

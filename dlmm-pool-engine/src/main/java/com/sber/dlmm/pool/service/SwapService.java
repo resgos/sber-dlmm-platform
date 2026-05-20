@@ -76,8 +76,18 @@ public class SwapService {
         boolean swapXtoY = req.tokenInId().equals(pool.getTokenXId());
         UUID tokenOutId = swapXtoY ? pool.getTokenYId() : pool.getTokenXId();
 
-        // Spot price from active bin
-        BigDecimal spotPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(), pool.getActiveBinId());
+        // Spot price = the pool's stored basePrice (matches what
+        // /api/v1/pools/{id}.currentPrice returns and what the UI
+        // displays). Sprint 9-DS-r2: previously this used
+        // BinMath.binPrice(basePrice, binStep, activeBinId) which
+        // computes basePrice * (1 + binStep/10000)^activeBinId.
+        // Seed pools have activeBinId = 2^23 = 8_388_608 as the
+        // "anchor" bin (where price ≡ basePrice), so the math
+        // overflowed to ~exp(4192) and priceImpact always read 100%.
+        // Until the bin-anchor convention is reconciled (admin
+        // PoolDetail and PoolsPage both already use basePrice as
+        // currentPrice), use the same reference here.
+        BigDecimal spotPrice = pool.getBasePrice();
 
         long remainingAmountIn = req.amountIn();
         long totalAmountOut = 0;
@@ -160,13 +170,33 @@ public class SwapService {
         }
 
         long consumedAmountIn = req.amountIn() - remainingAmountIn;
-        BigDecimal executionPrice = consumedAmountIn > 0
-                ? BigDecimal.valueOf(totalAmountOut).divide(BigDecimal.valueOf(consumedAmountIn), 18, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO;
+        // Sprint 9-DS-r2: priceImpact was always near 100% on Y→X swaps.
+        // The bug: spotPrice is "Y per 1 X" (canonical bin price). But
+        // for a Y→X swap, totalAmountOut is X and consumedAmountIn is Y,
+        // so totalAmountOut/consumedAmountIn = X/Y = 1/spotPrice — i.e.
+        // the *reciprocal* of the spot frame. Subtracting reciprocals
+        // ("0.01 - 95.2") always produces ~100% impact.
+        //
+        // Fix: normalise executionPrice to the same frame as spotPrice
+        // (always Y-per-X) before computing the diff. For X→Y swaps the
+        // raw ratio is already Y/X — keep it. For Y→X invert it.
+        BigDecimal executionPrice;
+        if (consumedAmountIn <= 0 || totalAmountOut <= 0) {
+            executionPrice = BigDecimal.ZERO;
+        } else if (swapXtoY) {
+            // X→Y: amountOut is Y, amountIn is X. ratio = Y/X = Y-per-X.
+            executionPrice = BigDecimal.valueOf(totalAmountOut)
+                    .divide(BigDecimal.valueOf(consumedAmountIn), 18, RoundingMode.HALF_UP);
+        } else {
+            // Y→X: amountOut is X, amountIn is Y. ratio = X/Y.
+            // Invert to Y-per-X so it lines up with spotPrice.
+            executionPrice = BigDecimal.valueOf(consumedAmountIn)
+                    .divide(BigDecimal.valueOf(totalAmountOut), 18, RoundingMode.HALF_UP);
+        }
 
         // Price impact = |executionPrice - spotPrice| / spotPrice * 100
         BigDecimal priceImpact = BigDecimal.ZERO;
-        if (spotPrice.compareTo(BigDecimal.ZERO) > 0) {
+        if (spotPrice.compareTo(BigDecimal.ZERO) > 0 && executionPrice.compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal diff = executionPrice.subtract(spotPrice).abs();
             priceImpact = diff.divide(spotPrice, 18, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(100))
@@ -282,7 +312,9 @@ public class SwapService {
                     + " > cap " + cap + " on pool " + pool.getId());
         }
 
-        BigDecimal spotPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(), pool.getActiveBinId());
+        // Sprint 9-DS-r2 — same fix as quote(): use stored basePrice
+        // as spot reference; BinMath at 2^23 overflows.
+        BigDecimal spotPrice = pool.getBasePrice();
 
         // 2. Execute swap atomically, updating bins
         long remainingAmountIn = req.amountIn();
@@ -437,14 +469,23 @@ public class SwapService {
         // 6. Credit output token to user
         tokenServiceClient.creditBalance(userId, tokenOutId, totalAmountOut);
 
-        // Execution price and price impact
-        BigDecimal executionPrice = consumedAmountIn > 0
-                ? BigDecimal.valueOf(totalAmountOut)
-                        .divide(BigDecimal.valueOf(consumedAmountIn), 18, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO;
+        // Execution price and price impact.
+        // Sprint 9-DS-r2 — same reciprocal-direction fix as in quote(),
+        // see comment there. Both paths normalise executionPrice to the
+        // "Y per X" frame so the impact math doesn't compute on reciprocals.
+        BigDecimal executionPrice;
+        if (consumedAmountIn <= 0 || totalAmountOut <= 0) {
+            executionPrice = BigDecimal.ZERO;
+        } else if (swapXtoY) {
+            executionPrice = BigDecimal.valueOf(totalAmountOut)
+                    .divide(BigDecimal.valueOf(consumedAmountIn), 18, RoundingMode.HALF_UP);
+        } else {
+            executionPrice = BigDecimal.valueOf(consumedAmountIn)
+                    .divide(BigDecimal.valueOf(totalAmountOut), 18, RoundingMode.HALF_UP);
+        }
 
         BigDecimal priceImpact = BigDecimal.ZERO;
-        if (spotPrice.compareTo(BigDecimal.ZERO) > 0) {
+        if (spotPrice.compareTo(BigDecimal.ZERO) > 0 && executionPrice.compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal diff = executionPrice.subtract(spotPrice).abs();
             priceImpact = diff.divide(spotPrice, 18, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(100))
