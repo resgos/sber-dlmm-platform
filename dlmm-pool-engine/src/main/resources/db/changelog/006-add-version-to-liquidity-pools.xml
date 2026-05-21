@@ -14,10 +14,16 @@
       Default 0 for existing rows so the first @Version-aware UPDATE
       doesn't fail on `version = NULL`.
 
-      Pattern: ALTER changeset without preConditions
-      (see docs/DB-MIGRATION-CONVENTION.md).
+      Sprint 9-DS-r4 (CI fix) — preConditions added. init-db.sql for
+      fresh deploys now ships the `version` column (so 04-spasibo-seed.sql
+      INSERT works); on first-Liquibase-run after that, the addColumn
+      below tripped a "column already exists" error and rolled back.
+      MARK_RAN skips cleanly when the column is already there.
     -->
     <changeSet id="006-add-version-to-liquidity-pools" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><columnExists tableName="liquidity_pools" columnName="version"/></not>
+        </preConditions>
         <addColumn tableName="liquidity_pools">
             <column name="version" type="BIGINT" defaultValueNumeric="0">
                 <constraints nullable="false"/>

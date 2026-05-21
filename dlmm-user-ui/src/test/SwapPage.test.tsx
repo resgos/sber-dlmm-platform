@@ -208,9 +208,14 @@ describe('SwapPage — quote + slippage math', () => {
     })
 
     // Price-impact + fee rows render.
-    expect(screen.getByText('Влияние на цену')).toBeInTheDocument()
-    expect(screen.getByText('0.42%')).toBeInTheDocument()
-    expect(screen.getByText('Курс')).toBeInTheDocument()
+    // Sprint 9-DS-r4 (CI fix): page now renders BOTH the inline-
+    // quote rows and a right-rail SwapInfoPanel that surfaces the
+    // same labels, so the same text appears 2× per assertion.
+    // `getAllByText` accepts the duplication; we only need the rows
+    // to exist somewhere on the page.
+    expect(screen.getAllByText('Влияние на цену').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('0.42%').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Курс').length).toBeGreaterThanOrEqual(1)
   })
 
   it('default slippage 0.5%: minAmountOut = floor(9970 * 0.995) = 9920', async () => {
@@ -222,7 +227,7 @@ describe('SwapPage — quote + slippage math', () => {
     await selectTokenIn('SRUB — Sber Rouble')
     await selectTokenOut('SBER — Sberbank')
     await userEvent.type(amountInInput(), '10000')
-    await screen.findByText('0.42%')
+    await screen.findAllByText('0.42%')
 
     await userEvent.click(screen.getByRole('button', { name: 'Обменять' }))
 
@@ -313,7 +318,9 @@ describe('SwapPage — swap mutation outcomes', () => {
     await selectTokenIn('SRUB — Sber Rouble')
     await selectTokenOut('SBER — Sberbank')
     await userEvent.type(amountInInput(), '100')
-    await screen.findByText('0.10%')
+    // Sprint 9-DS-r4 (CI fix) — quote row appears in both inline-
+    // quote and right-rail SwapInfoPanel; use findAllByText.
+    await screen.findAllByText('0.10%')
 
     await userEvent.click(screen.getByRole('button', { name: 'Обменять' }))
 
@@ -332,7 +339,9 @@ describe('SwapPage — swap mutation outcomes', () => {
     await selectTokenIn('SRUB — Sber Rouble')
     await selectTokenOut('SBER — Sberbank')
     await userEvent.type(amountInInput(), '100')
-    await screen.findByText('0.10%')
+    // Sprint 9-DS-r4 (CI fix) — quote row appears in both inline-
+    // quote and right-rail SwapInfoPanel; use findAllByText.
+    await screen.findAllByText('0.10%')
 
     await userEvent.click(screen.getByRole('button', { name: 'Обменять' }))
 
@@ -348,7 +357,9 @@ describe('SwapPage — swap mutation outcomes', () => {
     await selectTokenIn('SRUB — Sber Rouble')
     await selectTokenOut('SBER — Sberbank')
     await userEvent.type(amountInInput(), '100')
-    await screen.findByText('0.10%')
+    // Sprint 9-DS-r4 (CI fix) — quote row appears in both inline-
+    // quote and right-rail SwapInfoPanel; use findAllByText.
+    await screen.findAllByText('0.10%')
 
     await userEvent.click(screen.getByRole('button', { name: 'Обменять' }))
 
@@ -377,8 +388,10 @@ describe('SwapPage — quote panel formatting', () => {
     expect(await screen.findByText(/через пул SRUB\/SBER/)).toBeInTheDocument()
     // Sprint 9 — Pool meta now reads "комиссия 0.3% · допуск 0.5%"
     // (was "30 bps · допуск 0.5%"). User-friendly per UX feedback.
-    expect(screen.getByText(/комиссия 0\.3%/)).toBeInTheDocument()
-    expect(screen.getByText(/допуск 0\.5%/)).toBeInTheDocument()
+    // Sprint 9-DS-r4 (CI fix) — "комиссия 0.3%" also appears in
+    // the right-rail SwapInfoPanel pool meta; allow multiplicity.
+    expect(screen.getAllByText(/комиссия 0\.3%/).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/допуск 0\.5%/).length).toBeGreaterThanOrEqual(1)
   })
 
   it('quote panel shows mathematically-derived rate (1 SRUB ≈ 0.99 SBER)', async () => {
@@ -391,8 +404,11 @@ describe('SwapPage — quote panel formatting', () => {
     await userEvent.type(amountInInput(), '100')
 
     // Rate row text: "1 SRUB ≈ 0.990000 SBER"
+    // Sprint 9-DS-r4 (CI fix) — rate row appears in BOTH the
+    // inline quote panel and the right-rail SwapInfoPanel; allow
+    // multiplicity.
     await waitFor(() => {
-      expect(screen.getByText(/1 SRUB.*0\.990000.*SBER/)).toBeInTheDocument()
+      expect(screen.getAllByText(/1 SRUB.*0\.990000.*SBER/).length).toBeGreaterThanOrEqual(1)
     })
   })
 
@@ -406,10 +422,14 @@ describe('SwapPage — quote panel formatting', () => {
     await userEvent.type(amountInInput(), '100')
 
     // floor(99 × 0.995) = 98
+    // Sprint 9-DS-r4 (CI fix) — label is now "Мин. к получению (0.5%)"
+    // with the effective-slippage in parens (page edit). Match via
+    // regex so the test isn't tied to the literal slippage number.
     await waitFor(() => {
-      expect(screen.getByText('Мин. к получению')).toBeInTheDocument()
+      expect(screen.getAllByText(/Мин\. к получению/).length).toBeGreaterThanOrEqual(1)
     })
-    // The row value cell renders "98 SBER"
-    expect(screen.getByText(/98 SBER/)).toBeInTheDocument()
+    // The row value cell renders "98 SBER" — may appear in inline
+    // quote AND right-rail; multiplicity acceptable.
+    expect(screen.getAllByText(/98 SBER/).length).toBeGreaterThanOrEqual(1)
   })
 })

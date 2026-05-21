@@ -658,7 +658,13 @@ function SwapInfoPanel({
             <InfoRow
               icon={<DollarOutlined style={{ color: 'var(--sber-green)' }} />}
               label="Текущая цена"
-              value={`${pool.currentPrice.toLocaleString('ru-RU', { maximumFractionDigits: 6 })} ${pool.tokenYSymbol}/${pool.tokenXSymbol}`}
+              // Sprint 9-DS-r4 (CI fix) — defensive ?? 0 in case the
+              // pool list payload omits currentPrice (older API,
+              // partial response, test fixtures without the field).
+              // Before this guard the page threw on
+              // `undefined.toLocaleString` and the whole right
+              // panel unmounted.
+              value={`${(pool.currentPrice ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 })} ${pool.tokenYSymbol}/${pool.tokenXSymbol}`}
             />
             <InfoRow
               icon={<FundOutlined style={{ color: '#296AE3' }} />}

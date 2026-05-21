@@ -36,10 +36,17 @@ jobs:
 
     # Sprint 6 #6.10 — Pangolin/PgPro CI matrix test. Runs the integration
     # tests against both Postgres community and the Минцифры реестр-
-    # acceptable Pangolin fork to prove drop-in compatibility. If the
-    # Pangolin leg fails, the workflow still passes (continue-on-error)
-    # but Security tab shows the divergence — we want visibility, not
-    # a blocking gate, until Sprint 7+ stabilises.
+    # acceptable Pangolin fork to prove drop-in compatibility.
+    #
+    # Sprint 9-DS-r4 (CI fix): the Pangolin matrix leg was failing on every
+    # commit because `pangolindb/pangolin:1.5` is gated on PgPro's private
+    # registry and not pullable from GitHub-hosted runners. Step-level
+    # `continue-on-error` doesn't help when the failure is in "Initialize
+    # containers" (before any step runs). Moved `continue-on-error` to the
+    # JOB level so the workflow conclusion stays green when the Pangolin
+    # leg errors at container-init time. When PgPro publishes a public
+    # mirror (or when we add a self-hosted runner with access), flip
+    # `required: true` and drop the job-level continue-on-error.
     strategy:
       fail-fast: false
       matrix:
@@ -48,6 +55,7 @@ jobs:
           - { name: pangolin, image: "pangolindb/pangolin:1.5",  required: false }
 
     name: build-and-test (${{ matrix.db.name }})
+    continue-on-error: ${{ !matrix.db.required }}
 
     services:
       db:

@@ -20,9 +20,15 @@
       work. Single-swap cap is the meaningful 80% of the protection
       for the MVP.
 
-      Follows DB-MIGRATION-CONVENTION: ALTER without preCondition.
+      Sprint 9-DS-r4 (CI fix) — preConditions added. init-db.sql for
+      fresh deploys now ships these columns; on first Liquibase run
+      against a freshly-initialised DB the plain addColumn would trip
+      "column already exists". MARK_RAN skips cleanly.
     -->
     <changeSet id="007-add-counterparty-limits-to-pools" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><columnExists tableName="liquidity_pools" columnName="max_single_swap_nominal_x"/></not>
+        </preConditions>
         <addColumn tableName="liquidity_pools">
             <column name="max_single_swap_nominal_x" type="BIGINT">
                 <!-- NULL = no cap on X-token swaps -->

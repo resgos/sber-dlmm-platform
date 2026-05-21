@@ -117,15 +117,15 @@ describe('DashboardPage (admin-ui)', () => {
     })
     render(withQuery(<DashboardPage />))
 
-    // The page renders TWO .ant-statistic blocks (Active positions + KYC%).
-    // Locate by the unique card title, then walk up to the card container
-    // and read its textContent — AntD Statistic splits "25.0%" into
-    // <span>25</span><span>.</span><span>0</span><span>%</span>, so we have
-    // to reduce.
+    // Sprint 9-DS-r4 (CI fix): page renders the integer-rounded
+    // percentage ("25%") via `Math.round((verified/total) * 100)`,
+    // not a `.toFixed(1)` value. Earlier the page used AntD Statistic
+    // with one-decimal precision; the layout refactor dropped the
+    // decimal and this test wasn't updated.
     const kycTitle = await screen.findByText('Уровень верификации KYC')
     const card = kycTitle.closest('.ant-card')
     expect(card).not.toBeNull()
     const compact = (card?.textContent ?? '').replace(/\s+/g, '')
-    expect(compact).toContain('25.0%')
+    expect(compact).toContain('25%')
   })
 })

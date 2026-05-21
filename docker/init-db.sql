@@ -85,9 +85,23 @@ CREATE TABLE IF NOT EXISTS liquidity_pools (
     volume_24h BIGINT NOT NULL DEFAULT 0,
     total_fees_collected_x BIGINT NOT NULL DEFAULT 0,
     total_fees_collected_y BIGINT NOT NULL DEFAULT 0,
+    -- Sprint 6 #3.2 / pool-engine Liquibase 009 — protocol-side fee
+    -- accumulator, separate from total_fees_collected (which is gross).
+    -- Treasury sweep job (Sprint 7+) drains these.
+    total_protocol_fee_x BIGINT NOT NULL DEFAULT 0,
+    total_protocol_fee_y BIGINT NOT NULL DEFAULT 0,
+    -- Sprint 4 #4.2 / pool-engine Liquibase 007 — per-pool
+    -- counterparty caps. NULL = uncapped on that side.
+    max_single_swap_nominal_x BIGINT,
+    max_single_swap_nominal_y BIGINT,
     status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
     created_by UUID NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Sprint 4 #4.7 / pool-engine Liquibase 006 — JPA @Version optimistic
+    -- lock. Without this column the entity @Version fails ddl-auto:validate
+    -- on a fresh init-db.sql deploy, AND 04-spasibo-seed.sql's INSERT
+    -- references the column.
+    version BIGINT NOT NULL DEFAULT 0,
     UNIQUE (token_x_id, token_y_id, bin_step)
 );
 
