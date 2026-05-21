@@ -14,6 +14,7 @@ import { authStore } from '@/store/authStore'
 import KycStatusBadge from '@/components/KycStatusBadge'
 import SelfRestrictionPanel from '@/components/SelfRestrictionPanel'
 import ThemeToggle from '@/components/ThemeToggle'
+import KycUploadPanel from '@/components/KycUploadPanel'
 import { formatRub } from '@/components/StatCard'
 import type { User, TokenBalance, Position, Transaction } from '@/api/types'
 import dayjs from 'dayjs'
@@ -174,6 +175,12 @@ export default function ProfilePage() {
           />
         )}
       </Card>
+
+      {/* Sprint 9-DS-r4 P2-8 — KYC document upload (Sber ID stub).
+          Renders the Dragger only when the user is in NOT_SUBMITTED or
+          REJECTED; for PENDING/VERIFIED users it shows an info card
+          and bails out. */}
+      <KycUploadPanel kycStatus={kycStatus as 'NOT_SUBMITTED' | 'PENDING' | 'VERIFIED' | 'REJECTED'} />
 
       {/* Sprint 6 #6.7 — 115-ФЗ самозапрет */}
       <SelfRestrictionPanel />
