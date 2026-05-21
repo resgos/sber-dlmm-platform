@@ -446,6 +446,30 @@ body {
     position: fixed !important;
     z-index: 200 !important;
   }
+
+  /* Sprint 9-DS-r4 P2-16 — admin Modal sweep.
+     OTC desk, KYC review, Quote, Pool create — every admin Modal
+     embeds a Descriptions or Form that overflows 320-wide phones.
+     Force a horizontal scroll on the dense table-like children so
+     the page doesn't break sideways. The Modal itself is already
+     auto-sized via AntD's `width="80%"` defaults — this only
+     rescues the inner content. */
+  .ant-modal-body .ant-descriptions-view,
+  .ant-modal-body .ant-table-wrapper,
+  .ant-modal-body .ant-form-item-control-input-content > .ant-input-group {
+    overflow-x: auto;
+  }
+  /* OTC "Mark Settled" + Quote modals have a 2-column grid that
+     crunches numbers under 360px. Stack at phone. */
+  .ant-modal-body .ant-row {
+    flex-direction: column;
+  }
+  /* Page header rows on tablet+ phone — long titles wrap instead of
+     pushing the action button off-screen. */
+  .sber-page-header-row {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
 }
 
 /* ======================================================================

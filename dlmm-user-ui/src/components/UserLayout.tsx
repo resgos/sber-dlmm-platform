@@ -16,6 +16,7 @@ import {
 import { authStore } from '@/store/authStore'
 import { auth } from '@/api/services'
 import NotificationBell from './NotificationBell'
+import LanguageSwitcher from './LanguageSwitcher'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -187,6 +188,8 @@ export default function UserLayout() {
           </Space>
 
           <Space size={20}>
+            {/* Sprint 9-DS-r4 P2-14 — language picker; compact RU/EN toggle. */}
+            <LanguageSwitcher />
             <NotificationBell />
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
               <Space

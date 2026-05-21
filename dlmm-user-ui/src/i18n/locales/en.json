@@ -1,0 +1,155 @@
+{
+  "_comment": "Sprint 9-DS-r4 P2-14 — English translation. Mirrors the ru.json structure 1:1. Activated via i18n.changeLanguage('en'); see store/languageStore for the persistence hook + dropdown wiring (Sprint 10 surface). For now the bundle is loaded and ready — flipping language proves end-to-end coverage of the strings extracted in Sprint 8 C-4.",
+
+  "common": {
+    "loading": "Loading…",
+    "error": "Error",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "yes": "Yes",
+    "no": "No",
+    "all": "All",
+    "none": "None",
+    "open": "Open",
+    "details": "Details"
+  },
+
+  "brand": {
+    "sber": "SBER",
+    "product": "DLMM",
+    "tagline": "Liquidity platform"
+  },
+
+  "auth": {
+    "login": {
+      "subtitle": "Next-generation liquidity platform",
+      "emailLabel": "Email address",
+      "emailPlaceholder": "user@example.com",
+      "emailRequired": "Enter your email address",
+      "emailInvalid": "Enter a valid email address",
+      "passwordLabel": "Password",
+      "passwordRequired": "Enter your password",
+      "submit": "Sign in",
+      "noAccount": "No account yet?",
+      "register": "Sign up",
+      "errorFallback": "Invalid email or password. Please try again."
+    }
+  },
+
+  "dashboard": {
+    "title": "Your portfolio",
+    "activePositions_one": "{{count}} active position",
+    "activePositions_other": "{{count}} active positions",
+    "totalEarned": "earned {{amount}}",
+    "actions": {
+      "swap": "Swap",
+      "pools": "Pools"
+    },
+    "tiles": {
+      "totalBalance": "Total balance",
+      "activePositions": "Active positions",
+      "unclaimedFees": "Unclaimed fees",
+      "totalEarned": "Total earned"
+    },
+    "tokens": {
+      "title": "My tokens",
+      "symbol": "Token",
+      "available": "Available",
+      "locked": "Locked",
+      "price": "Price",
+      "value": "Value"
+    },
+    "transactions": {
+      "title": "Latest transactions",
+      "empty": "No transactions yet",
+      "allHistory": "Full history",
+      "date": "Date",
+      "type": "Type",
+      "amount": "Amount",
+      "status": "Status"
+    }
+  },
+
+  "swap": {
+    "title": "Swap",
+    "subtitle": "Instant token swap through DLMM pools",
+    "from": "You pay",
+    "to": "You receive",
+    "available": "Available",
+    "max": "MAX",
+    "tokenPlaceholder": "Token",
+    "amountPlaceholder": "0.0",
+    "swapDirection": "Flip direction",
+    "settings": "Slippage settings",
+    "slippageTitle": "Slippage tolerance",
+    "slippageCustom": "custom",
+    "quote": {
+      "loading": "Calculating route…",
+      "rate": "Rate",
+      "priceImpact": "Price impact",
+      "fee": "Fee",
+      "minReceived": "Min. received",
+      "via": "via pool {{pair}}",
+      "tolerance": "tolerance {{value}}%"
+    },
+    "cta": {
+      "selectTokens": "Pick tokens",
+      "enterAmount": "Enter amount",
+      "noPool": "Pool unavailable",
+      "executing": "Executing swap…",
+      "swap": "Swap"
+    },
+    "alerts": {
+      "noPool": "No active pool for the selected pair",
+      "success": "Swap completed successfully!",
+      "errorFallback": "Swap failed"
+    }
+  },
+
+  "hedge": {
+    "title": "FX Hedge",
+    "openHedges": "Open hedges",
+    "closeAll": "Close all",
+    "close": "Close",
+    "confirmClose": {
+      "title": "Close hedge?",
+      "body": "A reverse swap of {{amount}} units back to SRUB will be executed.",
+      "expected": "You'll get approximately ~{{amount}} SRUB; final amount depends on the exchange rate at execution time.",
+      "okText": "Close hedge"
+    },
+    "errors": {
+      "unwindFallback": "Failed to close hedge"
+    }
+  },
+
+  "pools": {
+    "title": "Liquidity pools",
+    "subtitle_one": "{{count}} pair available for trading and providing liquidity",
+    "subtitle_other": "{{count}} pairs available for trading and providing liquidity",
+    "searchPlaceholder": "Find a pair (SBER, GAZP, SRUB…)",
+    "card": {
+      "tvl": "TVL",
+      "volume24h": "Volume 24h",
+      "apy": "APY",
+      "binStep": "step {{value}}",
+      "fee": "fee {{value}}",
+      "addLiquidity": "Add liquidity"
+    },
+    "status": {
+      "ACTIVE": "Active",
+      "PAUSED": "Paused",
+      "SHUTDOWN": "Shut down",
+      "PENDING": "Pending"
+    },
+    "empty": {
+      "noResults": "No pairs match \"{{query}}\"",
+      "noPools": "No pools yet"
+    }
+  }
+}

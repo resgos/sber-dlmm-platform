@@ -135,7 +135,11 @@ export default function PoolsPage() {
           placeholder={t('pools.searchPlaceholder')}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(0) }}
-          style={{ width: 320, height: 40, borderRadius: 10 }}
+          // Sprint 9-DS-r4 P2-16 — fixed 320px width pushed past 320 viewport;
+          // class drops to width:100% under .sber-pools-search-mobile media
+          // query in sber-theme.css.
+          className="sber-pools-search"
+          style={{ height: 40, borderRadius: 10 }}
         />
       </div>
 

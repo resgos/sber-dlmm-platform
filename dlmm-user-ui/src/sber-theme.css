@@ -886,6 +886,56 @@ body {
   }
 }
 
+/* Sprint 9-DS-r4 P2-16 — additional mobile sweep.
+   Builds on the 768/414 breakpoints above with the leftover
+   overflow culprits surfaced after the Sprint 8 audit.
+
+   * PoolsPage search Input had `width: 320` inline → forced
+     horizontal scroll on 320-wide viewports. .sber-pools-search
+     drops to 100% width on phones.
+   * Hero "Стоимость портфеля" right-rail numbers in Profile
+     stack instead of trying to fit a 2-col grid on a narrow card.
+   * AntD Modal body (used by OTC / Hedge / Add-Liquidity dialogs)
+     shouldn't try to fit `width=600` on a 375-viewport — the
+     Modal already obeys auto-width on max-width but the inner
+     descriptions table can overflow. Force a horizontal scroll
+     on `.ant-modal-body .ant-descriptions-view` at the phone
+     breakpoint so dense tables fall back to swipe.
+   * PoolDetailPage right rail (Add Liquidity panel) stacked under
+     the chart at xs already, but the panel header — Title + back
+     button — was misaligned on phones. flex-wrap fix. */
+.sber-pools-search {
+  width: 320px;
+}
+@media (max-width: 768px) {
+  .sber-pools-search {
+    width: 100%;
+    max-width: 360px;
+  }
+}
+@media (max-width: 414px) {
+  .sber-pools-search {
+    width: 100%;
+    max-width: none;
+  }
+  /* Right-rail in Profile is .ant-col-lg-10 → falls to xs={24},
+     but the inner 2-col grid still tries to fit which crunches
+     numbers under 320. Stack at phone. */
+  .sber-card .ant-col-xs-24 > .ant-space > .ant-space-item:has(.ant-card) .ant-row {
+    flex-direction: column;
+  }
+  /* Modal descriptions table — swipe-scroll over hard truncation. */
+  .ant-modal-body .ant-descriptions-view,
+  .ant-modal-body .ant-table-wrapper {
+    overflow-x: auto;
+  }
+  /* PoolDetailPage / LiquidityPage header rows — wrap, not crush. */
+  .sber-page-header-row {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+}
+
 /* Sprint 9 UX-A11Y-2 wave 2 — skip-to-content link. Off-screen until
    keyboard focus reveals it. Lets screen-reader / keyboard users
    bypass the navigation tree and jump to the main content region. */
