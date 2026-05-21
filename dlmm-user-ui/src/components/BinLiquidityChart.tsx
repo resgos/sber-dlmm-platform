@@ -40,6 +40,16 @@ interface BinLiquidityChartProps {
     binMax: number
     strategy: LiquidityStrategy
   } | null
+  /**
+   * Sprint 9-DS-r4 (P2-6) — user's share of this bin's total
+   * liquidity, as a percentage. Used by the tooltip to surface
+   * "Ваша доля: X%" so the LP can see where their concentration
+   * sits relative to the pool depth. Approximation (uses strategy
+   * weights, not actual per-bin liquidity_shares); exact value
+   * comes from PositionResponse.binAllocations which we don't
+   * currently fetch on this page.
+   */
+  userBinSharePctByBinId?: Map<number, number>
 }
 
 interface ChartDataPoint {
@@ -81,16 +91,47 @@ function getBinColor(
 // of opaque "Резерв X / Y". Bin ID hidden — user sees price, not the
 // internal index. "Активный" labelled "Текущая цена" because that's what
 // the bin actually means to a non-quant user.
-const makeTooltip = (xSym: string, ySym: string) => ({ active, payload }: any) => {
+//
+// Sprint 9-DS-r4 (P2-6) — tooltip now also surfaces:
+//   - the bin id (in a small monospace tag, so power users can
+//     correlate to the addLiquidity numeric range)
+//   - "Активный бин" / "Ваш бин" badges when applicable
+//   - "Ваша доля: X%" computed from the userBinSharePctByBinId map
+// per the backlog spec.
+const makeTooltip = (
+  xSym: string,
+  ySym: string,
+  userBinSharePctByBinId?: Map<number, number>,
+) => ({ active, payload }: any) => {
   if (!active || !payload?.length) return null
   const d: ChartDataPoint = payload[0]?.payload
+  const userSharePct = d?.binId != null ? userBinSharePctByBinId?.get(d.binId) : undefined
   return (
     <div style={{
       background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8,
       padding: '10px 14px', fontSize: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+      minWidth: 200,
     }}>
-      <div style={{ fontWeight: 600, marginBottom: 4, color: d?.isActive ? '#F59E0B' : '#111827' }}>
-        {d?.isActive ? '★ Текущая цена' : 'Цена'}: {d?.price}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        {d?.isActive && (
+          <span style={{ background: '#FEF3C7', color: '#D97706', fontSize: 10,
+            padding: '1px 6px', borderRadius: 999, fontWeight: 600 }}>
+            ★ Активный бин
+          </span>
+        )}
+        {d?.isMine && !d?.isActive && (
+          <span style={{ background: 'rgba(147,51,234,0.12)', color: '#7C3AED', fontSize: 10,
+            padding: '1px 6px', borderRadius: 999, fontWeight: 600 }}>
+            Ваш бин
+          </span>
+        )}
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+          color: '#9CA3AF' }}>
+          #{d?.binId}
+        </span>
+      </div>
+      <div style={{ fontWeight: 600, marginBottom: 4, color: d?.isActive ? '#D97706' : '#111827' }}>
+        Цена: {d?.price}
       </div>
       <div style={{ color: '#3B82F6' }}>
         Резерв {ySym}: {Number(d?.reserveY ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
@@ -101,11 +142,17 @@ const makeTooltip = (xSym: string, ySym: string) => ({ active, payload }: any) =
       <div style={{ color: '#9CA3AF', marginTop: 4 }}>
         Ликвидность: {Number(d?.liquidity ?? 0).toLocaleString('ru-RU')}
       </div>
+      {userSharePct != null && userSharePct > 0 && (
+        <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #F3F4F6',
+          color: '#7C3AED', fontWeight: 600 }}>
+          Ваша доля: {userSharePct < 0.01 ? '< 0,01' : userSharePct.toFixed(2)}%
+        </div>
+      )}
     </div>
   )
 }
 
-export default function BinLiquidityChart({ poolId, userBinRanges, pendingPreview }: BinLiquidityChartProps) {
+export default function BinLiquidityChart({ poolId, userBinRanges, pendingPreview, userBinSharePctByBinId }: BinLiquidityChartProps) {
   // Sprint 9-DS-r4 (P1-5) — Meteora-style zoom level. Persisted only
   // for this render; no localStorage so different pools don't surprise
   // the user with a tight zoom that doesn't fit their layout.
@@ -216,7 +263,7 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
   const xSym = pool.tokenXSymbol || 'токен X'
   const ySym = pool.tokenYSymbol || 'токен Y'
   const activePrice = pool.bins.find((b) => b.binId === pool.activeBinId)?.price
-  const Tooltip2 = makeTooltip(xSym, ySym)
+  const Tooltip2 = makeTooltip(xSym, ySym, userBinSharePctByBinId)
 
   return (
     <div>

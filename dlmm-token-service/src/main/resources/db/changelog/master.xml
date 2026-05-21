@@ -13,5 +13,6 @@
     <include file="006-create-b2b-issuers-table.xml" relativeToChangelogFile="true"/>
     <include file="007-create-b2b-invoices-table.xml" relativeToChangelogFile="true"/>
     <include file="008-create-ysrub-yield-accruals.xml" relativeToChangelogFile="true"/>
+    <include file="009-create-spasibo-writeback-queue.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

@@ -104,6 +104,23 @@ public class TransactionService {
         return saved;
     }
 
+    /**
+     * Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" action for the
+     * SuspiciousTransactionsPage. Stamps reviewedAt/reviewedBy on the
+     * transaction; idempotent (re-reviewing a reviewed row updates
+     * the reviewedBy/At to the most recent reviewer).
+     */
+    @Transactional
+    public Transaction markReviewed(UUID txId, UUID reviewerUserId) {
+        Transaction transaction = transactionRepository.findById(txId)
+                .orElseThrow(() -> new TransactionFailedException("Transaction not found"));
+        transaction.setReviewedAt(LocalDateTime.now());
+        transaction.setReviewedBy(reviewerUserId);
+        Transaction saved = transactionRepository.save(transaction);
+        log.info("Transaction marked reviewed: id={} by={}", txId, reviewerUserId);
+        return saved;
+    }
+
     @Transactional
     public Transaction confirm(UUID txId) {
         Transaction transaction = transactionRepository.findById(txId)
@@ -249,7 +266,10 @@ public class TransactionService {
                 tx.getErrorMessage(),
                 tx.getCreatedAt(),
                 tx.getUpdatedAt(),
-                tx.getConfirmedAt()
+                tx.getConfirmedAt(),
+                // Sprint 9-DS-r4 (P2-12) — Mark-reviewed state.
+                tx.getReviewedAt(),
+                tx.getReviewedBy()
         );
     }
 }

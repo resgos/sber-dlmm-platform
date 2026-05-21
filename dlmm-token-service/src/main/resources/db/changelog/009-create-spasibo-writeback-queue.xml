@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 9-DS-r4 (P1-17) — SberSpasibo write-back queue.
+        See docs/SPASIBO-WRITEBACK-DESIGN.md §5.3.
+
+        DLMM accrues earned cashback into this queue on every qualifying
+        operation (SWAP earns 0.10%, HEDGE 0.50%, ADD_LIQ 0.05%,
+        CLAIM_FEE 0.10%) and a scheduler ships rows to Spasibo BU's
+        write API.
+
+        MVP scope (this changeset): persistence + accrual hook on SWAP
+        events. The HTTP call to Spasibo BU is gated behind a feature
+        flag and currently logs the would-be-posted payload — the
+        actual `POST /cashback/credit` lands when the Spasibo BU
+        contract + sandbox API are available (design §7 Sprint 7 gate).
+
+        Status enum: PENDING → ACCEPTED | REJECTED | RETRY | DEAD_LETTER.
+        UNIQUE(dlmm_tx_id) makes the accrual idempotent — a re-delivered
+        Kafka event for the same DLMM transaction is rejected at the
+        DB layer.
+    -->
+    <changeSet id="009-create-spasibo-writeback-queue" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="spasibo_writeback_queue"/></not>
+        </preConditions>
+        <createTable tableName="spasibo_writeback_queue">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="dlmm_tx_id" type="UUID">
+                <!-- Originating DLMM transaction (from SwapExecuted, etc.).
+                     UNIQUE = idempotent accrual under Kafka re-delivery. -->
+                <constraints nullable="false" unique="true"
+                             uniqueConstraintName="uk_spasibo_wb_dlmm_tx"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount_points" type="INT">
+                <!-- Integer Spasibo points to credit. Computed from the
+                     transaction's amountIn × per-op-type rate. -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="reason_code" type="VARCHAR(40)">
+                <!-- DLMM_SWAP | DLMM_HEDGE | DLMM_ADD_LIQ | DLMM_CLAIM_FEE -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)" defaultValue="PENDING">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attempt_count" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_error" type="VARCHAR(500)"/>
+            <column name="spasibo_tx_id" type="VARCHAR(64)">
+                <!-- Populated by Spasibo BU response on ACCEPTED. -->
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="settled_at" type="TIMESTAMP"/>
+        </createTable>
+
+        <createIndex indexName="idx_spasibo_wb_status_created"
+                     tableName="spasibo_writeback_queue">
+            <column name="status"/>
+            <column name="created_at"/>
+        </createIndex>
+
+        <createIndex indexName="idx_spasibo_wb_user_created"
+                     tableName="spasibo_writeback_queue">
+            <column name="user_id"/>
+            <column name="created_at"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

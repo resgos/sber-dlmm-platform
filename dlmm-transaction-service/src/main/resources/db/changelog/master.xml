@@ -11,5 +11,6 @@
     <include file="004-create-aml-alerts-table.xml" relativeToChangelogFile="true"/>
     <include file="005-create-otc-block-trades.xml" relativeToChangelogFile="true"/>
     <include file="006-add-pool-engine-tx-id-to-transactions.xml" relativeToChangelogFile="true"/>
+    <include file="007-add-reviewed-at-to-transactions.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

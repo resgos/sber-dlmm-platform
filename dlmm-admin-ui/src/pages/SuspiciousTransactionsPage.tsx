@@ -7,14 +7,17 @@ import {
   Alert,
   Spin,
   Tooltip,
+  Button,
+  message,
 } from 'antd'
 import {
   WarningOutlined,
   SafetyOutlined,
   CheckCircleOutlined,
   RiseOutlined,
+  CheckOutlined,
 } from '@ant-design/icons'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { transactions as txService } from '@/api/services'
 import type { SuspiciousTransaction } from '@/api/types'
@@ -32,10 +35,25 @@ import { formatCompact, shortId } from '@/lib/format'
  *   to look at
  */
 export default function SuspiciousTransactionsPage() {
+  const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({
     queryKey: ['suspiciousTransactions'],
     queryFn: txService.getSuspiciousTransactions,
     refetchInterval: 30000,
+  })
+
+  // Sprint 9-DS-r4 (P2-12) — "Mark reviewed" mutation. Stamps
+  // reviewedAt/reviewedBy on the transaction; admin-bff's
+  // suspicious-detection skips reviewed rows, so the row vanishes
+  // from this list on the next refetch (we invalidate immediately
+  // for instant feedback).
+  const reviewMutation = useMutation({
+    mutationFn: (txId: string) => txService.markReviewed(txId),
+    onSuccess: () => {
+      message.success('Транзакция помечена как просмотренная')
+      queryClient.invalidateQueries({ queryKey: ['suspiciousTransactions'] })
+    },
+    onError: () => message.error('Не удалось пометить транзакцию'),
   })
 
   const summary = useMemo(() => {
@@ -127,6 +145,26 @@ export default function SuspiciousTransactionsPage() {
       ),
       sorter: (a, b) => dayjs(a.timestamp).unix() - dayjs(b.timestamp).unix(),
       defaultSortOrder: 'descend',
+    },
+    {
+      // Sprint 9-DS-r4 (P2-12) — per-row "Просмотрено" action.
+      // Stamps reviewedAt on the transaction; the row disappears on
+      // the next refetch.
+      title: 'Действие',
+      key: 'review',
+      width: 130,
+      render: (_: unknown, r: SuspiciousTransaction) => (
+        <Button
+          size="small"
+          type="primary"
+          ghost
+          icon={<CheckOutlined />}
+          loading={reviewMutation.isPending && reviewMutation.variables === r.id}
+          onClick={() => reviewMutation.mutate(r.id)}
+        >
+          Просмотрено
+        </Button>
+      ),
     },
   ]
 

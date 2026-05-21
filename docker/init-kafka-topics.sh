@@ -43,4 +43,13 @@ kafka-topics --create \
     --if-not-exists
 
 echo "All Kafka topics created successfully."
-kafka-topics --bootstrap-server "$KAFKA_BROKER" --list
+kafka-topics --bootstrap-server "$KAFKA_BROKER" --list || true
+
+# Sprint 9-DS-r4 (known-live LOW) — explicit `exit 0` so the
+# container exit code reflects "init done" rather than whatever the
+# last `kafka-topics --create --if-not-exists` returned (Confluent
+# CLI 7.6 returns 2 on the no-op "topic exists" branch even though
+# the operation was successful from our perspective). Without this,
+# `docker-compose ps` shows the init container as exit 2 on every
+# restart even though everything is fine.
+exit 0

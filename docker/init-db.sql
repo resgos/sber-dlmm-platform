@@ -180,6 +180,12 @@ CREATE TABLE IF NOT EXISTS transactions (
     -- swaps, internal flows). UNIQUE so we get a real DB-level guarantee
     -- rather than relying on an in-app SELECT-then-INSERT race window.
     pool_engine_tx_id UUID UNIQUE,
+    -- Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" flag for the
+    -- SuspiciousTransactionsPage. Null = not yet reviewed; non-null =
+    -- reviewer's userId + timestamp. admin-bff's suspicious detection
+    -- skips reviewed rows so they stop showing up after acknowledgement.
+    reviewed_at TIMESTAMP,
+    reviewed_by UUID,
     metadata TEXT,
     error_message TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

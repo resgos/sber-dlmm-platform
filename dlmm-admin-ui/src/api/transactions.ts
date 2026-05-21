@@ -24,4 +24,14 @@ export const transactions = {
     )
     return response.data
   },
+
+  /**
+   * Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" action. POSTs to
+   * admin-bff which forwards to transaction-service to stamp
+   * reviewedAt/reviewedBy on the transaction row. The next refresh
+   * of getSuspiciousTransactions then omits the row.
+   */
+  markReviewed: async (txId: string): Promise<void> => {
+    await apiClient.post(`/admin/transactions/${txId}/review`)
+  },
 }

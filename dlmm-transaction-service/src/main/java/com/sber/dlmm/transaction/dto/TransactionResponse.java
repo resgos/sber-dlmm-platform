@@ -25,5 +25,11 @@ public record TransactionResponse(
     String errorMessage,
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
-    LocalDateTime confirmedAt
+    LocalDateTime confirmedAt,
+    // Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" state. Null
+    // when the row hasn't been reviewed yet; populated when an
+    // admin POSTs /transactions/{id}/review. Surfaces to admin-bff
+    // so its suspicious-detection can skip reviewed rows.
+    LocalDateTime reviewedAt,
+    UUID reviewedBy
 ) {}

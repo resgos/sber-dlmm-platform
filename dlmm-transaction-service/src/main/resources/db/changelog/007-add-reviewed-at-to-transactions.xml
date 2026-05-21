@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" action on the
+        SuspiciousTransactionsPage.
+
+        admin-bff currently derives the suspicious list on-the-fly from
+        the raw transactions stream (high price impact, swap > 5% TVL,
+        high-frequency users). There was no way to acknowledge a
+        reviewed row — it kept reappearing on every refresh until the
+        underlying transaction aged out of the analysis window.
+
+        Adds `reviewed_at` + `reviewed_by` columns. admin-bff's
+        suspicious-detection now skips transactions where
+        `reviewed_at IS NOT NULL`; the new
+        `POST /api/v1/transactions/{id}/review` endpoint flips the
+        flag (ADMIN/SUPER_ADMIN only) with reviewedBy = caller's userId.
+
+        Mirrored in init-db.sql for fresh deploys.
+    -->
+    <changeSet id="007-add-reviewed-at-to-transactions" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <tableExists tableName="transactions"/>
+                <not><columnExists tableName="transactions" columnName="reviewed_at"/></not>
+            </and>
+        </preConditions>
+        <addColumn tableName="transactions">
+            <column name="reviewed_at" type="TIMESTAMP"/>
+            <column name="reviewed_by" type="UUID"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

@@ -425,6 +425,27 @@ public class AdminProxyController {
         return jsonOk(result);
     }
 
+    /**
+     * Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" action for a
+     * suspicious transaction. Forwards to transaction-service's
+     * {@code POST /transactions/{id}/review} which stamps
+     * reviewedAt/reviewedBy.
+     */
+    @PostMapping("/transactions/{id}/review")
+    @Operation(summary = "Mark a transaction as reviewed (proxy to transaction-service)")
+    public ResponseEntity<String> reviewTransaction(
+            @PathVariable UUID id,
+            @RequestHeader(value = "Authorization", required = false) String auth) {
+        String result = transactionServiceClient.post()
+                .uri("/api/v1/transactions/{id}/review", id)
+                .header("Authorization", auth != null ? auth : "")
+                .retrieve()
+                .bodyToMono(String.class)
+                .onErrorReturn("{\"error\":\"Failed to mark reviewed\"}")
+                .block(TIMEOUT);
+        return jsonOk(result);
+    }
+
     // ============ HELPERS ============
 
     private ResponseEntity<String> jsonOk(String body) {

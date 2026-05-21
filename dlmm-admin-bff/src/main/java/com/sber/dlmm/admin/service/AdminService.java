@@ -229,6 +229,20 @@ public class AdminService {
             return Collections.emptyList();
         }
 
+        // Sprint 9-DS-r4 (P2-12) — skip rows already marked-reviewed
+        // by an admin (POST /transactions/{id}/review). The flag
+        // persists on the transactions table; admin-ui's
+        // "Просмотрено" button POSTs to that endpoint and then
+        // invalidates this query, so the row disappears from the
+        // suspicious list immediately.
+        transactions = transactions.stream()
+                .filter(tx -> tx.get("reviewedAt") == null)
+                .toList();
+        if (transactions.isEmpty()) {
+            log.debug("All recent transactions already reviewed");
+            return Collections.emptyList();
+        }
+
         List<Map<String, Object>> pools = poolEngine.fetchPoolsPage(AGGREGATION_PAGE_SIZE);
 
         Map<String, Long> poolTvlMap = pools != null

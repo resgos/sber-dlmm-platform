@@ -12,9 +12,9 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { Dayjs } from 'dayjs'
-import { otc, tokens as tokensApi } from '@/api/services'
+import { otc, tokens as tokensApi, users as usersApi } from '@/api/services'
 import type { OtcBlockTrade, OtcStatus } from '@/api/otc'
-import type { Token } from '@/api/types'
+import type { Token, User } from '@/api/types'
 
 const { Title, Text } = Typography
 const { TextArea } = Input
@@ -393,6 +393,49 @@ function CreateModal({ open, onClose, onSubmit, submitting }: {
   submitting: boolean
 }) {
   const [form] = Form.useForm()
+
+  // Sprint 9-DS-r4 (P2-2) — pull users + tokens once for the
+  // Select pickers. Both queries are catalog-scoped (small page size),
+  // cached so the modal opens instantly on second open.
+  const { data: userPage } = useQuery({
+    queryKey: ['admin-users', 0, 200],
+    queryFn: () => usersApi.getUsers(0, 200),
+    enabled: open,
+    staleTime: 60_000,
+  })
+  const { data: tokenPageForPicker } = useQuery({
+    queryKey: ['admin-tokens-for-otc', 0, 200],
+    queryFn: () => tokensApi.getTokens(0, 200),
+    enabled: open,
+    staleTime: 60_000,
+  })
+
+  const userOptions = useMemo(
+    () => (userPage?.content ?? []).map((u: User) => ({
+      value: u.id,
+      label: `${u.fullName ?? u.email} (${u.email})`,
+      // Sprint 9-DS-r4 (P2-2) — Select filterOption uses these search
+      // hints so an operator can type the email OR the full name and
+      // hit the right user without scrolling 200 rows.
+      search: `${u.fullName ?? ''} ${u.email}`.toLowerCase(),
+    })),
+    [userPage],
+  )
+  const tokenOptions = useMemo(
+    () => (tokenPageForPicker?.content ?? []).map((t: Token) => ({
+      value: t.id,
+      label: `${t.symbol} — ${t.name}`,
+      search: `${t.symbol} ${t.name}`.toLowerCase(),
+    })),
+    [tokenPageForPicker],
+  )
+
+  // Sprint 9-DS-r4 (P2-2) — AntD Select filterOption signature: returns
+  // true to keep the option visible. We match on a precomputed `search`
+  // string so symbol + email + name all work as input.
+  const filterByLabel = (input: string, option?: { search?: string }) =>
+    !!option?.search?.includes(input.toLowerCase())
+
   return (
     <Modal
       title="Новая OTC-сделка"
@@ -405,22 +448,46 @@ function CreateModal({ open, onClose, onSubmit, submitting }: {
       destroyOnClose
       width={520}
     >
+      {/* Sprint 9-DS-r4 (P2-2) — pasted-UUID Inputs replaced by
+          symbol/email Select pickers. Operators had to copy UUIDs
+          from another tab; selection by symbol/email is faster and
+          eliminates the typo class of failure. */}
       <Form form={form} layout="vertical" requiredMark="optional">
-        <Form.Item name="initiatorUserId" label="Инициатор (UUID)"
-          rules={[{ required: true, message: 'Введите UUID' }, { len: 36 }]}>
-          <Input placeholder="00000000-0000-0000-0000-000000000001" />
+        <Form.Item name="initiatorUserId" label="Инициатор"
+          rules={[{ required: true, message: 'Выберите пользователя' }]}>
+          <Select
+            showSearch
+            placeholder="Выберите по email или имени"
+            options={userOptions}
+            filterOption={filterByLabel}
+          />
         </Form.Item>
-        <Form.Item name="counterpartyUserId" label="Контрагент (UUID)"
-          rules={[{ required: true, message: 'Введите UUID' }, { len: 36 }]}>
-          <Input placeholder="00000000-0000-0000-0000-000000000002" />
+        <Form.Item name="counterpartyUserId" label="Контрагент"
+          rules={[{ required: true, message: 'Выберите контрагента' }]}>
+          <Select
+            showSearch
+            placeholder="Выберите по email или имени"
+            options={userOptions}
+            filterOption={filterByLabel}
+          />
         </Form.Item>
-        <Form.Item name="tokenInId" label="Token IN (UUID)"
-          rules={[{ required: true }, { len: 36 }]}>
-          <Input placeholder="b0000000-0000-0000-0000-000000000001" />
+        <Form.Item name="tokenInId" label="Token IN"
+          rules={[{ required: true, message: 'Выберите токен' }]}>
+          <Select
+            showSearch
+            placeholder="Например: SRUB"
+            options={tokenOptions}
+            filterOption={filterByLabel}
+          />
         </Form.Item>
-        <Form.Item name="tokenOutId" label="Token OUT (UUID)"
-          rules={[{ required: true }, { len: 36 }]}>
-          <Input placeholder="b0000000-0000-0000-0000-000000000002" />
+        <Form.Item name="tokenOutId" label="Token OUT"
+          rules={[{ required: true, message: 'Выберите токен' }]}>
+          <Select
+            showSearch
+            placeholder="Например: SBTC"
+            options={tokenOptions}
+            filterOption={filterByLabel}
+          />
         </Form.Item>
         <Form.Item name="amountIn" label="Amount IN (smallest unit)"
           rules={[{ required: true, type: 'number', min: 1 }]}>
@@ -460,8 +527,13 @@ function QuoteModal({ trade, onClose, onSubmit, submitting }: {
       destroyOnClose
     >
       {trade && (
+        // Sprint 9-DS-r4 (P2-1) — default expiry bumped 30min → 24h.
+        // Treasurer-side back-and-forth (review → call ops →
+        // counter-quote) takes more than half an hour in practice;
+        // the operator was always manually pushing the date forward.
+        // 24h matches the OTC desk's typical quote-valid window.
         <Form form={form} layout="vertical" requiredMark="optional"
-          initialValues={{ quoteExpiresAt: dayjs().add(30, 'minute') }}>
+          initialValues={{ quoteExpiresAt: dayjs().add(24, 'hour') }}>
           <Form.Item label="Amount IN (контекст)">
             <Input disabled value={trade.amountIn.toLocaleString('ru-RU')} />
           </Form.Item>

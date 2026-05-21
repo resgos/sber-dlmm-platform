@@ -20,6 +20,7 @@ import BinLiquidityChart from '@/components/BinLiquidityChart'
 import PoolActionTabs from '@/components/PoolActionTabs'
 import PoolRecentSwapsPanel from '@/components/PoolRecentSwapsPanel'
 import PoolPriceChart from '@/components/PoolPriceChart'
+import { calculateStrategyWeights } from '@/lib/strategyWeights'
 import { bpsToPercent } from '@/utils/format'
 import { KpiRow, KpiTile, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
@@ -124,6 +125,44 @@ export default function PoolDetailPage() {
     binMin: p.binRangeMin,
     binMax: p.binRangeMax,
   }))
+
+  /**
+   * Sprint 9-DS-r4 (P2-6) — per-bin user share map for the
+   * BinLiquidityChart tooltip ("Ваша доля: X%"). Computed by
+   * distributing each position's totalLiquidityShares across its
+   * bin range according to the strategy weights (same formula
+   * the backend uses to allocate the initial deposit), then
+   * dividing by the bin's total liquidity from pool.bins.
+   *
+   * <p>This is an APPROXIMATION — exact per-bin shares live in
+   * `PositionResponse.binAllocations` which we don't currently
+   * fetch on this page. Accurate to within rounding for SPOT,
+   * close for CURVE/BID_ASK. Good enough for the tooltip's
+   * "where do I sit" intent.
+   */
+  const userBinSharePctByBinId = useMemo(() => {
+    const map = new Map<number, number>()
+    if (!pool?.bins || poolPositions.length === 0) return map
+    const binTotalById = new Map<number, number>()
+    for (const b of pool.bins) binTotalById.set(b.binId, b.liquidity)
+    for (const pos of poolPositions) {
+      const weights = calculateStrategyWeights(
+        pos.strategy,
+        pos.binRangeMin,
+        pos.binRangeMax,
+        pool.activeBinId,
+      )
+      for (let i = 0; i < weights.length; i++) {
+        const binId = pos.binRangeMin + i
+        const total = binTotalById.get(binId)
+        if (!total || total <= 0) continue
+        const userLiq = pos.totalLiquidityShares * weights[i]
+        const pct = (userLiq / total) * 100
+        map.set(binId, (map.get(binId) ?? 0) + pct)
+      }
+    }
+    return map
+  }, [pool, poolPositions])
 
   /**
    * Sprint 9-DS-r4 (P1-8) — one-click rebalance for OOR positions.
@@ -407,6 +446,7 @@ export default function PoolDetailPage() {
               poolId={pool.id}
               userBinRanges={userBinRanges}
               pendingPreview={pendingPreview}
+              userBinSharePctByBinId={userBinSharePctByBinId}
             />
           </Card>
 

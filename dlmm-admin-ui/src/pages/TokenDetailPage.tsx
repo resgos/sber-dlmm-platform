@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Card,
@@ -17,6 +17,8 @@ import {
   Col,
   Tooltip,
   Tabs,
+  Table,
+  Empty,
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -29,10 +31,11 @@ import {
   DollarOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { tokens as tokenService } from '@/api/services'
-import type { Token, TokenType, MintBurnRequest } from '@/api/types'
+import { tokens as tokenService, transactions as txService } from '@/api/services'
+import type { Token, TokenType, MintBurnRequest, Transaction } from '@/api/types'
 import { KpiRow } from '@/components/sber'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
+import dayjs from 'dayjs'
 
 const { Text, Title } = Typography
 
@@ -113,6 +116,38 @@ export default function TokenDetailPage() {
     queryFn: () => tokenService.getToken(id!),
     enabled: !!id,
   })
+
+  /**
+   * Sprint 9-DS-r4 (P2-10) — recent mint/burn for this token.
+   *
+   * <p>Backend doesn't filter `/admin/transactions` by token id (only
+   * type + status); we pull a wide window of MINT events + BURN events
+   * separately and join client-side on tokenInId / tokenOutId. Limit 100
+   * each keeps payload small while still showing a useful audit
+   * window for tokens that don't mutate frequently. A proper per-token
+   * server-side filter is TD for Sprint 10.
+   */
+  const { data: mintEvents } = useQuery({
+    queryKey: ['admin-token-mints', 0, 100],
+    queryFn: () => txService.getTransactions(0, 100, { txType: 'MINT' }),
+    enabled: !!id,
+    staleTime: 30_000,
+  })
+  const { data: burnEvents } = useQuery({
+    queryKey: ['admin-token-burns', 0, 100],
+    queryFn: () => txService.getTransactions(0, 100, { txType: 'BURN' }),
+    enabled: !!id,
+    staleTime: 30_000,
+  })
+  const mintBurnRows = useMemo<Transaction[]>(() => {
+    if (!id) return []
+    // Both legs concatenated, filtered to this token, sorted newest-first.
+    const all = [...(mintEvents?.content ?? []), ...(burnEvents?.content ?? [])]
+    return all
+      .filter((t) => t.tokenInId === id || t.tokenOutId === id)
+      .sort((a, b) => dayjs(b.createdAt).unix() - dayjs(a.createdAt).unix())
+      .slice(0, 50)
+  }, [id, mintEvents, burnEvents])
 
   const mintMutation = useMutation({
     mutationFn: (data: MintBurnRequest) => tokenService.mint(id!, data),
@@ -350,6 +385,98 @@ export default function TokenDetailPage() {
                       />
                     </Col>
                   </Row>
+                ),
+              },
+              {
+                // Sprint 9-DS-r4 (P2-10) — recent emission events
+                // table. MINT (выпуск) + BURN (сжигание) for this
+                // token, newest first. Empty state when no events
+                // captured by the wide-window scan.
+                key: 'emission',
+                label: `История эмиссии${mintBurnRows.length ? ` (${mintBurnRows.length})` : ''}`,
+                children: (
+                  <Table
+                    className="sber-table"
+                    dataSource={mintBurnRows}
+                    rowKey="id"
+                    size="middle"
+                    pagination={{ pageSize: 10, hideOnSinglePage: true }}
+                    locale={{
+                      emptyText: (
+                        <Empty
+                          description="Нет операций выпуска или сжигания в последних 100 событиях каждого типа"
+                          imageStyle={{ height: 48 }}
+                        />
+                      ),
+                    }}
+                    columns={[
+                      {
+                        title: 'Тип',
+                        dataIndex: 'txType',
+                        width: 110,
+                        render: (txType: string) => (
+                          <Tag
+                            color={txType === 'MINT' ? 'green' : 'orange'}
+                            icon={txType === 'MINT'
+                              ? <PlusCircleOutlined />
+                              : <MinusCircleOutlined />}
+                            style={{ borderRadius: 999, padding: '2px 10px', margin: 0 }}
+                          >
+                            {txType === 'MINT' ? 'Выпуск' : 'Сжигание'}
+                          </Tag>
+                        ),
+                      },
+                      {
+                        title: 'Сумма',
+                        key: 'amount',
+                        align: 'right' as const,
+                        render: (_: unknown, r: Transaction) => {
+                          const amount = r.tokenInId === id ? r.amountIn : r.amountOut
+                          return (
+                            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                              {amount != null
+                                ? formatTokenAmount(amount, token.symbol, { compact: true })
+                                : '—'}
+                            </span>
+                          )
+                        },
+                      },
+                      {
+                        title: 'Пользователь',
+                        dataIndex: 'userId',
+                        width: 130,
+                        render: (userId: string) => (
+                          <Tooltip title={userId}>
+                            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12,
+                              color: 'var(--text-secondary)' }}>
+                              {userId?.slice(0, 8)}…
+                            </span>
+                          </Tooltip>
+                        ),
+                      },
+                      {
+                        title: 'Статус',
+                        dataIndex: 'status',
+                        width: 110,
+                        render: (status: string) => (
+                          <Tag color={status === 'CONFIRMED' ? 'success'
+                            : status === 'FAILED' ? 'error' : 'processing'}>
+                            {status}
+                          </Tag>
+                        ),
+                      },
+                      {
+                        title: 'Дата',
+                        dataIndex: 'createdAt',
+                        width: 140,
+                        render: (d: string) => (
+                          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>
+                            {dayjs(d).format('DD.MM.YYYY HH:mm')}
+                          </span>
+                        ),
+                      },
+                    ]}
+                  />
                 ),
               },
               {

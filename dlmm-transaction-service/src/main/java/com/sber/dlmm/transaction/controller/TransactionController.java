@@ -104,6 +104,22 @@ public class TransactionController {
     }
 
     /**
+     * Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" action for the
+     * SuspiciousTransactionsPage. Stamps reviewedAt/reviewedBy on the
+     * transaction so admin-bff's on-the-fly suspicious detection
+     * stops re-surfacing it. ADMIN / SUPER_ADMIN only.
+     */
+    @org.springframework.web.bind.annotation.PostMapping("/{id}/review")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<TransactionResponse> markReviewed(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        UUID reviewer = (UUID) authentication.getPrincipal();
+        Transaction reviewed = transactionService.markReviewed(id, reviewer);
+        return ResponseEntity.ok(transactionService.getTransaction(reviewed.getId()));
+    }
+
+    /**
      * Sprint 4 #4.4 + Sprint 5 #5.11 — settlement-report download for
      * corp accountants. Two output formats:
      * <ul>

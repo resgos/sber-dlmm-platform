@@ -86,6 +86,19 @@ public class Transaction {
 
     private LocalDateTime confirmedAt;
 
+    /**
+     * Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" flag for the
+     * SuspiciousTransactionsPage. Null while the row is fresh; set
+     * by {@code POST /api/v1/transactions/{id}/review} (admin only).
+     * admin-bff's suspicious-detection skips reviewed rows so the
+     * operator stops seeing acknowledged anomalies.
+     */
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
+    @Column(name = "reviewed_by")
+    private UUID reviewedBy;
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
