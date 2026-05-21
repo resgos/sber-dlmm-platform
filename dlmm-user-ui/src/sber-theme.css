@@ -79,6 +79,67 @@
   --radius-xl: 28px;
 }
 
+/* Sprint 9-DS-r4 P2-15 — dark mode.
+   Overrides the same CSS variables under `[data-theme="dark"]`. The
+   theme switcher (themeStore.ts) sets the attribute on <html>. Every
+   surface that reads from a `var(--bg-*)` / `var(--text-*)` /
+   `var(--border-*)` / `var(--surface-*)` token flips automatically.
+
+   The Plasma reference dark theme uses near-black backgrounds with
+   white-on-black text ramps. We keep our brand greens (--sber-green
+   etc.) untouched so primary CTAs stay green-on-anything. */
+[data-theme="dark"] {
+  --bg-page: #0B0F14;
+  --bg-card: #131820;
+  --bg-sidebar: #0F141B;
+
+  --surface-1: #1A2029;
+  --surface-2: #232A35;
+  --surface-3: #2C3441;
+
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-sidebar: rgba(255, 255, 255, 0.06);
+
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.60);
+  --text-paragraph: rgba(255, 255, 255, 0.80);
+  --text-muted: rgba(255, 255, 255, 0.32);
+
+  /* Shadows on dark surfaces should darken rather than lighten —
+     otherwise cards look "lifted off a fog" instead of "set into
+     the surface". */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.20);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.38);
+  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.50);
+  --shadow-glow: 0 12px 32px rgba(33, 160, 56, 0.45);
+
+  /* Aurora gradient is the login-page backdrop; dark variant tones
+     down the rgba alpha and shifts the third stop to violet so the
+     scene reads as "evening trading floor" rather than "midday". */
+  --grad-aurora: radial-gradient(at 20% 10%, rgba(33, 160, 56, 0.22), transparent 60%),
+                 radial-gradient(at 90% 0%, rgba(0, 181, 161, 0.18), transparent 55%),
+                 radial-gradient(at 50% 100%, rgba(110, 91, 255, 0.18), transparent 60%);
+}
+
+/* Plasma's reference dark theme inverts a handful of AntD component
+   defaults — bg-elevated stays white in light mode, picks up our
+   bg-card token in dark. We use the .ant-* selectors sparingly here
+   (most components inherit our CSS vars), but the Table header is a
+   notorious offender that hard-codes its own background. */
+[data-theme="dark"] .ant-table-thead > tr > th {
+  background: var(--surface-1) !important;
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .ant-table-tbody > tr > td {
+  background: var(--bg-card);
+  border-bottom-color: var(--border-light);
+}
+[data-theme="dark"] .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: var(--surface-1) !important;
+}
+
 body {
   /* Sprint 9 — Plasma's house typeface is SB Sans Text. Loaded from
      the official Sber CDN in index.html, with Onest as the

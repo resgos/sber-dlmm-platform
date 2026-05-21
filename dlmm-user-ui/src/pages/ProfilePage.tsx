@@ -13,6 +13,7 @@ import { users, balances, pools as poolsApi, fees, transactions as txApi } from 
 import { authStore } from '@/store/authStore'
 import KycStatusBadge from '@/components/KycStatusBadge'
 import SelfRestrictionPanel from '@/components/SelfRestrictionPanel'
+import ThemeToggle from '@/components/ThemeToggle'
 import { formatRub } from '@/components/StatCard'
 import type { User, TokenBalance, Position, Transaction } from '@/api/types'
 import dayjs from 'dayjs'
@@ -352,6 +353,12 @@ export default function ProfilePage() {
             </Space>
           )}
         </Card>
+
+        {/* Sprint 9-DS-r4 P2-15 — theme picker. Lives in the right rail
+            so the user can find it without hunting through nav menus;
+            the toggle uses themeStore (localStorage) and applies via
+            <html data-theme="dark"> instantly. */}
+        <ThemeToggle />
 
       </Space>
       </Col>

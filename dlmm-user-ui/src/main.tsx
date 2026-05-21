@@ -12,6 +12,11 @@ import App from './App'
 import './i18n'
 import 'antd/dist/reset.css'
 import './sber-theme.css'
+// Sprint 9-DS-r4 P2-15 — applies the persisted theme (or OS pref) to
+// <html data-theme="..."> before React mounts, so the very first paint
+// is the right colour and we don't get a light→dark flash.
+import { themeStore } from './store/themeStore'
+themeStore.initialize()
 
 const sberTheme = {
   token: {
