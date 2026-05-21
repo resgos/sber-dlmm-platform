@@ -7,6 +7,14 @@ import { pools as poolService } from '@/api/services'
 
 interface BinLiquidityChartProps {
   poolId: string
+  /**
+   * Sprint 9-DS-r3 — when set, bins inside any of these {min,max}
+   * ranges are highlighted in purple with a dashed outline so the
+   * LP can see exactly where their liquidity sits relative to the
+   * active bin and the pool's wider distribution. Mirror of
+   * Meteora's "your bins" overlay on the Dynamic Terminal chart.
+   */
+  userBinRanges?: Array<{ binMin: number; binMax: number }>
 }
 
 interface ChartDataPoint {
@@ -16,10 +24,22 @@ interface ChartDataPoint {
   reserveY: number
   liquidity: number
   isActive: boolean
+  isMine: boolean
   side: 'left' | 'active' | 'right'
 }
 
-function getBinColor(side: 'left' | 'active' | 'right', distance: number, maxDist: number) {
+function getBinColor(
+  side: 'left' | 'active' | 'right',
+  distance: number,
+  maxDist: number,
+  isMine: boolean,
+) {
+  if (isMine) {
+    // Sprint 9-DS-r3 — user's own bins overlay: purple (Plasma
+    // accent-violet) so they stand out against the green/blue
+    // pool-wide bars.
+    return side === 'active' ? '#9333EA' : 'rgba(147, 51, 234, 0.85)'
+  }
   if (side === 'active') return '#F59E0B'
   const t = Math.min(distance / Math.max(maxDist, 1), 1)
   const opacity = Math.max(0.25, 1 - t * 0.6)
@@ -60,13 +80,18 @@ const makeTooltip = (xSym: string, ySym: string) => ({ active, payload }: any) =
   )
 }
 
-export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
+export default function BinLiquidityChart({ poolId, userBinRanges }: BinLiquidityChartProps) {
   const { data: pool, isLoading, error } = useQuery({
     queryKey: ['poolDetail', poolId],
     queryFn: () => poolService.getPool(poolId),
     refetchInterval: 10000,
     enabled: !!poolId,
   })
+
+  const isMineFn = (binId: number) => {
+    if (!userBinRanges?.length) return false
+    return userBinRanges.some((r) => binId >= r.binMin && binId <= r.binMax)
+  }
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '40px 0' }}><Spin tip="Загрузка бинов..." /></div>
   if (error) return <Alert message="Не удалось загрузить данные бинов" type="error" showIcon style={{ borderRadius: 8 }} />
@@ -95,7 +120,9 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
     return {
       binId: bin.binId, price: bin.price.toFixed(2),
       reserveX: Number(bin.reserveX.toFixed(4)), reserveY: Number(bin.reserveY.toFixed(4)),
-      liquidity: Number(bin.liquidity.toFixed(0)), isActive: bin.binId === pool.activeBinId,
+      liquidity: Number(bin.liquidity.toFixed(0)),
+      isActive: bin.binId === pool.activeBinId,
+      isMine: isMineFn(bin.binId),
       side, _distance: distance, _maxDist: maxDist,
     } as any
   })
@@ -114,6 +141,12 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
           Текущая цена{activePrice != null ? `: ${activePrice.toFixed(4)}` : ''}
         </span>
         <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#21A038', marginRight: 6, verticalAlign: 'middle' }} />Резерв {xSym}</span>
+        {userBinRanges?.length ? (
+          <span>
+            <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: 'rgba(147,51,234,0.85)', marginRight: 6, verticalAlign: 'middle' }} />
+            Ваши бины
+          </span>
+        ) : null}
       </div>
       <ResponsiveContainer width="100%" height={320}>
         <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }} barCategoryGap="4%">
@@ -126,8 +159,12 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
           <ReferenceLine x={pool.activeBinId} stroke="#F59E0B" strokeWidth={2} strokeDasharray="5 3" />
           <Bar dataKey="liquidity" radius={[3, 3, 0, 0]} maxBarSize={18}>
             {chartData.map((entry: any, index: number) => (
-              <Cell key={`cell-${index}`} fill={getBinColor(entry.side, entry._distance, entry._maxDist)}
-                stroke={entry.isActive ? '#D97706' : 'none'} strokeWidth={entry.isActive ? 2 : 0} />
+              <Cell key={`cell-${index}`}
+                fill={getBinColor(entry.side, entry._distance, entry._maxDist, entry.isMine)}
+                stroke={entry.isActive ? '#D97706' : entry.isMine ? '#7C3AED' : 'none'}
+                strokeWidth={entry.isActive ? 2 : entry.isMine ? 1.5 : 0}
+                strokeDasharray={entry.isMine && !entry.isActive ? '3 2' : undefined}
+              />
             ))}
           </Bar>
         </BarChart>

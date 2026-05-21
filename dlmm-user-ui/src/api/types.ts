@@ -134,6 +134,10 @@ export interface Position {
   totalLiquidityShares: number
   unclaimedFeeX: number
   unclaimedFeeY: number
+  /** Sprint 9-DS-r3 — backend already returns these; admin Positions
+   *  page reads them via cast. Declared here for type-safe access. */
+  currentValueX?: number
+  currentValueY?: number
   isActive: boolean
   createdAt: string
   closedAt: string | null
