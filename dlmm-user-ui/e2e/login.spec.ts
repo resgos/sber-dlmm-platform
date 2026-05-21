@@ -37,13 +37,13 @@ test.describe('Login flow', () => {
 
     await page.getByRole('button', { name: 'Войти' }).click()
 
-    // After login we land on '#/' (HashRouter "/" route) which mounts
-    // the dashboard.
+    // After login we land on the dashboard at "#/" (HashRouter route "/").
     await page.waitForURL((url) => url.hash === '#/' || url.hash === '', { timeout: 10_000 })
 
-    // The dashboard renders the hero block — "Total Value Locked" is the
-    // largest stable string on the page and confirms server data flowed through.
-    await expect(page.getByText('Total Value Locked')).toBeVisible()
+    // Dashboard hero — "Ваш портфель" is the largest stable label on the
+    // page (Claude-design hero refresh; the previous "Total Value Locked"
+    // text was admin-side and never on the user dashboard).
+    await expect(page.getByText('Ваш портфель')).toBeVisible({ timeout: 10_000 })
 
     // Auth state persisted to localStorage (so reload would keep us logged in).
     const storedToken = await page.evaluate(() => localStorage.getItem('dlmm.auth.token'))
