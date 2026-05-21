@@ -81,7 +81,11 @@ export const test = base.extend<Fixtures>({
             }),
           }),
         )
-        await page.route('**/api/v1/tokens/balances/me', (route) =>
+        // balances API lives under /api/v1/balances/me (not /api/v1/tokens/balances/me)
+        // — see dlmm-user-ui/src/api/balances.ts. Wrong glob silently floods
+        // the console with proxy ECONNREFUSED in CI because Vite preview tries
+        // to forward to localhost:8080.
+        await page.route('**/api/v1/balances/me', (route) =>
           route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -111,8 +115,9 @@ export const test = base.extend<Fixtures>({
       },
 
       async seedAuth() {
-        // Navigate to /login first so we are on the right origin to write localStorage.
-        await page.goto('/login')
+        // Navigate to /#/login first so we are on the right origin to write localStorage.
+        // (App uses HashRouter — see main.tsx — so hash-prefixed paths are required.)
+        await page.goto('/#/login')
         await page.evaluate((token) => {
           localStorage.setItem('dlmm.auth.token', token)
           localStorage.setItem(

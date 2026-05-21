@@ -41,7 +41,10 @@ test.describe('Swap critical path', () => {
       })
     })
 
-    await page.goto('/swap')
+    // App uses HashRouter — see main.tsx. Path must be hash-prefixed
+    // or the SPA renders the dashboard at "/" and the test sees nothing
+    // it expects.
+    await page.goto('/#/swap')
 
     // Sanity — we landed on the swap page (not bounced to login).
     await expect(page.getByText('Мгновенный своп между токенами через DLMM-пулы')).toBeVisible()
@@ -98,7 +101,10 @@ test.describe('Swap critical path', () => {
     // This test pins that observation: visiting /swap unauthenticated renders
     // the shell without crashing. If we add a client-side guard later, this
     // test will start failing and we'll know to update it.
-    await page.goto('/swap')
+    // App uses HashRouter — see main.tsx. Path must be hash-prefixed
+    // or the SPA renders the dashboard at "/" and the test sees nothing
+    // it expects.
+    await page.goto('/#/swap')
     await expect(page.getByText('Мгновенный своп между токенами через DLMM-пулы')).toBeVisible()
   })
 })

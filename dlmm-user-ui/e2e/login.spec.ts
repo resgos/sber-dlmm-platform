@@ -22,7 +22,11 @@ test.describe('Login flow', () => {
       }),
     )
 
-    await page.goto('/login')
+    // App uses HashRouter (main.tsx) so the path lives in the URL hash,
+    // not the path component. Vite preview serves the SPA shell at any
+    // path, so we navigate via the hash form to actually hit the
+    // LoginPage component.
+    await page.goto('/#/login')
 
     // The login page renders the Sber brand mark + form.
     await expect(page.getByText('СБЕР')).toBeVisible()
@@ -33,8 +37,9 @@ test.describe('Login flow', () => {
 
     await page.getByRole('button', { name: 'Войти' }).click()
 
-    // After login we land on '/' which mounts the dashboard.
-    await page.waitForURL((url) => url.pathname === '/', { timeout: 10_000 })
+    // After login we land on '#/' (HashRouter "/" route) which mounts
+    // the dashboard.
+    await page.waitForURL((url) => url.hash === '#/' || url.hash === '', { timeout: 10_000 })
 
     // The dashboard renders the hero block — "Total Value Locked" is the
     // largest stable string on the page and confirms server data flowed through.
@@ -56,14 +61,15 @@ test.describe('Login flow', () => {
       }),
     )
 
-    await page.goto('/login')
+    await page.goto('/#/login')
 
     await page.getByLabel('Электронная почта').fill('demo@sber.ru')
     await page.getByLabel('Пароль').fill('wrong')
     await page.getByRole('button', { name: 'Войти' }).click()
 
     await expect(page.getByText('Неверный email или пароль')).toBeVisible()
-    expect(page.url()).toContain('/login')
+    // HashRouter keeps us at #/login on failure (no navigate call).
+    expect(page.url()).toContain('#/login')
 
     // No token was written.
     const storedToken = await page.evaluate(() => localStorage.getItem('dlmm.auth.token'))
