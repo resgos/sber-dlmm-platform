@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 9-DS-r4 (P1-11) — OHLCV candle store for the per-pool
+        TradingView-style chart on PoolDetailPage (P1-4).
+
+        Design:
+          - Source data: SwapExecuted events on the `pool-events`
+            Kafka topic (already produced by pool-engine's outbox).
+          - Aggregation: in-process bucketing per (pool, minute), with
+            a @Scheduled flush every 30s writing completed buckets to
+            this table. Hot in-memory buffer protects against the
+            chart query reading half-formed candles.
+          - Retention: nothing for MVP. The dev seed produces ~15k
+            candles/day across 22 pools (1m granularity); a cleanup
+            cron lands when retention policy is decided (Sprint 10).
+          - Storage: Postgres for MVP, ClickHouse migration planned
+            for Sprint 10 when candle volume crosses 1M rows. The
+            entity is decoupled from the source via a generic
+            interval_sec column so a future hourly aggregation
+            doesn't need a new table.
+
+        Composite unique constraint (pool_id, interval_sec, open_time)
+        gives us idempotent inserts — re-running the aggregator on the
+        same Kafka offset hits the unique and is dropped, no dupes.
+    -->
+    <changeSet id="003-create-ohlcv-candles-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="ohlcv_candles"/></not>
+        </preConditions>
+        <createTable tableName="ohlcv_candles">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="pool_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="interval_sec" type="INT">
+                <!-- 60 = 1m candle, 300 = 5m, 3600 = 1h, etc. -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="open_time" type="TIMESTAMP">
+                <!-- Start of the candle bucket, UTC. -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="open_price" type="DECIMAL(30,18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="high_price" type="DECIMAL(30,18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="low_price" type="DECIMAL(30,18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="close_price" type="DECIMAL(30,18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="volume_in" type="BIGINT" defaultValueNumeric="0">
+                <!-- Sum of amountIn (in the input-token's base units;
+                     direction is implicit in the pool's tokenX/Y order). -->
+                <constraints nullable="false"/>
+            </column>
+            <column name="swap_count" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint
+                constraintName="uk_ohlcv_candles_pool_interval_time"
+                tableName="ohlcv_candles"
+                columnNames="pool_id, interval_sec, open_time"/>
+
+        <createIndex indexName="idx_ohlcv_candles_pool_time"
+                     tableName="ohlcv_candles">
+            <column name="pool_id"/>
+            <column name="interval_sec"/>
+            <column name="open_time" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

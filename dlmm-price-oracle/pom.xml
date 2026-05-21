@@ -68,6 +68,14 @@
             <artifactId>jackson-dataformat-xml</artifactId>
         </dependency>
 
+        <!-- Sprint 9-DS-r4 (P1-11) — Kafka consumer on `pool-events` for
+             SwapExecuted aggregation into OHLCV candles. Used by
+             SwapEventOhlcvConsumer + OhlcvAggregator. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

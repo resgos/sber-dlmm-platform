@@ -123,6 +123,21 @@ export interface PoolDetail extends Pool {
 // Liquidity
 export type LiquidityStrategy = 'SPOT' | 'CURVE' | 'BID_ASK'
 
+// Sprint 9-DS-r4 (P1-11/P1-4) — OHLCV candle from price-oracle
+// (GET /api/v1/oracle/ohlcv/{poolId}). Field names match the
+// lightweight-charts candlestick series wire shape; `time` is the
+// raw ISO string the backend ships (LocalDateTime), the chart
+// component converts to UTC seconds before handing to the lib.
+export interface OhlcvCandle {
+  time: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  swapCount: number
+}
+
 export interface Position {
   id: string
   poolId: string

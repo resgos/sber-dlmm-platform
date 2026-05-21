@@ -11,6 +11,16 @@ spring:
     show-sql: false
   liquibase:
     change-log: classpath:db/changelog/master.xml
+  # Sprint 9-DS-r4 (P1-11) — Kafka consumer for the SwapEventOhlcvConsumer.
+  # Same bootstrap-servers env name the other services use; consumer
+  # group id is scoped per-service so offsets don't collide with
+  # transaction-service's own SwapEventConsumer.
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 server:
   port: 8086

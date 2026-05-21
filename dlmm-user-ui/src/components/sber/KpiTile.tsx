@@ -17,7 +17,13 @@ import type React from 'react'
 export interface KpiTileProps {
   label: string
   value: number | string
-  sub?: string
+  /**
+   * Secondary line below the value. Pass a string for the common
+   * case; pass ReactNode when the sub needs a multi-line layout
+   * (e.g. "Моя доля" tile splits "N позиций" + "Y ₽" into separate
+   * lines so neither wraps awkwardly — Sprint 9-DS-r4 P2-4).
+   */
+  sub?: string | React.ReactNode
   icon: React.ReactNode
   /** Optional accent for the value (use a status colour for "К расчёту" etc). */
   accent?: string

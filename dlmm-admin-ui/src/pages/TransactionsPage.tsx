@@ -331,9 +331,23 @@ export default function TransactionsPage() {
     setPage(0)
   }
 
-  const handleExport = () => {
-    if (data?.content) {
-      exportCsv(data.content)
+  // Sprint 9-DS-r4 (P2-11) — CSV export now respects every active
+  // filter (type, status, date range) AND pulls the entire matching
+  // result set, not just the on-screen page. Cap at 10k rows to bound
+  // the browser memory cost; ops who need a bigger range narrow the
+  // date filter (server-side report endpoint with date-window
+  // pagination is the right tool for full-history dumps anyway).
+  const [exporting, setExporting] = useState(false)
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const EXPORT_PAGE_SIZE = 10_000
+      const full = await txService.getTransactions(0, EXPORT_PAGE_SIZE, appliedFilters)
+      if (full?.content?.length) {
+        exportCsv(full.content)
+      }
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -346,7 +360,8 @@ export default function TransactionsPage() {
           <Button
             icon={<DownloadOutlined />}
             onClick={handleExport}
-            disabled={!data?.content?.length}
+            disabled={!data?.content?.length || exporting}
+            loading={exporting}
             style={{ borderRadius: 8 }}
           >
             Экспорт CSV

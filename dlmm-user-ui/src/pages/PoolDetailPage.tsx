@@ -19,6 +19,7 @@ import type { LiquidityStrategy, Position } from '@/api/types'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
 import PoolActionTabs from '@/components/PoolActionTabs'
 import PoolRecentSwapsPanel from '@/components/PoolRecentSwapsPanel'
+import PoolPriceChart from '@/components/PoolPriceChart'
 import { bpsToPercent } from '@/utils/format'
 import { KpiRow, KpiTile, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
@@ -322,9 +323,24 @@ export default function PoolDetailPage() {
               : sharePct < 0.01
               ? '< 0,01%'
               : `${sharePct.toFixed(2)}%`,
-            sub: poolPositions.length === 0
-              ? 'у вас нет позиций'
-              : `${poolPositions.length} позиц${poolPositions.length === 1 ? 'ия' : poolPositions.length < 5 ? 'ии' : 'ий'} · ${formatCompact(myShareValueRub)} ₽`,
+            // Sprint 9-DS-r4 (P2-4) — split the sub line into two
+            // rows when there's a position, so neither half wraps
+            // awkwardly inside the narrow KPI tile (single-line
+            // "N позиций · 5M ₽" wrapped mid-word when the share was
+            // <0,01%).
+            sub: poolPositions.length === 0 ? (
+              'у вас нет позиций'
+            ) : (
+              <div style={{ lineHeight: 1.3 }}>
+                <div style={{ whiteSpace: 'nowrap' }}>
+                  {poolPositions.length} позиц
+                  {poolPositions.length === 1 ? 'ия' : poolPositions.length < 5 ? 'ии' : 'ий'}
+                </div>
+                <div style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatCompact(myShareValueRub)} ₽
+                </div>
+              </div>
+            ),
             icon: <PieChartOutlined style={{ color: '#9333EA' }} />,
             accent: poolPositions.length > 0 ? '#9333EA' : undefined,
           },
@@ -366,6 +382,13 @@ export default function PoolDetailPage() {
           page, do everything without bouncing. */}
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={16}>
+          {/* Sprint 9-DS-r4 (P1-4) — TradingView-style price+volume
+              chart powered by lightweight-charts. Sits above the
+              liquidity distribution so the LP sees price action
+              first, then where the depth is. */}
+          <div style={{ marginBottom: 16 }}>
+            <PoolPriceChart poolId={pool.id} quoteSymbol={pool.tokenYSymbol} />
+          </div>
           <Card
             className="sber-card"
             style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}

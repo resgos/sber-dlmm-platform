@@ -294,7 +294,22 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
           <XAxis dataKey="binId" tick={false} axisLine={{ stroke: '#E5E7EB' }}
             label={{ value: `← ниже цены   |   ${activePrice != null ? activePrice.toFixed(4) : 'текущая цена'}   |   выше цены →`, position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false}
-            tickFormatter={(v) => { if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`; if (v >= 1000) return `${(v / 1000).toFixed(0)}K`; return String(v) }} />
+            width={60}
+            tickFormatter={(v) => {
+              // Sprint 9-DS-r4 (P2-5) — previous formatter produced
+              // 5-digit M-prefixed strings like "12000.0M" for
+              // billion-scale TVL bins, which overflowed the narrow
+              // default 45px Y-axis column and rendered as "2000.0M"
+              // (leading "1" clipped). Fix: extend to B (billions)
+              // and T (trillions) prefixes, drop the decimal for
+              // values >= 100 in any band, and widen the axis to 60px.
+              const abs = Math.abs(v)
+              if (abs >= 1e12) return `${(v / 1e12).toFixed(abs >= 1e14 ? 0 : 1)}T`
+              if (abs >= 1e9) return `${(v / 1e9).toFixed(abs >= 1e11 ? 0 : 1)}B`
+              if (abs >= 1e6) return `${(v / 1e6).toFixed(abs >= 1e8 ? 0 : 1)}M`
+              if (abs >= 1e3) return `${(v / 1e3).toFixed(0)}K`
+              return String(v)
+            }} />
           <Tooltip content={Tooltip2} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
           <ReferenceLine x={pool.activeBinId} stroke="#F59E0B" strokeWidth={2} strokeDasharray="5 3" />
           <Bar dataKey="liquidity" radius={[3, 3, 0, 0]} maxBarSize={18}>

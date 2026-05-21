@@ -1,8 +1,10 @@
 package com.sber.dlmm.oracle.controller;
 
 import com.sber.dlmm.oracle.dto.CbrSpreadResponse;
+import com.sber.dlmm.oracle.dto.OhlcvCandleResponse;
 import com.sber.dlmm.oracle.dto.PriceFeedResponse;
 import com.sber.dlmm.oracle.dto.TwapResponse;
+import com.sber.dlmm.oracle.service.OhlcvQueryService;
 import com.sber.dlmm.oracle.service.PriceOracleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/oracle")
@@ -21,6 +24,7 @@ import java.util.List;
 public class PriceOracleController {
 
     private final PriceOracleService priceOracleService;
+    private final OhlcvQueryService ohlcvQueryService;
 
     @GetMapping("/price/{symbol}")
     public ResponseEntity<PriceFeedResponse> getPrice(@PathVariable String symbol) {
@@ -55,5 +59,26 @@ public class PriceOracleController {
     @GetMapping("/spread/{currency}")
     public ResponseEntity<CbrSpreadResponse> getCbrSpread(@PathVariable String currency) {
         return ResponseEntity.ok(priceOracleService.getCbrSpread(currency));
+    }
+
+    /**
+     * Sprint 9-DS-r4 (P1-11) — OHLCV candle series for the
+     * TradingView-style chart on PoolDetailPage (P1-4). Source data is
+     * the {@code pool-events} Kafka stream; aggregator buckets per
+     * minute and flushes to Postgres every 30s. Read endpoint clamps
+     * limit to 500 and accepts only the 1-minute interval today
+     * (higher intervals are a Sprint 10 roll-up).
+     *
+     * <p>{@code interval=60} is the bucket width in seconds; the
+     * default mirrors lightweight-charts' typical 1m candle granularity.
+     *
+     * @return candles oldest-first (TradingView convention)
+     */
+    @GetMapping("/ohlcv/{poolId}")
+    public ResponseEntity<List<OhlcvCandleResponse>> getOhlcv(
+            @PathVariable UUID poolId,
+            @RequestParam(defaultValue = "60") int interval,
+            @RequestParam(defaultValue = "200") int limit) {
+        return ResponseEntity.ok(ohlcvQueryService.getCandles(poolId, interval, limit));
     }
 }

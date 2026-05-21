@@ -7,5 +7,6 @@
 
     <include file="001-create-price-feeds-table.xml" relativeToChangelogFile="true"/>
     <include file="002-create-price-history-table.xml" relativeToChangelogFile="true"/>
+    <include file="003-create-ohlcv-candles-table.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

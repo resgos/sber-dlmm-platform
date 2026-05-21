@@ -248,6 +248,30 @@ CREATE INDEX IF NOT EXISTS idx_price_history_price_feed_id ON price_history (pri
 CREATE INDEX IF NOT EXISTS idx_price_history_timestamp ON price_history (timestamp_epoch_ms);
 CREATE INDEX IF NOT EXISTS idx_price_history_feed_timestamp ON price_history (price_feed_id, timestamp_epoch_ms);
 
+-- ─── ohlcv_candles (price-oracle) ───────────────────────────────────────────
+-- Sprint 9-DS-r4 (P1-11) — per-pool OHLCV store powering the TradingView-
+-- style chart on PoolDetailPage. SwapEventOhlcvConsumer aggregates
+-- pool-events SwapExecuted into per-(pool, minute) buckets; OhlcvAggregator
+-- flushes completed buckets here every 30s. Unique (pool_id, interval_sec,
+-- open_time) makes re-runs idempotent. Mirrored by Liquibase changeset 003.
+CREATE TABLE IF NOT EXISTS ohlcv_candles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pool_id UUID NOT NULL,
+    interval_sec INT NOT NULL,
+    open_time TIMESTAMP NOT NULL,
+    open_price DECIMAL(30,18) NOT NULL,
+    high_price DECIMAL(30,18) NOT NULL,
+    low_price DECIMAL(30,18) NOT NULL,
+    close_price DECIMAL(30,18) NOT NULL,
+    volume_in BIGINT NOT NULL DEFAULT 0,
+    swap_count INT NOT NULL DEFAULT 0,
+    CONSTRAINT uk_ohlcv_candles_pool_interval_time
+        UNIQUE (pool_id, interval_sec, open_time)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ohlcv_candles_pool_time
+    ON ohlcv_candles (pool_id, interval_sec, open_time DESC);
+
 -- ─── notifications (notification-service) ───────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS notifications (

@@ -106,6 +106,29 @@ export default function HedgePage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
+  // Sprint 9-DS-r4 (P2-3) — optimistic-dismiss set for the unwind
+  // flow. The previous shape used a single `unwindMutation.isPending`
+  // flag that lit up every row and didn't prevent a fast second
+  // click from re-opening the confirm modal before the mutation
+  // resolved. We track per-hedge in-flight unwinds so the row
+  // disappears the moment the user confirms (and reappears only on
+  // failure).
+  const [unwindingHedgeIds, setUnwindingHedgeIds] = useState<Set<string>>(new Set())
+  const isUnwinding = (id: string) => unwindingHedgeIds.has(id)
+  const markUnwinding = (id: string) =>
+    setUnwindingHedgeIds((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  const clearUnwinding = (id: string) =>
+    setUnwindingHedgeIds((prev) => {
+      if (!prev.has(id)) return prev
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+
   const { data: tokenList } = useQuery({
     queryKey: ['tokens'],
     queryFn: () => tokens.getTokens(0, 200),
@@ -248,9 +271,14 @@ export default function HedgePage() {
     return allSwaps.filter((tx) => {
       if (!tx.idempotencyKey?.startsWith(HEDGE_KEY_PREFIX)) return false
       if (tx.status !== 'CONFIRMED') return false
-      return !unwoundSuffixes.has(tx.idempotencyKey)
+      if (unwoundSuffixes.has(tx.idempotencyKey)) return false
+      // Sprint 9-DS-r4 (P2-3) — optimistic dismiss: hide rows the
+      // user just confirmed-to-unwind so a fast second click can't
+      // re-open the modal before React Query catches up.
+      if (unwindingHedgeIds.has(tx.id)) return false
+      return true
     })
-  }, [myTxs])
+  }, [myTxs, unwindingHedgeIds])
 
   /**
    * Unwind a hedge: swap target FX → SRUB at current rate. Reuses the
@@ -273,16 +301,24 @@ export default function HedgePage() {
         idempotencyKey: UNWIND_KEY_PREFIX + (hedge.idempotencyKey ?? hedge.id),
       })
     },
-    onSuccess: () => {
+    onSuccess: (_data, hedge) => {
       setSuccess(true)
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
       queryClient.invalidateQueries({ queryKey: ['myTransactions'] })
       queryClient.invalidateQueries({ queryKey: ['myTransactions', 'hedges'] })
+      // Sprint 9-DS-r4 (P2-3) — leave the row hidden via the
+      // optimistic-dismiss set until React Query catches up; clear
+      // immediately on success so a refetch race that re-shows the
+      // row briefly is OK (it's truly closed server-side).
+      clearUnwinding(hedge.id)
       setTimeout(() => setSuccess(false), 5000)
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, hedge) => {
       const e = err as { response?: { data?: { message?: string } } }
       setError(e?.response?.data?.message || 'Не удалось закрыть хедж')
+      // Sprint 9-DS-r4 (P2-3) — release the optimistic dismiss so
+      // the user sees the row back and can retry.
+      clearUnwinding(hedge.id)
     },
   })
 
@@ -309,7 +345,14 @@ export default function HedgePage() {
       ),
       okText: 'Закрыть хедж',
       cancelText: 'Отмена',
-      onOk: () => unwindMutation.mutate(hedge),
+      onOk: () => {
+        // Sprint 9-DS-r4 (P2-3) — optimistic dismiss: hide the row
+        // immediately so a second confirm click can't reopen the
+        // modal before the mutation lands. Cleared in unwindMutation
+        // on success/error.
+        markUnwinding(hedge.id)
+        unwindMutation.mutate(hedge)
+      },
     })
   }
 
@@ -750,7 +793,13 @@ export default function HedgePage() {
                     icon={<RollbackOutlined />}
                     danger
                     onClick={() => confirmUnwind(tx)}
-                    loading={unwindMutation.isPending}
+                    // Sprint 9-DS-r4 (P2-3) — per-row spinner +
+                    // disabled. Was a global `unwindMutation.isPending`
+                    // which lit every row simultaneously and didn't
+                    // prevent rapid re-clicks before the loading
+                    // prop fired.
+                    loading={isUnwinding(tx.id)}
+                    disabled={isUnwinding(tx.id)}
                   >
                     Закрыть
                   </Button>
