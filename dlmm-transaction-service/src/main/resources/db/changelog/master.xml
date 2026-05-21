@@ -10,5 +10,6 @@
     <include file="003-add-vat-split-to-b2b-settlements.xml" relativeToChangelogFile="true"/>
     <include file="004-create-aml-alerts-table.xml" relativeToChangelogFile="true"/>
     <include file="005-create-otc-block-trades.xml" relativeToChangelogFile="true"/>
+    <include file="006-add-pool-engine-tx-id-to-transactions.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

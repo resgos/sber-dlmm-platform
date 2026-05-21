@@ -41,6 +41,24 @@ public class OutboxProperties {
      */
     private long sendTimeoutSec = 3L;
 
+    /**
+     * Sprint 9-DS-r4 (P0-5) — published rows older than this many days
+     * are deleted by the daily cleanup job. We replay events from
+     * Kafka topic offsets, never from the outbox, so retained rows
+     * exist only for debug/audit. A week is enough to reconcile any
+     * incident; longer would let the table grow unboundedly (1833
+     * rows accumulated in 24h of testing).
+     *
+     * <p>Set to 0 to disable cleanup (useful in dev / tests).
+     */
+    private int retentionDays = 7;
+
+    /**
+     * Cron for the cleanup job. Default 03:17 daily — off-peak,
+     * doesn't collide with hourly batch jobs at minute 0.
+     */
+    private String cleanupCron = "0 17 3 * * *";
+
     public String getServiceName() { return serviceName; }
     public void setServiceName(String serviceName) { this.serviceName = serviceName; }
     public long getDispatchIntervalMs() { return dispatchIntervalMs; }
@@ -49,4 +67,8 @@ public class OutboxProperties {
     public void setBatchSize(int batchSize) { this.batchSize = batchSize; }
     public long getSendTimeoutSec() { return sendTimeoutSec; }
     public void setSendTimeoutSec(long sendTimeoutSec) { this.sendTimeoutSec = sendTimeoutSec; }
+    public int getRetentionDays() { return retentionDays; }
+    public void setRetentionDays(int retentionDays) { this.retentionDays = retentionDays; }
+    public String getCleanupCron() { return cleanupCron; }
+    public void setCleanupCron(String cleanupCron) { this.cleanupCron = cleanupCron; }
 }

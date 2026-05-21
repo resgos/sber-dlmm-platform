@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 9-DS-r4 (P0-4) — second dedup key for SwapEventConsumer.
+
+        Background: pool-engine emits SwapExecuted with both an
+        idempotencyKey (user-supplied) and a txId (the pool-engine
+        row UUID). The consumer was deduping on idempotencyKey
+        only, so re-delivered events for any swap without a key
+        (internal/programmatic flows, early hedges) created
+        duplicate rows.
+
+        Fix: pin pool-engine's txId on the transaction with a
+        UNIQUE column so the DB itself rejects double-writes,
+        independent of which application instance picks the
+        re-delivery up. Backfill is null — historical rows that
+        had no source-of-truth poolEngineTxId stay null, only
+        new swap rows from this consumer onwards carry it.
+
+        Tactical note: init-db.sql also creates this column on
+        fresh DBs. preConditions skip this changeset when the
+        column already exists.
+    -->
+    <changeSet id="006-add-pool-engine-tx-id-to-transactions-column" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><columnExists tableName="transactions" columnName="pool_engine_tx_id"/></not>
+        </preConditions>
+        <addColumn tableName="transactions">
+            <column name="pool_engine_tx_id" type="UUID">
+                <constraints unique="true" uniqueConstraintName="uk_transactions_pool_engine_tx_id"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="006-add-pool-engine-tx-id-to-transactions-index" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><indexExists indexName="idx_transactions_pool_engine_tx_id"/></not>
+        </preConditions>
+        <createIndex indexName="idx_transactions_pool_engine_tx_id" tableName="transactions">
+            <column name="pool_engine_tx_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

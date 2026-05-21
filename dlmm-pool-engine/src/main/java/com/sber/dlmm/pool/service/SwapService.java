@@ -119,11 +119,11 @@ public class SwapService {
 
             BigDecimal binPrice = bin.getPrice();
             if (binPrice == null || binPrice.compareTo(BigDecimal.ZERO) <= 0) {
-                // Sprint 9-DS-r3 — same activeBinId-anchor fix as
-                // LiquidityService. binId is *absolute* (anchor at 2^23),
-                // so the offset to pass to BinMath is binId - activeBinId.
-                binPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(),
-                        currentBinId - pool.getActiveBinId());
+                // Sprint 9-DS-r4 (P0-2) — through BinMath.binPriceAtBin so
+                // we can't accidentally drop the activeBinId offset (the
+                // original Sprint 9-DS-r3 incident).
+                binPrice = BinMath.binPriceAtBin(pool.getBasePrice(), pool.getBinStep(),
+                        currentBinId, pool.getActiveBinId());
             }
 
             // Calculate max amount of input token this bin can absorb
@@ -355,8 +355,8 @@ public class SwapService {
 
             BigDecimal binPrice = bin.getPrice();
             if (binPrice == null || binPrice.compareTo(BigDecimal.ZERO) <= 0) {
-                binPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(),
-                        currentBinId - pool.getActiveBinId());
+                binPrice = BinMath.binPriceAtBin(pool.getBasePrice(), pool.getBinStep(),
+                        currentBinId, pool.getActiveBinId());
             }
 
             // Max input this bin can absorb

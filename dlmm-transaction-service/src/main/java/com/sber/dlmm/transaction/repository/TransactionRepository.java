@@ -17,6 +17,15 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
 
     Optional<Transaction> findByIdempotencyKey(String idempotencyKey);
 
+    /**
+     * Sprint 9-DS-r4 (P0-4) — second dedup key for the swap event
+     * consumer. The {@code SwapExecuted} envelope always carries the
+     * pool-engine row UUID; this lookup lets us recognise a
+     * re-delivered event even when the originating swap had no
+     * client-supplied idempotencyKey.
+     */
+    Optional<Transaction> findByPoolEngineTxId(UUID poolEngineTxId);
+
     Page<Transaction> findByUserId(UUID userId, Pageable pageable);
 
     Page<Transaction> findByUserIdAndTxType(UUID userId, TransactionType txType, Pageable pageable);

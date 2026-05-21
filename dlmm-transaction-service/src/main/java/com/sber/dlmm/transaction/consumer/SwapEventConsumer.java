@@ -6,6 +6,7 @@ import com.sber.dlmm.common.enums.TransactionType;
 import com.sber.dlmm.transaction.service.TransactionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -77,16 +78,34 @@ public class SwapEventConsumer {
                     ? null
                     : payload.path("idempotencyKey").asText();
 
-            // Deduplicate by idempotency key — re-delivered Kafka msg or
-            // a swap retry on the pool-engine side both reach us with
-            // the same key.
+            UUID txId = payload.has("txId") && !payload.get("txId").isNull()
+                    ? UUID.fromString(payload.get("txId").asText())
+                    : null;
+
+            // Sprint 9-DS-r4 (P0-4) — dedup on BOTH keys:
+            //   (a) idempotencyKey — set by the originating user/client
+            //       only. Hedges, programmatic flows and re-broadcasts
+            //       all use it.
+            //   (b) poolEngineTxId — the swap row's own UUID from
+            //       pool-engine. Always present in the SwapExecuted
+            //       envelope, including for swaps that had no
+            //       client-supplied idempotencyKey.
+            // The application-level check is the fast path. The
+            // poolEngineTxId column also carries a UNIQUE constraint,
+            // so even if two consumer instances race past this check
+            // the second INSERT trips a DataIntegrityViolationException
+            // and we treat it as a duplicate.
             if (idempotencyKey != null
                     && transactionService.findByIdempotencyKey(idempotencyKey).isPresent()) {
                 log.debug("Swap tx already persisted, skipping: idempotencyKey={}", idempotencyKey);
                 return;
             }
+            if (txId != null
+                    && transactionService.findByPoolEngineTxId(txId).isPresent()) {
+                log.debug("Swap tx already persisted, skipping: poolEngineTxId={}", txId);
+                return;
+            }
 
-            UUID txId = payload.has("txId") ? UUID.fromString(payload.get("txId").asText()) : null;
             UUID poolId = UUID.fromString(payload.get("poolId").asText());
             UUID userId = UUID.fromString(payload.get("userId").asText());
             UUID tokenInId = UUID.fromString(payload.get("tokenInId").asText());
@@ -101,22 +120,33 @@ public class SwapEventConsumer {
                     ? BigDecimal.valueOf(fee).divide(BigDecimal.valueOf(amountIn), 8, java.math.RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
 
-            var persisted = transactionService.createTransaction(
-                    TransactionType.SWAP,
-                    userId, poolId,
-                    tokenInId, amountIn,
-                    tokenOutId, amountOut,
-                    fee, feeRate, binsCrossed,
-                    idempotencyKey,
-                    txId != null ? "{\"poolEngineTxId\":\"" + txId + "\"}" : null);
+            try {
+                var persisted = transactionService.createTransaction(
+                        TransactionType.SWAP,
+                        userId, poolId,
+                        tokenInId, amountIn,
+                        tokenOutId, amountOut,
+                        fee, feeRate, binsCrossed,
+                        idempotencyKey,
+                        txId,
+                        /* metadata */ null);
 
-            // Swap on the pool-engine side is atomic — by the time we
-            // see the event the funds have already moved. Mark CONFIRMED
-            // immediately so it shows up correctly in the user feed.
-            transactionService.confirm(persisted.getId());
+                // Swap on the pool-engine side is atomic — by the time
+                // we see the event the funds have already moved. Mark
+                // CONFIRMED immediately so it shows up correctly in
+                // the user feed.
+                transactionService.confirm(persisted.getId());
 
-            log.info("Persisted swap from event: txId={} poolEngineTxId={} user={} pool={} key={}",
-                    persisted.getId(), txId, userId, poolId, idempotencyKey);
+                log.info("Persisted swap from event: txId={} poolEngineTxId={} user={} pool={} key={}",
+                        persisted.getId(), txId, userId, poolId, idempotencyKey);
+            } catch (DataIntegrityViolationException dup) {
+                // Race: another consumer instance (or this one on a
+                // re-balance) got there first. The UNIQUE constraints
+                // on idempotency_key + pool_engine_tx_id make this
+                // safe — we just acknowledge.
+                log.debug("Swap tx already persisted (DB unique violation), skipping: " +
+                        "poolEngineTxId={} key={}", txId, idempotencyKey);
+            }
         } catch (Exception e) {
             // We log but don't rethrow — the alternative is a poison
             // pill that blocks the partition. The outbox dispatcher

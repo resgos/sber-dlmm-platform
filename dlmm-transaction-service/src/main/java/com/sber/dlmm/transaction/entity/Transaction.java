@@ -62,6 +62,19 @@ public class Transaction {
     @Column(unique = true)
     private String idempotencyKey;
 
+    /**
+     * Sprint 9-DS-r4 (P0-4) — pool-engine's swap row UUID. Stamped by
+     * {@code SwapEventConsumer} when persisting a row from a
+     * {@code SwapExecuted} Kafka event. UNIQUE at the DB level so any
+     * second consumer attempt (re-delivery, partition rebalance,
+     * crash-resume) hits a constraint violation rather than silently
+     * duplicating. Null for non-swap rows (LP add/remove, fee claim,
+     * OTC, B2B settlement) — those flows don't originate from
+     * pool-engine swap events.
+     */
+    @Column(name = "pool_engine_tx_id", unique = true)
+    private UUID poolEngineTxId;
+
     @Column(columnDefinition = "text")
     private String metadata;
 

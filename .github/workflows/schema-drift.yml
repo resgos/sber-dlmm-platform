@@ -1,0 +1,122 @@
+name: schema-drift
+
+# Sprint 9-DS-r4 (P0-3) — fresh-deploy drift watchdog.
+#
+# The platform has two schema sources of truth that can fall out of
+# sync if a contributor only updates one:
+#   (a) docker/init-db.sql — bootstrap schema that the Postgres
+#       entrypoint loads on first start.
+#   (b) {service}/src/main/resources/db/changelog/*.xml — Liquibase
+#       changesets that run on every Spring Boot startup with
+#       validate-on-migrate. preConditions wrap the CREATE TABLEs so
+#       they coexist with init-db.sql (skip if table already exists),
+#       but it's easy to add a column to one and forget the other.
+#
+# Drift modes:
+#   - Liquibase adds a column → init-db.sql forgets → a fresh DB
+#     bootstrapped from init-db.sql alone lacks the column. JPA
+#     ddl-auto: validate fails at service startup.
+#   - init-db.sql adds a column → no matching Liquibase changeset → a
+#     replay-only deploy lacks the column. Same failure.
+#
+# This workflow exercises the most realistic "first deploy" path:
+# docker-compose up --wait — Postgres loads init-db.sql, every Java
+# service runs Liquibase + JPA validate, every container reports its
+# /actuator/health as UP within the compose healthcheck timeout. If
+# any service can't reconcile its entities against the bootstrapped
+# schema, the compose --wait flag fails the job.
+#
+# Why a separate workflow:
+#   - Slower than `mvn test` (~6 min vs 90s) — runs only on changes
+#     that could move the schema, not on every doc/UI edit.
+#   - Failures surface against the .github checks tab independently so
+#     reviewers can tell at a glance whether it's a unit-test failure
+#     or a deploy-time schema-validate failure.
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "docker/**"
+      - "**/db/changelog/**"
+      - "**/entity/**"
+      - "**/src/main/resources/application*.yml"
+      - ".github/workflows/schema-drift.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docker/**"
+      - "**/db/changelog/**"
+      - "**/entity/**"
+      - "**/src/main/resources/application*.yml"
+      - ".github/workflows/schema-drift.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: schema-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh-deploy:
+    name: docker compose up --wait (init-db.sql + Liquibase + JPA validate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Build all service jars once. The compose Dockerfile multi-stages
+      # Maven inside the build, but doing it on the runner with the
+      # Maven cache is much faster than letting each compose build copy
+      # the .m2 repo into a layer.
+      - name: Maven package (skip tests)
+        run: mvn -B -DskipTests -T 1C package
+
+      - name: Write docker/.env from secrets
+        # Compose refuses to start without docker/.env (Sprint 1
+        # `${DB_PASSWORD:?required}` guards). CI doesn't need real
+        # secrets — placeholders satisfy the var-set check.
+        run: |
+          cat > docker/.env <<EOF
+          DB_USER=dlmm
+          DB_PASSWORD=ci-placeholder
+          JWT_SECRET=ci-placeholder-jwt-secret-32-bytes-min-please
+          EOF
+
+      - name: Compose up --wait (all services must report healthy)
+        # `--wait` blocks until every service with a healthcheck reports
+        # `healthy`, or fails the command on timeout. Compose already
+        # has per-service healthchecks pointing at /actuator/health,
+        # and every JPA service runs Liquibase + ddl-auto: validate on
+        # boot, so a schema-drift failure shows up as a service stuck
+        # at `unhealthy`.
+        working-directory: docker
+        run: docker compose up -d --wait --wait-timeout 600
+
+      - name: Dump service logs on failure
+        if: failure()
+        working-directory: docker
+        run: |
+          echo "::group::Postgres logs"
+          docker compose logs postgres | tail -120
+          echo "::endgroup::"
+          for svc in dlmm-token-service dlmm-pool-engine dlmm-fee-service \
+                     dlmm-transaction-service dlmm-user-service \
+                     dlmm-notification-service dlmm-admin-bff \
+                     dlmm-price-oracle dlmm-gateway; do
+            echo "::group::$svc logs"
+            docker compose logs "$svc" 2>&1 | tail -80 || true
+            echo "::endgroup::"
+          done
+
+      - name: Compose down
+        if: always()
+        working-directory: docker
+        run: docker compose down -v

@@ -11,6 +11,19 @@ public final class BinMath {
 
     private BinMath() {}
 
+    /**
+     * Low-level: price = basePrice * (1 + binStep/10000)^binId.
+     *
+     * <p>{@code binId} is an <em>offset from the zero bin</em>, NOT an
+     * absolute LB-DLMM binId. For an absolute binId use the safer
+     * {@link #binPriceAtBin(BigDecimal, int, int, int)} helper, which
+     * subtracts {@code activeBinId} for you.
+     *
+     * <p>Direct callers (the tests, mostly) usually pass small offsets
+     * like 0 / ±1 / ±10 where the distinction doesn't matter. Business
+     * code that touches a pool's absolute binId must NOT call this
+     * directly — see Sprint 9-DS-r3 incident note in the class Javadoc.
+     */
     public static BigDecimal binPrice(BigDecimal basePrice, int binStep, int binId) {
         BigDecimal factor = BigDecimal.ONE.add(new BigDecimal(binStep).divide(TEN_THOUSAND, MC));
         // Previously a naive O(N) loop. With seed pools using activeBinId =
@@ -26,6 +39,33 @@ public final class BinMath {
                 ? basePrice.multiply(factorToBinId, MC)
                 : basePrice.divide(factorToBinId, MC);
         return price.setScale(18, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Sprint 9-DS-r4 (P0-2) — price at an absolute LB-DLMM
+     * {@code binId}, anchored at {@code activeBinId} (where the price
+     * equals the pool's {@code basePrice}).
+     *
+     * <p>Backstory: every direct call site used to do<pre>
+     *     BinMath.binPrice(basePrice, binStep, binId - activeBinId)
+     * </pre>and was repeatedly written as the bare<pre>
+     *     BinMath.binPrice(basePrice, binStep, binId)            // BUG
+     * </pre>which silently overflows. Seed pools use
+     * {@code activeBinId = 2^23 = 8 388 608} (Trader Joe LB convention,
+     * picked so a u24 column can hold negative offsets without a sign
+     * column), so the bug raises a small multiplier to ~8M and the
+     * result is meaningless — but no exception, just a 100% price
+     * impact downstream. Encapsulating the offset subtraction here
+     * makes the bug structurally impossible at the call site.
+     *
+     * @param basePrice  pool's stored base price (Y per 1 X at active)
+     * @param binStep    bin step in basis points
+     * @param binId      absolute LB-DLMM bin id
+     * @param activeBinId pool's active bin id (the price anchor)
+     */
+    public static BigDecimal binPriceAtBin(BigDecimal basePrice, int binStep,
+                                            int binId, int activeBinId) {
+        return binPrice(basePrice, binStep, binId - activeBinId);
     }
 
     public static int priceToBinId(BigDecimal basePrice, int binStep, BigDecimal price) {

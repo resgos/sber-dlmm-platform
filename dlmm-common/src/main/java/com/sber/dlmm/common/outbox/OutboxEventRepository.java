@@ -2,8 +2,11 @@ package com.sber.dlmm.common.outbox;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,4 +27,17 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
     List<OutboxEvent> findUnpublishedForService(String service, Pageable pageable);
 
     long countByServiceAndPublishedAtIsNull(String service);
+
+    /**
+     * Sprint 9-DS-r4 (P0-5) — cleanup job target. Deletes only rows
+     * that were successfully published before {@code cutoff}. We never
+     * touch unpublished rows (publishedAt IS NULL) so a wedged Kafka
+     * or a long backlog can't be silently dropped.
+     *
+     * <p>Returns the number of rows actually removed so the caller can
+     * log / monitor it.
+     */
+    @Modifying
+    @Query("DELETE FROM OutboxEvent e WHERE e.publishedAt IS NOT NULL AND e.publishedAt < :cutoff")
+    int deletePublishedBefore(@Param("cutoff") LocalDateTime cutoff);
 }

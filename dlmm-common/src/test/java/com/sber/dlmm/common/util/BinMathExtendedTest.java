@@ -182,4 +182,80 @@ class BinMathExtendedTest {
             assertTrue(cf.compareTo(BigDecimal.ONE) < 0);
         }
     }
+
+    // ── binPriceAtBin: absolute-binId helper (Sprint 9-DS-r4, P0-2) ─
+
+    @Nested
+    @DisplayName("binPriceAtBin: absolute-binId helper")
+    class BinPriceAtBinTests {
+
+        // Anchored at LB-DLMM's 2^23 convention. The bug this helper
+        // exists to prevent: callers used to write
+        //   BinMath.binPrice(base, step, binId)
+        // when they meant
+        //   BinMath.binPrice(base, step, binId - activeBinId)
+        // — raising the factor to ~8.4M and silently overflowing.
+        private static final int ACTIVE = 1 << 23; // 8_388_608
+
+        @Test
+        @DisplayName("at the active bin, price equals basePrice")
+        void atActiveBin_returnsBasePrice() {
+            BigDecimal base = new BigDecimal("5000000.0");
+            BigDecimal price = BinMath.binPriceAtBin(base, 100, ACTIVE, ACTIVE);
+            assertEquals(0, price.compareTo(base.setScale(18, RoundingMode.HALF_UP)));
+        }
+
+        @Test
+        @DisplayName("one bin above active = basePrice * (1 + step/10000)")
+        void oneAbove_appliesOneFactor() {
+            BigDecimal base = new BigDecimal("5000000.0");
+            int binStep = 100;
+            BigDecimal expected = base
+                    .multiply(new BigDecimal("1.01"))
+                    .setScale(18, RoundingMode.HALF_UP);
+            BigDecimal actual = BinMath.binPriceAtBin(base, binStep, ACTIVE + 1, ACTIVE);
+            assertEquals(0, actual.compareTo(expected),
+                    "expected " + expected + " but got " + actual);
+        }
+
+        @Test
+        @DisplayName("one bin below active = basePrice / (1 + step/10000)")
+        void oneBelow_dividesOneFactor() {
+            BigDecimal base = new BigDecimal("5000000.0");
+            int binStep = 100;
+            BigDecimal expected = base
+                    .divide(new BigDecimal("1.01"),
+                            new java.math.MathContext(34))
+                    .setScale(18, RoundingMode.HALF_UP);
+            BigDecimal actual = BinMath.binPriceAtBin(base, binStep, ACTIVE - 1, ACTIVE);
+            assertEquals(0, actual.compareTo(expected),
+                    "expected " + expected + " but got " + actual);
+        }
+
+        @Test
+        @DisplayName("equivalent to binPrice(base, step, binId - activeBinId)")
+        void delegatesToBinPriceWithOffset() {
+            BigDecimal base = new BigDecimal("12345.6789");
+            int binStep = 25;
+            for (int offset = -50; offset <= 50; offset += 7) {
+                BigDecimal viaHelper = BinMath.binPriceAtBin(base, binStep, ACTIVE + offset, ACTIVE);
+                BigDecimal viaRaw = BinMath.binPrice(base, binStep, offset);
+                assertEquals(0, viaHelper.compareTo(viaRaw),
+                        "Mismatch at offset " + offset
+                                + ": helper=" + viaHelper + " raw=" + viaRaw);
+            }
+        }
+
+        @Test
+        @DisplayName("with activeBinId=0, behaves identically to legacy binPrice")
+        void zeroActive_isLegacyBehaviour() {
+            BigDecimal base = new BigDecimal("100.0");
+            for (int binId = -10; binId <= 10; binId++) {
+                BigDecimal viaHelper = BinMath.binPriceAtBin(base, 50, binId, 0);
+                BigDecimal viaRaw = BinMath.binPrice(base, 50, binId);
+                assertEquals(0, viaHelper.compareTo(viaRaw),
+                        "Mismatch at binId " + binId);
+            }
+        }
+    }
 }

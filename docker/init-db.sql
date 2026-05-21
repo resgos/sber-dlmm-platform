@@ -161,6 +161,12 @@ CREATE TABLE IF NOT EXISTS transactions (
     fee_rate DECIMAL(10,6),
     bins_crossed INT NOT NULL DEFAULT 0,
     idempotency_key VARCHAR(255) UNIQUE,
+    -- Sprint 9-DS-r4 (P0-4) — pool-engine's own swap row id, propagated via
+    -- the SwapExecuted Kafka event. Lets the consumer dedup re-deliveries
+    -- even when no client-supplied idempotencyKey was attached (programmatic
+    -- swaps, internal flows). UNIQUE so we get a real DB-level guarantee
+    -- rather than relying on an in-app SELECT-then-INSERT race window.
+    pool_engine_tx_id UUID UNIQUE,
     metadata TEXT,
     error_message TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -173,6 +179,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_pool_id ON transactions (pool_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_tx_type ON transactions (tx_type);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions (status);
 CREATE INDEX IF NOT EXISTS idx_transactions_idempotency_key ON transactions (idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_transactions_pool_engine_tx_id ON transactions (pool_engine_tx_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions (created_at);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_status ON transactions (user_id, status);
 

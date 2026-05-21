@@ -157,13 +157,21 @@ class SwapServiceTest {
         @Test
         @DisplayName("multi-bin swap crosses bins when first bin exhausted")
         void multiBinQuote() {
-            // Bin 0 has small reserveY, bin 1 has more
+            // Sprint 9-DS-r4 — bin layout fixed for canonical X→Y
+            // traversal direction. Sprint 9-DS-r3 flipped the engine
+            // to walk DOWN for X→Y (since price = Y/X, Y sits below
+            // active), but this test was still seeding bin +1 — so
+            // after bin 0 ran out the engine walked into bin -1 (which
+            // was un-stubbed) and Mockito strict mode raised
+            // PotentialStubbingProblem. Seeding the bin-below-active
+            // instead reflects the canonical Y reserve layout and the
+            // intent of the original test.
             PoolBin bin0 = createBin(0, 1_000_000, 50_000, 1_050_000);
-            PoolBin bin1 = createBin(1, 1_000_000, 1_000_000, 2_000_000);
+            PoolBin binMinus1 = createBin(-1, 1_000_000, 1_000_000, 2_000_000);
 
             when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
             when(poolBinRepository.findByPoolIdAndBinId(POOL_ID, 0)).thenReturn(Optional.of(bin0));
-            when(poolBinRepository.findByPoolIdAndBinId(POOL_ID, 1)).thenReturn(Optional.of(bin1));
+            when(poolBinRepository.findByPoolIdAndBinId(POOL_ID, -1)).thenReturn(Optional.of(binMinus1));
 
             // Request more than bin0 can provide (reserveY=50_000 so maxAmountIn ~ 50_000 for price=1)
             SwapQuoteRequest req = new SwapQuoteRequest(POOL_ID, TOKEN_X_ID, 200_000);

@@ -40,6 +40,32 @@ public class TransactionService {
                                           int binsCrossed,
                                           String idempotencyKey,
                                           String metadata) {
+        return createTransaction(type, userId, poolId, tokenInId, amountIn,
+                tokenOutId, amountOut, fee, feeRate, binsCrossed,
+                idempotencyKey, /*poolEngineTxId*/ null, metadata);
+    }
+
+    /**
+     * Sprint 9-DS-r4 (P0-4) — overload that stamps the originating
+     * pool-engine swap row UUID. {@code SwapEventConsumer} is the only
+     * caller in practice; other transaction types (LP add/remove, fee
+     * claim, OTC, B2B settlement) keep using the old signature and
+     * leave {@code poolEngineTxId} null.
+     */
+    @Transactional
+    public Transaction createTransaction(TransactionType type,
+                                          UUID userId,
+                                          UUID poolId,
+                                          UUID tokenInId,
+                                          Long amountIn,
+                                          UUID tokenOutId,
+                                          Long amountOut,
+                                          long fee,
+                                          BigDecimal feeRate,
+                                          int binsCrossed,
+                                          String idempotencyKey,
+                                          UUID poolEngineTxId,
+                                          String metadata) {
         Transaction transaction = Transaction.builder()
                 .txType(type)
                 .status(TransactionStatus.CREATED)
@@ -53,11 +79,13 @@ public class TransactionService {
                 .feeRate(feeRate)
                 .binsCrossed(binsCrossed)
                 .idempotencyKey(idempotencyKey)
+                .poolEngineTxId(poolEngineTxId)
                 .metadata(metadata)
                 .build();
 
         Transaction saved = transactionRepository.save(transaction);
-        log.info("Created transaction id={} type={} userId={}", saved.getId(), type, userId);
+        log.info("Created transaction id={} type={} userId={} poolEngineTxId={}",
+                saved.getId(), type, userId, poolEngineTxId);
         return saved;
     }
 
@@ -157,6 +185,15 @@ public class TransactionService {
     @Transactional(readOnly = true)
     public Optional<Transaction> findByIdempotencyKey(String key) {
         return transactionRepository.findByIdempotencyKey(key);
+    }
+
+    /**
+     * Sprint 9-DS-r4 (P0-4) — secondary dedup lookup for the swap
+     * event consumer (see {@code SwapEventConsumer}).
+     */
+    @Transactional(readOnly = true)
+    public Optional<Transaction> findByPoolEngineTxId(UUID poolEngineTxId) {
+        return transactionRepository.findByPoolEngineTxId(poolEngineTxId);
     }
 
     /**

@@ -182,7 +182,12 @@ public class LiquidityService {
             //     bins below the active price hold Y (waiting to buy X
             //     cheap) and bins above hold X. Code said the opposite.
             //     Fix: swap the two branches.
-            BigDecimal binPrice = BinMath.binPrice(basePrice, binStep, binId - activeBinId);
+            // Sprint 9-DS-r4 (P0-2) — through BinMath.binPriceAtBin
+            // helper so the activeBinId-offset subtraction can't be
+            // dropped at the call site (the original Sprint 9-DS-r3
+            // bug). The helper does exactly `binId - activeBinId` for
+            // us; encapsulated so a future careless edit can't undo it.
+            BigDecimal binPrice = BinMath.binPriceAtBin(basePrice, binStep, binId, activeBinId);
 
             long amountX = 0;
             long amountY = 0;

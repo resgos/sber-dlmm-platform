@@ -7,6 +7,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -68,6 +69,44 @@ public class OutboxDispatcher {
                     repository.countByServiceAndPublishedAtIsNull(properties.getServiceName()));
         } else if (failed > 0) {
             log.info("Outbox dispatch tick had {} failure(s); will retry next tick", failed);
+        }
+    }
+
+    /**
+     * Sprint 9-DS-r4 (P0-5) — daily cleanup of long-published rows.
+     *
+     * <p>The outbox is a publish guarantee, not a system of record:
+     * once a row is on Kafka, retaining it indefinitely only inflates
+     * the table (~1.8k rows / day at idle in dev). Replays go through
+     * Kafka topic offsets, never through the outbox, so deleting old
+     * published rows is safe.
+     *
+     * <p>Set {@code dlmm.outbox.retention-days=0} to disable
+     * (dev / tests). The cron in {@code dlmm.outbox.cleanup-cron}
+     * controls when this fires; default is 03:17 daily — off-peak,
+     * doesn't collide with hourly batch jobs at minute 0.
+     *
+     * <p>This runs in every service that uses the outbox; each one
+     * deletes its own service's rows by virtue of the shared cutoff
+     * timestamp (the DELETE is service-agnostic — we don't need
+     * per-service scoping because every row has the same retention
+     * policy and the same cutoff trims them all in one statement).
+     */
+    @Scheduled(cron = "${dlmm.outbox.cleanup-cron:0 17 3 * * *}")
+    @Transactional
+    public void cleanup() {
+        int retentionDays = properties.getRetentionDays();
+        if (retentionDays <= 0) {
+            log.debug("Outbox cleanup disabled (retention-days={})", retentionDays);
+            return;
+        }
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+        int deleted = repository.deletePublishedBefore(cutoff);
+        if (deleted > 0) {
+            log.info("Outbox cleanup: deleted {} published row(s) older than {} ({}d retention)",
+                    deleted, cutoff, retentionDays);
+        } else {
+            log.debug("Outbox cleanup: no rows older than {} ({}d retention)", cutoff, retentionDays);
         }
     }
 }
