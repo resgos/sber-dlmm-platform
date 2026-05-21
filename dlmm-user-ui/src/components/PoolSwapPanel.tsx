@@ -21,11 +21,18 @@ const { Text } = Typography
  */
 interface PoolSwapPanelProps {
   pool: Pool
+  /**
+   * Sprint 9-DS-r4 — when true, the panel renders without its outer
+   * Card wrapper so it can sit inside another container (e.g. a
+   * <Tabs> inside PoolActionTabs). The title/extra row is also
+   * dropped because the parent tab label already says "Обменять".
+   */
+  embedded?: boolean
 }
 
 const SLIPPAGE = 0.5 // %
 
-export default function PoolSwapPanel({ pool }: PoolSwapPanelProps) {
+export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelProps) {
   const queryClient = useQueryClient()
   const [direction, setDirection] = useState<'XtoY' | 'YtoX'>(
     pool.tokenYSymbol === 'SRUB' ? 'YtoX' : 'XtoY',
@@ -92,22 +99,8 @@ export default function PoolSwapPanel({ pool }: PoolSwapPanelProps) {
 
   const insufficient = amountIn != null && inBalance != null && amountIn > inBalance.available
 
-  return (
-    <Card
-      className="sber-card"
-      style={{ borderRadius: 16, border: '1px solid var(--border-light)' }}
-      title={
-        <Space size={8}>
-          <SwapOutlined style={{ color: 'var(--sber-green)' }} />
-          <Text strong>Быстрый обмен</Text>
-        </Space>
-      }
-      extra={
-        <Tag color="default" style={{ borderRadius: 999, fontSize: 11 }}>
-          допуск {SLIPPAGE}%
-        </Tag>
-      }
-    >
+  const body = (
+    <>
       {success && (
         <Alert
           message={success}
@@ -251,6 +244,33 @@ export default function PoolSwapPanel({ pool }: PoolSwapPanelProps) {
           ? `Недостаточно ${tokenInSym}`
           : `Обменять ${formatTokenAmount(amountIn, tokenInSym, { compact: true })}`}
       </Button>
+    </>
+  )
+
+  if (embedded) {
+    // Sprint 9-DS-r4 — when nested inside another container (Pool
+    // Action Tabs), drop the outer Card so we don't get the
+    // double-border / double-padding look.
+    return body
+  }
+
+  return (
+    <Card
+      className="sber-card"
+      style={{ borderRadius: 16, border: '1px solid var(--border-light)' }}
+      title={
+        <Space size={8}>
+          <SwapOutlined style={{ color: 'var(--sber-green)' }} />
+          <Text strong>Быстрый обмен</Text>
+        </Space>
+      }
+      extra={
+        <Tag color="default" style={{ borderRadius: 999, fontSize: 11 }}>
+          допуск {SLIPPAGE}%
+        </Tag>
+      }
+    >
+      {body}
     </Card>
   )
 }

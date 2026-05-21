@@ -17,7 +17,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, fees } from '@/api/services'
 import type { Position } from '@/api/types'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
-import PoolSwapPanel from '@/components/PoolSwapPanel'
+import PoolActionTabs from '@/components/PoolActionTabs'
 import { bpsToPercent } from '@/utils/format'
 import { KpiRow, KpiTile, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
@@ -162,19 +162,10 @@ export default function PoolDetailPage() {
               </div>
             </Col>
             <Col flex="none">
-              <Space>
-                {/* Sprint 9-DS-r3 — removed the "Обмен" button that
-                    jumped to /swap; swap is now embedded right on
-                    this page (PoolSwapPanel) per Meteora pattern. */}
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => navigate(`/pools/${id}/liquidity`)}
-                  style={{ borderRadius: 8 }}
-                >
-                  Добавить ликвидность
-                </Button>
-              </Space>
+              {/* Sprint 9-DS-r4 — removed the hero "Добавить ликвидность"
+                  button that jumped to /liquidity. Both Add Liquidity
+                  and Swap now live in the PoolActionTabs right rail
+                  on this same page (Meteora pattern). */}
             </Col>
           </Row>
         </div>
@@ -365,7 +356,10 @@ export default function PoolDetailPage() {
         </Col>
 
         <Col xs={24} xl={8}>
-          <PoolSwapPanel pool={pool} />
+          {/* Sprint 9-DS-r4 — Meteora pattern: tabbed action panel
+              with Add Liquidity + Swap as siblings. Mirrors the
+              right-rail of Meteora's Dynamic Terminal. */}
+          <PoolActionTabs pool={pool} defaultTab="add" />
         </Col>
       </Row>
 
