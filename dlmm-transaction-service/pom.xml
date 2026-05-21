@@ -92,7 +92,9 @@
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-spring-boot3</artifactId>
         </dependency>
-        <!-- spring-boot-starter-aop is required by Resilience4j annotation processing -->
+        <!-- spring-boot-starter-aop is required by Resilience4j annotation
+             processing AND by the Sprint 9-DS-r4 (P2-13) dlmm-common
+             @AdminAudit aspect (OTC + /transactions/{id}/review). -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>

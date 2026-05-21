@@ -1,5 +1,6 @@
 package com.sber.dlmm.transaction.controller;
 
+import com.sber.dlmm.common.audit.AdminAudit;
 import com.sber.dlmm.common.dto.PageResponse;
 import com.sber.dlmm.common.enums.TransactionStatus;
 import com.sber.dlmm.common.enums.TransactionType;
@@ -111,6 +112,7 @@ public class TransactionController {
      */
     @org.springframework.web.bind.annotation.PostMapping("/{id}/review")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @AdminAudit(action = "TX_MARK_REVIEWED", targetType = "TX", targetIdParam = "id")
     public ResponseEntity<TransactionResponse> markReviewed(
             @PathVariable UUID id,
             Authentication authentication) {

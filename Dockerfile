@@ -23,4 +23,14 @@ WORKDIR /app
 ARG MODULE
 COPY --from=build /app/${MODULE}/target/*.jar app.jar
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Sprint 9-DS-r4 (TD-3) — force UTF-8 default encoding. eclipse-temurin
+# JRE images can ship with a non-UTF-8 platform default depending on
+# the underlying glibc locale; without -Dfile.encoding=UTF-8 the JVM
+# uses platform default for any I/O without an explicit charset and
+# Cyrillic strings ship through the wire as Windows-1251 → UTF-8 →
+# UTF-8 → "double-encoded mojibake" (Sprint 8 reports of garbled
+# Cyrillic in /api/v1/pools JSON). JAVA_TOOL_OPTIONS is the
+# belt-and-braces fallback: any java subprocess spawned by the app
+# inherits the encoding.
+ENV JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"
+ENTRYPOINT ["java", "-Dfile.encoding=UTF-8", "-jar", "app.jar"]

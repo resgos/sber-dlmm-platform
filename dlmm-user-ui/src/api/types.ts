@@ -149,10 +149,14 @@ export interface Position {
   totalLiquidityShares: number
   unclaimedFeeX: number
   unclaimedFeeY: number
-  /** Sprint 9-DS-r3 — backend already returns these; admin Positions
-   *  page reads them via cast. Declared here for type-safe access. */
-  currentValueX?: number
-  currentValueY?: number
+  /** Sprint 9-DS-r3 — backend always populates these via
+   *  PositionResponse.binAllocations aggregation. Sprint 9-DS-r4
+   *  (TD-9) — tightened from `number?` to `number` after auditing
+   *  the backend contract in `LiquidityService.toResponse`; any
+   *  legacy `?? 0` fallbacks in call sites are harmless defense-in-
+   *  depth and can stay. */
+  currentValueX: number
+  currentValueY: number
   /** Sprint 9-DS-r4 (P1-10) — cost-basis for the P&L column on
    *  PositionsPage. 0 for legacy positions opened before the schema
    *  migration; the UI shows "—" in that case. */

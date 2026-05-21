@@ -62,9 +62,16 @@ public class TokenService {
         if (tokenRepository.existsBySymbol(req.symbol())) {
             throw new IllegalArgumentException("Token with symbol " + req.symbol() + " already exists");
         }
-        if (req.tokenType() == TokenType.EQUITY_TOKEN &&
+        // Sprint 9-DS-r4 (TD-7) — extended TokenType values now
+        // properly enforced. Previously only EQUITY_TOKEN required an
+        // underlyingAsset; FIAT_BACKED, COMMODITY_BACKED, INDEX_TOKEN
+        // (Sprint 2 extended catalog) silently passed validation
+        // even without one, leaving the price-oracle unable to resolve
+        // them. The policy now lives on the enum itself
+        // ({@link TokenType#requiresUnderlyingAsset}).
+        if (req.tokenType() != null && req.tokenType().requiresUnderlyingAsset() &&
                 (req.underlyingAsset() == null || req.underlyingAsset().isBlank())) {
-            throw new IllegalArgumentException("EQUITY_TOKEN requires underlyingAsset");
+            throw new IllegalArgumentException(req.tokenType() + " requires underlyingAsset");
         }
 
         Token token = new Token();

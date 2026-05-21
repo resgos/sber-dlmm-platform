@@ -1,38 +1,37 @@
-package com.sber.dlmm.user.service;
+package com.sber.dlmm.common.audit;
 
-import com.sber.dlmm.user.entity.AdminAuditLog;
-import com.sber.dlmm.user.repository.AdminAuditLogRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
 /**
- * Sprint 8 #AU-4 — admin audit log writer + reader (audit C-6).
+ * Sprint 9-DS-r4 (P2-13) — moved from {@code dlmm-user-service} into
+ * {@code dlmm-common.audit} so every service can wire the same
+ * writer (transaction-service, pool-engine, …) without copy-paste.
  *
- * <p>Write path is invoked by {@code AdminAuditAspect} (around-advice on
- * methods annotated with {@code @AdminAudit}). Marked
- * {@link Propagation#REQUIRES_NEW} so the audit row survives even if the
- * surrounding business transaction rolls back — auditing a FAILED attempt
- * is the whole point.
+ * <p>Write path is invoked by {@link AdminAuditAspect}. Marked
+ * {@link Propagation#REQUIRES_NEW} so the audit row survives even if
+ * the surrounding business transaction rolls back — auditing a FAILED
+ * attempt is the whole point.
  *
- * <p>Read path is exposed via {@code UserController.getAuditLog} —
- * SUPER_ADMIN-only, paged. Cross-service audits (when other services
- * adopt @AdminAudit) will need either their own writer or a remote API
- * to this one — Sprint 9+ design decision.
+ * <p>Read path is exposed via user-service's {@code UserController.getAuditLog}
+ * (SUPER_ADMIN-only, paged); other services typically only write.
  */
-@Service
-@RequiredArgsConstructor
-@Slf4j
 public class AdminAuditService {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminAuditService.class);
+
     private final AdminAuditLogRepository repository;
+
+    public AdminAuditService(AdminAuditLogRepository repository) {
+        this.repository = repository;
+    }
 
     /**
      * Persist a single audit row. {@link Propagation#REQUIRES_NEW} so this

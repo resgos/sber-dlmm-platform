@@ -98,6 +98,10 @@
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-reactor</artifactId>
         </dependency>
+        <!-- AOP for Resilience4j @CircuitBreaker / @Retry weaving AND
+             Sprint 9-DS-r4 (P2-13) dlmm-common @AdminAudit aspect
+             (createPool/pause/resume/emergency-shutdown/protocol-fee-
+             update). Single dep, both consumers. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>

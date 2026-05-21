@@ -117,6 +117,26 @@
             <artifactId>spring-kafka</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <!--
+          Sprint 9-DS-r4 (P2-13) — admin audit aspect. spring-boot-
+          starter-aop is optional (services without admin mutations
+          don't activate DlmmAdminAuditAutoConfiguration anyway via
+          its @ConditionalOnProperty gate). But aspectjweaver is
+          compile-scope here so the @Aspect annotation on
+          AdminAuditAspect compiles cleanly; it's a small jar (~2MB)
+          and its runtime cost is zero if the auto-config doesn't
+          register the aspect bean.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
@@ -127,5 +147,6 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
     </dependencies>
 </project>

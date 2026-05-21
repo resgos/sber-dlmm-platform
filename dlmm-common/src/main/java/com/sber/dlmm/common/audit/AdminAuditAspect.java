@@ -1,18 +1,14 @@
-package com.sber.dlmm.user.audit;
+package com.sber.dlmm.common.audit;
 
-import com.sber.dlmm.common.audit.AdminAudit;
-import com.sber.dlmm.user.entity.AdminAuditLog;
-import com.sber.dlmm.user.service.AdminAuditService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -20,29 +16,38 @@ import java.lang.reflect.Method;
 import java.util.UUID;
 
 /**
- * Sprint 8 #AU-4 — AOP around-advice that captures every
- * {@code @AdminAudit}-marked method call into {@code admin_audit_log}.
+ * Sprint 8 #AU-4, moved Sprint 9-DS-r4 (P2-13) — AOP around-advice
+ * that captures every {@code @AdminAudit}-marked method call into
+ * {@code admin_audit_log}.
  *
- * <p>Captures actor from {@code SecurityContextHolder} (the userId String
- * placed by {@code JwtAuthenticationFilter}), target ID from the named
- * method parameter ({@link AdminAudit#targetIdParam()}), action label
- * from the annotation, and SUCCESS/FAILED status from method outcome.
+ * <p>Lives in {@code dlmm-common.audit} so any service (user, pool,
+ * transaction, …) gets the same capture path. Registered by
+ * {@link DlmmAdminAuditAutoConfiguration} when AOP + JPA are on the
+ * classpath.
  *
- * <p>Audit-write happens via {@link AdminAuditService#record(AdminAuditLog)}
- * which uses {@code REQUIRES_NEW} propagation — so the audit row survives
- * even when the business transaction rolls back.
+ * <p>Captures actor from {@code SecurityContextHolder} (the userId
+ * String placed by {@code JwtAuthenticationFilter}), target ID from
+ * the named method parameter, action label from the annotation, and
+ * SUCCESS/FAILED status from method outcome.
  *
- * <p>The aspect itself never throws — if anything in the capture path
- * blows up, we log and let the business call proceed/return normally.
- * Audit-write being broken must not break admin operations.
+ * <p>Audit-write uses {@link AdminAuditService#record} with
+ * {@code REQUIRES_NEW} propagation — the audit row survives even
+ * when the business transaction rolls back.
+ *
+ * <p>The aspect itself never throws — if anything in the capture
+ * path blows up, we log and let the business call proceed/return
+ * normally. Audit-write being broken must not break admin operations.
  */
 @Aspect
-@Component
-@RequiredArgsConstructor
-@Slf4j
 public class AdminAuditAspect {
 
+    private static final Logger log = LoggerFactory.getLogger(AdminAuditAspect.class);
+
     private final AdminAuditService auditService;
+
+    public AdminAuditAspect(AdminAuditService auditService) {
+        this.auditService = auditService;
+    }
 
     @Around("@annotation(com.sber.dlmm.common.audit.AdminAudit)")
     public Object aroundAuditedMethod(ProceedingJoinPoint pjp) throws Throwable {
@@ -67,8 +72,6 @@ public class AdminAuditAspect {
         Method method = sig.getMethod();
         AdminAudit ann = method.getAnnotation(AdminAudit.class);
         if (ann == null) {
-            // Shouldn't happen — pointcut filters on the annotation — but
-            // defensive in case of weaving oddities (e.g. interface vs impl).
             throw new IllegalStateException("@AdminAudit pointcut matched a method without the annotation: "
                     + method);
         }
@@ -93,8 +96,6 @@ public class AdminAuditAspect {
         try {
             auditService.record(row);
         } catch (Exception ex) {
-            // AdminAuditService.record() already catches & logs, but in case
-            // a wrapping proxy throws we still must not propagate.
             log.warn("Audit-aspect record swallowed exception: {}", ex.getMessage());
         }
     }
@@ -135,7 +136,6 @@ public class AdminAuditAspect {
             ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             if (attrs == null) return null;
             jakarta.servlet.http.HttpServletRequest req = attrs.getRequest();
-            // X-Forwarded-For is set by the gateway; first IP is the original client.
             String forwarded = req.getHeader("X-Forwarded-For");
             if (forwarded != null && !forwarded.isBlank()) {
                 int comma = forwarded.indexOf(',');

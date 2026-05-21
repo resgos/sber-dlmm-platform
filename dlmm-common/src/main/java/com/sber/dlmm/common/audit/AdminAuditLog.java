@@ -1,7 +1,9 @@
-package com.sber.dlmm.user.entity;
+package com.sber.dlmm.common.audit;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -19,8 +21,15 @@ import java.util.UUID;
 /**
  * Sprint 8 #AU-4 — admin audit log (audit C-6 critical).
  *
+ * <p><b>Sprint 9-DS-r4 (P2-13)</b> — moved out of {@code dlmm-user-service}
+ * into {@code dlmm-common.audit} so transaction-service + pool-engine
+ * (and any future service with admin mutations) can wire the same
+ * aspect/writer without copy-paste. All services share one Postgres
+ * schema, so the {@code admin_audit_log} table is the single source
+ * of truth — analysts query one place.
+ *
  * <p>Append-only record of every admin mutation that runs through an
- * {@code @AdminAudit}-annotated method. Captured by {@code AdminAuditAspect}
+ * {@code @AdminAudit}-annotated method. Captured by {@link AdminAuditAspect}
  * via Spring AOP — no caller-side bookkeeping required.
  *
  * <p>Never updated, never deleted. Compliance replay relies on
@@ -51,13 +60,14 @@ public class AdminAuditLog {
     private String actorRole;
 
     /**
-     * Action label from {@code @AdminAudit#value()}, e.g. "USER_BLOCK",
-     * "USER_KYC_UPDATE". Stable identifier for analyst queries.
+     * Action label from {@code @AdminAudit#action()}, e.g. "USER_BLOCK",
+     * "USER_KYC_UPDATE", "POOL_PAUSE", "OTC_QUOTE". Stable identifier for
+     * analyst queries.
      */
     @Column(nullable = false, length = 60)
     private String action;
 
-    /** "USER" / "POOL" / "TOKEN" — coarse-grained for filters. */
+    /** "USER" / "POOL" / "TOKEN" / "OTC" / "TX" — coarse-grained filter axis. */
     @Column(name = "target_type", length = 40)
     private String targetType;
 
@@ -66,7 +76,7 @@ public class AdminAuditLog {
     private String targetId;
 
     @Column(nullable = false, length = 20)
-    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Enumerated(EnumType.STRING)
     private Status status;
 
     /** Truncated exception message when {@link Status#FAILED}; null on SUCCESS. */

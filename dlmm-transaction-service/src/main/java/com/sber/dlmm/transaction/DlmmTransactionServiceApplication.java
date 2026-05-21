@@ -14,8 +14,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication(scanBasePackages = {"com.sber.dlmm.transaction", "com.sber.dlmm.common"})
 @EnableScheduling
-@EntityScan(basePackages = {"com.sber.dlmm.transaction", "com.sber.dlmm.common.outbox"})
-@EnableJpaRepositories(basePackages = {"com.sber.dlmm.transaction", "com.sber.dlmm.common.outbox"})
+// Sprint 9-DS-r4 (P2-13) — `com.sber.dlmm.common.audit` added for
+// the @AdminAudit aspect (shared admin_audit_log table). spring-boot-
+// starter-aop in this service's pom activates DlmmAdminAuditAutoConfiguration.
+@EntityScan(basePackages = {"com.sber.dlmm.transaction", "com.sber.dlmm.common.outbox", "com.sber.dlmm.common.audit"})
+@EnableJpaRepositories(basePackages = {"com.sber.dlmm.transaction", "com.sber.dlmm.common.outbox", "com.sber.dlmm.common.audit"})
 public class DlmmTransactionServiceApplication {
 
     public static void main(String[] args) {

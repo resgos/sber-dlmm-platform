@@ -1,5 +1,6 @@
 package com.sber.dlmm.transaction.controller;
 
+import com.sber.dlmm.common.audit.AdminAudit;
 import com.sber.dlmm.common.dto.PageResponse;
 import com.sber.dlmm.transaction.entity.OtcBlockTrade;
 import com.sber.dlmm.transaction.repository.OtcBlockTradeRepository;
@@ -51,6 +52,7 @@ public class OtcDeskController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Create new OTC block trade in REQUESTED state")
+    @AdminAudit(action = "OTC_CREATE", targetType = "OTC")
     public ResponseEntity<OtcBlockTrade> create(Authentication auth,
                                                  @Valid @RequestBody CreateRequest req) {
         UUID adminId = parseUserId(auth);
@@ -64,6 +66,7 @@ public class OtcDeskController {
     @PostMapping("/{id}/quote")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "REQUESTED → QUOTED: attach quote (price + expiry)")
+    @AdminAudit(action = "OTC_QUOTE", targetType = "OTC", targetIdParam = "id")
     public ResponseEntity<OtcBlockTrade> quote(@PathVariable UUID id,
                                                 @Valid @RequestBody QuoteRequest req) {
         return ResponseEntity.ok(otcDeskService.quote(
@@ -73,6 +76,7 @@ public class OtcDeskController {
     @PostMapping("/{id}/accept")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "QUOTED → ACCEPTED: counterparty accepts the quote")
+    @AdminAudit(action = "OTC_ACCEPT", targetType = "OTC", targetIdParam = "id")
     public ResponseEntity<OtcBlockTrade> accept(@PathVariable UUID id) {
         return ResponseEntity.ok(otcDeskService.accept(id));
     }
@@ -80,6 +84,7 @@ public class OtcDeskController {
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "QUOTED → REJECTED: counterparty declines")
+    @AdminAudit(action = "OTC_REJECT", targetType = "OTC", targetIdParam = "id")
     public ResponseEntity<OtcBlockTrade> reject(@PathVariable UUID id,
                                                  @RequestBody(required = false) ReasonRequest req) {
         return ResponseEntity.ok(otcDeskService.reject(id, req == null ? null : req.reason()));
@@ -88,6 +93,7 @@ public class OtcDeskController {
     @PostMapping("/{id}/settle")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "ACCEPTED → SETTLED: link the executed ledger transaction")
+    @AdminAudit(action = "OTC_SETTLE", targetType = "OTC", targetIdParam = "id")
     public ResponseEntity<OtcBlockTrade> settle(@PathVariable UUID id,
                                                  @Valid @RequestBody SettleRequest req) {
         return ResponseEntity.ok(otcDeskService.settle(id, req.settlementTxId()));
@@ -96,6 +102,7 @@ public class OtcDeskController {
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "REQUESTED|QUOTED → CANCELLED: admin cancels")
+    @AdminAudit(action = "OTC_CANCEL", targetType = "OTC", targetIdParam = "id")
     public ResponseEntity<OtcBlockTrade> cancel(@PathVariable UUID id,
                                                  @RequestBody(required = false) ReasonRequest req) {
         return ResponseEntity.ok(otcDeskService.cancel(id, req == null ? null : req.reason()));

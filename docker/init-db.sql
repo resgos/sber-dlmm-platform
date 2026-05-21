@@ -298,6 +298,34 @@ CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications (read);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications (user_id, read);
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (created_at);
 
+-- ─── admin_audit_log (shared across services, written by every @AdminAudit-
+--     annotated mutation across user-service, pool-engine, transaction-service)
+-- Sprint 8 #AU-4 originally lived in user-service Liquibase; Sprint 9-DS-r4
+-- (P2-13) moved the entity + aspect into dlmm-common and mirrored the table
+-- here so any service that boots into a fresh DB sees the table regardless
+-- of which service runs Liquibase first. Append-only — never updated, never
+-- deleted; compliance replay depends on immutability.
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_user_id UUID,
+    actor_role VARCHAR(40),
+    action VARCHAR(60) NOT NULL,
+    target_type VARCHAR(40),
+    target_id VARCHAR(120),
+    status VARCHAR(20) NOT NULL,
+    error_message VARCHAR(500),
+    method_signature VARCHAR(200),
+    ip_address VARCHAR(45),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_audit_actor
+    ON admin_audit_log (actor_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_target
+    ON admin_audit_log (target_type, target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_created
+    ON admin_audit_log (created_at DESC);
+
 -- ─── outbox_events (token-service, optionally other services) ───────────────
 -- Transactional outbox: domain-mutation @Transactional writes a row here
 -- alongside the balance change; a scheduled dispatcher polls

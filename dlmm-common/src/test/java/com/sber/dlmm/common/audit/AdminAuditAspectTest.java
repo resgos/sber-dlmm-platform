@@ -1,8 +1,7 @@
-package com.sber.dlmm.user.audit;
+package com.sber.dlmm.common.audit;
 
-import com.sber.dlmm.common.audit.AdminAudit;
-import com.sber.dlmm.user.entity.AdminAuditLog;
-import com.sber.dlmm.user.service.AdminAuditService;
+// Sprint 9-DS-r4 (P2-13) — moved from dlmm-user-service to dlmm-common
+// alongside the aspect + service it tests. Inputs unchanged.
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

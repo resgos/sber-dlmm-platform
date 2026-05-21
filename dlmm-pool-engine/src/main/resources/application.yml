@@ -1,5 +1,15 @@
 server:
   port: 8083
+  # Sprint 9-DS-r4 (TD-3) — explicit UTF-8 for the embedded servlet
+  # container. Without this, Tomcat's default ISO-8859-1 mangles
+  # Cyrillic strings in any response where the content-type doesn't
+  # carry an explicit charset. Pairs with the Dockerfile's
+  # -Dfile.encoding=UTF-8 — JVM + Tomcat both must agree.
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
 
 spring:
   application:

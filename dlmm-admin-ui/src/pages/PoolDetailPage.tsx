@@ -473,13 +473,64 @@ export default function PoolDetailPage() {
                 key: 'bins',
                 label: 'Распределение по бинам',
                 children: (
-                  <Card
-                    size="small"
-                    style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
-                    styles={{ body: { padding: 0 } }}
-                  >
-                    <BinLiquidityChart poolId={id!} />
-                  </Card>
+                  <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    {/* Sprint 9-DS-r4 (P2-9) — compact volume sparkline
+                        above the bin chart. Same source as the bigger
+                        "История объёмов" LineChart on the Аналитика
+                        tab, but inline so an admin scanning the depth
+                        view sees the trend at a glance. */}
+                    {analytics?.volumeHistory && analytics.volumeHistory.length > 0 && (
+                      <Card
+                        size="small"
+                        style={{
+                          borderRadius: 12,
+                          border: '1px solid var(--border-light)',
+                          background: 'var(--surface-1, #FAFAFA)',
+                        }}
+                        styles={{ body: { padding: '8px 16px' } }}
+                      >
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 12,
+                          fontSize: 11, color: 'var(--text-secondary)',
+                        }}>
+                          <span style={{ textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>
+                            Объём за 30 дн
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <ResponsiveContainer width="100%" height={48}>
+                              <LineChart data={analytics.volumeHistory}>
+                                <Line
+                                  type="monotone"
+                                  dataKey="volume"
+                                  stroke="#F59E0B"
+                                  strokeWidth={1.5}
+                                  dot={false}
+                                  isAnimationActive={false}
+                                />
+                                <Tooltip
+                                  formatter={(v: number) => [formatCompact(v), 'Объём']}
+                                  labelFormatter={(l) => dayjs(l).format('DD.MM.YYYY')}
+                                  contentStyle={{ fontSize: 11, padding: '4px 8px' }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)', fontWeight: 600 }}>
+                            {formatCompact(
+                              analytics.volumeHistory[analytics.volumeHistory.length - 1]?.volume ?? 0,
+                            )}
+                          </span>
+                        </div>
+                      </Card>
+                    )}
+                    <Card
+                      size="small"
+                      style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+                      styles={{ body: { padding: 0 } }}
+                    >
+                      <BinLiquidityChart poolId={id!} />
+                    </Card>
+                  </Space>
                 ),
               },
             ]}

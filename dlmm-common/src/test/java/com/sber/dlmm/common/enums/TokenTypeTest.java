@@ -62,4 +62,26 @@ class TokenTypeTest {
             assertThat(parsed).isEqualTo(value);
         }
     }
+
+    /**
+     * Sprint 9-DS-r4 (TD-7) — pins the off-platform vs synthetic
+     * policy decision baked into {@link TokenType#requiresUnderlyingAsset}.
+     * A future contributor who adds a value MUST extend the switch
+     * (the enum will refuse to compile otherwise), but this test also
+     * guards the intent so a careless "all values true" edit gets
+     * caught at CI time.
+     */
+    @Test
+    void requiresUnderlyingAsset_matchesPolicy() {
+        // Off-platform: tied to a real-world asset.
+        assertThat(TokenType.EQUITY_TOKEN.requiresUnderlyingAsset()).isTrue();
+        assertThat(TokenType.FIAT_BACKED.requiresUnderlyingAsset()).isTrue();
+        assertThat(TokenType.COMMODITY_BACKED.requiresUnderlyingAsset()).isTrue();
+        assertThat(TokenType.INDEX_TOKEN.requiresUnderlyingAsset()).isTrue();
+        // Synthetic / platform-only.
+        assertThat(TokenType.LP_TOKEN.requiresUnderlyingAsset()).isFalse();
+        assertThat(TokenType.GOVERNANCE_TOKEN.requiresUnderlyingAsset()).isFalse();
+        assertThat(TokenType.UTILITY.requiresUnderlyingAsset()).isFalse();
+        assertThat(TokenType.STABLE_TOKEN.requiresUnderlyingAsset()).isFalse();
+    }
 }

@@ -17,8 +17,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication
 @EnableScheduling
-@EntityScan(basePackages = {"com.sber.dlmm.token", "com.sber.dlmm.common.outbox"})
-@EnableJpaRepositories(basePackages = {"com.sber.dlmm.token", "com.sber.dlmm.common.outbox"})
+// Sprint 9-DS-r4 (P2-13) — `com.sber.dlmm.common.audit` added too
+// so the dlmm-common audit auto-config can find AdminAuditLog +
+// repository if token-service ever opts in to the @AdminAudit aspect.
+// Today it's a no-op (no AOP starter on classpath, auto-config gated
+// off) but the scan covers a future opt-in without a second edit here.
+@EntityScan(basePackages = {"com.sber.dlmm.token", "com.sber.dlmm.common.outbox", "com.sber.dlmm.common.audit"})
+@EnableJpaRepositories(basePackages = {"com.sber.dlmm.token", "com.sber.dlmm.common.outbox", "com.sber.dlmm.common.audit"})
 public class DlmmTokenServiceApplication {
 
     public static void main(String[] args) {

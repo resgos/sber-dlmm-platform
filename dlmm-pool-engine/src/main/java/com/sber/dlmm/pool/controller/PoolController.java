@@ -1,5 +1,6 @@
 package com.sber.dlmm.pool.controller;
 
+import com.sber.dlmm.common.audit.AdminAudit;
 import com.sber.dlmm.common.dto.PageResponse;
 import com.sber.dlmm.common.exception.ForbiddenException;
 import com.sber.dlmm.pool.config.JwtUserDetails;
@@ -60,6 +61,7 @@ public class PoolController {
 
     @PostMapping
     @Operation(summary = "Create a new liquidity pool (ADMIN only)")
+    @AdminAudit(action = "POOL_CREATE", targetType = "POOL")
     public ResponseEntity<PoolResponse> createPool(@Valid @RequestBody CreatePoolRequest request) {
         JwtUserDetails user = getCurrentUser();
         requireAdmin(user);
@@ -93,6 +95,7 @@ public class PoolController {
 
     @PostMapping("/{id}/pause")
     @Operation(summary = "Pause a pool (ADMIN only)")
+    @AdminAudit(action = "POOL_PAUSE", targetType = "POOL", targetIdParam = "id")
     public ResponseEntity<PoolResponse> pausePool(@PathVariable UUID id) {
         requireAdmin(getCurrentUser());
         return ResponseEntity.ok(poolService.pausePool(id));
@@ -100,6 +103,7 @@ public class PoolController {
 
     @PostMapping("/{id}/emergency-shutdown")
     @Operation(summary = "Emergency shutdown a pool (ADMIN only)")
+    @AdminAudit(action = "POOL_EMERGENCY_SHUTDOWN", targetType = "POOL", targetIdParam = "id")
     public ResponseEntity<PoolResponse> emergencyShutdown(@PathVariable UUID id) {
         requireAdmin(getCurrentUser());
         return ResponseEntity.ok(poolService.emergencyShutdown(id));
@@ -107,6 +111,7 @@ public class PoolController {
 
     @PostMapping("/{id}/resume")
     @Operation(summary = "Resume a pool (ADMIN only)")
+    @AdminAudit(action = "POOL_RESUME", targetType = "POOL", targetIdParam = "id")
     public ResponseEntity<PoolResponse> resumePool(@PathVariable UUID id) {
         requireAdmin(getCurrentUser());
         return ResponseEntity.ok(poolService.resumePool(id));
@@ -114,6 +119,7 @@ public class PoolController {
 
     @PutMapping("/{id}/fee-params")
     @Operation(summary = "Update pool fee parameters (ADMIN only)")
+    @AdminAudit(action = "POOL_FEE_PARAMS_UPDATE", targetType = "POOL", targetIdParam = "id")
     public ResponseEntity<PoolResponse> updateFeeParams(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateFeeParamsRequest request) {
@@ -132,6 +138,7 @@ public class PoolController {
      */
     @PutMapping("/{id}/protocol-fee-pct")
     @Operation(summary = "Update pool protocol fee % (0-5, ADMIN only)")
+    @AdminAudit(action = "POOL_PROTOCOL_FEE_UPDATE", targetType = "POOL", targetIdParam = "id")
     public ResponseEntity<PoolResponse> updateProtocolFeePct(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateProtocolFeeRequest request) {
