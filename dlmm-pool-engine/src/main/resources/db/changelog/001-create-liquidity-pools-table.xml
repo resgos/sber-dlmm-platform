@@ -40,7 +40,10 @@
             <column name="base_price" type="DECIMAL(30,18)">
                 <constraints nullable="false"/>
             </column>
-            <column name="protocol_fee_pct" type="INT" defaultValueNumeric="20">
+            <!-- Sprint 9-DS-r4 (P1-15) — DEFAULT lowered from 20 → 0
+                 to match the 3.A legal memo cap of 5%. Existing DBs
+                 are migrated by changeset 010. -->
+            <column name="protocol_fee_pct" type="INT" defaultValueNumeric="0">
                 <constraints nullable="false"/>
             </column>
             <column name="total_tvl_x" type="BIGINT" defaultValueNumeric="0">

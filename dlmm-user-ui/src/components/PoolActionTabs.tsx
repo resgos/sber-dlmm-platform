@@ -20,9 +20,24 @@ interface PoolActionTabsProps {
    * but pages that came from "Обмен" CTA can deep-link to swap.
    */
   defaultTab?: 'add' | 'swap'
+  /**
+   * Sprint 9-DS-r4 (P1-2) — forwarded to {@link PoolAddLiquidityPanel}
+   * so the parent page (PoolDetailPage) can mirror the user's
+   * pending strategy + range onto the bin chart as a live preview.
+   * Null = no pending add; non-null = the user is composing.
+   */
+  onPreviewChange?: (preview: {
+    binMin: number
+    binMax: number
+    strategy: import('@/api/types').LiquidityStrategy
+  } | null) => void
 }
 
-export default function PoolActionTabs({ pool, defaultTab = 'add' }: PoolActionTabsProps) {
+export default function PoolActionTabs({
+  pool,
+  defaultTab = 'add',
+  onPreviewChange,
+}: PoolActionTabsProps) {
   return (
     <Card
       className="sber-card"
@@ -31,6 +46,12 @@ export default function PoolActionTabs({ pool, defaultTab = 'add' }: PoolActionT
     >
       <Tabs
         defaultActiveKey={defaultTab}
+        // Sprint 9-DS-r4 (P1-2) — when the user switches OFF the
+        // Add tab, clear the preview so the chart returns to its
+        // resting "your existing positions only" overlay.
+        onChange={(key) => {
+          if (key !== 'add') onPreviewChange?.(null)
+        }}
         items={[
           {
             key: 'add',
@@ -40,7 +61,9 @@ export default function PoolActionTabs({ pool, defaultTab = 'add' }: PoolActionT
                 Добавить ликвидность
               </span>
             ),
-            children: <PoolAddLiquidityPanel pool={pool} />,
+            children: (
+              <PoolAddLiquidityPanel pool={pool} onPreviewChange={onPreviewChange} />
+            ),
           },
           {
             key: 'swap',

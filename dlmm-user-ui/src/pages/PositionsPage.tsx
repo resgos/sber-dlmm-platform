@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col } from 'antd'
-import { DollarOutlined, DeleteOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined } from '@ant-design/icons'
+import { DollarOutlined, DeleteOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { pools, fees } from '@/api/services'
@@ -106,6 +106,123 @@ export default function PositionsPage() {
   const totalUnclaimedX = activePositions.reduce((s: number, p: Position) => s + p.unclaimedFeeX, 0)
   const totalUnclaimedY = activePositions.reduce((s: number, p: Position) => s + p.unclaimedFeeY, 0)
 
+  const positionsWithClaimableFees = activePositions.filter(
+    (p) => p.unclaimedFeeX > 0 || p.unclaimedFeeY > 0,
+  )
+
+  /**
+   * Sprint 9-DS-r4 (P1-9) — "Закрыть всё" mass-action, copied from
+   * the HedgePage #6.14 pattern. Sequentially removes 100% of every
+   * active position. Serial (not Promise.all) for two reasons:
+   *  - same-pool concurrent removes would clobber each other under
+   *    the optimistic-lock retry loop (#4.7), so we avoid the noise;
+   *  - it gives the user a recoverable failure mode — first error
+   *    stops the loop, all previously-closed positions stay closed
+   *    (idempotency keys), and the remaining ones can be retried
+   *    manually one-by-one.
+   */
+  const confirmRemoveAll = () => {
+    if (activePositions.length === 0) return
+    Modal.confirm({
+      title: `Закрыть все позиции (${activePositions.length})?`,
+      width: 480,
+      content: (
+        <Space direction="vertical" size={8}>
+          <Text>
+            Будут последовательно сняты <b>{activePositions.length}</b> активных
+            позиций. С каждой будут одновременно забраны накопленные комиссии.
+          </Text>
+          <Text type="warning" style={{ fontSize: 12 }}>
+            Операция необратима. Каждое снятие выполняется как обычная транзакция
+            и может изменить цену пула.
+          </Text>
+          <Text type="secondary" style={{ fontSize: 11 }}>
+            Позиции закрываются последовательно — это даёт более предсказуемое
+            влияние на цены пулов и помогает локализовать любую ошибку.
+          </Text>
+        </Space>
+      ),
+      okText: `Закрыть все ${activePositions.length}`,
+      okButtonProps: { danger: true },
+      cancelText: 'Отмена',
+      onOk: async () => {
+        let closed = 0
+        for (const pos of activePositions) {
+          try {
+            await pools.removeLiquidity({
+              positionId: pos.id,
+              percentage: 100,
+              idempotencyKey: crypto.randomUUID(),
+            })
+            closed++
+          } catch (e: any) {
+            message.error(
+              `Снятие позиции ${pos.id.slice(0, 6)}… не удалось: ${
+                e?.response?.data?.message || 'ошибка'
+              }. Закрыто ${closed} из ${activePositions.length}.`,
+            )
+            queryClient.invalidateQueries({ queryKey: ['myPositions'] })
+            queryClient.invalidateQueries({ queryKey: ['myBalances'] })
+            return
+          }
+        }
+        message.success(`Закрыто позиций: ${closed}`)
+        queryClient.invalidateQueries({ queryKey: ['myPositions'] })
+        queryClient.invalidateQueries({ queryKey: ['myBalances'] })
+        queryClient.invalidateQueries({ queryKey: ['myFeeSummary'] })
+        queryClient.invalidateQueries({ queryKey: ['myFeeHistory'] })
+      },
+    })
+  }
+
+  /**
+   * Sprint 9-DS-r4 (P1-9) — companion to "Закрыть всё". Just claims
+   * fees on every position that has unclaimed, without removing them.
+   * Same serial-and-stop-on-first-failure shape as remove-all.
+   */
+  const confirmClaimAll = () => {
+    if (positionsWithClaimableFees.length === 0) return
+    Modal.confirm({
+      title: `Забрать комиссии со всех позиций (${positionsWithClaimableFees.length})?`,
+      width: 480,
+      content: (
+        <Space direction="vertical" size={8}>
+          <Text>
+            Будут забраны накопленные комиссии с{' '}
+            <b>{positionsWithClaimableFees.length}</b> позиций. Позиции остаются
+            открытыми и продолжают зарабатывать.
+          </Text>
+        </Space>
+      ),
+      okText: `Забрать с ${positionsWithClaimableFees.length} позиций`,
+      cancelText: 'Отмена',
+      onOk: async () => {
+        let claimed = 0
+        for (const pos of positionsWithClaimableFees) {
+          try {
+            await fees.claimFees({ positionId: pos.id })
+            claimed++
+          } catch (e: any) {
+            message.error(
+              `Claim позиции ${pos.id.slice(0, 6)}… не удалось: ${
+                e?.response?.data?.message || 'ошибка'
+              }. Забрано с ${claimed} из ${positionsWithClaimableFees.length}.`,
+            )
+            queryClient.invalidateQueries({ queryKey: ['myPositions'] })
+            queryClient.invalidateQueries({ queryKey: ['myBalances'] })
+            queryClient.invalidateQueries({ queryKey: ['myFeeSummary'] })
+            return
+          }
+        }
+        message.success(`Забрано с позиций: ${claimed}`)
+        queryClient.invalidateQueries({ queryKey: ['myPositions'] })
+        queryClient.invalidateQueries({ queryKey: ['myBalances'] })
+        queryClient.invalidateQueries({ queryKey: ['myFeeSummary'] })
+        queryClient.invalidateQueries({ queryKey: ['myFeeHistory'] })
+      },
+    })
+  }
+
   return (
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
       <PageHeader
@@ -137,7 +254,38 @@ export default function PositionsPage() {
         ]}
       />
 
-      <Card className="sber-card" title={<Text strong>Позиции</Text>}>
+      <Card
+        className="sber-card"
+        title={<Text strong>Позиции</Text>}
+        extra={
+          activePositions.length > 0 && (
+            <Space>
+              {/* Sprint 9-DS-r4 (P1-9) — mass-action pair: claim
+                  fees on everything that has them, then close all if
+                  the user wants to flatten the book. Mirrors the
+                  HedgePage "Закрыть всё" pattern. */}
+              <Button
+                size="small"
+                type="primary"
+                ghost
+                icon={<DollarOutlined />}
+                disabled={positionsWithClaimableFees.length === 0}
+                onClick={confirmClaimAll}
+              >
+                Забрать всё ({positionsWithClaimableFees.length})
+              </Button>
+              <Button
+                size="small"
+                danger
+                icon={<ClearOutlined />}
+                onClick={confirmRemoveAll}
+              >
+                Закрыть всё ({activePositions.length})
+              </Button>
+            </Space>
+          )
+        }
+      >
         <Table
           className="sber-table"
           loading={isLoading}

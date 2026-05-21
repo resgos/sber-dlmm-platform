@@ -74,7 +74,12 @@ CREATE TABLE IF NOT EXISTS liquidity_pools (
     decay_period_seconds INT NOT NULL DEFAULT 600,
     active_bin_id INT NOT NULL,
     base_price DECIMAL(30,18) NOT NULL,
-    protocol_fee_pct INT NOT NULL DEFAULT 20,
+    -- Sprint 9-DS-r4 (P1-15) — DEFAULT lowered from 20 → 0 to match
+    -- the 3.A legal memo cap of 5% (>5% triggers broker-dealer
+    -- re-registration). Pools opt-in to a non-zero value either via
+    -- the seed UPDATE in liquidity_pools below, the create-pool API,
+    -- or the admin /api/v1/pools/{id}/protocol-fee endpoint.
+    protocol_fee_pct INT NOT NULL DEFAULT 0,
     total_tvl_x BIGINT NOT NULL DEFAULT 0,
     total_tvl_y BIGINT NOT NULL DEFAULT 0,
     volume_24h BIGINT NOT NULL DEFAULT 0,
@@ -328,6 +333,15 @@ INSERT INTO liquidity_pools (id, token_x_id, token_y_id, bin_step, base_fee_bps,
   ('c0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000003',   50, 20, 200, 8388608,     16.666666000000000000,  200000000000,  500000000000,  180000000000,  200000000,  100000000, 'ACTIVE', 'a0000000-0000-0000-0000-000000000001'),
   ('c0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000004','b0000000-0000-0000-0000-000000000001',   50, 15, 200, 8388608,   7500.000000000000000000,  100000000000,  750000000000,   50000000000,   80000000,   40000000, 'ACTIVE', 'a0000000-0000-0000-0000-000000000001')
 ON CONFLICT DO NOTHING;
+
+-- Sprint 9-DS-r4 (P1-15) — flagship pool protocol-fee opt-in.
+-- The SBTC/SRUB pool above relies on the DEFAULT (now 0); override to 5%
+-- to capture protocol-side fee revenue (~25-30M ₽/yr at current volume).
+-- Mirrored in Liquibase 010-enable-protocol-fee-on-top-pools.xml for
+-- existing-DB upgrades. The other two flagship pools (GAZP/SRUB,
+-- SUSDT/SRUB) live in 02-extended-assets.sql and carry the same opt-in.
+UPDATE liquidity_pools SET protocol_fee_pct = 5
+ WHERE id = 'c0000000-0000-0000-0000-000000000001' AND protocol_fee_pct = 0;
 
 -- pool_bins
 INSERT INTO pool_bins (pool_id, bin_id, price, liquidity, reserve_x, reserve_y, composition_factor, total_fee_x, total_fee_y, fee_growth_x, fee_growth_y) VALUES

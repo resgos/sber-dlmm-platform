@@ -1,5 +1,6 @@
 package com.sber.dlmm.admin.service;
 
+import com.sber.dlmm.admin.client.BffDownstreamClient;
 import com.sber.dlmm.admin.client.PoolEngineClient;
 import com.sber.dlmm.admin.dto.DashboardResponse;
 import com.sber.dlmm.admin.dto.PoolAnalyticsResponse;
@@ -12,14 +13,9 @@ import com.sber.dlmm.admin.dto.SuspiciousTransactionResponse;
 import com.sber.dlmm.admin.dto.TokenAnalyticsResponse;
 import com.sber.dlmm.admin.dto.TokenAnalyticsResponse.PriceHistoryEntry;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -32,11 +28,6 @@ import java.util.UUID;
 @Service
 public class AdminService {
 
-    // Per-call timeout. Each downstream is called independently with this
-    // budget — a single slow service can't stall the whole dashboard.
-    // 8s accommodates pool-engine /pools current N+1 latency (~5-7s for 22
-    // pools with bins eagerly loaded — tracked separately as a perf bug).
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(8);
     // Smaller page than the previous 1000 — seed catalog is 22 pools / 4
     // users / 15 tx; 200 leaves headroom for growth without making the
     // unbounded fetch slower than it has to be.
@@ -44,33 +35,19 @@ public class AdminService {
     private static final BigDecimal PRICE_IMPACT_THRESHOLD = new BigDecimal("3.0");
     private static final long HIGH_FREQUENCY_THRESHOLD = 50;
 
-    private final WebClient userServiceClient;
-    private final WebClient tokenServiceClient;
-    private final WebClient poolEngineClient;
-    private final WebClient feeServiceClient;
-    private final WebClient transactionServiceClient;
-    private final WebClient priceOracleClient;
-    /** Sprint 8 C-10 — circuit-broken wrapper for pool-engine. Other downstreams
-        still use the raw WebClients above; Sprint 9 extracts them similarly. */
+    // Sprint 9-DS-r4 (P1-13) — every downstream now goes through a
+    // Resilience4j-wrapped client. The previous shape (six raw WebClient
+    // fields with per-call inline `.onErrorReturn(...)`) caught HTTP
+    // errors but left threads pinned on slow downstreams until each
+    // 8-second timeout expired — a stuck token-service could saturate
+    // the bff. With Resilience4j a 50%-failure CB trips fast and frees
+    // the threads.
     private final PoolEngineClient poolEngine;
+    private final BffDownstreamClient downstream;
 
-    public AdminService(
-            WebClient.Builder webClientBuilder,
-            PoolEngineClient poolEngine,
-            @Value("${dlmm.services.user-service-url}") String userServiceUrl,
-            @Value("${dlmm.services.token-service-url}") String tokenServiceUrl,
-            @Value("${dlmm.services.pool-engine-url}") String poolEngineUrl,
-            @Value("${dlmm.services.fee-service-url}") String feeServiceUrl,
-            @Value("${dlmm.services.transaction-service-url}") String transactionServiceUrl,
-            @Value("${dlmm.services.price-oracle-url}") String priceOracleUrl
-    ) {
+    public AdminService(PoolEngineClient poolEngine, BffDownstreamClient downstream) {
         this.poolEngine = poolEngine;
-        this.userServiceClient = webClientBuilder.clone().baseUrl(userServiceUrl).build();
-        this.tokenServiceClient = webClientBuilder.clone().baseUrl(tokenServiceUrl).build();
-        this.poolEngineClient = webClientBuilder.clone().baseUrl(poolEngineUrl).build();
-        this.feeServiceClient = webClientBuilder.clone().baseUrl(feeServiceUrl).build();
-        this.transactionServiceClient = webClientBuilder.clone().baseUrl(transactionServiceUrl).build();
-        this.priceOracleClient = webClientBuilder.clone().baseUrl(priceOracleUrl).build();
+        this.downstream = downstream;
     }
 
     public DashboardResponse getDashboard() {
@@ -85,14 +62,12 @@ public class AdminService {
         //      because zip awaits all three signals.
         // Now each call is bounded by REQUEST_TIMEOUT and degrades to an
         // empty list independently.
-        List<Map<String, Object>> users = fetchPageContent(userServiceClient,
-                "/api/v1/users?page=0&size=" + AGGREGATION_PAGE_SIZE, "users");
-        // Sprint 8 C-10 — pool-engine call goes through the circuit-broken
-        // PoolEngineClient. Failures degrade to empty list (fallback method),
-        // same downstream-degraded shape the rest of this method expects.
+        // Sprint 9-DS-r4 (P1-13) — every downstream now CB-wrapped.
+        // Fallbacks all return Collections.emptyList() so the aggregation
+        // below sees the same shape on degradation.
+        List<Map<String, Object>> users = downstream.fetchUsersPage(AGGREGATION_PAGE_SIZE);
         List<Map<String, Object>> pools = poolEngine.fetchPoolsPage(AGGREGATION_PAGE_SIZE);
-        List<Map<String, Object>> transactions = fetchPageContent(transactionServiceClient,
-                "/api/v1/transactions?page=0&size=" + AGGREGATION_PAGE_SIZE, "transactions");
+        List<Map<String, Object>> transactions = downstream.fetchTransactionsPage(AGGREGATION_PAGE_SIZE);
 
         long totalUsers = users.size();
         // user-service returns kycStatus as a string ("VERIFIED" | "PENDING" | …)
@@ -157,64 +132,17 @@ public class AdminService {
     // @CircuitBreaker'd. The signature, return-on-failure semantics, and
     // log shape are preserved by the new client (verified by manual diff).
 
-    /**
-     * Fetches a Spring Data {@code Page<...>} response and returns its
-     * {@code content} list, or an empty list on any failure (HTTP error,
-     * deserialisation error, timeout). Dashboard degrades gracefully when
-     * a single downstream is unavailable.
-     */
-    @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> fetchPageContent(WebClient client, String uri, String label) {
-        try {
-            Map<String, Object> page = client.get()
-                    .uri(uri)
-                    .retrieve()
-                    .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                    .onErrorResume(ex -> {
-                        log.warn("Downstream {} failed: {}", label, ex.toString());
-                        return Mono.empty();
-                    })
-                    .block(REQUEST_TIMEOUT);
-            if (page == null) return Collections.emptyList();
-            Object content = page.get("content");
-            return content instanceof List<?> list
-                    ? (List<Map<String, Object>>) list
-                    : Collections.emptyList();
-        } catch (RuntimeException ex) {
-            log.warn("Downstream {} blocking call exhausted timeout: {}", label, ex.toString());
-            return Collections.emptyList();
-        }
-    }
-
     public PoolAnalyticsResponse getPoolAnalytics(UUID poolId) {
         log.debug("Fetching pool analytics for poolId={}", poolId);
 
-        Mono<Map<String, Object>> poolDetailMono = poolEngineClient.get()
-                .uri("/api/v1/pools/{id}", poolId)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .onErrorReturn(Collections.emptyMap());
-
-        Mono<List<Map<String, Object>>> feeHistoryMono = feeServiceClient.get()
-                .uri("/api/v1/fees/pool/{poolId}/history?days=30", poolId)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList());
-
-        var combined = Mono.zip(poolDetailMono, feeHistoryMono);
-        var tuple = combined.block(REQUEST_TIMEOUT);
-
-        if (tuple == null) {
-            log.warn("Timed out waiting for pool analytics data for poolId={}", poolId);
-            return new PoolAnalyticsResponse(
-                    Collections.emptyList(), Collections.emptyList(),
-                    Collections.emptyList(), Collections.emptyList(),
-                    Collections.emptyList()
-            );
-        }
-
-        Map<String, Object> poolDetail = tuple.getT1();
-        List<Map<String, Object>> feeHistory = tuple.getT2();
+        // Sprint 9-DS-r4 (P1-13) — sequential CB-wrapped calls in place
+        // of the previous Mono.zip(...).block(REQUEST_TIMEOUT). Each side
+        // has its own breaker, so a stuck fee-service doesn't drag down
+        // the pool-detail render and vice-versa. Total latency is the
+        // sum (was max(p,f)), but on a healthy system both are ~ms and
+        // the trade-off pays off on the failure path.
+        Map<String, Object> poolDetail = poolEngine.fetchPoolDetail(poolId);
+        List<Map<String, Object>> feeHistory = downstream.fetchPoolFeeHistory(poolId, 30);
 
         List<TvlHistoryEntry> tvlHistory = extractList(poolDetail, "tvlHistory").stream()
                 .map(entry -> new TvlHistoryEntry(
@@ -267,28 +195,10 @@ public class AdminService {
     public TokenAnalyticsResponse getTokenAnalytics(UUID tokenId) {
         log.debug("Fetching token analytics for tokenId={}", tokenId);
 
-        Mono<Map<String, Object>> tokenDetailMono = tokenServiceClient.get()
-                .uri("/api/v1/tokens/{id}", tokenId)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .onErrorReturn(Collections.emptyMap());
-
-        Mono<List<Map<String, Object>>> priceHistoryMono = priceOracleClient.get()
-                .uri("/api/v1/prices/{tokenId}/history?days=30", tokenId)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList());
-
-        var combined = Mono.zip(tokenDetailMono, priceHistoryMono);
-        var tuple = combined.block(REQUEST_TIMEOUT);
-
-        if (tuple == null) {
-            log.warn("Timed out waiting for token analytics data for tokenId={}", tokenId);
-            return new TokenAnalyticsResponse(0, 0, 0, Collections.emptyList(), 0);
-        }
-
-        Map<String, Object> tokenDetail = tuple.getT1();
-        List<Map<String, Object>> priceHistoryRaw = tuple.getT2();
+        // Sprint 9-DS-r4 (P1-13) — sequential CB-wrapped calls, same
+        // trade-off as getPoolAnalytics above.
+        Map<String, Object> tokenDetail = downstream.fetchTokenDetail(tokenId);
+        List<Map<String, Object>> priceHistoryRaw = downstream.fetchPriceHistory(tokenId, 30);
 
         long totalSupply = toLong(tokenDetail.get("totalSupply"));
         long circulatingSupply = toLong(tokenDetail.get("circulatingSupply"));
@@ -311,24 +221,15 @@ public class AdminService {
     public List<SuspiciousTransactionResponse> getSuspiciousTransactions() {
         log.debug("Fetching and analyzing transactions for suspicious activity");
 
-        List<Map<String, Object>> transactions = transactionServiceClient.get()
-                .uri("/api/v1/transactions?limit=1000")
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList())
-                .block(REQUEST_TIMEOUT);
+        // Sprint 9-DS-r4 (P1-13) — both calls now CB-wrapped.
+        List<Map<String, Object>> transactions = downstream.fetchRecentTransactions(1000);
 
-        if (transactions == null || transactions.isEmpty()) {
+        if (transactions.isEmpty()) {
             log.debug("No transactions found for suspicious activity analysis");
             return Collections.emptyList();
         }
 
-        List<Map<String, Object>> pools = poolEngineClient.get()
-                .uri("/api/v1/pools")
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
-                .onErrorReturn(Collections.emptyList())
-                .block(REQUEST_TIMEOUT);
+        List<Map<String, Object>> pools = poolEngine.fetchPoolsPage(AGGREGATION_PAGE_SIZE);
 
         Map<String, Long> poolTvlMap = pools != null
                 ? pools.stream().collect(

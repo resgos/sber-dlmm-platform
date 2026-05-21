@@ -89,6 +89,21 @@ public class TransactionController {
     }
 
     /**
+     * Sprint 9-DS-r4 (P1-6) — Meteora-style pool-scoped recent
+     * transactions feed. Backs the "История" panel below the bin
+     * chart on user-ui PoolDetailPage. Public read (no @PreAuthorize)
+     * because pool history is on-chain-equivalent data — no PII
+     * leaks; userId in the payload is already exposed elsewhere
+     * (top-LPs list, leaderboard).
+     */
+    @GetMapping("/pool/{poolId}")
+    public ResponseEntity<List<TransactionResponse>> getRecentPoolTransactions(
+            @PathVariable UUID poolId,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(transactionService.getRecentPoolTransactions(poolId, limit));
+    }
+
+    /**
      * Sprint 4 #4.4 + Sprint 5 #5.11 — settlement-report download for
      * corp accountants. Two output formats:
      * <ul>

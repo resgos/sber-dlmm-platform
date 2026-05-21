@@ -1,105 +1,82 @@
 package com.sber.dlmm.admin.service;
 
+import com.sber.dlmm.admin.client.BffDownstreamClient;
+import com.sber.dlmm.admin.client.PoolEngineClient;
 import com.sber.dlmm.admin.dto.DashboardResponse;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.reactive.function.client.ClientResponse;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import reactor.core.publisher.Mono;
 
-import java.lang.reflect.Field;
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.util.LinkedHashMap;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
- * Pins the contract of {@link AdminService#getDashboard()} after the
- * BFF-stability refactor:
+ * Pins {@link AdminService#getDashboard()} after the Sprint 9-DS-r4
+ * (P1-13) refactor to the {@link PoolEngineClient} + {@link
+ * BffDownstreamClient} shape:
  *
- *  - parses Spring Data Page-shaped responses ({@code {"content": [...]}})
- *    correctly instead of trying to deserialise the page object as a
- *    bare List (the old bug);
- *  - degrades to zeros when a single downstream returns HTTP 5xx —
- *    other counters still aggregate from the healthy services;
- *  - degrades to zeros when a single downstream returns the wrong
- *    JSON shape — no NPE, no 10-second stall;
- *  - reads {@code kycStatus == "VERIFIED"} (not the old
- *    {@code verified}/{@code kycVerified} keys that the prior code
- *    looked at and never matched);
- *  - aggregates pool TVL from {@code totalTvlY} and fee revenue from
- *    {@code totalFeesCollectedY} (matches actual pool-engine DTO field
- *    names).
+ *   - parses Spring Data Page-shaped responses ({@code {"content": [...]}})
+ *     correctly (the wrapped clients return the {@code content} list
+ *     directly, so the service code only does the aggregation);
+ *   - degrades to zeros when a downstream returns empty (fallback path)
+ *     instead of throwing — other counters still aggregate from the
+ *     healthy services;
+ *   - reads {@code kycStatus == "VERIFIED"} (matches user-service's
+ *     actual key, not the legacy {@code verified} the old code looked at);
+ *   - aggregates pool TVL from {@code totalTvlY} and fee revenue from
+ *     {@code totalFeesCollectedY} (matches the pool-engine DTO field
+ *     names).
  *
- * Uses a WebClient {@code exchangeFunction} stub so we don't boot a server.
+ * <p>Mockito mocks are now the right shape — previous tests built the
+ * service from raw {@link org.springframework.web.reactive.function.client.WebClient}
+ * stubs and used reflection to swap fields. After the refactor those
+ * fields are gone; the two wrapped-client beans handle all the HTTP.
  */
 class AdminServiceDashboardTest {
 
+    private PoolEngineClient poolEngine;
+    private BffDownstreamClient downstream;
     private AdminService adminService;
-    private final AtomicReference<Mono<ClientResponse>> userResponse = new AtomicReference<>();
-    private final AtomicReference<Mono<ClientResponse>> poolResponse = new AtomicReference<>();
-    private final AtomicReference<Mono<ClientResponse>> txResponse = new AtomicReference<>();
 
     @BeforeEach
-    void setUp() throws Exception {
-        WebClient userClient = stubClient(userResponse);
-        WebClient poolClient = stubClient(poolResponse);
-        WebClient txClient = stubClient(txResponse);
-        WebClient noopClient = stubClient(new AtomicReference<>(Mono.error(new IllegalStateException("not used"))));
-
-        // Sprint 9 #M-4 — PoolEngineClient was added to AdminService for the
-        // active-positions count tile. Test doesn't exercise that path so a
-        // null reference is fine; the existing dashboard assertions touch
-        // user/pool/transaction WebClients only.
-        adminService = new AdminService(
-                WebClient.builder(),
-                null,
-                "http://noop", "http://noop", "http://noop",
-                "http://noop", "http://noop", "http://noop"
-        );
-        // Override the 6 internal clients with our stubs. Field injection is
-        // ugly but keeps the test independent of Spring context.
-        setField("userServiceClient", userClient);
-        setField("tokenServiceClient", noopClient);
-        setField("poolEngineClient", poolClient);
-        setField("feeServiceClient", noopClient);
-        setField("transactionServiceClient", txClient);
-        setField("priceOracleClient", noopClient);
+    void setUp() {
+        poolEngine = mock(PoolEngineClient.class);
+        downstream = mock(BffDownstreamClient.class);
+        adminService = new AdminService(poolEngine, downstream);
     }
 
-    @AfterEach
-    void teardown() {
-        userResponse.set(null);
-        poolResponse.set(null);
-        txResponse.set(null);
-    }
+    // Today's ISO date prefix — the service filters transactionsToday by
+    // createdAt.startsWith(today). Mock data must use today so the
+    // assertion lands on a non-zero count.
+    private static final String TODAY = LocalDate.now().toString();
 
     @Test
     void aggregatesHealthyResponsesCorrectly() {
-        userResponse.set(jsonOk(Map.of(
-                "content", List.of(
-                        Map.of("id", "u1", "kycStatus", "VERIFIED"),
-                        Map.of("id", "u2", "kycStatus", "VERIFIED"),
-                        Map.of("id", "u3", "kycStatus", "PENDING"),
-                        Map.of("id", "u4", "kycStatus", "REJECTED")))));
-        poolResponse.set(jsonOk(Map.of(
-                "content", List.of(
-                        Map.of("id", "p1", "status", "ACTIVE",
-                                "totalTvlY", 100, "volume24h", 50, "totalFeesCollectedY", 5),
-                        Map.of("id", "p2", "status", "ACTIVE",
-                                "totalTvlY", 200, "volume24h", 80, "totalFeesCollectedY", 8),
-                        Map.of("id", "p3", "status", "PAUSED",
-                                "totalTvlY", 30, "volume24h", 0, "totalFeesCollectedY", 1)))));
-        txResponse.set(jsonOk(Map.of(
-                "content", List.of(
-                        Map.of("id", "t1"), Map.of("id", "t2"), Map.of("id", "t3")))));
+        when(downstream.fetchUsersPage(anyInt())).thenReturn(List.<Map<String, Object>>of(
+                Map.of("id", "u1", "kycStatus", "VERIFIED"),
+                Map.of("id", "u2", "kycStatus", "VERIFIED"),
+                Map.of("id", "u3", "kycStatus", "PENDING"),
+                Map.of("id", "u4", "kycStatus", "REJECTED")
+        ));
+        when(poolEngine.fetchPoolsPage(anyInt())).thenReturn(List.<Map<String, Object>>of(
+                Map.of("id", "p1", "status", "ACTIVE",
+                        "totalTvlY", 100, "volume24h", 50, "totalFeesCollectedY", 5),
+                Map.of("id", "p2", "status", "ACTIVE",
+                        "totalTvlY", 200, "volume24h", 80, "totalFeesCollectedY", 8),
+                Map.of("id", "p3", "status", "PAUSED",
+                        "totalTvlY", 30, "volume24h", 0, "totalFeesCollectedY", 1)
+        ));
+        when(downstream.fetchTransactionsPage(anyInt())).thenReturn(List.<Map<String, Object>>of(
+                Map.of("id", "t1", "createdAt", TODAY + "T10:00:00"),
+                Map.of("id", "t2", "createdAt", TODAY + "T11:00:00"),
+                Map.of("id", "t3", "createdAt", TODAY + "T12:00:00")
+        ));
 
         DashboardResponse r = adminService.getDashboard();
 
@@ -114,16 +91,19 @@ class AdminServiceDashboardTest {
     }
 
     @Test
-    void degradesGracefullyOnSingleDownstream5xx() {
-        userResponse.set(jsonOk(Map.of("content", List.of(
-                Map.of("id", "u1", "kycStatus", "VERIFIED")))));
-        poolResponse.set(Mono.error(WebClientResponseException.create(
-                500, "Internal Server Error", null, null, null)));
-        txResponse.set(jsonOk(Map.of("content", List.of(Map.of("id", "t1")))));
+    void degradesGracefullyOnSingleDownstreamEmpty() {
+        // Pool side returns empty (would happen after CB-OPEN fallback);
+        // user + transactions stay healthy.
+        when(downstream.fetchUsersPage(anyInt())).thenReturn(List.<Map<String, Object>>of(
+                Map.of("id", "u1", "kycStatus", "VERIFIED")
+        ));
+        when(poolEngine.fetchPoolsPage(anyInt())).thenReturn(List.<Map<String, Object>>of());
+        when(downstream.fetchTransactionsPage(anyInt())).thenReturn(List.<Map<String, Object>>of(
+                Map.of("id", "t1", "createdAt", TODAY + "T09:00:00")
+        ));
 
         DashboardResponse r = adminService.getDashboard();
 
-        // user + transactions came through; pools all zero
         assertThat(r.totalUsers()).isEqualTo(1);
         assertThat(r.verifiedUsers()).isEqualTo(1);
         assertThat(r.totalPools()).isZero();
@@ -133,28 +113,10 @@ class AdminServiceDashboardTest {
     }
 
     @Test
-    void degradesGracefullyOnWrongResponseShape() {
-        // Imagine an old or misconfigured downstream returning a bare list
-        // instead of a page. The old AdminService stalled silently for
-        // 10 seconds; the new one should treat the shape as empty and
-        // continue.
-        userResponse.set(jsonOk(List.of(Map.of("id", "ignored"))));  // bare list, no "content" key
-        poolResponse.set(jsonOk(Map.of("content", List.of(
-                Map.of("status", "ACTIVE", "totalTvlY", 999)))));
-        txResponse.set(jsonOk(Map.of("content", List.of())));
-
-        DashboardResponse r = adminService.getDashboard();
-
-        assertThat(r.totalUsers()).as("bare list lacks .content key, treated as empty").isZero();
-        assertThat(r.totalPools()).isEqualTo(1);
-        assertThat(r.totalTvlRub()).isEqualByComparingTo(new BigDecimal("999"));
-    }
-
-    @Test
-    void neverThrowsAndReturnsZerosWhenAllDownstreamFail() {
-        userResponse.set(Mono.error(new RuntimeException("user-svc down")));
-        poolResponse.set(Mono.error(new RuntimeException("pool-engine down")));
-        txResponse.set(Mono.error(new RuntimeException("tx-svc down")));
+    void neverThrowsAndReturnsZerosWhenAllDownstreamEmpty() {
+        when(downstream.fetchUsersPage(anyInt())).thenReturn(List.of());
+        when(poolEngine.fetchPoolsPage(anyInt())).thenReturn(List.of());
+        when(downstream.fetchTransactionsPage(anyInt())).thenReturn(List.of());
 
         DashboardResponse r = adminService.getDashboard();
 
@@ -162,42 +124,5 @@ class AdminServiceDashboardTest {
         assertThat(r.totalPools()).isZero();
         assertThat(r.transactionsToday()).isZero();
         assertThat(r.totalTvlRub()).isEqualByComparingTo(BigDecimal.ZERO);
-    }
-
-    // ─── helpers ──────────────────────────────────────────────────────────
-
-    private static WebClient stubClient(AtomicReference<Mono<ClientResponse>> next) {
-        return WebClient.builder()
-                .baseUrl("http://stub")
-                .exchangeFunction(req -> {
-                    Mono<ClientResponse> r = next.get();
-                    return r != null ? r : Mono.empty();
-                })
-                .build();
-    }
-
-    private static Mono<ClientResponse> jsonOk(Object body) {
-        try {
-            String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body);
-            return Mono.just(ClientResponse.create(HttpStatus.OK)
-                    .header("Content-Type", "application/json")
-                    .body(json)
-                    .build());
-        } catch (Exception e) {
-            return Mono.error(e);
-        }
-    }
-
-    private void setField(String name, Object value) throws Exception {
-        Field f = AdminService.class.getDeclaredField(name);
-        f.setAccessible(true);
-        f.set(adminService, value);
-    }
-
-    // Touch the imports to keep them
-    @SuppressWarnings("unused")
-    private static void noOp() {
-        new LinkedHashMap<>();
-        Duration.ZERO.toMillis();
     }
 }

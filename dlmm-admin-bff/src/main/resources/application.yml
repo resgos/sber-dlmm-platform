@@ -35,12 +35,11 @@ management:
       probes:
         enabled: true
 
-# Sprint 8 C-10 (R#33) — circuit breaker + retry for outbound calls.
-# First downstream wired is pool-engine (PoolEngineClient.java); the rest
-# (user-service, token-service, transaction-service, fee-service, price-oracle)
-# are Sprint 9 carry-overs — they need per-target client extraction first.
-# Tuning mirrors the pool-engine reference so operator dashboards/alerts
-# stay consistent across services.
+# Sprint 8 C-10 (R#33) → Sprint 9-DS-r4 (P1-13) — circuit breaker + retry
+# for ALL outbound bff calls.
+# Tuning mirrors the pool-engine reference (dlmm-pool-engine/application.yml)
+# so operator dashboards/alerts stay consistent across services. One
+# instance per downstream so the breaker state is queryable per-target.
 resilience4j:
   circuitbreaker:
     configs:
@@ -54,6 +53,16 @@ resilience4j:
     instances:
       pool-engine:
         base-config: default
+      user-service:
+        base-config: default
+      token-service:
+        base-config: default
+      transaction-service:
+        base-config: default
+      fee-service:
+        base-config: default
+      price-oracle:
+        base-config: default
   retry:
     configs:
       default:
@@ -66,4 +75,14 @@ resilience4j:
           - java.util.concurrent.TimeoutException
     instances:
       pool-engine:
+        base-config: default
+      user-service:
+        base-config: default
+      token-service:
+        base-config: default
+      transaction-service:
+        base-config: default
+      fee-service:
+        base-config: default
+      price-oracle:
         base-config: default

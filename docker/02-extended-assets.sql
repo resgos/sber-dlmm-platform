@@ -101,6 +101,17 @@ INSERT INTO liquidity_pools (id, token_x_id, token_y_id, bin_step, base_fee_bps,
   ('c0000000-0000-0000-0000-000000000112', 'b0000000-0000-0000-0000-000000000112', 'b0000000-0000-0000-0000-000000000001',  5, 10, 100, 8388608,  103.200000000000000000,1500000000000,  154800000000000,  22000000000,  22000000,   2270400000, 'ACTIVE', 'a0000000-0000-0000-0000-000000000001')
 ON CONFLICT DO NOTHING;
 
+-- Sprint 9-DS-r4 (P1-15) — flagship pool protocol-fee opt-in.
+-- GAZP/SRUB (blue-chip equity) and SUSDT/SRUB (stablecoin rail) are
+-- two of the three pools singled out for the Treasury-fee turn-on per
+-- the monetisation roadmap. Mirrored in Liquibase 010 so existing DBs
+-- pick up the same change.
+UPDATE liquidity_pools SET protocol_fee_pct = 5
+ WHERE id IN (
+   'c0000000-0000-0000-0000-000000000102',  -- GAZP/SRUB
+   'c0000000-0000-0000-0000-000000000110'   -- SUSDT/SRUB
+ ) AND protocol_fee_pct = 0;
+
 -- ─── Bins: 21 around active_bin (8388598..8388618) for each new pool ───────
 -- Distributing TVL like the initial pools: top of book bins hold most of TVL_y
 -- (SRUB), upper bins hold TVL_x (the asset). Generated programmatically.

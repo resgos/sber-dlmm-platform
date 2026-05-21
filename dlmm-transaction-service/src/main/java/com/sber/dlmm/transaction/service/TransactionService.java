@@ -197,6 +197,22 @@ public class TransactionService {
     }
 
     /**
+     * Sprint 9-DS-r4 (P1-6) — pool-scoped recent SWAP feed for the
+     * Meteora-style "История" panel on user-ui PoolDetailPage. Caller
+     * limit is clamped to [1, 100] so a stray {@code ?limit=10000}
+     * can't OOM the bff.
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<TransactionResponse> getRecentPoolTransactions(UUID poolId, int limit) {
+        int clamped = Math.max(1, Math.min(limit, 100));
+        PageRequest pr = PageRequest.of(0, clamped);
+        return transactionRepository.findRecentPoolSwaps(poolId, pr)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    /**
      * Sprint 4 #4.4 — settlement-report CSV row source.
      * Returns up to {@link #REPORT_MAX_ROWS} transactions matching the
      * filter, sorted by createdAt DESC. Capped to bound memory; corp

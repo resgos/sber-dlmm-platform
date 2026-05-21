@@ -17,4 +17,20 @@ export const transactions = {
     const { data } = await apiClient.get<Transaction>(`/transactions/${id}`)
     return data
   },
+
+  /**
+   * Sprint 9-DS-r4 (P1-6) — Meteora-style pool-scoped recent feed.
+   * Backs the "История" panel below the bin chart on PoolDetailPage.
+   * Backend clamps to [1,100]; client sends 20 by default.
+   */
+  getRecentPoolTransactions: async (
+    poolId: string,
+    limit = 20,
+  ): Promise<Transaction[]> => {
+    const { data } = await apiClient.get<Transaction[]>(
+      `/transactions/pool/${poolId}`,
+      { params: { limit } },
+    )
+    return data
+  },
 }

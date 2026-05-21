@@ -67,4 +67,18 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     java.util.List<Transaction> findConfirmedInWindow(@Param("since") LocalDateTime since,
                                                        @Param("until") LocalDateTime until,
                                                        Pageable pageable);
+
+    /**
+     * Sprint 9-DS-r4 (P1-6) — pool-scoped recent SWAP feed for the
+     * user-ui PoolDetailPage "История" panel below the bin chart
+     * (Meteora-style). CONFIRMED only so the feed never flashes a
+     * pending tx that later fails. Backed by the existing
+     * idx_transactions_pool_id index.
+     */
+    @Query("SELECT t FROM Transaction t " +
+           "WHERE t.poolId = :poolId " +
+           "AND t.txType = com.sber.dlmm.common.enums.TransactionType.SWAP " +
+           "AND t.status = com.sber.dlmm.common.enums.TransactionStatus.CONFIRMED " +
+           "ORDER BY t.createdAt DESC")
+    java.util.List<Transaction> findRecentPoolSwaps(@Param("poolId") UUID poolId, Pageable pageable);
 }

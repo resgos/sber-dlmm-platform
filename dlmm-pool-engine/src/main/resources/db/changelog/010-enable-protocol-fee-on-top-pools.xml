@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 9-DS-r4 (P1-15) — enable protocol_fee_pct=5 on the
+        three highest-volume seed pools (SBTC/SRUB, GAZP/SRUB,
+        SUSDT/SRUB). Captures 5% of every swap fee into the
+        total_protocol_fee_x/y accumulators (added by changeset 009)
+        for the upcoming Treasury sweep job.
+
+        Background:
+        - init-db.sql ships protocol_fee_pct with DEFAULT 20.
+        - Sprint 5 #5.G legal memo capped this at 5% (>5% triggers
+          broker-dealer re-registration). Service layer in
+          PoolService.updateProtocolFeePct enforces the cap at write
+          time, but the DB DEFAULT was never lowered, so any pool
+          row inserted without an explicit value is technically
+          non-compliant.
+
+        This changeset does TWO things:
+          (a) Lower the column DEFAULT from 20 to 0. Future pool rows
+              without an explicit value are then opted-out by default
+              (safe pre-Treasury-sweep). Operators turn the fee on
+              per-pool via the admin endpoint /api/v1/pools/{id}/protocol-fee.
+          (b) Set protocol_fee_pct=5 on the three flagship pools by
+              hard-coded id. WHERE clause filters by current value
+              IN (0, 20) so re-running this changeset doesn't clobber
+              an operator's manual change in between deploys.
+
+        Revenue impact: ~30M ₽/yr at current swap volume on these
+        three pools. The Treasury sweep job (Sprint 7+, see
+        docs/SPRINT-PLAN.md) drains the accumulators into the
+        protocol treasury account; without this changeset the sweep
+        would always pick up 0.
+    -->
+
+    <changeSet id="010-lower-protocol-fee-default" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="liquidity_pools" columnName="protocol_fee_pct"/>
+            <!-- Skip on a fresh DB where init-db.sql has already been
+                 updated (re-runs are no-ops because the default is
+                 idempotent, but the MARK_RAN keeps the log clean). -->
+        </preConditions>
+        <!-- defaultValueNumeric clearing requires dropDefaultValue first
+             in Liquibase XML semantics; addDefaultValue then re-sets. -->
+        <dropDefaultValue tableName="liquidity_pools" columnName="protocol_fee_pct"/>
+        <addDefaultValue tableName="liquidity_pools"
+                         columnName="protocol_fee_pct"
+                         defaultValueNumeric="0"/>
+    </changeSet>
+
+    <changeSet id="010-enable-protocol-fee-on-top-pools" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <columnExists tableName="liquidity_pools" columnName="protocol_fee_pct"/>
+        </preConditions>
+
+        <!-- SBTC/SRUB — flagship crypto pair, highest seed volume. -->
+        <update tableName="liquidity_pools">
+            <column name="protocol_fee_pct" valueNumeric="5"/>
+            <where>id = 'c0000000-0000-0000-0000-000000000001' AND protocol_fee_pct IN (0, 20)</where>
+        </update>
+
+        <!-- GAZP/SRUB — blue-chip equity, regulatory-positioning pool. -->
+        <update tableName="liquidity_pools">
+            <column name="protocol_fee_pct" valueNumeric="5"/>
+            <where>id = 'c0000000-0000-0000-0000-000000000102' AND protocol_fee_pct IN (0, 20)</where>
+        </update>
+
+        <!-- SUSDT/SRUB — stablecoin liquidity rail, highest extended-asset volume. -->
+        <update tableName="liquidity_pools">
+            <column name="protocol_fee_pct" valueNumeric="5"/>
+            <where>id = 'c0000000-0000-0000-0000-000000000110' AND protocol_fee_pct IN (0, 20)</where>
+        </update>
+    </changeSet>
+
+</databaseChangeLog>

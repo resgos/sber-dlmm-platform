@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card, Typography, Space, Tag, Button, Spin, Alert, Row, Col, Tabs, message } from 'antd'
 import {
@@ -15,9 +15,10 @@ import {
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, fees } from '@/api/services'
-import type { Position } from '@/api/types'
+import type { LiquidityStrategy, Position } from '@/api/types'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
 import PoolActionTabs from '@/components/PoolActionTabs'
+import PoolRecentSwapsPanel from '@/components/PoolRecentSwapsPanel'
 import { bpsToPercent } from '@/utils/format'
 import { KpiRow, KpiTile, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
@@ -43,6 +44,16 @@ export default function PoolDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+
+  // Sprint 9-DS-r4 (P1-2) — pending preview state for the bin chart.
+  // The Add Liquidity panel (inside PoolActionTabs) pushes its current
+  // {binMin, binMax, strategy} here on every change; BinLiquidityChart
+  // reads it and overlays the would-be distribution.
+  const [pendingPreview, setPendingPreview] = useState<{
+    binMin: number
+    binMax: number
+    strategy: LiquidityStrategy
+  } | null>(null)
 
   const { data: pool, isLoading, error } = useQuery({
     queryKey: ['poolDetail', id],
@@ -255,7 +266,11 @@ export default function PoolDetailPage() {
               </Space>
             }
           >
-            <BinLiquidityChart poolId={pool.id} userBinRanges={userBinRanges} />
+            <BinLiquidityChart
+              poolId={pool.id}
+              userBinRanges={userBinRanges}
+              pendingPreview={pendingPreview}
+            />
           </Card>
 
           {poolPositions.length > 0 && (
@@ -353,13 +368,23 @@ export default function PoolDetailPage() {
               </div>
             </Card>
           )}
+
+          {/* Sprint 9-DS-r4 (P1-6) — Meteora-style pool-scoped recent
+              swaps feed. Always rendered: even if the user has no
+              positions yet, seeing live pool activity is a strong
+              "this market is liquid" signal that encourages first add. */}
+          <PoolRecentSwapsPanel pool={pool} />
         </Col>
 
         <Col xs={24} xl={8}>
           {/* Sprint 9-DS-r4 — Meteora pattern: tabbed action panel
               with Add Liquidity + Swap as siblings. Mirrors the
               right-rail of Meteora's Dynamic Terminal. */}
-          <PoolActionTabs pool={pool} defaultTab="add" />
+          <PoolActionTabs
+            pool={pool}
+            defaultTab="add"
+            onPreviewChange={setPendingPreview}
+          />
         </Col>
       </Row>
 

@@ -107,6 +107,31 @@ public class PoolEngineClient {
         return Collections.emptyList();
     }
 
+    /**
+     * Sprint 9-DS-r4 (P1-13) — GET /api/v1/pools/{id}. Used by
+     * {@code AdminService.getPoolAnalytics} for the TVL/volume/bin
+     * history series. Empty map on fallback so the caller's
+     * {@code extractList(map, ...)} reads short and the page renders
+     * the rest of the analytics with whatever else came back.
+     */
+    @CircuitBreaker(name = CB_NAME, fallbackMethod = "fetchPoolDetailFallback")
+    @Retry(name = CB_NAME)
+    public Map<String, Object> fetchPoolDetail(java.util.UUID poolId) {
+        Map<String, Object> result = webClient.get()
+                .uri("/api/v1/pools/{id}", poolId)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .block(CALL_TIMEOUT);
+        return result == null ? Collections.emptyMap() : result;
+    }
+
+    @SuppressWarnings("unused")
+    private Map<String, Object> fetchPoolDetailFallback(java.util.UUID poolId, Throwable ex) {
+        log.warn("pool-engine /pools/{} CB OPEN or call failed: {}. Returning empty.",
+                poolId, ex.toString());
+        return Collections.emptyMap();
+    }
+
     private static long toLong(Object value) {
         if (value == null) return 0L;
         if (value instanceof Number n) return n.longValue();

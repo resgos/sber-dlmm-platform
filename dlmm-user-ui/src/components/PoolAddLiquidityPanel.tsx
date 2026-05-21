@@ -1,10 +1,10 @@
-import { useState } from 'react'
-import { Card, Typography, Space, InputNumber, Button, Alert, Tag } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { useEffect, useMemo, useState } from 'react'
+import { Typography, Space, InputNumber, Button, Alert, Tag, Tooltip } from 'antd'
+import { PlusOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { pools, balances } from '@/api/services'
 import type { Pool, LiquidityStrategy } from '@/api/types'
-import { formatCompact } from '@/lib/format'
+import { formatCompact, formatRub } from '@/lib/format'
 
 const { Text } = Typography
 
@@ -20,6 +20,17 @@ const { Text } = Typography
 
 interface PoolAddLiquidityPanelProps {
   pool: Pool
+  /**
+   * Sprint 9-DS-r4 (P1-2) — every change to strategy / bin range is
+   * forwarded so the parent page (PoolDetailPage) can mirror the
+   * pending distribution onto the bin chart as a live preview.
+   * Null when nothing meaningful to preview (range invalid).
+   */
+  onPreviewChange?: (preview: {
+    binMin: number
+    binMax: number
+    strategy: LiquidityStrategy
+  } | null) => void
 }
 
 // Inline SVG glyphs matching Meteora's strategy icons.
@@ -58,12 +69,25 @@ const STRATEGIES: { value: LiquidityStrategy; label: string }[] = [
   { value: 'BID_ASK', label: 'Bid Ask' },
 ]
 
-export default function PoolAddLiquidityPanel({ pool }: PoolAddLiquidityPanelProps) {
+export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAddLiquidityPanelProps) {
   const queryClient = useQueryClient()
   const [strategy, setStrategy] = useState<LiquidityStrategy>('SPOT')
   // Default to ±10 bins around the active bin (matches our hint copy).
   const [binMin, setBinMin] = useState<number | null>(pool.activeBinId - 10)
   const [binMax, setBinMax] = useState<number | null>(pool.activeBinId + 10)
+
+  // Sprint 9-DS-r4 (P1-2) — push preview state up on every change so
+  // the bin chart redraws the user-bin overlay live. Cleared on
+  // unmount so navigating away (or switching tab) leaves the chart
+  // showing only the user's real positions.
+  useEffect(() => {
+    if (binMin != null && binMax != null && binMax >= binMin) {
+      onPreviewChange?.({ binMin, binMax, strategy })
+    } else {
+      onPreviewChange?.(null)
+    }
+    return () => onPreviewChange?.(null)
+  }, [binMin, binMax, strategy, onPreviewChange])
   const [amountX, setAmountX] = useState<number | null>(null)
   const [amountY, setAmountY] = useState<number | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -107,6 +131,37 @@ export default function PoolAddLiquidityPanel({ pool }: PoolAddLiquidityPanelPro
   const canAdd =
     amountX != null && amountY != null && amountX > 0 && amountY > 0 &&
     binMin != null && binMax != null && binMax > binMin && totalBins <= 1000
+
+  /**
+   * Sprint 9-DS-r4 (P1-7) — Meteora-style "Cost required to create 1
+   * position" estimate.
+   *
+   * <p>Components:
+   *   - capitalRub: total committed value in ₽ (rough — for the
+   *     SRUB-quoted pools it's exact; for crypto-crypto pools it's a
+   *     local-price-only estimate without an FX leg).
+   *   - bookkeepingRub: 5 ₽ per bin, placeholder until we wire real
+   *     storage-fee accounting (per backlog "Static for now, exact
+   *     later" — Sprint 10 #DEX-P0 will replace with the actual
+   *     per-bin gas-equivalent once a 1С audit lands).
+   *   - protocolFeeRub: zero for adds today (protocol_fee is taken on
+   *     SWAPS, not on LP add — see SwapService.execute). Surface a
+   *     "0 ₽" line anyway so the table is consistent with Meteora's.
+   */
+  const COST_PER_BIN_RUB = 5
+  const capitalRub = useMemo(() => {
+    if (amountX == null && amountY == null) return 0
+    const x = amountX ?? 0
+    const y = amountY ?? 0
+    const xInY = (pool.currentPrice ?? 0) * x
+    // Pool is quoted in tokenY; if tokenY isn't SRUB we still display
+    // the number using ₽ formatting — it's a "value in pair-quote"
+    // estimate, the unit caveat lives in the tooltip below.
+    return xInY + y
+  }, [amountX, amountY, pool.currentPrice])
+  const bookkeepingRub = totalBins * COST_PER_BIN_RUB
+  const protocolFeeRub = 0
+  const totalCostRub = bookkeepingRub + protocolFeeRub
 
   return (
     <Space direction="vertical" size={14} style={{ width: '100%' }}>
@@ -249,6 +304,70 @@ export default function PoolAddLiquidityPanel({ pool }: PoolAddLiquidityPanelPro
           )}
         </div>
       </div>
+
+      {/* Sprint 9-DS-r4 (P1-7) — Meteora-style cost estimate. Always
+          rendered (even with empty inputs) so the LP knows the form
+          will surface costs; populates as soon as bins + amounts are
+          set. Tooltip clarifies the per-bin number is a placeholder
+          until real per-bin storage fees ship in Sprint 10. */}
+      {totalBins > 0 && (
+        <div
+          style={{
+            padding: '10px 12px',
+            background: 'var(--surface-1, #F9FAFB)',
+            borderRadius: 10,
+            fontSize: 12,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Ваш капитал
+              {pool.tokenYSymbol !== 'SRUB' && (
+                <Tooltip title={`В единицах ${pool.tokenYSymbol}. Для не-SRUB пар без отдельной FX-конвертации.`}>
+                  {' '}
+                  <InfoCircleOutlined style={{ fontSize: 11, color: 'var(--text-muted)' }} />
+                </Tooltip>
+              )}
+            </Text>
+            <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {capitalRub > 0 ? formatRub(capitalRub) : '—'}
+            </Text>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Учёт позиции ({totalBins} × {COST_PER_BIN_RUB} ₽)
+              <Tooltip title="Оценочная стоимость учёта позиции в бухгалтерии пула. Замена реальной формулы — в Sprint 10 после аудита 1С.">
+                {' '}
+                <InfoCircleOutlined style={{ fontSize: 11, color: 'var(--text-muted)' }} />
+              </Tooltip>
+            </Text>
+            <Text style={{ fontVariantNumeric: 'tabular-nums' }}>{formatRub(bookkeepingRub)}</Text>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Комиссия протокола на вход
+              <Tooltip title="Protocol fee на DLMM применяется к свопам, а не к вводу ликвидности. Поэтому всегда 0 на этом шаге.">
+                {' '}
+                <InfoCircleOutlined style={{ fontSize: 11, color: 'var(--text-muted)' }} />
+              </Tooltip>
+            </Text>
+            <Text style={{ fontVariantNumeric: 'tabular-nums' }}>{formatRub(protocolFeeRub)}</Text>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              paddingTop: 6,
+              borderTop: '1px solid var(--border-light)',
+            }}
+          >
+            <Text strong style={{ fontSize: 12 }}>Итого стоимость создания</Text>
+            <Text strong style={{ fontSize: 12, color: 'var(--sber-green)', fontVariantNumeric: 'tabular-nums' }}>
+              {formatRub(totalCostRub)}
+            </Text>
+          </div>
+        </div>
+      )}
 
       <Button
         type="primary"
