@@ -35,3 +35,19 @@ logging:
   level:
     com.sber.dlmm: DEBUG
     org.springframework: INFO
+
+# Sprint 9-DS-r2 — actuator endpoints were unconfigured, so /actuator/health
+# returned NoResourceFoundException (500 via GlobalExceptionHandler) and
+# the Docker healthcheck reported the service unhealthy even though the
+# app was serving its business endpoints fine. Match the exposure list
+# every other service uses.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true

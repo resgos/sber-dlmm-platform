@@ -6,5 +6,6 @@
                             http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
 
     <include file="001-create-notifications-table.xml" relativeToChangelogFile="true"/>
+    <include file="002-rename-read-to-is-read.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

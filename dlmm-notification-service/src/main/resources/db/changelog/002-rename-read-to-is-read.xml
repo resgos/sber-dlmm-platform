@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      The Notification entity declares @Column(name = "is_read") (avoiding
+      the SQL-reserved word `read`), but the original init-db.sql + the
+      Sprint 2 changeset created the column as plain `read`. JPA schema
+      validation rejects the mismatch with
+      `Schema-validation: missing column [is_read] in table [notifications]`,
+      and notification-service crashes on boot.
+
+      Fix: rename `read` → `is_read` so the column matches the entity.
+      Wrapped in preConditions so it's a no-op on a fresh DB that gets
+      the right name from a future init-db rewrite, and on databases
+      where someone has already renamed manually.
+    -->
+    <changeSet id="002-rename-read-to-is-read" author="dlmm">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <tableExists tableName="notifications"/>
+                <columnExists tableName="notifications" columnName="read"/>
+                <not>
+                    <columnExists tableName="notifications" columnName="is_read"/>
+                </not>
+            </and>
+        </preConditions>
+        <renameColumn
+                tableName="notifications"
+                oldColumnName="read"
+                newColumnName="is_read"
+                columnDataType="boolean"/>
+    </changeSet>
+
+</databaseChangeLog>

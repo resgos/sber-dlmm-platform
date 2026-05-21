@@ -35,6 +35,15 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- Sprint 9-DS-r2 — was missing. /actuator/health returned
+             NoResourceFoundException (translated to 500 by the global
+             handler) and the Docker healthcheck reported the service
+             unhealthy even though the business endpoints were fine. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
