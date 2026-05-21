@@ -101,16 +101,29 @@ public class SwapService {
 
             PoolBin bin = poolBinRepository.findByPoolIdAndBinId(pool.getId(), currentBinId).orElse(null);
 
+            // Sprint 9-DS-r3 — bin-traversal direction was inverted.
+            // Canonical LB-DLMM with price = Y/X:
+            //   X→Y swap drains Y from the active bin and walks DOWN
+            //   into bins-below-active (which also hold Y) as price
+            //   falls; Y→X drains X from above-active bins, price rises.
+            // Old code did the opposite, so after the active bin's
+            // small both-sided reserve ran out, the swap walked into
+            // empty bins and either returned a tiny fill or threw
+            // InsufficientLiquidityException. Only tiny swaps that fit
+            // entirely in the active bin worked.
             if (bin == null || bin.getLiquidity() <= 0) {
-                // No liquidity in this bin, move to next
-                currentBinId = swapXtoY ? currentBinId + 1 : currentBinId - 1;
+                currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
                 continue;
             }
 
             BigDecimal binPrice = bin.getPrice();
             if (binPrice == null || binPrice.compareTo(BigDecimal.ZERO) <= 0) {
-                binPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(), currentBinId);
+                // Sprint 9-DS-r3 — same activeBinId-anchor fix as
+                // LiquidityService. binId is *absolute* (anchor at 2^23),
+                // so the offset to pass to BinMath is binId - activeBinId.
+                binPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(),
+                        currentBinId - pool.getActiveBinId());
             }
 
             // Calculate max amount of input token this bin can absorb
@@ -129,7 +142,8 @@ public class SwapService {
             }
 
             if (maxAmountIn <= 0) {
-                currentBinId = swapXtoY ? currentBinId + 1 : currentBinId - 1;
+                // Sprint 9-DS-r3 — flipped per canonical DLMM (see above).
+                currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
                 continue;
             }
@@ -158,9 +172,10 @@ public class SwapService {
             totalFee += fee;
             remainingAmountIn -= actualAmountIn;
 
-            // If bin is exhausted, move to next
+            // If bin is exhausted, move to next.
+            // Sprint 9-DS-r3 — flipped per canonical DLMM (see above).
             if (actualAmountIn >= maxAmountIn) {
-                currentBinId = swapXtoY ? currentBinId + 1 : currentBinId - 1;
+                currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
             }
         }
@@ -330,15 +345,18 @@ public class SwapService {
 
             PoolBin bin = poolBinRepository.findByPoolIdAndBinId(pool.getId(), currentBinId).orElse(null);
 
+            // Sprint 9-DS-r3 — direction flipped to match canonical
+            // LB-DLMM (see comment in quote()).
             if (bin == null || bin.getLiquidity() <= 0) {
-                currentBinId = swapXtoY ? currentBinId + 1 : currentBinId - 1;
+                currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
                 continue;
             }
 
             BigDecimal binPrice = bin.getPrice();
             if (binPrice == null || binPrice.compareTo(BigDecimal.ZERO) <= 0) {
-                binPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(), currentBinId);
+                binPrice = BinMath.binPrice(pool.getBasePrice(), pool.getBinStep(),
+                        currentBinId - pool.getActiveBinId());
             }
 
             // Max input this bin can absorb
@@ -353,7 +371,8 @@ public class SwapService {
             }
 
             if (maxAmountIn <= 0) {
-                currentBinId = swapXtoY ? currentBinId + 1 : currentBinId - 1;
+                // Sprint 9-DS-r3 — flipped per canonical DLMM (see above).
+                currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
                 continue;
             }
@@ -426,8 +445,9 @@ public class SwapService {
             // Track last bin with liquidity
             lastActiveBinId = currentBinId;
 
+            // Sprint 9-DS-r3 — direction flipped (see top of loop).
             if (actualAmountIn >= maxAmountIn) {
-                currentBinId = swapXtoY ? currentBinId + 1 : currentBinId - 1;
+                currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
             }
         }

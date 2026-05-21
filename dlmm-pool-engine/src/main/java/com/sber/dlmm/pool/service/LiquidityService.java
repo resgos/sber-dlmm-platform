@@ -162,30 +162,61 @@ public class LiquidityService {
                 continue;
             }
 
-            BigDecimal binPrice = BinMath.binPrice(basePrice, binStep, binId);
+            // Sprint 9-DS-r3 — TWO BUGS fixed in this block:
+            //
+            // (a) BinMath.binPrice(basePrice, binStep, binId) treats binId
+            //     as an offset from the *zero* bin. Seed pools use
+            //     activeBinId = 2^23 = 8 388 608 as the anchor where
+            //     price == basePrice, so the formula overflowed to
+            //     exp(4192) and every below-active bin computed
+            //     amountX = binLiquidity / astronomical = 0 (FLOOR).
+            //     Result: any add-liquidity call with the user range
+            //     straddling the active bin deposited ONLY Y — every
+            //     X-side bin silently swallowed nothing (the response's
+            //     depositedX was always 0). Fix: compute price relative
+            //     to activeBinId (subtract the offset).
+            //
+            // (b) The X/Y side assignment was inverted vs canonical DLMM
+            //     (and vs seed bin data, which has Y-only below price
+            //     and X-only above). In standard DLMM with price=Y/X,
+            //     bins below the active price hold Y (waiting to buy X
+            //     cheap) and bins above hold X. Code said the opposite.
+            //     Fix: swap the two branches.
+            BigDecimal binPrice = BinMath.binPrice(basePrice, binStep, binId - activeBinId);
 
             long amountX = 0;
             long amountY = 0;
 
             if (binId < activeBinId) {
-                // Below active bin: only token X
-                // amountX = liquidity / price
+                // Below active price: bin holds Y only (canonical DLMM).
+                // amountY = binLiquidity (Y units), amountX = 0.
+                amountX = 0;
+                amountY = binLiquidity;
+            } else if (binId > activeBinId) {
+                // Above active price: bin holds X only.
+                // amountX = binLiquidity / price (convert Y-denominated
+                // liquidity into X units at this bin's price).
                 amountX = binPrice.compareTo(BigDecimal.ZERO) > 0
                         ? BigDecimal.valueOf(binLiquidity)
                                 .divide(binPrice, 0, RoundingMode.FLOOR).longValue()
                         : 0;
                 amountY = 0;
-            } else if (binId > activeBinId) {
-                // Above active bin: only token Y
-                amountX = 0;
-                amountY = binLiquidity;
             } else {
-                // Active bin: both tokens, based on composition factor
-                BigDecimal c = getOrDefaultCompositionFactor(pool.getId(), binId);
-                // amountY = liquidity * c
+                // Active bin: both legs based on composition factor c.
+                // Sprint 9-DS-r3 — c can exceed 1.0 in this codebase
+                // because `binLiquidity` is stored as mixed-unit sum
+                // (amountX + amountY) rather than canonical LB-DLMM "L"
+                // units, so after multiple adds reserveY/liquidity drifts
+                // past 1.0. Without the clamp `1 - c` goes negative and
+                // amountX comes out negative — which then *increases* the
+                // pool's X reserve when subtracted later. Clamp c to
+                // [0,1] so the active bin contribution stays sensible.
+                // Proper fix is to switch to canonical L-units throughout,
+                // which is a much larger refactor.
+                BigDecimal cRaw = getOrDefaultCompositionFactor(pool.getId(), binId);
+                BigDecimal c = cRaw.max(BigDecimal.ZERO).min(BigDecimal.ONE);
                 amountY = BigDecimal.valueOf(binLiquidity).multiply(c, MC)
                         .setScale(0, RoundingMode.FLOOR).longValue();
-                // amountX = liquidity * (1 - c) / price
                 BigDecimal oneMinusC = BigDecimal.ONE.subtract(c, MC);
                 amountX = binPrice.compareTo(BigDecimal.ZERO) > 0
                         ? BigDecimal.valueOf(binLiquidity).multiply(oneMinusC, MC)
