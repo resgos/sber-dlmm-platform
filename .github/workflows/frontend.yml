@@ -11,6 +11,7 @@ on:
       - "dlmm-user-ui/**"
       - "scripts/check-no-hex-in-tsx.mjs"
       - "scripts/hex-baseline.json"
+      - "scripts/check-ui-shared-drift.mjs"
       - ".github/workflows/frontend.yml"
   pull_request:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - "dlmm-user-ui/**"
       - "scripts/check-no-hex-in-tsx.mjs"
       - "scripts/hex-baseline.json"
+      - "scripts/check-ui-shared-drift.mjs"
       - ".github/workflows/frontend.yml"
   workflow_dispatch:
 
@@ -41,6 +43,17 @@ jobs:
           node-version: "20"
       - name: Check no new hex in .tsx
         run: node scripts/check-no-hex-in-tsx.mjs
+
+      # Sprint 9-DS-r4 P2-17 — UI shared-code drift watchdog.
+      # Files duplicated between admin-ui and user-ui (format helpers,
+      # KpiTile, TokenPairChip) must stay in lockstep until the
+      # Sprint 10 workspaces refactor lands. Strict entries (lib/utils
+      # format, TokenPairChip) fail the build on byte-level drift.
+      # Relaxed entries (KpiTile) emit an INFO line documenting the
+      # divergence — see scripts/check-ui-shared-drift.mjs for the
+      # manifest + rationale.
+      - name: Check UI shared-code drift
+        run: node scripts/check-ui-shared-drift.mjs
 
   ui:
     needs: hex-ratchet
