@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Card, Typography, Space, Tag, Button, Spin, Alert, Row, Col, Tabs, message } from 'antd'
+import { Card, Typography, Space, Tag, Button, Spin, Alert, Row, Col, Tabs, message, Modal } from 'antd'
 import {
   ArrowLeftOutlined,
   PlusOutlined,
@@ -84,6 +84,11 @@ export default function PoolDetailPage() {
     onError: (e: any) => message.error(e?.response?.data?.message || 'Не удалось забрать комиссии'),
   })
 
+  // Sprint 9-DS-r4 (P1-8) — one-click rebalance state. Disables the
+  // banner CTA while the multi-step close+reopen runs so the user
+  // can't double-fire.
+  const [rebalancing, setRebalancing] = useState(false)
+
   if (isLoading) return <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
   if (error || !pool) return <Alert message="Пул не найден" type="error" showIcon />
 
@@ -118,6 +123,109 @@ export default function PoolDetailPage() {
     binMin: p.binRangeMin,
     binMax: p.binRangeMax,
   }))
+
+  /**
+   * Sprint 9-DS-r4 (P1-8) — one-click rebalance for OOR positions.
+   *
+   * For each out-of-range position we:
+   *   1. Capture its current value (X, Y reserves) before removal so
+   *      we can redeposit the same capital
+   *   2. Remove 100% liquidity (atomic — rolls back if downstream fails)
+   *   3. Reopen a new position centred on the CURRENT activeBinId with
+   *      the SAME strategy and the SAME bin-width (so a ±10 SPOT
+   *      becomes a ±10 SPOT around the new active price)
+   *
+   * Sequential, not parallel — same reasoning as P1-9 mass-close:
+   * concurrent same-pool mutations rack up optimistic-lock retries
+   * and give the LP no recoverable error point. Stop on first failure
+   * so any positions already migrated stay migrated.
+   *
+   * Idempotency: each step carries its own random key so a partial
+   * run that's resumed later doesn't double-close.
+   */
+  const confirmRebalanceAll = () => {
+    if (!pool) return
+    const oorPositions = poolPositions.filter(
+      (p) => pool.activeBinId < p.binRangeMin || pool.activeBinId > p.binRangeMax,
+    )
+    if (oorPositions.length === 0) return
+
+    Modal.confirm({
+      title: `Ребалансировать ${oorPositions.length} позиций?`,
+      width: 520,
+      content: (
+        <Space direction="vertical" size={8}>
+          <Text>
+            Каждая позиция вне диапазона будет последовательно закрыта,
+            а затем заново открыта с тем же объёмом капитала, той же
+            стратегией и шириной диапазона, но вокруг текущей цены
+            (бин <code>{pool.activeBinId}</code>).
+          </Text>
+          <Text type="warning" style={{ fontSize: 12 }}>
+            Операция последовательная — если что-то сломается на
+            половине, ранее перенесённые позиции остаются перенесёнными.
+            Не закрывайте вкладку до завершения.
+          </Text>
+        </Space>
+      ),
+      okText: `Перенести ${oorPositions.length}`,
+      cancelText: 'Отмена',
+      onOk: async () => {
+        setRebalancing(true)
+        let done = 0
+        try {
+          for (const pos of oorPositions) {
+            // Capture pre-remove values so we know how much to redeposit.
+            const amountX = pos.currentValueX ?? 0
+            const amountY = pos.currentValueY ?? 0
+            if (amountX <= 0 && amountY <= 0) {
+              // Empty position — skip cleanly.
+              done++
+              continue
+            }
+            const widthMin = pos.binRangeMin - pool.activeBinId // typically negative
+            const widthMax = pos.binRangeMax - pool.activeBinId // typically positive
+            // Preserve TOTAL width — keep absolute spread = (max - min)
+            // around the NEW active bin (centred). If original was
+            // asymmetric (e.g. CURVE skewed up), preserve the skew.
+            const newBinMin = pool.activeBinId + widthMin
+            const newBinMax = pool.activeBinId + widthMax
+
+            try {
+              await pools.removeLiquidity({
+                positionId: pos.id,
+                percentage: 100,
+                idempotencyKey: crypto.randomUUID(),
+              })
+              await pools.addLiquidity({
+                poolId: pool.id,
+                amountX,
+                amountY,
+                binRangeMin: newBinMin,
+                binRangeMax: newBinMax,
+                strategy: pos.strategy,
+                idempotencyKey: crypto.randomUUID(),
+              })
+              done++
+            } catch (e: any) {
+              message.error(
+                `Не удалось перенести позицию ${pos.id.slice(0, 6)}…: ${
+                  e?.response?.data?.message || 'ошибка'
+                }. Перенесено ${done} из ${oorPositions.length}.`,
+              )
+              return
+            }
+          }
+          message.success(`Перенесено позиций: ${done}`)
+        } finally {
+          setRebalancing(false)
+          queryClient.invalidateQueries({ queryKey: ['myPositions'] })
+          queryClient.invalidateQueries({ queryKey: ['myBalances'] })
+          queryClient.invalidateQueries({ queryKey: ['poolDetail', pool.id] })
+        }
+      },
+    })
+  }
 
   return (
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
@@ -225,21 +333,27 @@ export default function PoolDetailPage() {
 
       {/* Sprint 9-DS-r3 — out-of-range warning (Meteora pattern). When
           the active bin sits outside any of the user's ranges, that
-          capital earns 0 fees. Surface loudly. */}
+          capital earns 0 fees. Surface loudly.
+          Sprint 9-DS-r4 (P1-8) — the Ребаланс CTA is now a real
+          one-click action: it closes the OOR positions and reopens
+          them centred on the current active bin with the same
+          strategy + bin-width. Was a navigate to /liquidity. */}
       {outOfRangeCount > 0 && (
         <Alert
           message={`${outOfRangeCount} ваших позиций — вне диапазона цены`}
-          description="Позиция вне диапазона не получает комиссий. Откройте «Добавить ликвидность» и перенесите ликвидность ближе к текущей цене (rebalance)."
+          description="Позиция вне диапазона не получает комиссий. Нажмите «Ребаланс», чтобы перенести её к текущей цене с тем же объёмом капитала и той же стратегией."
           type="warning"
           showIcon
           icon={<WarningOutlined />}
           action={
             <Button
               size="small"
-              onClick={() => navigate(`/pools/${id}/liquidity`)}
+              type="primary"
+              loading={rebalancing}
+              onClick={confirmRebalanceAll}
               style={{ borderRadius: 8 }}
             >
-              Ребаланс
+              Ребаланс ({outOfRangeCount})
             </Button>
           }
           style={{ borderRadius: 12 }}

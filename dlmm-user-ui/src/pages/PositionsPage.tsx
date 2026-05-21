@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col } from 'antd'
-import { DollarOutlined, DeleteOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined } from '@ant-design/icons'
+import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip } from 'antd'
+import { DollarOutlined, DeleteOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { pools, fees } from '@/api/services'
@@ -325,6 +325,71 @@ export default function PositionsPage() {
                       pool?.tokenYSymbol ?? '',
                     )}
                   </span>
+                )
+              },
+            },
+            {
+              // Sprint 9-DS-r4 (P1-10) — P&L column. Compares current
+              // position value (server-supplied via PositionResponse)
+              // against the original deposit (also server-supplied;
+              // backed by the new initial_deposit_x/y columns added
+              // in Liquibase 011). Computed in pair-quote currency
+              // (tokenY units) since both sides convert to it via
+              // the pool's current price. Legacy positions opened
+              // before the schema migration carry initialDeposit=0
+              // and show "—". Excludes fees (those have their own
+              // column); pure mark-to-market P&L only.
+              title: <Tooltip title="Текущая стоимость позиции минус её первоначальная стоимость (в единицах второй монеты пары). Не включает комиссии — они в отдельной колонке.">P&L</Tooltip>,
+              key: 'pnl',
+              align: 'right' as const,
+              render: (_: unknown, r: Position) => {
+                const pool = poolById.get(r.poolId)
+                const price = pool?.currentPrice ?? 0
+                const ySym = pool?.tokenYSymbol ?? 'Y'
+                const initialX = r.initialDepositX ?? 0
+                const initialY = r.initialDepositY ?? 0
+                const currentX = r.currentValueX ?? 0
+                const currentY = r.currentValueY ?? 0
+
+                if (initialX === 0 && initialY === 0) {
+                  return (
+                    <Tooltip title="Позиция открыта до Sprint 9-DS-r4 — нет исходной стоимости.">
+                      <Text type="secondary">—</Text>
+                    </Tooltip>
+                  )
+                }
+
+                const initialQuote = initialY + initialX * price
+                const currentQuote = currentY + currentX * price
+                const pnlQuote = currentQuote - initialQuote
+                const pnlPct = initialQuote > 0 ? (pnlQuote / initialQuote) * 100 : 0
+                const positive = pnlQuote >= 0
+
+                return (
+                  <Space direction="vertical" size={0} style={{ alignItems: 'flex-end' }}>
+                    <Text
+                      strong
+                      style={{
+                        color: positive ? 'var(--sber-green)' : '#DC2626',
+                        fontVariantNumeric: 'tabular-nums',
+                        fontSize: 13,
+                      }}
+                    >
+                      {positive ? <RiseOutlined /> : <FallOutlined />}{' '}
+                      {positive ? '+' : ''}
+                      {formatTokenAmount(Math.abs(pnlQuote), ySym, { compact: true, maxFractionDigits: 2 })}
+                    </Text>
+                    <Text
+                      type="secondary"
+                      style={{
+                        fontSize: 11,
+                        color: positive ? 'var(--sber-green)' : '#DC2626',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {positive ? '+' : ''}{pnlPct.toFixed(2)}%
+                    </Text>
+                  </Space>
                 )
               },
             },

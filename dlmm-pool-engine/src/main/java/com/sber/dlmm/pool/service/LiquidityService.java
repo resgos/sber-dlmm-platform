@@ -319,6 +319,12 @@ public class LiquidityService {
                 .unclaimedFeeY(0)
                 .lastFeeGrowthX(lastFeeGrowthX)
                 .lastFeeGrowthY(lastFeeGrowthY)
+                // Sprint 9-DS-r4 (P1-10) — cost-basis snapshot for the
+                // P&L column on PositionsPage. Stamped at position
+                // creation; partial removes scale this down proportionally
+                // (see removeLiquidity below).
+                .initialDepositX(totalDepositedX)
+                .initialDepositY(totalDepositedY)
                 .isActive(true)
                 .createdAt(LocalDateTime.now())
                 .build();
@@ -465,6 +471,14 @@ public class LiquidityService {
         position.setUnclaimedFeeX(0);
         position.setUnclaimedFeeY(0);
 
+        // Sprint 9-DS-r4 (P1-10) — scale cost-basis down proportionally
+        // on partial removes so a 50% remove halves the basis as well.
+        // Avoids a P&L jump from the same "remaining position" suddenly
+        // being measured against the full original deposit.
+        long remainingBps = 10_000 - percentageBps;
+        position.setInitialDepositX(position.getInitialDepositX() * remainingBps / 10_000);
+        position.setInitialDepositY(position.getInitialDepositY() * remainingBps / 10_000);
+
         // Update fee growth snapshot to current
         PoolBin activeBin = poolBinRepository.findByPoolIdAndBinId(pool.getId(), pool.getActiveBinId()).orElse(null);
         if (activeBin != null) {
@@ -541,6 +555,12 @@ public class LiquidityService {
                     pos.getTotalLiquidityShares(), currentValueX, currentValueY,
                     pos.getUnclaimedFeeX() + unclaimedFeeX,
                     pos.getUnclaimedFeeY() + unclaimedFeeY,
+                    // Sprint 9-DS-r4 (P1-10) — cost-basis surface
+                    // for the PositionsPage P&L column. 0 for any
+                    // legacy position opened before the schema
+                    // migration; new positions carry real values.
+                    pos.getInitialDepositX(),
+                    pos.getInitialDepositY(),
                     pos.isActive(), pos.getCreatedAt(), pos.getClosedAt(),
                     binAllocations));
         }

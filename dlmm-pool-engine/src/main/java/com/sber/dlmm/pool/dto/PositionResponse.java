@@ -18,6 +18,12 @@ public record PositionResponse(
         long currentValueY,
         long unclaimedFeeX,
         long unclaimedFeeY,
+        // Sprint 9-DS-r4 (P1-10) — cost-basis for the PositionsPage
+        // P&L column. Sum of all deposits to this position, scaled
+        // down proportionally on partial removes. 0 for legacy
+        // positions opened before the schema migration.
+        long initialDepositX,
+        long initialDepositY,
         boolean isActive,
         LocalDateTime createdAt,
         LocalDateTime closedAt,

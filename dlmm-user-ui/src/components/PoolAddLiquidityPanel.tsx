@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Typography, Space, InputNumber, Button, Alert, Tag, Tooltip } from 'antd'
+import { Typography, Space, InputNumber, Button, Alert, Tag, Tooltip, Slider } from 'antd'
 import { PlusOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { pools, balances } from '@/api/services'
@@ -249,7 +249,12 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
         </div>
       </div>
 
-      {/* Price range — bin numbers */}
+      {/* Price range — Meteora-style range slider + numeric inputs.
+          Sprint 9-DS-r4 (P1-1) — added the draggable Min/Max slider
+          on top of the existing numeric inputs and quick-picks. The
+          slider gives at-a-glance feedback for the new LP; numerics
+          stay for ops who need bin-level precision (and for inputs
+          beyond the slider's ±50 view). */}
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <Text type="secondary" style={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
@@ -272,7 +277,28 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
             ))}
           </Space>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+
+        {/* Sprint 9-DS-r4 (P1-1) — the visual price range. Slider
+            range is ±50 around active (covers the SPOT/CURVE common
+            case + headroom for BID_ASK); numeric inputs below can
+            still go wider for power users. Tooltip on each handle
+            shows the actual price (Y per 1 X) computed from the bin
+            offset via the DLMM log-spaced formula — same math the
+            backend's BinMath uses. */}
+        <BinRangeSlider
+          activeBinId={pool.activeBinId}
+          binStep={pool.binStep}
+          currentPrice={pool.currentPrice ?? 0}
+          quoteSymbol={pool.tokenYSymbol}
+          binMin={binMin}
+          binMax={binMax}
+          onChange={(min, max) => {
+            setBinMin(min)
+            setBinMax(max)
+          }}
+        />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
           <div>
             <Text type="secondary" style={{ fontSize: 11 }}>Мин бин</Text>
             <InputNumber
@@ -386,6 +412,90 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
           : 'Добавить ликвидность'}
       </Button>
     </Space>
+  )
+}
+
+/**
+ * Sprint 9-DS-r4 (P1-1) — Meteora-style draggable range slider for
+ * the [binMin, binMax] selection. AntD's <Slider range/> handles the
+ * UI; the formatter on each handle converts the bin offset into a
+ * human-readable price using the DLMM log-spaced formula
+ * {@code price = currentPrice × (1 + binStep/10000)^(binId - activeBinId)}.
+ *
+ * <p>Slider domain is fixed at ±50 bins around active — covers the
+ * common SPOT/CURVE adds and gives BID_ASK enough headroom. Power
+ * users who need a wider range use the numeric inputs below.
+ */
+function BinRangeSlider({
+  activeBinId,
+  binStep,
+  currentPrice,
+  quoteSymbol,
+  binMin,
+  binMax,
+  onChange,
+}: {
+  activeBinId: number
+  binStep: number
+  currentPrice: number
+  quoteSymbol: string
+  binMin: number | null
+  binMax: number | null
+  onChange: (min: number, max: number) => void
+}) {
+  const RANGE = 50
+  const sliderMin = activeBinId - RANGE
+  const sliderMax = activeBinId + RANGE
+  // Clamp the current value into the slider domain for display; the
+  // numeric inputs below still hold the true value.
+  const lo = Math.max(sliderMin, Math.min(sliderMax, binMin ?? activeBinId))
+  const hi = Math.max(sliderMin, Math.min(sliderMax, binMax ?? activeBinId))
+
+  const priceAtBin = (binId: number) => {
+    if (!currentPrice || !binStep) return 0
+    const r = 1 + binStep / 10_000
+    return currentPrice * Math.pow(r, binId - activeBinId)
+  }
+
+  const fmt = (n: number) =>
+    n >= 1000
+      ? n.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
+      : n.toLocaleString('ru-RU', { maximumFractionDigits: 4 })
+
+  return (
+    <div style={{ padding: '0 6px' }}>
+      <Slider
+        range
+        min={sliderMin}
+        max={sliderMax}
+        value={[lo, hi]}
+        marks={{
+          [activeBinId]: {
+            label: (
+              <span style={{ color: 'var(--sber-green)', fontSize: 10, fontWeight: 600 }}>
+                ★ {currentPrice ? fmt(currentPrice) : 'актив'}
+              </span>
+            ),
+            style: { color: 'var(--sber-green)' },
+          },
+        }}
+        tooltip={{
+          formatter: (binId) =>
+            binId != null && currentPrice > 0
+              ? `${fmt(priceAtBin(binId))} ${quoteSymbol}`
+              : `bin ${binId}`,
+        }}
+        styles={{
+          // Highlight the active-bin tick a touch greener than default.
+          track: { backgroundColor: 'var(--sber-green)' },
+        }}
+        onChange={(v) => {
+          if (Array.isArray(v) && v.length === 2) {
+            onChange(v[0], v[1])
+          }
+        }}
+      />
+    </div>
   )
 }
 

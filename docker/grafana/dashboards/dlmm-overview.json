@@ -120,6 +120,51 @@
         }
       ],
       "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "title": "Gateway throttle rate by tier (P1-14)",
+      "type": "timeseries",
+      "description": "Requests rejected with 429 by the per-tier rate limiter, broken out by tier (FREE / PRO / ENTERPRISE). Sustained non-zero on PRO or ENTERPRISE means we should bump the replenish rate; FREE throttles are expected and signal upsell opportunity.",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (tier) (rate(dlmm_gateway_ratelimit_total{outcome=\"throttled\"}[1m]))",
+          "legendFormat": "{{tier}} throttled",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "title": "Gateway throttle ratio by tier (P1-14)",
+      "type": "timeseries",
+      "description": "Fraction of requests rejected per tier = throttled / (allowed + throttled). A tier sitting near 1.0 is fully saturated; near 0 means quota headroom.",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (tier) (rate(dlmm_gateway_ratelimit_total{outcome=\"throttled\"}[5m])) / clamp_min(sum by (tier) (rate(dlmm_gateway_ratelimit_total[5m])), 0.001)",
+          "legendFormat": "{{tier}} throttle ratio",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
+    },
+    {
+      "title": "TVL rollup drift by pool (P1-12)",
+      "type": "timeseries",
+      "description": "Difference between LiquidityPool.totalTvlX/Y (cached, incrementally maintained) and SUM(pool_bins.reserve_x/y) (ground truth). Updated by TvlReconciliationService nightly at 03:34. Non-zero = code-path bug somewhere in swap/add/remove that's leaking the incremental updates.",
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "dlmm_pool_tvl_drift",
+          "legendFormat": "{{pool}} ({{side}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
     }
   ]
 }

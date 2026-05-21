@@ -23,4 +23,20 @@ public interface PoolBinRepository extends JpaRepository<PoolBin, PoolBinId> {
     @Query("SELECT b FROM PoolBin b WHERE b.poolId = :poolId " +
             "AND b.liquidity > 0 ORDER BY b.binId ASC")
     List<PoolBin> findActiveBins(@Param("poolId") UUID poolId);
+
+    /**
+     * Sprint 9-DS-r4 (P1-12) — TVL reconciliation input. Returns the
+     * true sum of reserves across every bin in the pool. The rollups
+     * {@code LiquidityPool.totalTvlX/Y} are incrementally maintained
+     * by swap + add/remove paths and can drift if any of those paths
+     * has a bug; the reconciliation job compares this aggregate
+     * against the cached rollup and alerts on mismatch.
+     *
+     * <p>Returns a 2-long array: [sumReserveX, sumReserveY]. Single
+     * query per pool keeps the nightly reconciliation cheap (one
+     * scan per pool of the pool_bins partition).
+     */
+    @Query("SELECT COALESCE(SUM(b.reserveX), 0L), COALESCE(SUM(b.reserveY), 0L) " +
+            "FROM PoolBin b WHERE b.poolId = :poolId")
+    Object[] sumReservesByPool(@Param("poolId") UUID poolId);
 }

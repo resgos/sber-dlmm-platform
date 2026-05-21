@@ -1,6 +1,8 @@
 package com.sber.dlmm.gateway.filter;
 
 import com.sber.dlmm.common.enums.ApiTier;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -17,6 +19,7 @@ import org.springframework.util.AntPathMatcher;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
@@ -57,15 +60,47 @@ public class TierBasedRateLimitFilter implements GlobalFilter, Ordered {
     private final KeyResolver tierKeyResolver;
     private final Map<ApiTier, RedisRateLimiter> limiters;
 
+    /**
+     * Sprint 9-DS-r4 (P1-14) — per-tier throttle counters surfaced to
+     * Prometheus / Grafana. Two counters per tier:
+     *   - dlmm_gateway_ratelimit_total{tier=FREE|PRO|ENTERPRISE,outcome=allowed}
+     *   - dlmm_gateway_ratelimit_total{tier=FREE|PRO|ENTERPRISE,outcome=throttled}
+     *
+     * Allowed/throttled ratio per tier tells us at a glance whether a
+     * tier is hitting its quota (and therefore whether to bump the
+     * replenish rate, upsell to the next tier, or open an investigation
+     * into a runaway client). Pre-registered into EnumMaps so the hot
+     * path inside the reactive chain is just a {@code counter.increment()}
+     * — no map.computeIfAbsent under load.
+     */
+    private final Map<ApiTier, Counter> allowedCounters;
+    private final Map<ApiTier, Counter> throttledCounters;
+
     public TierBasedRateLimitFilter(@Qualifier("tierKeyResolver") KeyResolver tierKeyResolver,
                                      @Qualifier("freeRateLimiter") RedisRateLimiter freeRateLimiter,
                                      @Qualifier("proRateLimiter") RedisRateLimiter proRateLimiter,
-                                     @Qualifier("enterpriseRateLimiter") RedisRateLimiter enterpriseRateLimiter) {
+                                     @Qualifier("enterpriseRateLimiter") RedisRateLimiter enterpriseRateLimiter,
+                                     MeterRegistry meterRegistry) {
         this.tierKeyResolver = tierKeyResolver;
         this.limiters = Map.of(
                 ApiTier.FREE, freeRateLimiter,
                 ApiTier.PRO, proRateLimiter,
                 ApiTier.ENTERPRISE, enterpriseRateLimiter);
+
+        this.allowedCounters = new EnumMap<>(ApiTier.class);
+        this.throttledCounters = new EnumMap<>(ApiTier.class);
+        for (ApiTier t : ApiTier.values()) {
+            allowedCounters.put(t, Counter.builder("dlmm.gateway.ratelimit")
+                    .description("Requests after per-tier rate-limit check")
+                    .tag("tier", t.name())
+                    .tag("outcome", "allowed")
+                    .register(meterRegistry));
+            throttledCounters.put(t, Counter.builder("dlmm.gateway.ratelimit")
+                    .description("Requests after per-tier rate-limit check")
+                    .tag("tier", t.name())
+                    .tag("outcome", "throttled")
+                    .register(meterRegistry));
+        }
     }
 
     @Override
@@ -102,8 +137,11 @@ public class TierBasedRateLimitFilter implements GlobalFilter, Ordered {
                             response.getHeaders().forEach((name, value) ->
                                     exchange.getResponse().getHeaders().add(name, value));
                             if (response.isAllowed()) {
+                                // Sprint 9-DS-r4 (P1-14) — observability.
+                                allowedCounters.get(tier).increment();
                                 return chain.filter(exchange);
                             }
+                            throttledCounters.get(tier).increment();
                             log.debug("Rate-limit exceeded: tier={} key={}", tier, key);
                             ServerHttpResponse resp = exchange.getResponse();
                             resp.setStatusCode(HttpStatus.TOO_MANY_REQUESTS);

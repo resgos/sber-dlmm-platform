@@ -129,6 +129,14 @@ CREATE TABLE IF NOT EXISTS lp_positions (
     unclaimed_fee_y BIGINT NOT NULL DEFAULT 0,
     last_fee_growth_x BIGINT NOT NULL DEFAULT 0,
     last_fee_growth_y BIGINT NOT NULL DEFAULT 0,
+    -- Sprint 9-DS-r4 (P1-10) — cost-basis tracking for the position P&L
+    -- column on PositionsPage. Initial-deposit pair stays in base units
+    -- (matches reserve_x/y); the UI computes P&L = currentValue - deposit
+    -- in pair-quote. Updated by LiquidityService: += on every add to the
+    -- same position; *= (1-pct/100) on partial removes (proportional
+    -- cost-basis reduction). Mirrored by Liquibase 011.
+    initial_deposit_x BIGINT NOT NULL DEFAULT 0,
+    initial_deposit_y BIGINT NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     closed_at TIMESTAMP

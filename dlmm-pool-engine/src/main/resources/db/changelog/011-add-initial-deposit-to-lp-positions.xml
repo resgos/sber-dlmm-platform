@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 9-DS-r4 (P1-10) — cost-basis tracking for the position
+        P&L column on PositionsPage.
+
+        Before this changeset, the only "value" data on lp_positions
+        was total_liquidity_shares (an opaque count, no price-anchored
+        meaning). The UI could show "current value" via PositionResponse
+        currentValueX/Y but had nothing to compare it against — no
+        deposit amount, no entry price.
+
+        Adds initial_deposit_x / initial_deposit_y, populated by
+        LiquidityService:
+          - addLiquidity (first call): set to deposit amounts
+          - addLiquidity (subsequent same-position): +=
+          - removeLiquidity(pct): proportional reduction (1 - pct/100)
+
+        Backfill is 0 for existing positions — historical P&L can't be
+        reconstructed without per-position transaction history (deferred
+        to Sprint 10 if needed). Positions opened from now on get
+        accurate cost-basis.
+
+        Mirrored in init-db.sql for fresh deploys.
+    -->
+    <changeSet id="011-add-initial-deposit-to-lp-positions" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <tableExists tableName="lp_positions"/>
+                <not><columnExists tableName="lp_positions" columnName="initial_deposit_x"/></not>
+            </and>
+        </preConditions>
+
+        <addColumn tableName="lp_positions">
+            <column name="initial_deposit_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="initial_deposit_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

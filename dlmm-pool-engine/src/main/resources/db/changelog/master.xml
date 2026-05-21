@@ -15,5 +15,6 @@
     <include file="008-create-margin-call-events-table.xml" relativeToChangelogFile="true"/>
     <include file="009-add-protocol-fee-accumulators.xml" relativeToChangelogFile="true"/>
     <include file="010-enable-protocol-fee-on-top-pools.xml" relativeToChangelogFile="true"/>
+    <include file="011-add-initial-deposit-to-lp-positions.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

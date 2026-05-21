@@ -60,6 +60,20 @@ public class LpPosition {
     @Column(name = "last_fee_growth_y", nullable = false)
     private long lastFeeGrowthY;
 
+    /**
+     * Sprint 9-DS-r4 (P1-10) — cost-basis for the position P&L
+     * column. Sum of all X-side deposits to this position, reduced
+     * proportionally on partial removes. Compared against
+     * {@code currentValueX} to derive P&L. Persisted in base units
+     * (matches {@code reserveX} convention). See Liquibase
+     * changeset 011.
+     */
+    @Column(name = "initial_deposit_x", nullable = false)
+    private long initialDepositX;
+
+    @Column(name = "initial_deposit_y", nullable = false)
+    private long initialDepositY;
+
     @Column(name = "is_active", nullable = false)
     private boolean isActive;
 

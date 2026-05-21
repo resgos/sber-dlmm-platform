@@ -138,6 +138,11 @@ export interface Position {
    *  page reads them via cast. Declared here for type-safe access. */
   currentValueX?: number
   currentValueY?: number
+  /** Sprint 9-DS-r4 (P1-10) — cost-basis for the P&L column on
+   *  PositionsPage. 0 for legacy positions opened before the schema
+   *  migration; the UI shows "—" in that case. */
+  initialDepositX?: number
+  initialDepositY?: number
   isActive: boolean
   createdAt: string
   closedAt: string | null
