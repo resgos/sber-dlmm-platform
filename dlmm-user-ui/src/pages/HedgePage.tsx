@@ -665,7 +665,7 @@ export default function HedgePage() {
                         <div style={{
                           fontSize: 13,
                           color: quote.priceImpact < 0.5 ? 'var(--sber-green)'
-                            : quote.priceImpact < 2 ? 'var(--sber-amber)' : '#EF4444',
+                            : quote.priceImpact < 2 ? 'var(--sber-amber)' : 'var(--color-negative-strong)',
                         }}>
                           {quote.priceImpact > 0
                             ? <RiseOutlined style={{ marginRight: 4 }} />

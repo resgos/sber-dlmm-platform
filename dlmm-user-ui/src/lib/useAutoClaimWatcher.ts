@@ -24,6 +24,24 @@ export function shouldFire(position: Position, threshold: number, enabled: boole
   return total >= threshold
 }
 
+/**
+ * Sprint 10 wave 3 — pure preview helper. Given the current positions
+ * + policy, returns the positions that WOULD fire on the next watcher
+ * tick (ignoring cooldown, since the preview is "what's about to
+ * happen"). Used by the AutoClaimSettings card so the user can sanity-
+ * check before flipping the switch.
+ */
+export function previewFireable(
+  positions: Position[] | undefined,
+  threshold: number,
+  skipPoolIds: ReadonlyArray<string>,
+): Position[] {
+  if (!positions) return []
+  return positions.filter((p) =>
+    shouldFire(p, threshold, true) && !skipPoolIds.includes(p.poolId),
+  )
+}
+
 export function useAutoClaimWatcher(
   positions: Position[] | undefined,
   onClaimed?: (ctx: AutoClaimContext) => void,
@@ -46,10 +64,20 @@ export function useAutoClaimWatcher(
     const policy = autoClaimStore.get()
     if (!policy.enabled) return
 
+    // Sprint 10 wave 3 — rolling-24h cap honoured at the watcher level
+    // too (not just the per-position cooldown). Belt-and-braces in case
+    // a future cooldown change forgets the cap.
+    if (autoClaimStore.isCappedToday()) return
+
     // Find the first eligible position. We deliberately do one per
     // render-cycle so the UI is never blocked on a chain of awaits;
     // the next React Query refresh will pick up the next eligible one.
-    const eligible = positions.find((p) => shouldFire(p, policy.threshold, true) && autoClaimStore.canFire(p.id))
+    // Sprint 10 wave 3 — skip pools the user has flagged exception.
+    const eligible = positions.find((p) =>
+      shouldFire(p, policy.threshold, true) &&
+      !policy.skipPoolIds.includes(p.poolId) &&
+      autoClaimStore.canFire(p.id),
+    )
     if (!eligible) return
 
     const symbolPair = `${eligible.tokenXSymbol}/${eligible.tokenYSymbol}`

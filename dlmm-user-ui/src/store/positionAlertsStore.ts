@@ -129,3 +129,51 @@ export function isOnCooldown(alert: PositionAlert): boolean {
   if (!alert.lastFiredAt) return false
   return (Date.now() - new Date(alert.lastFiredAt).getTime()) < COOLDOWN_MS
 }
+
+// ---------------------------------------------------------------------
+// Sprint 10 wave 3 — alert history log.
+//
+// Records every fire across all rules so the user has a single
+// "what happened" view in the drawer, not just per-rule lastFiredAt.
+// Capped at HISTORY_MAX in-memory entries (refresh wipes — matches
+// the auto-claim store pattern). Backend swap-in (Sprint 11) reads
+// from notification-service's notification log instead.
+// ---------------------------------------------------------------------
+
+export interface AlertHistoryEntry {
+  alertId: string
+  alertLabel: string
+  alertType: AlertType
+  message: string
+  delivery: 'browser' | 'in-app'
+  firedAt: string
+}
+
+const ALERT_HISTORY_MAX = 50
+const alertHistory: AlertHistoryEntry[] = []
+const historyListeners = new Set<() => void>()
+
+function notifyHistory(): void {
+  historyListeners.forEach((l) => {
+    try { l() } catch { /* ignore */ }
+  })
+}
+
+export const alertHistoryStore = {
+  list(): ReadonlyArray<AlertHistoryEntry> {
+    return alertHistory
+  },
+  record(entry: AlertHistoryEntry): void {
+    alertHistory.unshift(entry)
+    if (alertHistory.length > ALERT_HISTORY_MAX) alertHistory.length = ALERT_HISTORY_MAX
+    notifyHistory()
+  },
+  clear(): void {
+    alertHistory.length = 0
+    notifyHistory()
+  },
+  subscribe(listener: () => void): () => void {
+    historyListeners.add(listener)
+    return () => historyListeners.delete(listener)
+  },
+}

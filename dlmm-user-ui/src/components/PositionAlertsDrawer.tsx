@@ -14,18 +14,23 @@ import {
   Alert,
   Popconfirm,
   Switch,
+  Tabs,
 } from 'antd'
 import {
   BellOutlined,
   PlusOutlined,
   DeleteOutlined,
   WarningFilled,
+  ExperimentOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons'
 import {
   positionAlertsStore,
+  alertHistoryStore,
   type AlertType,
   type PositionAlert,
 } from '@/store/positionAlertsStore'
+import { fireTestAlert } from '@/lib/usePositionAlertWatcher'
 import type { Position } from '@/api/types'
 
 const { Text } = Typography
@@ -62,6 +67,11 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
     positionAlertsStore.list,
     () => [] as PositionAlert[],
   )
+  const history = useSyncExternalStore(
+    alertHistoryStore.subscribe,
+    alertHistoryStore.list,
+    () => [] as ReturnType<typeof alertHistoryStore.list>,
+  )
 
   const [showForm, setShowForm] = useState(false)
   const [form] = Form.useForm<{
@@ -90,6 +100,38 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
 
   const notifPermission = typeof Notification !== 'undefined' ? Notification.permission : 'denied'
 
+  // Sprint 10 wave 3 — when permission is denied or unavailable, we
+  // still want the user to be able to FIX it. The Notification
+  // browser API doesn't let pages re-prompt after denial — only the
+  // user can grant it via site settings. We render an actionable
+  // banner with a step-by-step hint instead of just a passive warning.
+  const permissionBanner = notifPermission === 'denied' ? (
+    <Alert
+      type="warning"
+      showIcon
+      icon={<WarningFilled />}
+      message="Браузерные уведомления заблокированы"
+      description={
+        <Space direction="vertical" size={4}>
+          <Text style={{ fontSize: 12 }}>
+            Алерты всё равно покажутся внутри страницы (правый верхний угол), но звуковых браузерных
+            уведомлений не будет даже если вкладка скрыта.
+          </Text>
+          <Text style={{ fontSize: 11 }} type="secondary">
+            Чтобы включить: нажмите 🔒 / ⓘ слева от адресной строки → «Уведомления» → «Разрешить» → обновите страницу.
+          </Text>
+        </Space>
+      }
+    />
+  ) : notifPermission === 'default' ? (
+    <Alert
+      type="info"
+      showIcon
+      message="Разрешение на уведомления не запрошено"
+      description="Браузер спросит разрешение в момент первого срабатывания алерта. Можно нажать «Тест» рядом с любым правилом, чтобы спросить заранее."
+    />
+  ) : null
+
   return (
     <Drawer
       title={<Space><BellOutlined /><Text strong>Оповещения по позициям</Text></Space>}
@@ -98,18 +140,17 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
       width={Math.min(window.innerWidth * 0.9, 480)}
       destroyOnClose
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
-        {notifPermission === 'denied' && (
-          <Alert
-            type="warning"
-            showIcon
-            icon={<WarningFilled />}
-            message="Уведомления заблокированы в браузере"
-            description="Правила всё равно вычисляются, но всплывающие сообщения показаны не будут. Разрешите уведомления в настройках сайта, чтобы получать алерты."
-          />
-        )}
+      <Tabs
+        defaultActiveKey="rules"
+        items={[
+          {
+            key: 'rules',
+            label: <Space size={6}><BellOutlined />Правила {alerts.length > 0 && <Tag style={{ marginInlineStart: 0, borderRadius: 999 }}>{alerts.length}</Tag>}</Space>,
+            children: (
+              <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                {permissionBanner}
 
-        {alerts.length === 0 && !showForm && (
+                {alerts.length === 0 && !showForm && (
           <Empty
             description="Алертов пока нет"
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -153,6 +194,19 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
                       )}
                     </div>
                     <Space size={6}>
+                      {/* Sprint 10 wave 3 — Test button. Fires a fake
+                          alert so the user can verify the notification
+                          + permission flow without waiting for a real
+                          event. */}
+                      <Tooltip title="Тестовое срабатывание — поможет убедиться, что уведомления работают">
+                        <Button
+                          size="small"
+                          type="text"
+                          icon={<ExperimentOutlined />}
+                          aria-label="Тестовое срабатывание"
+                          onClick={() => fireTestAlert(a)}
+                        />
+                      </Tooltip>
                       <Tooltip title={a.active ? 'Отключить' : 'Включить'}>
                         <Switch
                           size="small"
@@ -251,7 +305,63 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
             </Form>
           </div>
         )}
-      </Space>
+              </Space>
+            ),
+          },
+          {
+            // Sprint 10 wave 3 — single "what fired and when" view
+            // across all rules. The per-rule `lastFiredAt` shown
+            // in-line on Rules tab is fine for "is this rule alive?";
+            // this tab answers "what happened recently?".
+            key: 'history',
+            label: <Space size={6}><HistoryOutlined />История {history.length > 0 && <Tag style={{ marginInlineStart: 0, borderRadius: 999 }}>{history.length}</Tag>}</Space>,
+            children: (
+              <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                {history.length === 0 ? (
+                  <Empty
+                    description="Срабатываний пока не было"
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        Последние {history.length} срабатываний (хранятся в памяти вкладки)
+                      </Text>
+                      <Button size="small" type="text" onClick={() => alertHistoryStore.clear()}>
+                        Очистить
+                      </Button>
+                    </div>
+                    {history.map((h, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          padding: 10,
+                          border: '1px solid var(--border-light)',
+                          borderRadius: 8,
+                          background: 'var(--bg-card)',
+                        }}
+                      >
+                        <Space size={6} wrap style={{ marginBottom: 4 }}>
+                          <Tag color="orange" style={{ borderRadius: 999 }}>{h.alertType}</Tag>
+                          <Tag style={{ borderRadius: 999 }}>{h.delivery === 'browser' ? 'браузер' : 'в приложении'}</Tag>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {new Date(h.firedAt).toLocaleString('ru-RU')}
+                          </Text>
+                        </Space>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{h.alertLabel}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                          {h.message}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </Space>
+            ),
+          },
+        ]}
+      />
     </Drawer>
   )
 }

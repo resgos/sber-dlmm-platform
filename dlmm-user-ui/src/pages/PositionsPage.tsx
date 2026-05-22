@@ -9,10 +9,13 @@ import { KpiRow, PageHeader, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
 import PositionAlertsDrawer from '@/components/PositionAlertsDrawer'
 import HealthScoreBadge from '@/components/HealthScoreBadge'
+import HealthScoreExplainer from '@/components/HealthScoreExplainer'
 import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
 import { useAutoClaimWatcher } from '@/lib/useAutoClaimWatcher'
+import { calculateHealth, type HealthScore } from '@/lib/positionHealth'
 import { positionAlertsStore } from '@/store/positionAlertsStore'
 import { useSyncExternalStore } from 'react'
+import { Segmented } from 'antd'
 import dayjs from 'dayjs'
 
 const { Text } = Typography
@@ -115,7 +118,24 @@ export default function PositionsPage() {
     onError: (err: any) => message.error(err?.response?.data?.message || 'Ошибка'),
   })
 
-  const activePositions = (myPositions || []).filter((p: Position) => p.isActive)
+  const allActive = (myPositions || []).filter((p: Position) => p.isActive)
+
+  // Sprint 10 wave 3 — health filter. Pre-compute each position's
+  // health once and reuse for both the table column and the
+  // filter; otherwise we'd be calling calculateHealth twice per row.
+  const healthByPositionId = useMemo(() => {
+    const map = new Map<string, HealthScore>()
+    for (const p of allActive) {
+      map.set(p.id, calculateHealth(p, poolById.get(p.poolId)))
+    }
+    return map
+  }, [allActive, poolById])
+
+  const [healthFilter, setHealthFilter] = useState<'all' | 'excellent' | 'good' | 'fair' | 'poor'>('all')
+  const activePositions = useMemo(() => {
+    if (healthFilter === 'all') return allActive
+    return allActive.filter((p: Position) => healthByPositionId.get(p.id)?.band === healthFilter)
+  }, [allActive, healthByPositionId, healthFilter])
 
   const totalUnclaimedX = activePositions.reduce((s: number, p: Position) => s + p.unclaimedFeeX, 0)
   const totalUnclaimedY = activePositions.reduce((s: number, p: Position) => s + p.unclaimedFeeY, 0)
@@ -244,6 +264,10 @@ export default function PositionsPage() {
         subtitle="Ваши LP-позиции в DLMM-пулах — диапазоны бинов, незабранные комиссии, история выплат"
       />
 
+      {/* Sprint 10 wave 3 — one-time onboarding banner explaining the
+          new Health Score column. localStorage-persisted dismiss. */}
+      <HealthScoreExplainer />
+
       <KpiRow
         tiles={[
           {
@@ -272,7 +296,24 @@ export default function PositionsPage() {
         className="sber-card"
         title={<Text strong>Позиции</Text>}
         extra={
-          <Space>
+          <Space wrap>
+            {/* Sprint 10 wave 3 — Health filter. Lets the user
+                triage "show me only the poor ones" without scanning
+                the whole table. */}
+            {allActive.length > 1 && (
+              <Segmented
+                size="small"
+                value={healthFilter}
+                onChange={(v) => setHealthFilter(v as typeof healthFilter)}
+                options={[
+                  { label: `Все (${allActive.length})`, value: 'all' },
+                  { label: 'Отлично', value: 'excellent' },
+                  { label: 'Хорошо', value: 'good' },
+                  { label: 'Так себе', value: 'fair' },
+                  { label: 'Плохо', value: 'poor' },
+                ]}
+              />
+            )}
             {/* Sprint 10 (new feature) — position alerts. Always
                 visible (even with no positions) so the user can
                 discover the feature; drawer shows the right CTA
@@ -341,10 +382,17 @@ export default function PositionsPage() {
               // Single 0-100 number with a 3-factor tooltip breakdown
               // (range fit / fee earning / age). See lib/positionHealth.ts
               // for the weights + calibration notes.
+              // Sprint 10 wave 3 — sortable so the user can flip to
+              // "show me my worst positions first" with one click.
               title: <Tooltip title="Эвристическая оценка состояния позиции: соответствие диапазону, доходность по комиссиям, возраст. Не является инвестиционной рекомендацией.">Здоровье</Tooltip>,
               key: 'health',
-              width: 90,
+              width: 110,
               align: 'center' as const,
+              sorter: (a: Position, b: Position) => {
+                const ah = healthByPositionId.get(a.id)?.total ?? 0
+                const bh = healthByPositionId.get(b.id)?.total ?? 0
+                return ah - bh
+              },
               render: (_: unknown, r: Position) => <HealthScoreBadge position={r} pool={poolById.get(r.poolId)} />,
             },
             { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="blue">{s}</Tag> },
@@ -409,7 +457,7 @@ export default function PositionsPage() {
                     <Text
                       strong
                       style={{
-                        color: positive ? 'var(--sber-green)' : '#DC2626',
+                        color: positive ? 'var(--sber-green)' : 'var(--color-negative)',
                         fontVariantNumeric: 'tabular-nums',
                         fontSize: 13,
                       }}
@@ -422,7 +470,7 @@ export default function PositionsPage() {
                       type="secondary"
                       style={{
                         fontSize: 11,
-                        color: positive ? 'var(--sber-green)' : '#DC2626',
+                        color: positive ? 'var(--sber-green)' : 'var(--color-negative)',
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
@@ -543,7 +591,7 @@ export default function PositionsPage() {
           </Text>
           <Slider min={1} max={100} value={removePercent} onChange={setRemovePercent}
             marks={{ 25: '25%', 50: '50%', 75: '75%', 100: '100%' }} />
-          <Text strong style={{ textAlign: 'center', display: 'block', fontSize: 24, color: '#EF4444' }}>
+          <Text strong style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--color-negative-strong)' }}>
             {removePercent}%
           </Text>
         </Space>

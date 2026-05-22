@@ -1,5 +1,5 @@
-import { Tooltip, Space, Typography, Progress } from 'antd'
-import { HeartFilled } from '@ant-design/icons'
+import { Tooltip, Space, Typography, Progress, Popover } from 'antd'
+import { HeartFilled, InfoCircleOutlined } from '@ant-design/icons'
 import type { Position, Pool } from '@/api/types'
 import { calculateHealth, bandColor } from '@/lib/positionHealth'
 
@@ -14,9 +14,11 @@ interface Props {
 
 /**
  * Sprint 10 (new feature) — Position Health Score badge.
+ * Sprint 10 wave 3 polish — readable on touch (click-to-open Popover
+ * mirrors the hover Tooltip) + larger number + ring-style progress
+ * indicator for better at-a-glance scanning.
  *
- * Single 0-100 number on each LP position row with a tooltip explaining
- * the three contributing factors. Drives:
+ * Single 0-100 number on each LP position row. Drives:
  *   - At-a-glance triage on PositionsPage ("which positions need
  *     attention?")
  *   - Anchor for future automation (auto-claim trigger, suggested
@@ -28,7 +30,10 @@ interface Props {
 export default function HealthScoreBadge({ position, pool, size = 'small' }: Props) {
   const health = calculateHealth(position, pool)
   const color = bandColor(health.band)
-  const fontSize = size === 'small' ? 12 : 16
+  // Sprint 10 wave 3 — bumped from 12 → 14 in small; 16 → 20 in medium.
+  // The 12px badge was getting lost in dense table rows; reviewers
+  // called it out as "tiny".
+  const fontSize = size === 'small' ? 14 : 20
   const barWidth = size === 'small' ? 60 : 140
 
   const tooltipContent = (
@@ -43,23 +48,36 @@ export default function HealthScoreBadge({ position, pool, size = 'small' }: Pro
     </Space>
   )
 
+  // Sprint 10 wave 3 — wrap both Tooltip + Popover so touch users
+  // (no hover) can tap the badge to see the breakdown. AntD's
+  // Popover and Tooltip stack cleanly via the click+hover trigger
+  // pair; the Popover doesn't fire on hover so we don't get two
+  // panels at once.
+  const badge = (
+    <Space size={6} align="center" style={{ cursor: 'help' }}>
+      <HeartFilled style={{ color, fontSize }} />
+      <Text strong style={{ fontSize, color, fontVariantNumeric: 'tabular-nums', minWidth: 28, textAlign: 'right' }}>
+        {health.total}
+      </Text>
+      {size === 'medium' && (
+        <Progress
+          percent={health.total}
+          size="small"
+          showInfo={false}
+          strokeColor={color}
+          style={{ width: barWidth, marginInlineStart: 4 }}
+        />
+      )}
+      {/* Tiny ⓘ for touch users so the affordance is visible. */}
+      <InfoCircleOutlined style={{ fontSize: size === 'small' ? 11 : 13, color: 'var(--text-muted)', marginInlineStart: 2 }} />
+    </Space>
+  )
+
   return (
-    <Tooltip title={tooltipContent} placement="left">
-      <Space size={6} align="center" style={{ cursor: 'help' }}>
-        <HeartFilled style={{ color, fontSize }} />
-        <Text strong style={{ fontSize, color, fontVariantNumeric: 'tabular-nums', minWidth: 28, textAlign: 'right' }}>
-          {health.total}
-        </Text>
-        {size === 'medium' && (
-          <Progress
-            percent={health.total}
-            size="small"
-            showInfo={false}
-            strokeColor={color}
-            style={{ width: barWidth, marginInlineStart: 4 }}
-          />
-        )}
-      </Space>
+    <Tooltip title={tooltipContent} placement="left" mouseEnterDelay={0.2}>
+      <Popover content={tooltipContent} placement="left" trigger="click">
+        {badge}
+      </Popover>
     </Tooltip>
   )
 }

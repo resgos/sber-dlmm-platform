@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Card,
   Typography,
@@ -11,6 +11,7 @@ import {
   Row,
   Col,
   Statistic,
+  message,
 } from 'antd'
 import {
   CloseCircleOutlined,
@@ -19,9 +20,11 @@ import {
   RiseOutlined,
   ThunderboltFilled,
   InfoCircleOutlined,
+  ClearOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { pools as poolsApi } from '@/api/services'
 import type { Pool } from '@/api/types'
 import { formatRub } from '@/components/StatCard'
@@ -29,21 +32,53 @@ import { bpsToPercent } from '@/utils/format'
 
 const { Title, Text } = Typography
 const MAX_COMPARE = 3
+const URL_PARAM = 'p'
 
 /**
  * Sprint 10 (new feature) — Pool comparator.
+ * Sprint 10 wave 3 polish — URL state (sharable links) + responsive
+ * stack at small viewports + clear-all + "copy link" affordance.
  *
  * Lets the user pick 2 or 3 pools and see their headline metrics
  * side-by-side. Useful before committing capital — "is GAZP/SRUB
  * fee yield meaningfully better than SBER/SRUB at this point in
  * time?". No new backend endpoint needed (uses `/pools` listing).
  *
+ * URL state: ?p=poolId1,poolId2,poolId3 — refresh-safe, shareable
+ * via Slack. Updates lazily as the user adds/removes pools.
+ *
  * The "winner per row" highlight is a UX hint, not investment
  * advice — the disclaimer alert at the bottom makes that explicit.
  */
 export default function PoolComparePage() {
   const navigate = useNavigate()
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Initialise from URL — handles deep-link arrivals + refresh.
+  const initialIds = useMemo(() => {
+    const raw = searchParams.get(URL_PARAM)
+    if (!raw) return []
+    return raw.split(',').filter(Boolean).slice(0, MAX_COMPARE)
+  }, []) // intentionally one-shot — URL is the source of truth on mount only
+
+  const [selectedIds, setSelectedIds] = useState<string[]>(initialIds)
+
+  // Push selection back to URL whenever it changes. Replace (not push)
+  // so the browser back-button doesn't get spammed with every add/remove.
+  useEffect(() => {
+    if (selectedIds.length === 0) {
+      // Clear the param entirely when empty so the URL stays clean.
+      if (searchParams.has(URL_PARAM)) {
+        const next = new URLSearchParams(searchParams)
+        next.delete(URL_PARAM)
+        setSearchParams(next, { replace: true })
+      }
+      return
+    }
+    const next = new URLSearchParams(searchParams)
+    next.set(URL_PARAM, selectedIds.join(','))
+    setSearchParams(next, { replace: true })
+  }, [selectedIds, searchParams, setSearchParams])
 
   const { data: poolList } = useQuery({
     queryKey: ['pools', 0, 200],
@@ -57,12 +92,34 @@ export default function PoolComparePage() {
   )
 
   const addPool = (id: string): void => {
-    if (selectedIds.includes(id)) return
-    if (selectedIds.length >= MAX_COMPARE) return
+    if (selectedIds.includes(id)) {
+      message.info('Этот пул уже в сравнении')
+      return
+    }
+    if (selectedIds.length >= MAX_COMPARE) {
+      message.warning(`Максимум ${MAX_COMPARE} пула. Уберите один, чтобы добавить новый.`)
+      return
+    }
     setSelectedIds([...selectedIds, id])
   }
   const removePool = (id: string): void => {
     setSelectedIds(selectedIds.filter((x) => x !== id))
+  }
+  const clearAll = (): void => {
+    setSelectedIds([])
+  }
+  const copyShareLink = async (): Promise<void> => {
+    // window.location.href has the current URL (already kept in sync by the
+    // effect above). Stop using clipboard API if it's not available
+    // (Safari in non-secure contexts) — fall back to a manual copy prompt.
+    const url = window.location.href
+    try {
+      await navigator.clipboard.writeText(url)
+      message.success('Ссылка для сравнения скопирована — отправьте коллегам')
+    } catch {
+      // eslint-disable-next-line no-alert
+      window.prompt('Скопируйте ссылку вручную:', url)
+    }
   }
 
   // For each comparable metric, identify the pool that "wins" — used to
@@ -125,7 +182,35 @@ export default function PoolComparePage() {
 
       <Card className="sber-card">
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Text strong>Добавить пул в сравнение</Text>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+            <Text strong>Добавить пул в сравнение</Text>
+            {/* Sprint 10 wave 3 — actions visible only when there's
+                something to act on. Share-link is the killer feature:
+                shareable comparison via Slack/email. */}
+            {selected.length > 0 && (
+              <Space size={6}>
+                <Tooltip title="Скопировать ссылку на это сравнение">
+                  <Button
+                    size="small"
+                    icon={<ShareAltOutlined />}
+                    onClick={copyShareLink}
+                  >
+                    Поделиться
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Очистить выбор">
+                  <Button
+                    size="small"
+                    icon={<ClearOutlined />}
+                    onClick={clearAll}
+                    danger
+                  >
+                    Очистить
+                  </Button>
+                </Tooltip>
+              </Space>
+            )}
+          </div>
           <Select
             placeholder="Найти пул по символам (например, SBER)"
             showSearch
@@ -159,8 +244,17 @@ export default function PoolComparePage() {
         <Card className="sber-card">
           <Row gutter={[16, 16]}>
             {selected.map((p) => {
+              // Sprint 10 wave 3 — responsive break-points so a 3-pool
+              // comparison stacks vertically on phones and flows 2-up
+              // on tablet portrait. Hard minWidth was forcing horizontal
+              // scroll under 800px.
               return (
-                <Col key={p.id} xs={24} md={24 / selected.length} style={{ minWidth: 240 }}>
+                <Col
+                  key={p.id}
+                  xs={24}
+                  sm={selected.length === 1 ? 24 : 12}
+                  md={Math.max(8, 24 / selected.length)}
+                >
                   <Card
                     size="small"
                     title={

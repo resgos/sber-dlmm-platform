@@ -95,7 +95,7 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
   const priceImpactColour =
     !quote?.priceImpact ? undefined
       : quote.priceImpact < 0.5 ? 'var(--sber-green)'
-      : quote.priceImpact < 2 ? '#D97706' : '#DC2626'
+      : quote.priceImpact < 2 ? 'var(--color-warning-amber)' : 'var(--color-negative)'
 
   const insufficient = amountIn != null && inBalance != null && amountIn > inBalance.available
 

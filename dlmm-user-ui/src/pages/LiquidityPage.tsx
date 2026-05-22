@@ -299,7 +299,7 @@ export default function LiquidityPage() {
             onChange={setRemovePercent}
             marks={{ 25: '25%', 50: '50%', 75: '75%', 100: '100%' }}
           />
-          <Text strong style={{ textAlign: 'center', display: 'block', fontSize: 24, color: '#EF4444' }}>
+          <Text strong style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--color-negative-strong)' }}>
             {removePercent}%
           </Text>
         </Space>

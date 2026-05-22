@@ -30,11 +30,27 @@ export interface AutoClaimPolicy {
   enabled: boolean
   /** Minimum unclaimed fee total (X+Y in base units) before auto-claim fires. */
   threshold: number
+  /**
+   * Sprint 10 wave 3 — daily cap. Max number of auto-claims that
+   * may fire from this browser in any rolling 24h window. Hard
+   * safety net against runaway loops (e.g. a stuck threshold +
+   * rapid refresh + a position that keeps accruing). 0 = unlimited
+   * (default 20 is generous for typical use).
+   */
+  dailyCap: number
+  /**
+   * Sprint 10 wave 3 — pool exception list. Auto-claim is skipped
+   * for any position belonging to a pool whose id is in this set.
+   * Stored as an array for JSON-roundtrip; Set converted at read.
+   */
+  skipPoolIds: string[]
 }
 
 const DEFAULT_POLICY: AutoClaimPolicy = {
   enabled: false,
   threshold: 1000, // 1k base units — sensible for SRUB-quoted seed pools
+  dailyCap: 20,
+  skipPoolIds: [],
 }
 
 // History of auto-fired claims, kept in-memory only (a refresh wipes
@@ -54,7 +70,13 @@ function safeRead(): AutoClaimPolicy {
     if (typeof parsed?.enabled !== 'boolean' || typeof parsed?.threshold !== 'number') {
       return DEFAULT_POLICY
     }
-    return parsed as AutoClaimPolicy
+    // Backfill new optional fields for users with a pre-wave-3 policy.
+    return {
+      enabled: parsed.enabled,
+      threshold: parsed.threshold,
+      dailyCap: typeof parsed.dailyCap === 'number' ? parsed.dailyCap : DEFAULT_POLICY.dailyCap,
+      skipPoolIds: Array.isArray(parsed.skipPoolIds) ? parsed.skipPoolIds.filter((x: unknown) => typeof x === 'string') : [],
+    }
   } catch {
     return DEFAULT_POLICY
   }
@@ -84,11 +106,33 @@ export const autoClaimStore = {
     return () => listeners.delete(listener)
   },
 
-  /** True if the position is past its per-position cooldown window. */
+  /**
+   * True if the position is past its per-position cooldown window AND
+   * the rolling 24h cap hasn't been hit. Sprint 10 wave 3.
+   */
   canFire(positionId: string): boolean {
     const last = lastFiredAtByPosition.get(positionId)
-    if (!last) return true
-    return Date.now() - last >= PER_POSITION_COOLDOWN_MS
+    if (last && Date.now() - last < PER_POSITION_COOLDOWN_MS) return false
+    return !this.isCappedToday()
+  },
+
+  /**
+   * Sprint 10 wave 3 — rolling-24h cap check. The dailyCap policy
+   * field hard-limits how many fires the watcher will let through
+   * per day; 0 disables the cap.
+   */
+  isCappedToday(): boolean {
+    const p = safeRead()
+    if (p.dailyCap <= 0) return false
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    const count = history.filter((h) => new Date(h.firedAt).getTime() >= cutoff).length
+    return count >= p.dailyCap
+  },
+
+  /** Used by the Profile UI for the "X / Y сегодня" hint. */
+  countLast24h(): number {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    return history.filter((h) => new Date(h.firedAt).getTime() >= cutoff).length
   },
 
   /** Record a successful claim — bookkeeping for cooldown + history. */
@@ -99,7 +143,33 @@ export const autoClaimStore = {
     notify()
   },
 
+  /** Sprint 10 wave 3 — pool exception toggle. */
+  toggleSkipPool(poolId: string): void {
+    const p = safeRead()
+    const next = p.skipPoolIds.includes(poolId)
+      ? p.skipPoolIds.filter((x) => x !== poolId)
+      : [...p.skipPoolIds, poolId]
+    this.set({ ...p, skipPoolIds: next })
+  },
+
+  isPoolSkipped(poolId: string): boolean {
+    return safeRead().skipPoolIds.includes(poolId)
+  },
+
   history(): ReadonlyArray<{ positionId: string; symbol: string; amount: number; firedAt: string }> {
     return history
+  },
+
+  /**
+   * Sprint 10 wave 3 — test-only reset of the in-memory side state
+   * (history + cooldown map). localStorage state is cleared by tests
+   * via `localStorage.clear()` already; this complements that. NOT
+   * intended for production use — exposed so vitest can isolate tests
+   * that depend on side state from prior tests.
+   */
+  __resetSideStateForTests(): void {
+    history.length = 0
+    lastFiredAtByPosition.clear()
+    notify()
   },
 }

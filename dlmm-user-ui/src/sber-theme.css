@@ -66,6 +66,14 @@
   --plasma-critical-button: #F31B30;
   --plasma-input-border-focus: #5993FF;
 
+  /* Sprint 10 wave 3 — semantic colour aliases used by inline styles
+     (P&L negative, slippage warning, self-restriction lock). Aliased
+     so the dark-mode override can substitute a less saturated tone
+     without touching every call site. */
+  --color-negative: #DC2626;
+  --color-negative-strong: #EF4444;
+  --color-warning-amber: #D97706;
+
   /* Modern shadow ramp */
   --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
   --shadow-sm: 0 2px 8px rgba(15,23,42,0.05);
@@ -138,6 +146,143 @@
 }
 [data-theme="dark"] .ant-table-tbody > tr.ant-table-row:hover > td {
   background: var(--surface-1) !important;
+}
+
+/* Sprint 10 wave 3 — dark-theme polish pass after first-impression review.
+ *
+ * Issues called out in the review:
+ *   - .sber-hero stayed at full-saturation green gradient in dark mode
+ *     → too loud against the near-black page bg.
+ *   - .sber-card had `inset 0 1px 0 rgba(255,255,255,0.95)` shadow that
+ *     looks like a wrong bright top border on dark surfaces.
+ *   - AntD Modal / Drawer / Popover content backgrounds inherit AntD
+ *     defaults (white) and don't pick up --bg-card automatically.
+ *   - .sber-pool-card hover glow uses bright green rgba — works in
+ *     light, screams in dark.
+ *   - .sber-glass-card (login backdrop) uses light-mode rgba alpha
+ *     that washes out on a dark page.
+ */
+
+/* Hero — desaturate in dark so the card doesn't visually dominate.
+   Keep the brand-green hint via the deep variant (--sber-green-deep) +
+   --sber-green-dark; drops the saturation by ~30% which reads as
+   "evening trading floor" instead of "noon billboard". */
+[data-theme="dark"] .sber-hero {
+  background: linear-gradient(120deg, #0E3F1B 0%, #155F26 35%, #0C7842 70%, #006B5A 100%) !important;
+  box-shadow:
+    0 20px 40px -16px rgba(0, 0, 0, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Card — kill the bright inset highlight (looks like an outline on
+   dark) and replace with a subtle 1px line that matches surface-2. */
+[data-theme="dark"] .sber-card {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 0 0 1px var(--border-light) inset !important;
+}
+[data-theme="dark"] .sber-card:hover {
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.45),
+    0 0 0 1px var(--border-strong) inset !important;
+}
+
+/* Pool card hover glow — same brand-green, lower alpha so it reads as
+   accent rather than alarm. */
+[data-theme="dark"] .sber-pool-card:hover {
+  box-shadow:
+    0 12px 28px -10px rgba(33, 160, 56, 0.30),
+    0 4px 8px rgba(0, 0, 0, 0.30),
+    0 0 0 1px rgba(33, 160, 56, 0.35) !important;
+}
+
+/* AntD Modal / Drawer / Popover / Dropdown menus — explicit dark bg.
+   AntD's design tokens flow most of these but a handful are still
+   white-hardcoded via deep selectors. */
+[data-theme="dark"] .ant-modal-content,
+[data-theme="dark"] .ant-modal-header,
+[data-theme="dark"] .ant-drawer-content,
+[data-theme="dark"] .ant-drawer-header,
+[data-theme="dark"] .ant-popover-inner,
+[data-theme="dark"] .ant-dropdown-menu {
+  background: var(--bg-card) !important;
+  color: var(--text-primary);
+}
+[data-theme="dark"] .ant-modal-title,
+[data-theme="dark"] .ant-drawer-title,
+[data-theme="dark"] .ant-modal-close-icon,
+[data-theme="dark"] .ant-drawer-close {
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .ant-popover-arrow::before,
+[data-theme="dark"] .ant-popover-arrow::after {
+  background: var(--bg-card) !important;
+}
+[data-theme="dark"] .ant-dropdown-menu-item {
+  color: var(--text-primary);
+}
+[data-theme="dark"] .ant-dropdown-menu-item:hover {
+  background: var(--surface-1) !important;
+}
+
+/* Login glass-card — light-mode used rgba(255,255,255,0.6) alpha which
+   becomes invisible on dark. Switch to surface-1 with subtle border. */
+[data-theme="dark"] .sber-glass-card {
+  background: var(--surface-1) !important;
+  border: 1px solid var(--border-strong) !important;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55) !important;
+}
+
+/* AntD Form labels, Inputs, Selects, InputNumber — pick up text-primary
+   instead of the AntD default ~#000. Most already inherit but the .ant-form-item-label
+   uses its own color rule. */
+[data-theme="dark"] .ant-form-item-label > label,
+[data-theme="dark"] .ant-input,
+[data-theme="dark"] .ant-input-number,
+[data-theme="dark"] .ant-input-number-input,
+[data-theme="dark"] .ant-select-selection-item,
+[data-theme="dark"] .ant-select-selection-placeholder {
+  color: var(--text-primary);
+}
+[data-theme="dark"] .ant-input,
+[data-theme="dark"] .ant-input-affix-wrapper,
+[data-theme="dark"] .ant-input-number,
+[data-theme="dark"] .ant-select-selector,
+[data-theme="dark"] .ant-picker {
+  background: var(--surface-1) !important;
+  border-color: var(--border-strong) !important;
+}
+
+/* AntD Tag default variant uses a near-white bg in light. In dark it
+   needs the surface-1 tone to avoid a light flash on a dark card. */
+[data-theme="dark"] .ant-tag {
+  background: var(--surface-1);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+/* AntD Empty illustration fill: light grey on light, washed out on
+   dark. Bump the opacity. */
+[data-theme="dark"] .ant-empty-img-simple-g {
+  fill: rgba(255, 255, 255, 0.05);
+}
+[data-theme="dark"] .ant-empty-description {
+  color: var(--text-secondary);
+}
+
+/* AntD Steps connector line — light grey by default reads as
+   "disabled" on dark. Use surface-3 so it reads as "axis". */
+[data-theme="dark"] .ant-steps-item-tail::after {
+  background: var(--surface-3) !important;
+}
+
+/* Negative / warning colour aliases — desaturated for dark so a row
+   full of red doesn't burn retinas at night. */
+[data-theme="dark"] {
+  --color-negative: #F87171;
+  --color-negative-strong: #FCA5A5;
+  --color-warning-amber: #FBBF24;
 }
 
 body {
