@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip } from 'antd'
-import { DollarOutlined, DeleteOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons'
+import { DollarOutlined, DeleteOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { pools, fees } from '@/api/services'
 import type { Position, Pool, FeeHistoryEntry } from '@/api/types'
 import { KpiRow, PageHeader, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
+import PositionAlertsDrawer from '@/components/PositionAlertsDrawer'
+import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
+import { positionAlertsStore } from '@/store/positionAlertsStore'
+import { useSyncExternalStore } from 'react'
 import dayjs from 'dayjs'
 
 const { Text } = Typography
@@ -41,6 +45,14 @@ export default function PositionsPage() {
   const queryClient = useQueryClient()
   const [removeModalPos, setRemoveModalPos] = useState<Position | null>(null)
   const [removePercent, setRemovePercent] = useState(100)
+  const [alertsDrawerOpen, setAlertsDrawerOpen] = useState(false)
+  // Sprint 10 (new feature) — show the alert count next to the bell
+  // so the user knows whether they've configured any rules.
+  const alertCount = useSyncExternalStore(
+    positionAlertsStore.subscribe,
+    () => positionAlertsStore.list().length,
+    () => 0,
+  )
 
   const { data: myPositions, isLoading } = useQuery({
     queryKey: ['myPositions'],
@@ -258,32 +270,46 @@ export default function PositionsPage() {
         className="sber-card"
         title={<Text strong>Позиции</Text>}
         extra={
-          activePositions.length > 0 && (
-            <Space>
-              {/* Sprint 9-DS-r4 (P1-9) — mass-action pair: claim
-                  fees on everything that has them, then close all if
-                  the user wants to flatten the book. Mirrors the
-                  HedgePage "Закрыть всё" pattern. */}
-              <Button
-                size="small"
-                type="primary"
-                ghost
-                icon={<DollarOutlined />}
-                disabled={positionsWithClaimableFees.length === 0}
-                onClick={confirmClaimAll}
-              >
-                Забрать всё ({positionsWithClaimableFees.length})
-              </Button>
-              <Button
-                size="small"
-                danger
-                icon={<ClearOutlined />}
-                onClick={confirmRemoveAll}
-              >
-                Закрыть всё ({activePositions.length})
-              </Button>
-            </Space>
-          )
+          <Space>
+            {/* Sprint 10 (new feature) — position alerts. Always
+                visible (even with no positions) so the user can
+                discover the feature; drawer shows the right CTA
+                state internally. */}
+            <Button
+              size="small"
+              icon={<BellOutlined />}
+              onClick={() => setAlertsDrawerOpen(true)}
+              aria-label="Открыть оповещения по позициям"
+            >
+              Алерты{alertCount > 0 ? ` (${alertCount})` : ''}
+            </Button>
+            {activePositions.length > 0 && (
+              <>
+                {/* Sprint 9-DS-r4 (P1-9) — mass-action pair: claim
+                    fees on everything that has them, then close all if
+                    the user wants to flatten the book. Mirrors the
+                    HedgePage "Закрыть всё" pattern. */}
+                <Button
+                  size="small"
+                  type="primary"
+                  ghost
+                  icon={<DollarOutlined />}
+                  disabled={positionsWithClaimableFees.length === 0}
+                  onClick={confirmClaimAll}
+                >
+                  Забрать всё ({positionsWithClaimableFees.length})
+                </Button>
+                <Button
+                  size="small"
+                  danger
+                  icon={<ClearOutlined />}
+                  onClick={confirmRemoveAll}
+                >
+                  Закрыть всё ({activePositions.length})
+                </Button>
+              </>
+            )}
+          </Space>
         }
       >
         <Table
@@ -509,6 +535,35 @@ export default function PositionsPage() {
           </Text>
         </Space>
       </Modal>
+
+      {/* Sprint 10 (new feature) — alert watcher + manager drawer.
+          Hook fires once per myPositions/poolPage refresh; cooldown is
+          handled inside the store. */}
+      <PositionAlertsWatcherSlot positions={myPositions} pools={poolPage?.content ?? undefined} />
+      <PositionAlertsDrawer
+        open={alertsDrawerOpen}
+        onClose={() => setAlertsDrawerOpen(false)}
+        positions={activePositions}
+      />
     </Space>
   )
+}
+
+/**
+ * Sprint 10 (new feature) — tiny render-less helper.
+ *
+ * The watcher hook must be called at the top of a component (Rules
+ * of Hooks). Mounting it on a sub-component keeps PositionsPage's
+ * own hook order stable and gives us a clean place to thread the
+ * positions + pools props in.
+ */
+function PositionAlertsWatcherSlot({
+  positions,
+  pools,
+}: {
+  positions: Position[] | undefined
+  pools: Pool[] | undefined
+}) {
+  usePositionAlertWatcher(positions, pools)
+  return null
 }
