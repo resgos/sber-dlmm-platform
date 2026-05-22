@@ -1,4 +1,4 @@
-import { Row, Col, Card, Typography, Space, Form, Input, Button, Descriptions, Avatar, Alert, Divider, message, Tag } from 'antd'
+import { Row, Col, Card, Typography, Space, Form, Input, Button, Descriptions, Avatar, Alert, Divider, message, Tag, Tabs } from 'antd'
 import {
   UserOutlined,
   SaveOutlined,
@@ -6,6 +6,9 @@ import {
   PieChartOutlined,
   ThunderboltFilled,
   HistoryOutlined,
+  DashboardOutlined,
+  SafetyOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
@@ -258,9 +261,21 @@ export default function ProfilePage() {
       {/* Sprint 9 — right-rail. Previously the profile page stopped at the
           640px maxWidth and the whole right half was empty white space.
           Now: account snapshot + recent activity, so the page reads as
-          "your account" instead of "your settings form". */}
+          "your account" instead of "your settings form".
+          UI-CRITIQUE 2026-05-22 #6 — right-rail had grown to 5 stacked
+          cards (Сводка + Recent activity + 2FA + AutoClaim + Theme) ≈
+          1200px scroll. Wrapped в Tabs: Обзор / Безопасность /
+          Настройки. ONE thing visible at a time → user finds the
+          control they need without scroll hunt. */}
       <Col xs={24} lg={10}>
-      <Space direction="vertical" size={24} style={{ width: '100%' }}>
+      <Tabs
+        defaultActiveKey="overview"
+        items={[
+          {
+            key: 'overview',
+            label: <Space size={6}><DashboardOutlined />Обзор</Space>,
+            children: (
+              <Space direction="vertical" size={24} style={{ width: '100%' }}>
 
         <Card
           className="sber-card"
@@ -370,23 +385,38 @@ export default function ProfilePage() {
           )}
         </Card>
 
-        {/* Sprint 11 G-20 — 2FA TOTP settings. Frontend MVP — verify
-            stub accepts any 6-digit code; real backend TOTP validate
-            lands in Sprint 12. */}
-        <TwoFactorSettings />
+              </Space>
+            ),
+          },
+          {
+            key: 'security',
+            label: <Space size={6}><SafetyOutlined />Безопасность</Space>,
+            children: (
+              <Space direction="vertical" size={24} style={{ width: '100%' }}>
+                {/* Sprint 11 G-20 — 2FA TOTP settings. Frontend MVP — verify
+                    stub accepts any 6-digit code; real backend TOTP validate
+                    lands in Sprint 12. */}
+                <TwoFactorSettings />
+              </Space>
+            ),
+          },
+          {
+            key: 'settings',
+            label: <Space size={6}><SettingOutlined />Настройки</Space>,
+            children: (
+              <Space direction="vertical" size={24} style={{ width: '100%' }}>
+                {/* Sprint 10 (new feature) — auto-claim toggle. Pure-frontend
+                    MVP; the watcher hook on PositionsPage fires fees.claimFees()
+                    on every refresh for positions over threshold. */}
+                <AutoClaimSettings />
 
-        {/* Sprint 10 (new feature) — auto-claim toggle. Pure-frontend
-            MVP; the watcher hook on PositionsPage fires fees.claimFees()
-            on every refresh for positions over threshold. */}
-        <AutoClaimSettings />
-
-        {/* Sprint 9-DS-r4 P2-15 — theme picker. Lives in the right rail
-            so the user can find it without hunting through nav menus;
-            the toggle uses themeStore (localStorage) and applies via
-            <html data-theme="dark"> instantly. */}
-        <ThemeToggle />
-
-      </Space>
+                {/* Sprint 9-DS-r4 P2-15 — theme picker. */}
+                <ThemeToggle />
+              </Space>
+            ),
+          },
+        ]}
+      />
       </Col>
       </Row>
     </Space>

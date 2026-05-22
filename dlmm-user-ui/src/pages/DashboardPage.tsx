@@ -221,10 +221,14 @@ export default function DashboardPage() {
             </div>
             <div
               style={{
-                fontSize: 32,
+                // UI-CRITIQUE 2026-05-22 #3 — hero value harmonised to
+                // the new --text-display-ish 28 (was 32). CSS class
+                // .sber-hero-value already enforces 36px via !important
+                // — this inline только для случаев когда class не применён.
+                fontSize: 'var(--text-xl)',
                 fontWeight: 700,
                 color: 'var(--bg-card)',
-                lineHeight: 1.05,
+                lineHeight: 'var(--leading-tight)',
                 letterSpacing: '-0.015em',
                 fontVariantNumeric: 'tabular-nums',
                 marginBottom: 8,

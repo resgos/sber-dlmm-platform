@@ -491,38 +491,45 @@ body {
    sync manually until Sprint 10 workspaces refactor (#R-39).
    ====================================================================== */
 
+/* UI-CRITIQUE 2026-05-22 #3 — see user-ui sber-theme.css for full
+   rationale. Admin mirrors user-side hero for visual consistency
+   (drift watchdog enforces this). */
 .sber-hero {
-  padding: 36px 40px !important;
+  padding: 24px 28px !important;
   box-shadow:
-    0 20px 40px -16px rgba(33,160,56,0.25),
-    0 2px 8px rgba(15,23,42,0.06),
-    inset 0 1px 0 rgba(255,255,255,0.18) !important;
+    0 16px 36px -16px rgba(33,160,56,0.20),
+    0 2px 6px rgba(15,23,42,0.05),
+    inset 0 1px 0 rgba(255,255,255,0.12) !important;
   background: linear-gradient(120deg, #1C8A30 0%, #21A038 35%, #00C853 70%, #00B5A1 100%) !important;
   background-size: 180% 100%;
-  animation: sber-hero-shift 18s ease-in-out infinite alternate;
+  animation: sber-hero-shift 36s ease-in-out infinite alternate;
 }
 @keyframes sber-hero-shift {
   from { background-position: 0% 50%; }
   to   { background-position: 100% 50%; }
 }
 .sber-hero-title {
-  font-size: 12px !important;
+  font-size: 11px !important;
   font-weight: 600 !important;
   letter-spacing: 1.2px !important;
   opacity: 0.78 !important;
 }
 .sber-hero-value {
-  font-size: 44px !important;
+  font-size: 36px !important;
   font-weight: 800 !important;
   letter-spacing: -1.0px !important;
-  line-height: 1.05 !important;
-  text-shadow: 0 1px 0 rgba(255,255,255,0.08), 0 2px 24px rgba(0,0,0,0.12);
+  line-height: 1.15 !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.06), 0 2px 16px rgba(0,0,0,0.10);
 }
 .sber-hero-meta { font-size: 13px !important; opacity: 0.88 !important; line-height: 1.55 !important; }
 
-@media (max-width: 414px) {
-  .sber-hero { padding: 24px 20px !important; }
+@media (max-width: 768px) {
+  .sber-hero { padding: 22px 22px !important; }
   .sber-hero-value { font-size: 30px !important; letter-spacing: -0.6px !important; }
+}
+@media (max-width: 414px) {
+  .sber-hero { padding: 20px 18px !important; }
+  .sber-hero-value { font-size: 26px !important; letter-spacing: -0.4px !important; }
 }
 
 .sber-card {

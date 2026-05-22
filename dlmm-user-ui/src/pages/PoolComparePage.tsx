@@ -11,6 +11,8 @@ import {
   Row,
   Col,
   Statistic,
+  Segmented,
+  Table,
   message,
 } from 'antd'
 import {
@@ -22,6 +24,9 @@ import {
   InfoCircleOutlined,
   ClearOutlined,
   ShareAltOutlined,
+  AppstoreOutlined,
+  TableOutlined,
+  CrownFilled,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -63,6 +68,22 @@ export default function PoolComparePage() {
   }, []) // intentionally one-shot — URL is the source of truth on mount only
 
   const [selectedIds, setSelectedIds] = useState<string[]>(initialIds)
+
+  // UI-CRITIQUE 2026-05-22 #8 — view-mode toggle. Cards стиль хорош
+  // когда 1-2 пула; tabular mode выигрывает при 3 пулах + Dmitry-style
+  // institutional users которые читают 5+ метрик подряд. localStorage-
+  // persisted preference так что пользователь не переключает каждый
+  // визит.
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>(() => {
+    try {
+      const raw = localStorage.getItem('dlmm.poolCompare.viewMode')
+      if (raw === 'cards' || raw === 'table') return raw
+    } catch { /* ignore */ }
+    return 'cards'
+  })
+  useEffect(() => {
+    try { localStorage.setItem('dlmm.poolCompare.viewMode', viewMode) } catch { /* ignore */ }
+  }, [viewMode])
 
   // Push selection back to URL whenever it changes. Replace (not push)
   // so the browser back-button doesn't get spammed with every add/remove.
@@ -189,7 +210,18 @@ export default function PoolComparePage() {
                 something to act on. Share-link is the killer feature:
                 shareable comparison via Slack/email. */}
             {selected.length > 0 && (
-              <Space size={6}>
+              <Space size={6} wrap>
+                {/* UI-CRITIQUE #8 — view-mode toggle. Visible только
+                    когда есть что показывать; иначе захламляет toolbar. */}
+                <Segmented
+                  size="small"
+                  value={viewMode}
+                  onChange={(v) => setViewMode(v as 'cards' | 'table')}
+                  options={[
+                    { value: 'cards', icon: <AppstoreOutlined />, label: 'Карты' },
+                    { value: 'table', icon: <TableOutlined />, label: 'Таблица' },
+                  ]}
+                />
                 <Tooltip title="Скопировать ссылку на это сравнение">
                   <Button
                     size="small"
@@ -241,6 +273,10 @@ export default function PoolComparePage() {
           description="Выберите хотя бы один пул, чтобы начать сравнение"
           style={{ padding: 40 }}
         />
+      ) : viewMode === 'table' ? (
+        <Card className="sber-card">
+          <ComparisonTable selected={selected} winners={winners} onOpenPool={(id) => navigate(`/pools/${id}`)} onRemove={removePool} />
+        </Card>
       ) : (
         <Card className="sber-card">
           <Row gutter={[16, 16]}>
@@ -368,6 +404,186 @@ export default function PoolComparePage() {
         </Card>
       )}
     </Space>
+  )
+}
+
+/**
+ * UI-CRITIQUE 2026-05-22 #8 — comparison table mode.
+ *
+ * Rows = metrics, columns = pools. Winners в каждой row подсвечены
+ * crown иконкой + зелёный текст. Compact for institutional users
+ * which need to scan 8+ metrics × 3 pools at once. Horizontal scroll
+ * на mobile вместо visual squish которое cards-mode даёт.
+ */
+function ComparisonTable({
+  selected,
+  winners,
+  onOpenPool,
+  onRemove,
+}: {
+  selected: Pool[]
+  winners: { apy: string | null; vol: string | null; tvlX: string | null; fee: string | null; binStep: string | null }
+  onOpenPool: (id: string) => void
+  onRemove: (id: string) => void
+}) {
+  // Compute pro metrics once per pool — they're deterministic-by-id so
+  // calling computeProMetrics multiple times is safe but wasteful.
+  const proById = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof computeProMetrics>>()
+    for (const p of selected) m.set(p.id, computeProMetrics(p))
+    return m
+  }, [selected])
+
+  // For pro metrics we compute winners locally — argmax / argmin on the
+  // computed series. Same threshold convention as headline winners (skip
+  // если top-2 совпадают в пределах 0.1%).
+  const proWinners = useMemo(() => {
+    const argextrema = (key: 'volatilityPct30d' | 'maxDrawdownPct' | 'sharpe', dir: 'max' | 'min'): string | null => {
+      if (selected.length < 2) return null
+      const sorted = [...selected].sort((a, b) => {
+        const av = proById.get(a.id)![key]
+        const bv = proById.get(b.id)![key]
+        return dir === 'max' ? bv - av : av - bv
+      })
+      const top = proById.get(sorted[0].id)![key]
+      const second = proById.get(sorted[1].id)![key]
+      if (top === 0 && second === 0) return null
+      if (Math.abs(top - second) / Math.max(Math.abs(top), 1) < 0.001) return null
+      return sorted[0].id
+    }
+    return {
+      // Volatility: lower is better for risk-conscious LP.
+      volatility: argextrema('volatilityPct30d', 'min'),
+      // Max drawdown: lower (closer to 0) is better.
+      drawdown: argextrema('maxDrawdownPct', 'min'),
+      // Sharpe: higher is better.
+      sharpe: argextrema('sharpe', 'max'),
+    }
+  }, [selected, proById])
+
+  interface MetricRow {
+    label: string
+    /** Per-pool cell renderer. Receives pool + isWinner flag. */
+    render: (p: Pool, isWinner: boolean) => React.ReactNode
+    /** Which pool id wins this row (null = no clear winner). */
+    winnerId: string | null
+  }
+
+  const rows: MetricRow[] = [
+    {
+      label: 'APY',
+      winnerId: winners.apy,
+      render: (p, w) => <span>{p.estimatedApy.toFixed(2)}%{w && <CrownFilled style={{ marginInlineStart: 6, color: 'var(--sber-amber)' }} />}</span>,
+    },
+    {
+      label: 'Объём 24ч',
+      winnerId: winners.vol,
+      render: (p, w) => <span>{formatRub(p.volume24h)}{w && <CrownFilled style={{ marginInlineStart: 6, color: 'var(--sber-amber)' }} />}</span>,
+    },
+    {
+      label: 'TVL X',
+      winnerId: winners.tvlX,
+      render: (p, w) => <span>{p.totalTvlX.toLocaleString('ru-RU')}{w && <CrownFilled style={{ marginInlineStart: 6, color: 'var(--sber-amber)' }} />}</span>,
+    },
+    {
+      label: 'Базовая комиссия',
+      winnerId: winners.fee,
+      render: (p, w) => <span>{bpsToPercent(p.baseFeeBps)}{w && <CrownFilled style={{ marginInlineStart: 6, color: 'var(--sber-amber)' }} />}</span>,
+    },
+    {
+      label: 'Шаг бина',
+      winnerId: winners.binStep,
+      render: (p, w) => <span>{bpsToPercent(p.binStep)}{w && <CrownFilled style={{ marginInlineStart: 6, color: 'var(--sber-amber)' }} />}</span>,
+    },
+    {
+      label: 'Волатильность 30д',
+      winnerId: proWinners.volatility,
+      render: (p, w) => {
+        const m = proById.get(p.id)!
+        return <span>{m.volatilityPct30d.toFixed(1)}%{w && <CrownFilled style={{ marginInlineStart: 6, color: 'var(--sber-amber)' }} />}</span>
+      },
+    },
+    {
+      label: 'Max drawdown',
+      winnerId: proWinners.drawdown,
+      render: (p, w) => {
+        const m = proById.get(p.id)!
+        return <span style={{ color: m.maxDrawdownPct > 10 ? 'var(--color-negative)' : undefined }}>
+          −{m.maxDrawdownPct.toFixed(1)}%{w && <CrownFilled style={{ marginInlineStart: 6, color: 'var(--sber-amber)' }} />}
+        </span>
+      },
+    },
+    {
+      label: 'Sharpe (vs 14% RFR)',
+      winnerId: proWinners.sharpe,
+      render: (p, w) => {
+        const m = proById.get(p.id)!
+        return <span style={{ color: m.sharpe > 1 ? 'var(--sber-green)' : m.sharpe < 0 ? 'var(--color-negative)' : undefined }}>
+          {m.sharpe >= 0 ? '+' : ''}{m.sharpe.toFixed(2)}{w && <CrownFilled style={{ marginInlineStart: 6, color: 'var(--sber-amber)' }} />}
+        </span>
+      },
+    },
+  ]
+
+  const columns = [
+    {
+      title: 'Метрика',
+      dataIndex: 'label',
+      key: 'label',
+      fixed: 'left' as const,
+      width: 200,
+      render: (label: string) => <Text strong style={{ fontSize: 'var(--text-sm)' }}>{label}</Text>,
+    },
+    ...selected.map((p) => ({
+      title: (
+        <Space direction="vertical" size={2} align="start">
+          <Space size={4}>
+            <Tag color="green" style={{ borderRadius: 'var(--radius-pill)', fontWeight: 600, marginInlineEnd: 0 }}>
+              {p.tokenXSymbol} / {p.tokenYSymbol}
+            </Tag>
+            <Button
+              type="text"
+              size="small"
+              icon={<CloseCircleOutlined />}
+              aria-label={`Убрать ${p.tokenXSymbol}/${p.tokenYSymbol}`}
+              onClick={() => onRemove(p.id)}
+            />
+          </Space>
+          <Button type="link" size="small" style={{ padding: 0, height: 'auto', fontSize: 'var(--text-xs)' }} onClick={() => onOpenPool(p.id)}>
+            Открыть пул →
+          </Button>
+        </Space>
+      ),
+      dataIndex: p.id,
+      key: p.id,
+      align: 'right' as const,
+      render: (_: unknown, row: MetricRow) => {
+        const isWinner = row.winnerId === p.id
+        return (
+          <div
+            style={{
+              fontVariantNumeric: 'tabular-nums',
+              fontWeight: isWinner ? 700 : 500,
+              color: isWinner ? 'var(--brand-primary-strong)' : 'var(--text-primary)',
+              padding: '4px 0',
+            }}
+          >
+            {row.render(p, isWinner)}
+          </div>
+        )
+      },
+    })),
+  ]
+
+  return (
+    <Table
+      dataSource={rows}
+      columns={columns}
+      rowKey="label"
+      pagination={false}
+      scroll={{ x: 'max-content' }}
+      size="small"
+    />
   )
 }
 
