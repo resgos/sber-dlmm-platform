@@ -24,6 +24,8 @@ import {
 } from '@ant-design/icons'
 import { teamStore, ROLE_LABELS, ROLE_HINTS, canPerform, type TeamMember, type TeamRole } from '@/store/teamStore'
 import { authStore } from '@/store/authStore'
+import EmptyState from '@/components/EmptyState'
+import ModalHeader from '@/components/ModalHeader'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -71,21 +73,16 @@ export default function TeamPage() {
         </div>
 
         <Card className="sber-card">
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={
-              <Space direction="vertical" size={6} align="center">
-                <Text strong>У вас пока нет организации</Text>
-                <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
-                  Создайте — и сможете приглашать членов команды с разными ролями.
-                </Text>
-              </Space>
+          {/* UI-CRITIQUE #9 — unified EmptyState component. */}
+          <EmptyState
+            title="У вас пока нет организации"
+            description="Создайте — и сможете приглашать членов команды с разными ролями."
+            cta={
+              <Button type="primary" icon={<TeamOutlined />} onClick={() => setCreateOpen(true)}>
+                Создать организацию
+              </Button>
             }
-          >
-            <Button type="primary" icon={<TeamOutlined />} onClick={() => setCreateOpen(true)}>
-              Создать организацию
-            </Button>
-          </Empty>
+          />
         </Card>
 
         <CreateOrgModal
@@ -270,7 +267,7 @@ function CreateOrgModal({ open, onClose, defaultEmail }: { open: boolean; onClos
   const [form] = Form.useForm<{ orgName: string; ownerName: string }>()
   return (
     <Modal
-      title="Создание организации"
+      title={<ModalHeader title="Создание организации" severity="info" icon={<TeamOutlined />} />}
       open={open}
       onCancel={onClose}
       onOk={async () => {
@@ -311,7 +308,7 @@ function InviteMemberModal({ open, onClose }: { open: boolean; onClose: () => vo
   const [form] = Form.useForm<{ email: string; name: string; role: TeamRole }>()
   return (
     <Modal
-      title="Пригласить участника"
+      title={<ModalHeader title="Пригласить участника" severity="info" icon={<UserAddOutlined />} />}
       open={open}
       onCancel={onClose}
       onOk={async () => {

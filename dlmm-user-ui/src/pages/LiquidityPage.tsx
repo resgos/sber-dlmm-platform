@@ -11,6 +11,7 @@ import type { Position, LiquidityStrategy } from '@/api/types'
 import StrategySelector from '@/components/StrategySelector'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
 import RiskDisclosure from '@/components/RiskDisclosure'
+import ModalHeader from '@/components/ModalHeader'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
 
 const { Title, Text } = Typography
@@ -286,7 +287,7 @@ export default function LiquidityPage() {
       </Card>
 
       <Modal
-        title="Удаление ликвидности"
+        title={<ModalHeader title="Удаление ликвидности" severity="danger" />}
         open={!!removeModalPos}
         onCancel={() => setRemoveModalPos(null)}
         onOk={() => removeModalPos && removeMutation.mutate(removeModalPos.id)}

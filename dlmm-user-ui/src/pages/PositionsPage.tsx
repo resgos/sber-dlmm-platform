@@ -16,6 +16,7 @@ import { calculateHealth, type HealthScore } from '@/lib/positionHealth'
 import { positionAlertsStore } from '@/store/positionAlertsStore'
 import { useSyncExternalStore } from 'react'
 import { Segmented } from 'antd'
+import ModalHeader from '@/components/ModalHeader'
 import dayjs from 'dayjs'
 
 const { Text } = Typography
@@ -578,7 +579,7 @@ export default function PositionsPage() {
       )}
 
       <Modal
-        title="Удаление ликвидности"
+        title={<ModalHeader title="Удаление ликвидности" severity="danger" />}
         open={!!removeModalPos}
         onCancel={() => setRemoveModalPos(null)}
         onOk={() => removeModalPos && removeMutation.mutate(removeModalPos.id)}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Card, Row, Col, Tag, Typography, Space, Button, Input, Empty, Pagination, Skeleton } from 'antd'
+import { Card, Row, Col, Tag, Typography, Space, Button, Input, Pagination, Skeleton } from 'antd'
+import EmptyState from '@/components/EmptyState'
 import { SearchOutlined, ArrowRightOutlined, ThunderboltFilled, BarChartOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -162,7 +163,10 @@ export default function PoolsPage() {
           ))}
         </Row>
       ) : pagePools.length === 0 ? (
-        <Empty description={search ? t('pools.empty.noResults', { query: search }) : t('pools.empty.noPools')} />
+        <EmptyState
+          title={search ? t('pools.empty.noResults', { query: search }) : t('pools.empty.noPools')}
+          description={search ? 'Попробуйте изменить поисковый запрос или сбросить фильтр.' : undefined}
+        />
       ) : (
         <>
           <Row gutter={[16, 16]}>
