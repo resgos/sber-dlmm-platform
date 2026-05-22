@@ -296,24 +296,12 @@ export default function PositionsPage() {
         className="sber-card"
         title={<Text strong>Позиции</Text>}
         extra={
+          // UI-CRITIQUE 2026-05-22 #2 fix — extras zone is now actions
+          // only. Health filter (which is navigation / data selection)
+          // moved out into its own row above the table. This separates
+          // "what should the table show" from "what action should I
+          // take on what's shown".
           <Space wrap>
-            {/* Sprint 10 wave 3 — Health filter. Lets the user
-                triage "show me only the poor ones" without scanning
-                the whole table. */}
-            {allActive.length > 1 && (
-              <Segmented
-                size="small"
-                value={healthFilter}
-                onChange={(v) => setHealthFilter(v as typeof healthFilter)}
-                options={[
-                  { label: `Все (${allActive.length})`, value: 'all' },
-                  { label: 'Отлично', value: 'excellent' },
-                  { label: 'Хорошо', value: 'good' },
-                  { label: 'Так себе', value: 'fair' },
-                  { label: 'Плохо', value: 'poor' },
-                ]}
-              />
-            )}
             {/* Sprint 10 (new feature) — position alerts. Always
                 visible (even with no positions) so the user can
                 discover the feature; drawer shows the right CTA
@@ -355,6 +343,25 @@ export default function PositionsPage() {
           </Space>
         }
       >
+        {/* UI-CRITIQUE 2026-05-22 #2 — filter zone, separated from
+            actions zone in Card extras. */}
+        {allActive.length > 1 && (
+          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>Фильтр по здоровью:</Text>
+            <Segmented
+              size="small"
+              value={healthFilter}
+              onChange={(v) => setHealthFilter(v as typeof healthFilter)}
+              options={[
+                { label: `Все (${allActive.length})`, value: 'all' },
+                { label: 'Отлично', value: 'excellent' },
+                { label: 'Хорошо', value: 'good' },
+                { label: 'Так себе', value: 'fair' },
+                { label: 'Плохо', value: 'poor' },
+              ]}
+            />
+          </div>
+        )}
         <Table
           className="sber-table"
           loading={isLoading}

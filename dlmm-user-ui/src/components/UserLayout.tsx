@@ -23,22 +23,60 @@ import LanguageSwitcher from './LanguageSwitcher'
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
 
+/**
+ * UI-CRITIQUE 2026-05-22 #11 — sidebar grouping by activity zone.
+ *
+ * Before this refactor: 9 flat items in one list → high visual
+ * repetition at collapsed sidebar (64px) + low scanability. After:
+ * 3 semantic groups (Trade / Manage / Account) with dividers. AntD
+ * Menu supports `type: 'group'` which renders a header label + items.
+ *
+ * Sprint 4 #4.1 — hedge reuses swap-API but UX заточен под казначеев.
+ * Sprint 10 F-07 — portfolio rebalancer wizard.
+ * Sprint 11 G-21 — team / multi-user management.
+ */
 const menuItems = [
-  { key: '/', icon: <HomeOutlined />, label: 'Главная' },
-  { key: '/swap', icon: <SwapOutlined />, label: 'Обмен' },
-  // Sprint 4 #4.1 — FX-хеджирование. Реюзит swap-API, но UX заточен под
-  // казначеев («хочу захеджировать X% рублёвой позиции»).
-  { key: '/hedge', icon: <SafetyCertificateOutlined />, label: 'Хедж FX' },
-  { key: '/pools', icon: <FundOutlined />, label: 'Пулы' },
-  { key: '/positions', icon: <PieChartOutlined />, label: 'Мои позиции' },
-  // Sprint 10 F-07 — portfolio rebalancer wizard.
-  { key: '/rebalance', icon: <RetweetOutlined />, label: 'Ребаланс' },
-  { key: '/transactions', icon: <TransactionOutlined />, label: 'Транзакции' },
-  // Sprint 11 G-21 — team / multi-user management. Между Profile и
-  // Transactions так чтобы пользователю было заметно.
-  { key: '/team', icon: <TeamOutlined />, label: 'Команда' },
-  { key: '/profile', icon: <UserOutlined />, label: 'Профиль' },
+  {
+    type: 'group' as const,
+    label: 'Торговля',
+    children: [
+      { key: '/', icon: <HomeOutlined />, label: 'Главная' },
+      { key: '/swap', icon: <SwapOutlined />, label: 'Обмен' },
+      { key: '/hedge', icon: <SafetyCertificateOutlined />, label: 'Хедж FX' },
+      { key: '/pools', icon: <FundOutlined />, label: 'Пулы' },
+    ],
+  },
+  { type: 'divider' as const },
+  {
+    type: 'group' as const,
+    label: 'Управление',
+    children: [
+      { key: '/positions', icon: <PieChartOutlined />, label: 'Мои позиции' },
+      { key: '/rebalance', icon: <RetweetOutlined />, label: 'Ребаланс' },
+      { key: '/transactions', icon: <TransactionOutlined />, label: 'Транзакции' },
+    ],
+  },
+  { type: 'divider' as const },
+  {
+    type: 'group' as const,
+    label: 'Аккаунт',
+    children: [
+      { key: '/team', icon: <TeamOutlined />, label: 'Команда' },
+      { key: '/profile', icon: <UserOutlined />, label: 'Профиль' },
+    ],
+  },
 ]
+
+interface LeafMenuItem {
+  key: string
+  icon: JSX.Element
+  label: string
+}
+
+/** Flat list of leaf items — used by selectedKey lookup. */
+const flatMenuItems: LeafMenuItem[] = menuItems
+  .flatMap((m) => ('children' in m ? m.children : []))
+  .filter((m): m is LeafMenuItem => m != null && 'key' in m)
 
 function SberLogo({ size = 28 }: { size?: number }) {
   return (
@@ -88,7 +126,9 @@ export default function UserLayout() {
   const selectedKey = (() => {
     const path = location.pathname
     if (path === '/') return '/'
-    const match = menuItems.find((item) => item.key !== '/' && path.startsWith(item.key))
+    // After UI-CRITIQUE #11 grouping, top-level menuItems are groups,
+    // not leaf items — selectedKey lookup must scan flatMenuItems.
+    const match = flatMenuItems.find((item) => item.key !== '/' && path.startsWith(item.key))
     return match?.key || '/'
   })()
 
