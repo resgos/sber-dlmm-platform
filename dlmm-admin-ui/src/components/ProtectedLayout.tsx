@@ -13,6 +13,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ShopOutlined,
+  ApiOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 
@@ -54,6 +55,12 @@ const menuItems = [
     key: '/otc',
     icon: <ShopOutlined />,
     label: 'OTC desk',
+  },
+  {
+    // Sprint 10 F-15 — gateway rate-limit analytics by tier.
+    key: '/api-analytics',
+    icon: <ApiOutlined />,
+    label: 'API-аналитика',
   },
   {
     key: '/settings',

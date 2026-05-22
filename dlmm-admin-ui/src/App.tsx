@@ -13,6 +13,7 @@ import PoolDetailPage from '@/pages/PoolDetailPage'
 import TransactionsPage from '@/pages/TransactionsPage'
 import SuspiciousTransactionsPage from '@/pages/SuspiciousTransactionsPage'
 import OtcDeskPage from '@/pages/OtcDeskPage'
+import ApiAnalyticsPage from '@/pages/ApiAnalyticsPage'
 import SettingsPage from '@/pages/SettingsPage'
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="transactions/suspicious" element={<SuspiciousTransactionsPage />} />
         <Route path="otc" element={<OtcDeskPage />} />
+        <Route path="api-analytics" element={<ApiAnalyticsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
