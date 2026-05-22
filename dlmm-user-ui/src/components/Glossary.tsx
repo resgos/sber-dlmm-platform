@@ -95,7 +95,8 @@ export default function Glossary({ term, children }: GlossaryProps) {
   if (!def) {
     // Unknown term — fail open, render children как есть. Каскад
     // нечасто, но логируем чтобы поймать опечатки в dev.
-    if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+    // Vite-native env access — `process` isn't typed in browser build.
+    if (typeof window !== 'undefined' && import.meta.env.DEV) {
       console.warn(`[Glossary] unknown term "${term}"`)
     }
     return <>{children}</>
