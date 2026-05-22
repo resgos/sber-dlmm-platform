@@ -48,14 +48,30 @@ export interface PositionAlert {
   createdAt: string
 }
 
+// UI-CRITIQUE 2026-05-22 fix — cached parsed snapshot. Без кэша
+// каждый `useSyncExternalStore(... , list, ...)` getSnapshot
+// возвращал бы новую ссылку (JSON.parse → new Array) на каждый
+// рендер → React видит "data changed" → бесконечный цикл рендера
+// → Minified React error #185.
+//
+// Cache invariant: cache === current data. Mutations go через
+// safeWrite which обновляет cache одновременно с localStorage.
+let cache: PositionAlert[] | null = null
+
 function safeRead(): PositionAlert[] {
+  if (cache !== null) return cache
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
+    if (!raw) {
+      cache = []
+      return cache
+    }
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
+    cache = Array.isArray(parsed) ? parsed : []
+    return cache
   } catch {
-    return []
+    cache = []
+    return cache
   }
 }
 
@@ -65,6 +81,9 @@ function safeWrite(alerts: PositionAlert[]): void {
   } catch {
     /* ignore quota / private-mode */
   }
+  // Update the cache with the new immutable array — subscribers
+  // получают новую ссылку на следующем getSnapshot tick.
+  cache = alerts
 }
 
 const listeners = new Set<() => void>()
@@ -150,7 +169,13 @@ export interface AlertHistoryEntry {
 }
 
 const ALERT_HISTORY_MAX = 50
-const alertHistory: AlertHistoryEntry[] = []
+// UI-CRITIQUE 2026-05-22 fix — historyCache replaces mutated-in-place
+// `alertHistory: AlertHistoryEntry[]`. Mutating the same array in
+// `record()` left useSyncExternalStore's reference unchanged, so
+// React never re-rendered subscribers (the drawer history tab). Now
+// every write replaces the reference; subscribers get a fresh
+// snapshot on the next getSnapshot tick.
+let historyCache: AlertHistoryEntry[] = []
 const historyListeners = new Set<() => void>()
 
 function notifyHistory(): void {
@@ -161,15 +186,14 @@ function notifyHistory(): void {
 
 export const alertHistoryStore = {
   list(): ReadonlyArray<AlertHistoryEntry> {
-    return alertHistory
+    return historyCache
   },
   record(entry: AlertHistoryEntry): void {
-    alertHistory.unshift(entry)
-    if (alertHistory.length > ALERT_HISTORY_MAX) alertHistory.length = ALERT_HISTORY_MAX
+    historyCache = [entry, ...historyCache].slice(0, ALERT_HISTORY_MAX)
     notifyHistory()
   },
   clear(): void {
-    alertHistory.length = 0
+    historyCache = []
     notifyHistory()
   },
   subscribe(listener: () => void): () => void {

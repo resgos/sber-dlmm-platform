@@ -47,26 +47,42 @@ const DEFAULT_STATE: TwoFactorState = {
   recoveryCodesUsed: 0,
 }
 
+// UI-CRITIQUE 2026-05-22 fix — cached snapshot, same reason as
+// positionAlertsStore / teamStore: getSnapshot must return the same
+// reference until a write happens, otherwise useSyncExternalStore
+// re-renders forever.
+let cache: TwoFactorState | null = null
+
 function safeRead(): TwoFactorState {
+  if (cache !== null) return cache
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_STATE
+    if (!raw) {
+      cache = DEFAULT_STATE
+      return cache
+    }
     const parsed = JSON.parse(raw)
-    if (typeof parsed?.enabled !== 'boolean') return DEFAULT_STATE
-    return {
+    if (typeof parsed?.enabled !== 'boolean') {
+      cache = DEFAULT_STATE
+      return cache
+    }
+    cache = {
       enabled: parsed.enabled,
       secret: typeof parsed.secret === 'string' ? parsed.secret : null,
       enabledAt: typeof parsed.enabledAt === 'string' ? parsed.enabledAt : null,
       recoveryCodes: Array.isArray(parsed.recoveryCodes) ? parsed.recoveryCodes : [],
       recoveryCodesUsed: typeof parsed.recoveryCodesUsed === 'number' ? parsed.recoveryCodesUsed : 0,
     }
+    return cache
   } catch {
-    return DEFAULT_STATE
+    cache = DEFAULT_STATE
+    return cache
   }
 }
 
 function safeWrite(state: TwoFactorState): void {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch { /* ignore */ }
+  cache = state
 }
 
 const listeners = new Set<() => void>()

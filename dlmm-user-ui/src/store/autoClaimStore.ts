@@ -55,35 +55,52 @@ const DEFAULT_POLICY: AutoClaimPolicy = {
 
 // History of auto-fired claims, kept in-memory only (a refresh wipes
 // it). The Profile drawer reads this for the audit list.
-const history: Array<{ positionId: string; symbol: string; amount: number; firedAt: string }> = []
+// UI-CRITIQUE 2026-05-22 fix — `let` (not `const`) because we now
+// rebuild the array on each record() to give useSyncExternalStore a
+// new reference (the old in-place .unshift made the store inert from
+// React's perspective).
+let history: Array<{ positionId: string; symbol: string; amount: number; firedAt: string }> = []
 const HISTORY_MAX = 20
 
 // Cooldown per position to dedupe back-to-back fires.
 const PER_POSITION_COOLDOWN_MS = 60 * 60 * 1000
 const lastFiredAtByPosition = new Map<string, number>()
 
+// UI-CRITIQUE 2026-05-22 fix — cached snapshot. Same reason as in
+// positionAlertsStore: useSyncExternalStore needs a stable reference
+// between renders until data actually changes.
+let cache: AutoClaimPolicy | null = null
+
 function safeRead(): AutoClaimPolicy {
+  if (cache !== null) return cache
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_POLICY
+    if (!raw) {
+      cache = DEFAULT_POLICY
+      return cache
+    }
     const parsed = JSON.parse(raw)
     if (typeof parsed?.enabled !== 'boolean' || typeof parsed?.threshold !== 'number') {
-      return DEFAULT_POLICY
+      cache = DEFAULT_POLICY
+      return cache
     }
     // Backfill new optional fields for users with a pre-wave-3 policy.
-    return {
+    cache = {
       enabled: parsed.enabled,
       threshold: parsed.threshold,
       dailyCap: typeof parsed.dailyCap === 'number' ? parsed.dailyCap : DEFAULT_POLICY.dailyCap,
       skipPoolIds: Array.isArray(parsed.skipPoolIds) ? parsed.skipPoolIds.filter((x: unknown) => typeof x === 'string') : [],
     }
+    return cache
   } catch {
-    return DEFAULT_POLICY
+    cache = DEFAULT_POLICY
+    return cache
   }
 }
 
 function safeWrite(p: AutoClaimPolicy): void {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)) } catch { /* ignore */ }
+  cache = p
 }
 
 const listeners = new Set<() => void>()
@@ -138,8 +155,10 @@ export const autoClaimStore = {
   /** Record a successful claim — bookkeeping for cooldown + history. */
   recordFired(positionId: string, symbol: string, amount: number): void {
     lastFiredAtByPosition.set(positionId, Date.now())
-    history.unshift({ positionId, symbol, amount, firedAt: new Date().toISOString() })
-    if (history.length > HISTORY_MAX) history.length = HISTORY_MAX
+    // UI-CRITIQUE 2026-05-22 fix — rebuild the array (new reference)
+    // instead of mutating in place, so useSyncExternalStore subscribers
+    // actually see the change.
+    history = [{ positionId, symbol, amount, firedAt: new Date().toISOString() }, ...history].slice(0, HISTORY_MAX)
     notify()
   },
 
@@ -168,7 +187,10 @@ export const autoClaimStore = {
    * that depend on side state from prior tests.
    */
   __resetSideStateForTests(): void {
-    history.length = 0
+    // UI-CRITIQUE 2026-05-22 fix — assign new [] instead of .length = 0
+    // so any test that subscribed via useSyncExternalStore sees the
+    // change. `history` is now `let`, not `const`.
+    history = []
     lastFiredAtByPosition.clear()
     notify()
   },

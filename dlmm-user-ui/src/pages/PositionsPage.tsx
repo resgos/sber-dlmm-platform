@@ -119,7 +119,14 @@ export default function PositionsPage() {
     onError: (err: any) => message.error(err?.response?.data?.message || 'Ошибка'),
   })
 
-  const allActive = (myPositions || []).filter((p: Position) => p.isActive)
+  // UI-CRITIQUE 2026-05-22 fix — wrap in useMemo so reference is
+  // stable across re-renders. Без этого PositionAlertsWatcher /
+  // AutoClaimWatcher useEffect re-fired каждый render, mutation
+  // triggered state change, infinite loop → React error #185.
+  const allActive = useMemo(
+    () => (myPositions || []).filter((p: Position) => p.isActive),
+    [myPositions],
+  )
 
   // Sprint 10 wave 3 — health filter. Pre-compute each position's
   // health once and reuse for both the table column and the

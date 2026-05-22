@@ -56,22 +56,36 @@ const DEFAULT_STATE: TeamState = {
   createdAt: '',
 }
 
+// UI-CRITIQUE 2026-05-22 fix — cached snapshot, same reason as in
+// positionAlertsStore: without cache, every useSyncExternalStore
+// getSnapshot returned a new JSON.parse'd object → React saw
+// "data changed" every render → infinite loop → error #185.
+let cache: TeamState | null = null
+
 function safeRead(): TeamState {
+  if (cache !== null) return cache
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_STATE
+    if (!raw) {
+      cache = DEFAULT_STATE
+      return cache
+    }
     const parsed = JSON.parse(raw)
     if (typeof parsed?.orgName !== 'string' || !Array.isArray(parsed?.members)) {
-      return DEFAULT_STATE
+      cache = DEFAULT_STATE
+      return cache
     }
-    return parsed as TeamState
+    cache = parsed as TeamState
+    return cache
   } catch {
-    return DEFAULT_STATE
+    cache = DEFAULT_STATE
+    return cache
   }
 }
 
 function safeWrite(state: TeamState): void {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)) } catch { /* ignore */ }
+  cache = state
 }
 
 const listeners = new Set<() => void>()
