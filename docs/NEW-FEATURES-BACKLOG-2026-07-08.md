@@ -35,7 +35,7 @@ slotted into Sprint 10-12; long-tail goes to parking lot.
 | **F-04** | **Tax report export** — auto-3-НДФЛ + quarterly broker report. Real friction killer for retail. | 3 | 4 | 4 | 3.0 | Needs accountant sign-off on format. Sprint 12+ pending Compliance memo. |
 | **F-05** | **Voucher / gift mode** — gift SRUB / SSPAS as one-click link (Telegram-shareable). | 2 | 3 | 2 | 3.0 | Spasibo already tokenized; gifting = transfer + notification. Sprint 10 if Spasibo write-back (8.C) lands. |
 | **F-06** | **Smart hedge auto-roll** — pre-expiry, prompt user to roll the FX hedge to next month at one click. Retention. | 3 | 4 | 3 | 4.0 | Needs hedge-expiry concept (we don't have one today — Sprint 4 hedges are perpetual). Sprint 11+ once expiry model added. |
-| **F-07** | **Portfolio rebalancer wizard** — "Your USDT is 60%, target was 40%, auto-rebalance for 0.3 ₽". | 3 | 2 | 2 | 3.0 | Just a UI on top of existing swap. Sprint 10 quick win. |
+| **F-07** | **Portfolio rebalancer wizard** — "Your USDT is 60%, target was 40%, auto-rebalance for 0.3 ₽". | 3 | 2 | 2 | 3.0 | **done (Sprint 10 wave 1, 2026-05-22)** — `/rebalance` 3-step page (view → target → plan+execute). `src/lib/rebalancePlanner.ts` is the pure-logic planner: ±0.5% tolerance to skip dust trades, sell-then-buy via SRUB pivot, greedy ordering so pivot pool fills before any buy. Sequential execution stop-on-first-failure with a journal panel. 9 unit tests pin the planner contract. UI live at `/rebalance`, side-menu entry `RetweetOutlined`. |
 | **F-08** | **Backtest simulator** — "what if I'd run this strategy 90d ago" using transaction history seed. | 2 | 2 | 4 | 1.0 | Parking lot — UX retention but no direct revenue. |
 | **F-09** | **In-app learn-mode tutorials** — onboarding gap. Zero learn content today. | 2 | 1 | 3 | 0.7 | Parking lot — content production is the cost. |
 
@@ -65,7 +65,7 @@ slotted into Sprint 10-12; long-tail goes to parking lot.
 | # | Feature | R | M | E | Score | Notes |
 |---|---|---|---|---|---|---|
 | **F-21** | **Self-service KYC re-verification** — currently admin-only queue. Reduce admin queue load. | 2 | 2 | 2 | 2.0 | Sprint 10 quick win. |
-| **F-22** | **Operator runbook generator** — for every Critical Prometheus alert, generate one-pager from logs + history. | 2 | 3 | 4 | 1.5 | Parking — interesting but no direct revenue. Sprint 12+. |
+| **F-22** | **Operator runbook generator** — for every Critical Prometheus alert, generate one-pager from logs + history. | 2 | 3 | 4 | 1.5 | **done (Sprint 10 wave 1, 2026-05-22)** — `scripts/gen-alert-runbooks.mjs` walks `docker/prometheus/rules/*.yml`, emits one Markdown per alert into `docs/runbooks/` (severity, team, PromQL expr, description, hand-curated KNOWLEDGE table per alert with causes + actions). `--check` CI mode wired via new `.github/workflows/runbook-drift.yml` — triggers only on rules/script/docs/workflow change, fails the build on stale runbooks or orphan files. 7 runbooks + INDEX.md auto-generated today. |
 | **F-23** | **Chaos test schedule** — DR readiness, scheduled kill-and-restore in staging. | 3 | 2 | 3 | 2.0 | SRE-track. Sprint 11. |
 | **F-24** | **Distributed tracing (Sleuth + Zipkin)** — already in RISK-REGISTER #37 (audit AU-5). | 3 | 3 | 3 | 3.0 | Sprint 10 SRE. |
 
@@ -79,6 +79,13 @@ slotted into Sprint 10-12; long-tail goes to parking lot.
 | **F-28** | **Educational content + tutorials** — onboarding tutorial flow. | 2 | 1 | 4 | 0.5 | Parking — content cost is the issue. |
 
 ---
+
+## 6.5. New ideas added Sprint 10 wave 1 (2026-05-22)
+
+| # | Feature | R | M | E | Score | Status |
+|---|---|---|---|---|---|---|
+| **N-01** | **Pool comparator** — side-by-side compare up to 3 pools (APY/vol/TVL/fee/binStep) with "winner per row" highlight. Helps treasurers decide where to park capital. | 2 | 1 | 1 | 2.0 | **done** — `/pools/compare` page; "Сравнить" entry in PoolsPage toolbar. Pure-frontend on top of existing `/pools` listing. |
+| **N-02** | **Position alerts** — user attaches rules to LP positions (OUT_OF_RANGE / FEES_THRESHOLD / VALUE_DROP); browser notifications when triggered. Retention play. | 3 | 2 | 2 | 3.0 | **done (frontend MVP)** — `positionAlertsStore` (localStorage), `usePositionAlertWatcher` hook on PositionsPage, `PositionAlertsDrawer` for CRUD. Browser Notification API with lazy permission ask. 5-min cooldown per rule. Backend swap-in path documented (POST /api/v1/positions/{id}/alerts + @Scheduled checker, Sprint 11). 16 unit tests. |
 
 ## 7. Top picks ranked
 

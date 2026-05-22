@@ -1,0 +1,46 @@
+name: runbook-drift
+
+# Sprint 10 F-22 — verify auto-generated runbooks stay in sync with
+# the Prometheus rule source-of-truth.
+#
+# Triggered only when the relevant inputs change so we don't burn
+# minutes on unrelated PRs. The generator itself is ~10ms — the
+# Node + checkout setup is the bulk of the job time.
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "docker/prometheus/rules/**"
+      - "scripts/gen-alert-runbooks.mjs"
+      - "docs/runbooks/**"
+      - ".github/workflows/runbook-drift.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docker/prometheus/rules/**"
+      - "scripts/gen-alert-runbooks.mjs"
+      - "docs/runbooks/**"
+      - ".github/workflows/runbook-drift.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: runbook-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # --check mode exits 1 if any runbook is stale vs the source
+      # YAML or the KNOWLEDGE table in the generator. Fix:
+      # `node scripts/gen-alert-runbooks.mjs`.
+      - name: Verify runbooks in sync
+        run: node scripts/gen-alert-runbooks.mjs --check
