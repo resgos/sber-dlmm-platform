@@ -6,6 +6,8 @@ import DashboardPage from '@/pages/DashboardPage'
 import SwapPage from '@/pages/SwapPage'
 import HedgePage from '@/pages/HedgePage'
 import PoolsPage from '@/pages/PoolsPage'
+import RebalancePage from '@/pages/RebalancePage'
+import PoolComparePage from '@/pages/PoolComparePage'
 import PoolDetailPage from '@/pages/PoolDetailPage'
 import LiquidityPage from '@/pages/LiquidityPage'
 import PositionsPage from '@/pages/PositionsPage'
@@ -25,6 +27,8 @@ function App() {
         <Route path="pools/:id" element={<PoolDetailPage />} />
         <Route path="pools/:id/liquidity" element={<LiquidityPage />} />
         <Route path="positions" element={<PositionsPage />} />
+        <Route path="rebalance" element={<RebalancePage />} />
+        <Route path="pools/compare" element={<PoolComparePage />} />
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

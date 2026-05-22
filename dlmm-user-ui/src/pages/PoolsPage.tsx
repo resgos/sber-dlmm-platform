@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Card, Row, Col, Tag, Typography, Space, Button, Input, Empty, Pagination, Skeleton } from 'antd'
-import { SearchOutlined, ArrowRightOutlined, ThunderboltFilled } from '@ant-design/icons'
+import { SearchOutlined, ArrowRightOutlined, ThunderboltFilled, BarChartOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -129,18 +129,28 @@ export default function PoolsPage() {
           <Title level={4} className="sber-page-title">{t('pools.title')}</Title>
           <Text type="secondary">{t('pools.subtitle', { count: filtered.length })}</Text>
         </div>
-        <Input
-          allowClear
-          prefix={<SearchOutlined style={{ color: '#9CA3AF' }} />}
-          placeholder={t('pools.searchPlaceholder')}
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0) }}
-          // Sprint 9-DS-r4 P2-16 — fixed 320px width pushed past 320 viewport;
-          // class drops to width:100% under .sber-pools-search-mobile media
-          // query in sber-theme.css.
-          className="sber-pools-search"
-          style={{ height: 40, borderRadius: 10 }}
-        />
+        <Space size={12} wrap>
+          <Input
+            allowClear
+            prefix={<SearchOutlined style={{ color: '#9CA3AF' }} />}
+            placeholder={t('pools.searchPlaceholder')}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0) }}
+            // Sprint 9-DS-r4 P2-16 — fixed 320px width pushed past 320 viewport;
+            // class drops to width:100% under .sber-pools-search-mobile media
+            // query in sber-theme.css.
+            className="sber-pools-search"
+            style={{ height: 40, borderRadius: 10 }}
+          />
+          {/* Sprint 10 (new feature) — pool comparator entry point. */}
+          <Button
+            icon={<BarChartOutlined />}
+            onClick={() => navigate('/pools/compare')}
+            style={{ height: 40, borderRadius: 10 }}
+          >
+            Сравнить
+          </Button>
+        </Space>
       </div>
 
       {isLoading ? (

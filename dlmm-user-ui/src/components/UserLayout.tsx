@@ -12,6 +12,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  RetweetOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 import { auth } from '@/api/services'
@@ -29,6 +30,8 @@ const menuItems = [
   { key: '/hedge', icon: <SafetyCertificateOutlined />, label: 'Хедж FX' },
   { key: '/pools', icon: <FundOutlined />, label: 'Пулы' },
   { key: '/positions', icon: <PieChartOutlined />, label: 'Мои позиции' },
+  // Sprint 10 F-07 — portfolio rebalancer wizard.
+  { key: '/rebalance', icon: <RetweetOutlined />, label: 'Ребаланс' },
   { key: '/transactions', icon: <TransactionOutlined />, label: 'Транзакции' },
   { key: '/profile', icon: <UserOutlined />, label: 'Профиль' },
 ]
