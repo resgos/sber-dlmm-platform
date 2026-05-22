@@ -10,6 +10,7 @@ import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
 import PositionAlertsDrawer from '@/components/PositionAlertsDrawer'
 import HealthScoreBadge from '@/components/HealthScoreBadge'
 import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
+import { useAutoClaimWatcher } from '@/lib/useAutoClaimWatcher'
 import { positionAlertsStore } from '@/store/positionAlertsStore'
 import { useSyncExternalStore } from 'react'
 import dayjs from 'dayjs'
@@ -564,10 +565,10 @@ export default function PositionsPage() {
 /**
  * Sprint 10 (new feature) — tiny render-less helper.
  *
- * The watcher hook must be called at the top of a component (Rules
- * of Hooks). Mounting it on a sub-component keeps PositionsPage's
- * own hook order stable and gives us a clean place to thread the
- * positions + pools props in.
+ * The watcher hooks (position alerts + auto-claim) must be called at
+ * the top of a component (Rules of Hooks). Mounting them on a
+ * sub-component keeps PositionsPage's own hook order stable and
+ * gives us a clean place to thread props in.
  */
 function PositionAlertsWatcherSlot({
   positions,
@@ -577,5 +578,15 @@ function PositionAlertsWatcherSlot({
   pools: Pool[] | undefined
 }) {
   usePositionAlertWatcher(positions, pools)
+  // Sprint 10 (new feature) — auto-claim watcher in the same helper
+  // so we only mount one render-less child. Silent unless the user
+  // has opted in via Profile → AutoClaimSettings.
+  useAutoClaimWatcher(positions, ({ position, amount }) => {
+    // Surface a transient toast so the user knows a claim fired.
+    message.success(
+      `Авто-сбор: ${position.tokenXSymbol}/${position.tokenYSymbol} — забрано ${amount.toLocaleString('ru-RU')}`,
+      4,
+    )
+  })
   return null
 }

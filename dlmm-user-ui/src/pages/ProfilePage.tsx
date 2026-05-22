@@ -15,6 +15,7 @@ import KycStatusBadge from '@/components/KycStatusBadge'
 import SelfRestrictionPanel from '@/components/SelfRestrictionPanel'
 import ThemeToggle from '@/components/ThemeToggle'
 import KycUploadPanel from '@/components/KycUploadPanel'
+import AutoClaimSettings from '@/components/AutoClaimSettings'
 import { formatRub } from '@/components/StatCard'
 import type { User, TokenBalance, Position, Transaction } from '@/api/types'
 import dayjs from 'dayjs'
@@ -367,6 +368,11 @@ export default function ProfilePage() {
             </Space>
           )}
         </Card>
+
+        {/* Sprint 10 (new feature) — auto-claim toggle. Pure-frontend
+            MVP; the watcher hook on PositionsPage fires fees.claimFees()
+            on every refresh for positions over threshold. */}
+        <AutoClaimSettings />
 
         {/* Sprint 9-DS-r4 P2-15 — theme picker. Lives in the right rail
             so the user can find it without hunting through nav menus;
