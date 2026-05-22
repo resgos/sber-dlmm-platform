@@ -180,7 +180,14 @@ export default function ProfilePage() {
           Renders the Dragger only when the user is in NOT_SUBMITTED or
           REJECTED; for PENDING/VERIFIED users it shows an info card
           and bails out. */}
-      <KycUploadPanel kycStatus={kycStatus as 'NOT_SUBMITTED' | 'PENDING' | 'VERIFIED' | 'REJECTED'} />
+      <KycUploadPanel
+        kycStatus={kycStatus as 'NOT_SUBMITTED' | 'PENDING' | 'VERIFIED' | 'REJECTED'}
+        // Sprint 10 F-21 — surface the admin-supplied rejection reason
+        // when REJECTED. The backend User DTO doesn't carry the field
+        // on this branch yet (admin UI collects it in the audit log);
+        // a future User contract extension will populate it directly.
+        rejectionReason={(user as User & { kycRejectionReason?: string })?.kycRejectionReason}
+      />
 
       {/* Sprint 6 #6.7 — 115-ФЗ самозапрет */}
       <SelfRestrictionPanel />

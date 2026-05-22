@@ -8,6 +8,7 @@ import type { Position, Pool, FeeHistoryEntry } from '@/api/types'
 import { KpiRow, PageHeader, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
 import PositionAlertsDrawer from '@/components/PositionAlertsDrawer'
+import HealthScoreBadge from '@/components/HealthScoreBadge'
 import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
 import { positionAlertsStore } from '@/store/positionAlertsStore'
 import { useSyncExternalStore } from 'react'
@@ -333,6 +334,17 @@ export default function PositionsPage() {
                 if (pool) return <TokenPairChip x={pool.tokenXSymbol} y={pool.tokenYSymbol} />
                 return <Text type="secondary">пул {r.poolId.slice(0, 6)}…</Text>
               },
+            },
+            {
+              // Sprint 10 (new feature) — Position Health Score column.
+              // Single 0-100 number with a 3-factor tooltip breakdown
+              // (range fit / fee earning / age). See lib/positionHealth.ts
+              // for the weights + calibration notes.
+              title: <Tooltip title="Эвристическая оценка состояния позиции: соответствие диапазону, доходность по комиссиям, возраст. Не является инвестиционной рекомендацией.">Здоровье</Tooltip>,
+              key: 'health',
+              width: 90,
+              align: 'center' as const,
+              render: (_: unknown, r: Position) => <HealthScoreBadge position={r} pool={poolById.get(r.poolId)} />,
             },
             { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="blue">{s}</Tag> },
             {

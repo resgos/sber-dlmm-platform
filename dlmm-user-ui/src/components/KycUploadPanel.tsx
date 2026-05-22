@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Card, Upload, Button, Space, Typography, Tag, Alert, message } from 'antd'
-import { InboxOutlined, FileTextOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
+import { Card, Upload, Button, Space, Typography, Tag, Alert, message, Popconfirm } from 'antd'
+import { InboxOutlined, FileTextOutlined, SafetyCertificateOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface'
 
 const { Text, Paragraph } = Typography
@@ -11,10 +11,21 @@ type KycStatus = 'NOT_SUBMITTED' | 'PENDING' | 'VERIFIED' | 'REJECTED'
 interface KycUploadPanelProps {
   /** Current KYC status — drives whether the upload Dragger is shown. */
   kycStatus: KycStatus
+  /** Sprint 10 F-21 — surface the admin-supplied rejection reason on
+   *  REJECTED so the user knows what to fix on resubmit. Optional
+   *  because the backend contract is still in flux (admin UI already
+   *  collects the reason via the audit-log REJECT action). */
+  rejectionReason?: string
 }
 
 const ACCEPTED_MIME = ['image/jpeg', 'image/png', 'image/heic', 'application/pdf']
 const MAX_SIZE_MB = 10
+
+// Sprint 10 F-21 — soft client-side cooldown between submissions.
+// Prevents spam clicks; the real rate-limit will live in the gateway
+// when the Sber ID endpoint lands. localStorage key is per-browser.
+const RESUBMIT_COOLDOWN_KEY = 'dlmm.user.kycLastSubmittedAt'
+const RESUBMIT_COOLDOWN_MS = 60 * 60 * 1000 // 1h — generous; tightens to 24h once backend rate-limit ships
 
 interface RequiredDocument {
   key: string
@@ -29,50 +40,81 @@ const REQUIRED_DOCS: RequiredDocument[] = [
 ]
 
 /**
- * Sprint 9-DS-r4 P2-8 — KYC document upload.
+ * Sprint 9-DS-r4 P2-8 + Sprint 10 F-21 — KYC document upload.
  *
- * Stub implementation. The Sber ID integration (which would push docs
- * to ID-verify's OCR + face-match pipeline) doesn't have a published
- * contract on this branch — we wire the UX shell now so when the
- * contract lands in Sprint 10, only `handleSubmit` flips from
- * client-side stub to a real POST /api/v1/users/kyc/submit.
+ * Stub backend integration. Sber ID's OCR + face-match contract isn't
+ * published on this branch — the UX shell is wired so when the contract
+ * lands in Sprint 11, only `handleSubmit` flips from client-side stub
+ * to a real POST /api/v1/users/kyc/submit.
  *
- * Today's behaviour: files accumulate client-side in a per-doc map,
- * "Отправить на верификацию" flips the local panel into a PENDING
- * mock state and informs the user that the documents were "received".
- * No file actually leaves the browser. Removed when the real endpoint
- * ships — see TD note in Sprint 10 backlog.
+ * F-21 (this revision) — self-service re-verification:
+ *   - REJECTED users see the admin-supplied rejection reason at the
+ *     top of the Dragger so they know what to fix.
+ *   - VERIFIED users get a "Запросить переверификацию" button (for
+ *     expired docs / changed personal info) that flips the local
+ *     panel into the Dragger flow.
+ *   - 1h soft cooldown between submissions (localStorage timestamp)
+ *     prevents spam; real rate-limit ships with the backend.
+ *
+ * Today's "submit" still just message.success()s + flips local state
+ * to PENDING. No file actually leaves the browser.
  */
-export default function KycUploadPanel({ kycStatus }: KycUploadPanelProps) {
+export default function KycUploadPanel({ kycStatus, rejectionReason }: KycUploadPanelProps) {
   const [filesByDoc, setFilesByDoc] = useState<Record<string, UploadFile[]>>({})
   const [submitted, setSubmitted] = useState(false)
+  // F-21 — VERIFIED user clicked "Запросить переверификацию" → render
+  // the Dragger anyway. Local-only; refresh resets to the server-truth.
+  const [reverifyMode, setReverifyMode] = useState(false)
 
-  // Already-verified or under-review users don't see the uploader at
-  // all — the panel renders an info alert and exits.
-  if (kycStatus === 'VERIFIED') {
-    return (
-      <Card className="sber-card" title={<Text strong>Документы KYC</Text>}>
+  const renderVerifiedCard = (): JSX.Element => (
+    <Card className="sber-card" title={<Text strong>Документы KYC</Text>}>
+      <Space direction="vertical" size={12} style={{ width: '100%' }}>
         <Alert
           message="Документы приняты и верифицированы"
-          description="Если необходимо обновить документы — обратитесь в поддержку."
+          description="Если ваши документы устарели или изменились личные данные, вы можете запросить переверификацию."
           type="success"
           showIcon
         />
-      </Card>
-    )
+        <Popconfirm
+          title="Запросить переверификацию?"
+          description="Текущая верификация останется активной до тех пор, пока новые документы не будут одобрены. Платформенные операции прерывать не нужно."
+          onConfirm={() => setReverifyMode(true)}
+          okText="Продолжить"
+          cancelText="Отмена"
+        >
+          <Button icon={<ReloadOutlined />} type="default">
+            Запросить переверификацию
+          </Button>
+        </Popconfirm>
+      </Space>
+    </Card>
+  )
+
+  const renderPendingCard = (): JSX.Element => (
+    <Card className="sber-card" title={<Text strong>Документы KYC</Text>}>
+      <Alert
+        message="Документы на рассмотрении"
+        description="Обычно проверка занимает 1–2 рабочих дня. После одобрения вам будут доступны все функции платформы."
+        type="info"
+        showIcon
+      />
+    </Card>
+  )
+
+  // Already-verified and not asking for re-verification → exit early.
+  if (kycStatus === 'VERIFIED' && !reverifyMode) {
+    return renderVerifiedCard()
   }
   if (kycStatus === 'PENDING' || submitted) {
-    return (
-      <Card className="sber-card" title={<Text strong>Документы KYC</Text>}>
-        <Alert
-          message="Документы на рассмотрении"
-          description="Обычно проверка занимает 1–2 рабочих дня. После одобрения вам будут доступны все функции платформы."
-          type="info"
-          showIcon
-        />
-      </Card>
-    )
+    return renderPendingCard()
   }
+
+  // F-21 — check soft cooldown before letting them submit.
+  const lastSubmittedAt = readLastSubmittedAt()
+  const cooldownRemainingMs = lastSubmittedAt
+    ? Math.max(0, RESUBMIT_COOLDOWN_MS - (Date.now() - lastSubmittedAt))
+    : 0
+  const onCooldown = cooldownRemainingMs > 0
 
   const handleSubmit = (): void => {
     const submittedDocs = REQUIRED_DOCS.filter((d) => (filesByDoc[d.key]?.length ?? 0) > 0)
@@ -80,9 +122,14 @@ export default function KycUploadPanel({ kycStatus }: KycUploadPanelProps) {
       message.warning(`Загрузите все ${REQUIRED_DOCS.length} документа перед отправкой`)
       return
     }
+    if (onCooldown) {
+      message.warning(`Подождите ${Math.ceil(cooldownRemainingMs / 60_000)} мин до следующей отправки`)
+      return
+    }
     // Stub — real impl will POST a multipart form to /api/v1/users/kyc/submit
     // and respect the Sber ID idempotency key contract.
     message.success('Документы переданы на верификацию. Ожидайте уведомления.')
+    writeLastSubmittedAt()
     setSubmitted(true)
   }
 
@@ -94,10 +141,40 @@ export default function KycUploadPanel({ kycStatus }: KycUploadPanelProps) {
       title={
         <Space>
           <SafetyCertificateOutlined style={{ color: 'var(--sber-green)' }} />
-          <Text strong>Документы для верификации (KYC)</Text>
+          <Text strong>
+            {reverifyMode ? 'Переверификация документов (KYC)' : 'Документы для верификации (KYC)'}
+          </Text>
         </Space>
       }
+      extra={
+        reverifyMode && (
+          <Button size="small" type="text" onClick={() => setReverifyMode(false)}>
+            Отменить
+          </Button>
+        )
+      }
     >
+      {/* Sprint 10 F-21 — surface rejection reason at the top so the user
+          knows what to fix BEFORE re-uploading. */}
+      {kycStatus === 'REJECTED' && rejectionReason && (
+        <Alert
+          type="error"
+          showIcon
+          message="Предыдущая заявка отклонена"
+          description={rejectionReason}
+          style={{ marginBottom: 16 }}
+        />
+      )}
+      {kycStatus === 'REJECTED' && !rejectionReason && (
+        <Alert
+          type="warning"
+          showIcon
+          message="Предыдущая заявка отклонена"
+          description="Проверьте качество фото (фокус, нет бликов, читаемый текст) и при необходимости свяжитесь с поддержкой за разъяснениями."
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       <Paragraph type="secondary" style={{ marginBottom: 16 }}>
         Загрузите три документа в формате JPG / PNG / HEIC / PDF, объём каждого до {MAX_SIZE_MB} МБ.
         Документы поступают в обработку через Sber ID и хранятся в шифрованном виде.
@@ -120,7 +197,7 @@ export default function KycUploadPanel({ kycStatus }: KycUploadPanelProps) {
                 return Upload.LIST_IGNORE
               }
               // Sprint 9-DS-r4 stub: keep file client-side, never POST.
-              // Sprint 10 will hand `file` to the real endpoint.
+              // Sprint 11 will hand `file` to the real endpoint.
               return false
             },
             onChange: ({ fileList }) => {
@@ -167,7 +244,7 @@ export default function KycUploadPanel({ kycStatus }: KycUploadPanelProps) {
         <Button
           type="primary"
           size="large"
-          disabled={!allReady}
+          disabled={!allReady || onCooldown}
           onClick={handleSubmit}
           style={{ height: 44 }}
         >
@@ -178,7 +255,35 @@ export default function KycUploadPanel({ kycStatus }: KycUploadPanelProps) {
             Загрузите все {REQUIRED_DOCS.length} документа, чтобы продолжить.
           </Text>
         )}
+        {onCooldown && (
+          <Text type="warning" style={{ fontSize: 12 }}>
+            Следующая отправка возможна через {Math.ceil(cooldownRemainingMs / 60_000)} мин.
+          </Text>
+        )}
       </Space>
     </Card>
   )
+}
+
+// --- soft cooldown helpers --------------------------------------------
+// localStorage is per-browser, so the cooldown is advisory only — the
+// real rate-limit will live in the gateway / Sber ID endpoint. Using a
+// long horizon (1h dev / 24h prod) keeps the bar high enough to deter
+// accidental double-submits without trapping the user if they need a
+// quick re-upload after fixing a doc.
+function readLastSubmittedAt(): number | null {
+  try {
+    const raw = localStorage.getItem(RESUBMIT_COOLDOWN_KEY)
+    if (!raw) return null
+    const n = Number(raw)
+    return Number.isFinite(n) ? n : null
+  } catch {
+    return null
+  }
+}
+
+function writeLastSubmittedAt(): void {
+  try {
+    localStorage.setItem(RESUBMIT_COOLDOWN_KEY, String(Date.now()))
+  } catch { /* quota / private-mode — accept the loss */ }
 }
