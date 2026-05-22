@@ -10,6 +10,7 @@ import { pools, balances, fees } from '@/api/services'
 import type { Position, LiquidityStrategy } from '@/api/types'
 import StrategySelector from '@/components/StrategySelector'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
+import RiskDisclosure from '@/components/RiskDisclosure'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
 
 const { Title, Text } = Typography
@@ -275,6 +276,10 @@ export default function LiquidityPage() {
       <Card className="sber-card" title={<Text strong>Распределение ликвидности</Text>}>
         <BinLiquidityChart poolId={pool.id} />
       </Card>
+
+      {/* Sprint 12 G-14 — risk disclosure banner. Always-on per
+          compliance — never dismissible. */}
+      <RiskDisclosure variant="lp" />
 
       <Card className="sber-card">
         <Tabs items={tabItems} />

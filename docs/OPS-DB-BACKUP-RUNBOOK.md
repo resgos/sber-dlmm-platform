@@ -56,7 +56,7 @@ Designed to be `cron`-runnable on a host outside the compose stack
 cleanup job (`OutboxDispatcher.cleanup`) so the cron-window
 contention is intentional and predictable.
 
-## Restore drill (dev)
+## Restore drill (dev) — manual
 
 ```bash
 # Trash the running DB (in dev)
@@ -74,6 +74,61 @@ docker exec -i dlmm-postgres pg_restore -U dlmm -d dlmm --clean --if-exists \
 `/actuator/health`. If JPA `ddl-auto: validate` accepts the
 restored schema and a `/api/v1/pools` call returns the expected
 row count, the restore is healthy.
+
+## Automated DR drill (Sprint 11 G-35)
+
+`docker/scripts/dr-drill.sh` runs the full snapshot → kill → restore →
+verify cycle and reports RTO + per-table row-count parity. Driven by
+Dmitry + АВ feedback ("тестируйте failover до того как мы подключаемся").
+
+```bash
+# Full drill (DESTRUCTIVE — wipes named volume, simulates total DB
+# loss + cold restore). Dev/staging only.
+docker/scripts/dr-drill.sh
+
+# DRY-RUN — capture baseline + snapshot, skip destroy/restore.
+# Safe to run in any environment. Use this in CI smoke tests.
+DRILL_SKIP_DESTROY=1 docker/scripts/dr-drill.sh
+```
+
+### Sample output (DRY-RUN, dev compose with seed data)
+
+```
+[dr-drill] ===== DR drill starting =====
+[dr-drill] DRILL_SKIP_DESTROY=1 → DRY-RUN mode
+[dr-drill] ----- step 1: baseline row counts -----
+  users                     4 rows
+  tokens                    25 rows
+  liquidity_pools           22 rows
+  lp_positions              19 rows
+  transactions              2067 rows
+[dr-drill] ----- step 2: snapshot -----
+  snapshot took 2s, 12 MB
+[dr-drill] DRY-RUN: skipping destroy / restore / verify
+[dr-drill] ===== DR drill DONE =====
+```
+
+### Production cadence
+
+- **Staging:** automated weekly cron — full drill with destroy/restore.
+  Failure pages on-call.
+- **Production:** quarterly drill in a copy-environment (snapshot → fresh
+  cluster → restore → verify). Never destroy production directly.
+- **Pre-release gate:** full drill in staging passes before any pre-prod
+  promotion. CI enforces via the `DRILL_SKIP_DESTROY=1` smoke (validates
+  the snapshot can be produced) on every PR touching `init-db.sql` or
+  the Liquibase changesets.
+
+### Reading the report
+
+- **RTO** (Recovery Time Objective): время от `docker stop` до полностью
+  восстановленного состояния. Sprint 11 target = < 5 минут на dev
+  compose; production target with WAL-G = < 2 минут.
+- **Row-count parity:** все 5 критических таблиц должны вернуть исходные
+  count'ы. Любое несовпадение = data loss, расследование обязательно.
+- **Drill duration creep:** если drill стал занимать > 2× времени за
+  последний квартал — это сигнал растущей БД или деградирующего I/O.
+  Plan capacity bump.
 
 ---
 

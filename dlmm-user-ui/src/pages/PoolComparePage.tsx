@@ -29,6 +29,7 @@ import { pools as poolsApi } from '@/api/services'
 import type { Pool } from '@/api/types'
 import { formatRub } from '@/components/StatCard'
 import { bpsToPercent } from '@/utils/format'
+import { computeProMetrics } from '@/lib/poolMetrics'
 
 const { Title, Text } = Typography
 const MAX_COMPARE = 3
@@ -340,6 +341,12 @@ export default function PoolComparePage() {
                           }}
                         />
                       </div>
+
+                      {/* Sprint 12 G-23 — pro metrics for institutional
+                          users (Dmitry-driven feedback). Synthetic today;
+                          real OHLCV swap-in Sprint 13. */}
+                      <ProMetricsBlock pool={p} />
+
                       <Button block onClick={() => navigate(`/pools/${p.id}`)} type="primary" ghost>
                         Открыть пул
                       </Button>
@@ -361,5 +368,47 @@ export default function PoolComparePage() {
         </Card>
       )}
     </Space>
+  )
+}
+
+/**
+ * Sprint 12 G-23 — pro metrics block per pool card. Three rows of
+ * institutional-grade indicators (30d volatility, max drawdown,
+ * Sharpe) plus a ⓘ that explains "это synthetic метрики". Sprint 13
+ * swaps to real OHLCV reads.
+ */
+function ProMetricsBlock({ pool }: { pool: Pool }) {
+  const m = computeProMetrics(pool)
+  return (
+    <div style={{ borderTop: '1px dashed var(--border-light)', paddingTop: 10, marginTop: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          Pro метрики
+        </Text>
+        {m.isSynthetic && (
+          <Tooltip title="Synthetic метрики на базе APY + volume24h. Реальные исторические значения по OHLCV — Sprint 13.">
+            <Tag color="default" style={{ fontSize: 10, borderRadius: 999, marginInlineEnd: 0 }}>
+              синтет.
+            </Tag>
+          </Tooltip>
+        )}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+        <Text type="secondary">Волатильность 30д</Text>
+        <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>{m.volatilityPct30d.toFixed(1)}%</Text>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+        <Text type="secondary">Max drawdown</Text>
+        <Text strong style={{ fontVariantNumeric: 'tabular-nums', color: m.maxDrawdownPct > 10 ? 'var(--color-negative)' : 'var(--text-primary)' }}>
+          −{m.maxDrawdownPct.toFixed(1)}%
+        </Text>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+        <Text type="secondary">Sharpe (vs 14% RFR)</Text>
+        <Text strong style={{ fontVariantNumeric: 'tabular-nums', color: m.sharpe > 1 ? 'var(--sber-green)' : m.sharpe < 0 ? 'var(--color-negative)' : 'var(--text-primary)' }}>
+          {m.sharpe >= 0 ? '+' : ''}{m.sharpe.toFixed(2)}
+        </Text>
+      </div>
+    </div>
   )
 }

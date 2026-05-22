@@ -16,6 +16,7 @@ import SelfRestrictionPanel from '@/components/SelfRestrictionPanel'
 import ThemeToggle from '@/components/ThemeToggle'
 import KycUploadPanel from '@/components/KycUploadPanel'
 import AutoClaimSettings from '@/components/AutoClaimSettings'
+import TwoFactorSettings from '@/components/TwoFactorSettings'
 import { formatRub } from '@/components/StatCard'
 import type { User, TokenBalance, Position, Transaction } from '@/api/types'
 import dayjs from 'dayjs'
@@ -368,6 +369,11 @@ export default function ProfilePage() {
             </Space>
           )}
         </Card>
+
+        {/* Sprint 11 G-20 — 2FA TOTP settings. Frontend MVP — verify
+            stub accepts any 6-digit code; real backend TOTP validate
+            lands in Sprint 12. */}
+        <TwoFactorSettings />
 
         {/* Sprint 10 (new feature) — auto-claim toggle. Pure-frontend
             MVP; the watcher hook on PositionsPage fires fees.claimFees()

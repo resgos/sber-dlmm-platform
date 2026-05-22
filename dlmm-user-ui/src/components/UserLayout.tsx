@@ -13,6 +13,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   RetweetOutlined,
+  TeamOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 import { auth } from '@/api/services'
@@ -33,6 +34,9 @@ const menuItems = [
   // Sprint 10 F-07 — portfolio rebalancer wizard.
   { key: '/rebalance', icon: <RetweetOutlined />, label: 'Ребаланс' },
   { key: '/transactions', icon: <TransactionOutlined />, label: 'Транзакции' },
+  // Sprint 11 G-21 — team / multi-user management. Между Profile и
+  // Transactions так чтобы пользователю было заметно.
+  { key: '/team', icon: <TeamOutlined />, label: 'Команда' },
   { key: '/profile', icon: <UserOutlined />, label: 'Профиль' },
 ]
 

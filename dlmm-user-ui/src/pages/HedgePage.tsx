@@ -29,6 +29,7 @@ import { pools, tokens, balances, transactions } from '@/api/services'
 import type { Pool, Token, TokenBalance, Transaction } from '@/api/types'
 import { bpsToPercent } from '@/utils/format'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
+import RiskDisclosure from '@/components/RiskDisclosure'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -425,6 +426,13 @@ export default function HedgePage() {
           Хедж работает как мгновенный своп: SRUB конвертируется в выбранную валюту,
           вы получаете токенизированную позицию, которую можно держать или развернуть обратно.
         </Paragraph>
+      </div>
+
+      {/* Sprint 12 G-14 — risk disclosure. Hedge-specific copy
+          explains: фиксированный курс может «стоить» если рынок
+          пойдёт в нашу пользу. */}
+      <div style={{ marginBottom: 20 }}>
+        <RiskDisclosure variant="hedge" />
       </div>
 
       {/* Exposure summary — anchors the whole UX in "how many rubles do I have?".

@@ -163,6 +163,33 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
   const protocolFeeRub = 0
   const totalCostRub = bookkeepingRub + protocolFeeRub
 
+  /**
+   * Sprint 12 G-22 — price impact estimate for the act of adding LP.
+   *
+   * Premise: at the active bin, the canonical X:Y ratio is determined
+   * by `pool.currentPrice`. If your deposit X+Y matches that ratio,
+   * the active bin's reserves grow proportionally — no price move,
+   * impact ≈ 0. If your deposit is skewed (mostly Y, or mostly X),
+   * the imbalance gets absorbed via implicit "internal swap" which
+   * moves through some bins → price impact.
+   *
+   * Estimate: |Y_actual - Y_target| / totalTvlY × 100, clamped 0..50%.
+   * Y_target = X_in * currentPrice (the "balanced" Y for this X).
+   *
+   * This is a UI hint, not a precise quote. Real per-bin calc lives
+   * in pool-engine (Sprint 13 backend swap-in: POST /api/v1/pools/
+   * {id}/add-liquidity/quote).
+   */
+  const addPriceImpactPct: number | null = useMemo(() => {
+    if (amountX == null || amountY == null || amountX <= 0 || amountY <= 0) return null
+    const yTarget = amountX * (pool.currentPrice ?? 0)
+    const imbalance = Math.abs(amountY - yTarget)
+    if (imbalance === 0) return 0
+    const tvlY = pool.totalTvlY || 1
+    const pct = (imbalance / tvlY) * 100
+    return Math.min(50, pct)
+  }, [amountX, amountY, pool.currentPrice, pool.totalTvlY])
+
   return (
     <Space direction="vertical" size={14} style={{ width: '100%' }}>
       {success && (
@@ -379,6 +406,39 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
             </Text>
             <Text style={{ fontVariantNumeric: 'tabular-nums' }}>{formatRub(protocolFeeRub)}</Text>
           </div>
+
+          {/* Sprint 12 G-22 — price impact on the act of adding
+              liquidity itself. Dmitry-driven (medium-business demo):
+              "На add-liquidity слип не рассчитывается, только на swap".
+              Formula: if you're depositing X+Y where X/Y is not at
+              currentPrice (target ratio), the deposit implicitly
+              "swaps" to balance — that swap moves the bin. Estimate:
+              max(deltaX, deltaY) / totalTvlSide × 100. Capped at 50%
+              for display sanity. */}
+          {addPriceImpactPct != null && addPriceImpactPct > 0.05 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                Влияние на цену пула
+                <Tooltip title="Если ваш ввод смещает пропорцию активного бина, цена пула сдвигается. Чем больше относительно TVL — тем больший сдвиг. Свыше 2% — рекомендуется разбить ввод на несколько частей.">
+                  {' '}
+                  <InfoCircleOutlined style={{ fontSize: 11, color: 'var(--text-muted)' }} />
+                </Tooltip>
+              </Text>
+              <Text
+                strong
+                style={{
+                  fontVariantNumeric: 'tabular-nums',
+                  color: addPriceImpactPct > 2
+                    ? 'var(--color-negative)'
+                    : addPriceImpactPct > 0.5
+                      ? 'var(--color-warning-amber)'
+                      : 'var(--sber-green)',
+                }}
+              >
+                {addPriceImpactPct.toFixed(2)}%
+              </Text>
+            </div>
+          )}
           <div
             style={{
               display: 'flex',

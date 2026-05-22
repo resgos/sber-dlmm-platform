@@ -1,5 +1,6 @@
-import { Tooltip, Space, Typography, Progress, Popover } from 'antd'
-import { HeartFilled, InfoCircleOutlined } from '@ant-design/icons'
+import { Tooltip, Space, Typography, Progress, Popover, Button } from 'antd'
+import { HeartFilled, InfoCircleOutlined, RetweetOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import type { Position, Pool } from '@/api/types'
 import { calculateHealth, bandColor } from '@/lib/positionHealth'
 
@@ -28,8 +29,14 @@ interface Props {
  * via CSS vars (sber-green/amber/critical) so theme-switching works.
  */
 export default function HealthScoreBadge({ position, pool, size = 'small' }: Props) {
+  const navigate = useNavigate()
   const health = calculateHealth(position, pool)
   const color = bandColor(health.band)
+  // Sprint 12 G-03 — actionable CTA. Если оценка плохая или so-so —
+  // показываем кнопку «Ребалансировать» прямо в тултипе. До этого
+  // tooltip объяснял проблему но не предлагал решение — Елена и
+  // Anna обе спрашивали "что мне с этим делать".
+  const needsAction = health.band === 'poor' || health.band === 'fair'
   // Sprint 10 wave 3 — bumped from 12 → 14 in small; 16 → 20 in medium.
   // The 12px badge was getting lost in dense table rows; reviewers
   // called it out as "tiny".
@@ -45,6 +52,24 @@ export default function HealthScoreBadge({ position, pool, size = 'small' }: Pro
       <Text style={{ color: 'var(--bg-card)', fontSize: 11, opacity: 0.75, display: 'block', marginTop: 4 }}>
         Эвристический индикатор. Не является инвестиционной рекомендацией.
       </Text>
+      {/* Sprint 12 G-03 — actionable CTA. */}
+      {needsAction && (
+        <Button
+          size="small"
+          type="primary"
+          ghost
+          icon={<RetweetOutlined />}
+          onClick={(e) => {
+            // Stop propagation so the popover click handler doesn't
+            // re-toggle the popup before navigation completes.
+            e.stopPropagation()
+            navigate('/rebalance')
+          }}
+          style={{ marginTop: 4, alignSelf: 'flex-start' }}
+        >
+          Ребалансировать
+        </Button>
+      )}
     </Space>
   )
 
