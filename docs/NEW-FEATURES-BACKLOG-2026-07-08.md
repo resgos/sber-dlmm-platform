@@ -48,7 +48,7 @@ slotted into Sprint 10-12; long-tail goes to parking lot.
 | **F-12** | **Cross-pool routing optimizer** — best-execution across N pools. Brings high-roller volume. | 4 | 3 | 4 | 3.0 | Graph routing + execution batching. Sprint 11. |
 | **F-13** | **Spread / liquidity SLA contracts** — Sber Treasury becomes guaranteed MM under monthly SLA. | 5 | 5 | 2 | **12.5** | Mostly contract paper + a config-flag MM tier already shipped (#6.4). Top pick — Sprint 10 cross-functional. |
 | **F-14** | **Custom dashboards for corp B2B issuers** — branded sub-portals per issuer (R-d). | 3 | 3 | 4 | 2.25 | Multitenant theming on the B2B portal. Sprint 12. |
-| **F-15** | **API key usage analytics** — per-key call volume + latency dashboards. Sprint 9 has tiers, this completes the picture. | 3 | 2 | 2 | 3.0 | Sprint 10 — natural Sprint 9 follow-up. |
+| **F-15** | **API key usage analytics** — per-key call volume + latency dashboards. Sprint 9 has tiers, this completes the picture. | 3 | 2 | 2 | 3.0 | **done (Sprint 10 wave 2, 2026-05-22)** — `/api-analytics` admin page scrapes gateway `/actuator/prometheus` (no new backend), parses `dlmm_gateway_ratelimit_total{tier,outcome}` via new `lib/prometheusTextParser.ts`. Renders: total/allowed/throttled tiles + per-tier card (FREE/PRO/ENTERPRISE) with allowed/throttled counters, configured RPS quota, throttle ratio with tone tinting (green<1% / amber 1-10% / red>10%). Auto-refresh 15s + manual button. 7 parser tests pin the format. Sprint 11 swap: per-API-key breakdown once we have an `X-Api-Key-Id` claim in JWT. |
 | **F-16** | **DLMM-as-Service white-label deeper** — currently issuer mints tokens; extend to "design your own pool curve". | 4 | 4 | 5 | 3.2 | Q4 2026 product extension. |
 
 ## 4. Compliance / regulatory
@@ -64,7 +64,7 @@ slotted into Sprint 10-12; long-tail goes to parking lot.
 
 | # | Feature | R | M | E | Score | Notes |
 |---|---|---|---|---|---|---|
-| **F-21** | **Self-service KYC re-verification** — currently admin-only queue. Reduce admin queue load. | 2 | 2 | 2 | 2.0 | Sprint 10 quick win. |
+| **F-21** | **Self-service KYC re-verification** — currently admin-only queue. Reduce admin queue load. | 2 | 2 | 2 | 2.0 | **done (Sprint 10 wave 2, 2026-05-22)** — `KycUploadPanel` extended: VERIFIED users see "Запросить переверификацию" CTA (Popconfirm-gated) that flips into the upload Dragger; REJECTED users see admin-supplied `rejectionReason` at the top of the form (optional User field); 1h soft cooldown via localStorage timestamp prevents spam clicks. 9 unit tests (was 4, +5 new branches for F-21). |
 | **F-22** | **Operator runbook generator** — for every Critical Prometheus alert, generate one-pager from logs + history. | 2 | 3 | 4 | 1.5 | **done (Sprint 10 wave 1, 2026-05-22)** — `scripts/gen-alert-runbooks.mjs` walks `docker/prometheus/rules/*.yml`, emits one Markdown per alert into `docs/runbooks/` (severity, team, PromQL expr, description, hand-curated KNOWLEDGE table per alert with causes + actions). `--check` CI mode wired via new `.github/workflows/runbook-drift.yml` — triggers only on rules/script/docs/workflow change, fails the build on stale runbooks or orphan files. 7 runbooks + INDEX.md auto-generated today. |
 | **F-23** | **Chaos test schedule** — DR readiness, scheduled kill-and-restore in staging. | 3 | 2 | 3 | 2.0 | SRE-track. Sprint 11. |
 | **F-24** | **Distributed tracing (Sleuth + Zipkin)** — already in RISK-REGISTER #37 (audit AU-5). | 3 | 3 | 3 | 3.0 | Sprint 10 SRE. |
@@ -80,12 +80,14 @@ slotted into Sprint 10-12; long-tail goes to parking lot.
 
 ---
 
-## 6.5. New ideas added Sprint 10 wave 1 (2026-05-22)
+## 6.5. New ideas added Sprint 10 wave 1+2 (2026-05-22)
 
 | # | Feature | R | M | E | Score | Status |
 |---|---|---|---|---|---|---|
 | **N-01** | **Pool comparator** — side-by-side compare up to 3 pools (APY/vol/TVL/fee/binStep) with "winner per row" highlight. Helps treasurers decide where to park capital. | 2 | 1 | 1 | 2.0 | **done** — `/pools/compare` page; "Сравнить" entry in PoolsPage toolbar. Pure-frontend on top of existing `/pools` listing. |
 | **N-02** | **Position alerts** — user attaches rules to LP positions (OUT_OF_RANGE / FEES_THRESHOLD / VALUE_DROP); browser notifications when triggered. Retention play. | 3 | 2 | 2 | 3.0 | **done (frontend MVP)** — `positionAlertsStore` (localStorage), `usePositionAlertWatcher` hook on PositionsPage, `PositionAlertsDrawer` for CRUD. Browser Notification API with lazy permission ask. 5-min cooldown per rule. Backend swap-in path documented (POST /api/v1/positions/{id}/alerts + @Scheduled checker, Sprint 11). 16 unit tests. |
+| **N-03** | **Position Health Score** — 0-100 score per LP position summarising range-fit (45%) + fee-earning vs target APY (35%) + age confidence (20%). At-a-glance triage on PositionsPage; anchor for future automation. | 2 | 2 | 1 | 4.0 | **done** — `lib/positionHealth.ts` (135 LoC pure-function calculator with 3-factor weighted sum + colour bands). `HealthScoreBadge` Tooltip on each PositionsPage row. 13 unit tests pin every factor edge case. Calibration deliberately conservative — 20% target APY, ≥30d full age weight; refine with real user data Sprint 11. |
+| **N-04** | **Auto-claim fees scheduler toggle** — user opts in via Profile, watcher hook on PositionsPage fires `fees.claimFees()` when unclaimed exceeds threshold. Reduces manual claim friction. | 3 | 2 | 2 | 3.0 | **done (frontend MVP)** — `autoClaimStore` (localStorage policy + capped 20-entry in-memory history + per-position 1h cooldown). `useAutoClaimWatcher` hook (one inflight claim at a time via re-entrancy guard). `AutoClaimSettings` card in Profile right rail. Transient toast on every fire so user has visual confirmation. Sprint 11 swap: POST /api/v1/users/auto-claim-policy + @Scheduled checker on backend. 9 unit tests. |
 
 ## 7. Top picks ranked
 
