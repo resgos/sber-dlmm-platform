@@ -77,35 +77,35 @@ export default function SpasiboWidget() {
     >
       <Space direction="vertical" size={14} style={{ width: '100%' }}>
         <Space align="center">
-          <GiftOutlined style={{ fontSize: 22, color: 'white' }} />
+          <GiftOutlined style={{ fontSize: 'var(--text-lg)', color: 'white' }} />
           <Title level={5} style={{ color: 'white', margin: 0 }}>
             СберСпасибо
           </Title>
         </Space>
 
         <Statistic
-          title={<Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Доступно баллов</Text>}
+          title={<Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 'var(--text-xs)' }}>Доступно баллов</Text>}
           value={available}
           valueStyle={{ color: 'white', fontSize: 26, fontWeight: 700 }}
           groupSeparator=" "
-          suffix={<span style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>SSPAS</span>}
+          suffix={<span style={{ fontSize: 'var(--text-base)', color: 'rgba(255,255,255,0.7)' }}>SSPAS</span>}
         />
 
         <Divider style={{ margin: '4px 0', background: 'rgba(255,255,255,0.2)' }} />
 
-        <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>
+        <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 'var(--text-xs)' }}>
           Конвертировать баллы в SRUB по курсу 1:1 (без комиссии)
         </Text>
 
         {success && (
           <Alert message="Конвертация выполнена" type="success" showIcon
             closable onClose={() => setSuccess(false)}
-            style={{ borderRadius: 8 }} />
+            style={{ borderRadius: 'var(--radius-sm)' }} />
         )}
         {error && (
           <Alert message={error} type="error" showIcon closable
             onClose={() => setError(null)}
-            style={{ borderRadius: 8 }} />
+            style={{ borderRadius: 'var(--radius-sm)' }} />
         )}
 
         {/* Sprint 9 — was Space.Compact which inherited the 42px input

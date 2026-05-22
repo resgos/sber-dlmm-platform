@@ -67,7 +67,7 @@ export default function RegisterPage() {
           <Title level={3} className="sber-brand-title" style={{ margin: 0 }}>
             СБЕР <span className="sber-brand-title-accent">DLMM</span>
           </Title>
-          <Text style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Создайте аккаунт</Text>
+          <Text style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-base)' }}>Создайте аккаунт</Text>
         </Space>
 
         {error && (
@@ -77,7 +77,7 @@ export default function RegisterPage() {
             showIcon
             closable
             onClose={() => setError(null)}
-            style={{ marginBottom: 24, borderRadius: 8 }}
+            style={{ marginBottom: 24, borderRadius: 'var(--radius-sm)' }}
           />
         )}
 
@@ -92,7 +92,7 @@ export default function RegisterPage() {
               <Input
                 prefix={<UserOutlined style={{ color: '#9CA3AF' }} />}
                 placeholder="Иван"
-                style={{ height: 44, borderRadius: 8 }}
+                style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
               />
             </Form.Item>
             <Form.Item
@@ -101,7 +101,7 @@ export default function RegisterPage() {
               rules={[{ required: true, message: 'Введите фамилию' }, { min: 2, message: 'Минимум 2 символа' }]}
               style={{ flex: 1 }}
             >
-              <Input placeholder="Иванов" style={{ height: 44, borderRadius: 8 }} />
+              <Input placeholder="Иванов" style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
             </Form.Item>
           </Space>
 
@@ -113,7 +113,7 @@ export default function RegisterPage() {
             <Input
               prefix={<IdcardOutlined style={{ color: '#9CA3AF' }} />}
               placeholder="SBER-USR-12345"
-              style={{ height: 44, borderRadius: 8 }}
+              style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
             />
           </Form.Item>
 
@@ -128,7 +128,7 @@ export default function RegisterPage() {
             <Input
               prefix={<PhoneOutlined style={{ color: '#9CA3AF' }} />}
               placeholder="+79001234567"
-              style={{ height: 44, borderRadius: 8 }}
+              style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
             />
           </Form.Item>
 
@@ -144,7 +144,7 @@ export default function RegisterPage() {
               prefix={<MailOutlined style={{ color: '#9CA3AF' }} />}
               placeholder="user@example.com"
               autoComplete="email"
-              style={{ height: 44, borderRadius: 8 }}
+              style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
             />
           </Form.Item>
 
@@ -160,7 +160,7 @@ export default function RegisterPage() {
             <Input.Password
               prefix={<LockOutlined style={{ color: '#9CA3AF' }} />}
               placeholder="--------"
-              style={{ height: 44, borderRadius: 8 }}
+              style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
             />
           </Form.Item>
 
@@ -181,7 +181,7 @@ export default function RegisterPage() {
             <Input.Password
               prefix={<LockOutlined style={{ color: '#9CA3AF' }} />}
               placeholder="--------"
-              style={{ height: 44, borderRadius: 8 }}
+              style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
             />
           </Form.Item>
 
@@ -191,7 +191,7 @@ export default function RegisterPage() {
               htmlType="submit"
               loading={loading}
               block
-              style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 10 }}
+              style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-sm)' }}
             >
               Зарегистрироваться
             </Button>

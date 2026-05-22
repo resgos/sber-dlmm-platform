@@ -35,7 +35,7 @@ export default function ThemeToggle() {
       title={<Text strong>Внешний вид</Text>}
       styles={{ body: { padding: 18 } }}
     >
-      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
+      <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 12 }}>
         Тема интерфейса
       </Text>
       <Radio.Group
@@ -64,7 +64,7 @@ export default function ThemeToggle() {
           </Space>
         </Radio.Button>
       </Radio.Group>
-      <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 10 }}>
+      <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginTop: 10 }}>
         «Системная» подстраивается под настройку ОС и реагирует на её изменение.
       </Text>
     </Card>

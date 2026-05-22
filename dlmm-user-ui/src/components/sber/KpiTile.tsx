@@ -33,7 +33,7 @@ export default function KpiTile({ label, value, sub, icon, accent }: KpiTileProp
   return (
     <Card
       className="sber-card"
-      style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+      style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
       styles={{ body: { padding: '14px 16px' } }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -41,13 +41,13 @@ export default function KpiTile({ label, value, sub, icon, accent }: KpiTileProp
           style={{
             width: 36,
             height: 36,
-            borderRadius: 10,
+            borderRadius: 'var(--radius-sm)',
             background: 'var(--surface-1, #FAFAFA)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            fontSize: 16,
+            fontSize: 'var(--text-md)',
           }}
           aria-hidden
         >
@@ -56,7 +56,7 @@ export default function KpiTile({ label, value, sub, icon, accent }: KpiTileProp
         <div style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
-              fontSize: 11,
+              fontSize: 'var(--text-xs)',
               color: 'var(--text-secondary)',
               letterSpacing: '0.04em',
               textTransform: 'uppercase',
@@ -68,7 +68,7 @@ export default function KpiTile({ label, value, sub, icon, accent }: KpiTileProp
           </div>
           <div
             style={{
-              fontSize: 22,
+              fontSize: 'var(--text-lg)',
               fontWeight: 700,
               color: accent ?? 'var(--text-primary)',
               lineHeight: 1.1,
@@ -78,7 +78,7 @@ export default function KpiTile({ label, value, sub, icon, accent }: KpiTileProp
             {value}
           </div>
           {sub && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 3 }}>
               {sub}
             </div>
           )}

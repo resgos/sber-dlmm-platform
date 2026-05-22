@@ -56,7 +56,7 @@ export default function LoginPage() {
           <Title level={3} className="sber-brand-title" style={{ margin: 0 }}>
             {t('brand.sber')} <span className="sber-brand-title-accent">{t('brand.product')}</span>
           </Title>
-          <Text style={{ color: 'var(--text-secondary)', fontSize: 14 }}>{t('auth.login.subtitle')}</Text>
+          <Text style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-base)' }}>{t('auth.login.subtitle')}</Text>
         </Space>
 
         {error && (
@@ -66,7 +66,7 @@ export default function LoginPage() {
             showIcon
             closable
             onClose={() => setError(null)}
-            style={{ marginBottom: 24, borderRadius: 8 }}
+            style={{ marginBottom: 24, borderRadius: 'var(--radius-sm)' }}
           />
         )}
 
@@ -83,7 +83,7 @@ export default function LoginPage() {
               prefix={<UserOutlined style={{ color: '#9CA3AF' }} />}
               placeholder={t('auth.login.emailPlaceholder')}
               autoComplete="email"
-              style={{ height: 44, borderRadius: 8 }}
+              style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
             />
           </Form.Item>
 
@@ -96,7 +96,7 @@ export default function LoginPage() {
               prefix={<LockOutlined style={{ color: '#9CA3AF' }} />}
               placeholder="--------"
               autoComplete="current-password"
-              style={{ height: 44, borderRadius: 8 }}
+              style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
             />
           </Form.Item>
 
@@ -106,7 +106,7 @@ export default function LoginPage() {
               htmlType="submit"
               loading={loading}
               block
-              style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 10 }}
+              style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-sm)' }}
             >
               {t('auth.login.submit')}
             </Button>

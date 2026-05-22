@@ -134,10 +134,10 @@ export default function ProfilePage() {
           <Avatar
             size={64}
             icon={<UserOutlined />}
-            style={{ backgroundColor: '#21A038', fontSize: 28 }}
+            style={{ backgroundColor: '#21A038', fontSize: 'var(--text-xl)' }}
           />
           <div>
-            <Text strong style={{ fontSize: 18, display: 'block' }}>
+            <Text strong style={{ fontSize: 'var(--text-md)', display: 'block' }}>
               {user?.fullName || `${user?.firstName || ''} ${user?.lastName || ''}`}
             </Text>
             <Text type="secondary">{user?.email}</Text>
@@ -155,7 +155,7 @@ export default function ProfilePage() {
             description="Обычно проверка занимает 1-2 рабочих дня. После верификации вам будут доступны все функции платформы."
             type="info"
             showIcon
-            style={{ borderRadius: 8 }}
+            style={{ borderRadius: 'var(--radius-sm)' }}
           />
         )}
         {kycStatus === 'NOT_SUBMITTED' && (
@@ -164,7 +164,7 @@ export default function ProfilePage() {
             description="Для доступа к торговле и управлению ликвидностью необходимо пройти KYC верификацию."
             type="warning"
             showIcon
-            style={{ borderRadius: 8 }}
+            style={{ borderRadius: 'var(--radius-sm)' }}
           />
         )}
         {kycStatus === 'REJECTED' && (
@@ -173,7 +173,7 @@ export default function ProfilePage() {
             description="Ваша заявка на верификацию была отклонена. Пожалуйста, свяжитесь с поддержкой."
             type="error"
             showIcon
-            style={{ borderRadius: 8 }}
+            style={{ borderRadius: 'var(--radius-sm)' }}
           />
         )}
       </Card>
@@ -210,7 +210,7 @@ export default function ProfilePage() {
             label={<span style={{ fontWeight: 500, color: '#374151' }}>Имя</span>}
             rules={[{ required: true, message: 'Введите имя' }]}
           >
-            <Input placeholder="Иван" style={{ height: 44, borderRadius: 8 }} />
+            <Input placeholder="Иван" style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
           </Form.Item>
 
           <Form.Item
@@ -218,13 +218,13 @@ export default function ProfilePage() {
             label={<span style={{ fontWeight: 500, color: '#374151' }}>Фамилия</span>}
             rules={[{ required: true, message: 'Введите фамилию' }]}
           >
-            <Input placeholder="Иванов" style={{ height: 44, borderRadius: 8 }} />
+            <Input placeholder="Иванов" style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
           </Form.Item>
 
           <Form.Item
             label={<span style={{ fontWeight: 500, color: '#374151' }}>Электронная почта</span>}
           >
-            <Input value={user?.email} disabled style={{ height: 44, borderRadius: 8 }} />
+            <Input value={user?.email} disabled style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
           </Form.Item>
 
           <Button
@@ -232,7 +232,7 @@ export default function ProfilePage() {
             htmlType="submit"
             icon={<SaveOutlined />}
             loading={updateMutation.isPending}
-            style={{ height: 44, borderRadius: 8 }}
+            style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
           >
             Сохранить
           </Button>
@@ -270,17 +270,17 @@ export default function ProfilePage() {
           <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-light)' }}>
             <Space size={10}>
               <div style={{
-                width: 36, height: 36, borderRadius: 10,
+                width: 36, height: 36, borderRadius: 'var(--radius-sm)',
                 background: 'var(--sber-green-light)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <WalletOutlined style={{ color: 'var(--sber-green)', fontSize: 18 }} />
+                <WalletOutlined style={{ color: 'var(--sber-green)', fontSize: 'var(--text-md)' }} />
               </div>
               <div>
-                <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block' }}>
                   Стоимость портфеля
                 </Text>
-                <Text strong style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
+                <Text strong style={{ fontSize: 'var(--text-lg)', fontVariantNumeric: 'tabular-nums' }}>
                   {formatRub(totalRub)}
                 </Text>
               </div>
@@ -292,26 +292,26 @@ export default function ProfilePage() {
             borderBottom: '1px solid var(--border-light)',
           }}>
             <div style={{ padding: 14, borderRight: '1px solid var(--border-light)' }}>
-              <Text type="secondary" style={{ fontSize: 11 }}>Активов в кошельке</Text>
-              <div style={{ fontSize: 18, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Активов в кошельке</Text>
+              <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                 {tokensHeld}
               </div>
             </div>
             <div style={{ padding: 14 }}>
-              <Text type="secondary" style={{ fontSize: 11 }}>Активных позиций</Text>
-              <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--sber-green)', fontVariantNumeric: 'tabular-nums' }}>
+              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Активных позиций</Text>
+              <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--sber-green)', fontVariantNumeric: 'tabular-nums' }}>
                 {activePositionCount}
               </div>
             </div>
           </div>
 
           <div style={{ padding: 14 }}>
-            <Text type="secondary" style={{ fontSize: 11 }}>Заработано на ликвидности</Text>
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--sber-green)', fontVariantNumeric: 'tabular-nums' }}>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Заработано на ликвидности</Text>
+            <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--sber-green)', fontVariantNumeric: 'tabular-nums' }}>
               {formatRub(totalEarned)}
             </div>
             {feeSummary && feeSummary.totalUnclaimed > 0 && (
-              <Tag color="green" style={{ marginTop: 6, borderRadius: 999 }}>
+              <Tag color="green" style={{ marginTop: 6, borderRadius: 'var(--radius-pill)' }}>
                 <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
                 {formatRub(feeSummary.totalUnclaimed)} к получению
               </Tag>
@@ -347,11 +347,11 @@ export default function ProfilePage() {
                   }}
                 >
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>
+                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
                       {txTypeLabel[tx.txType] ?? tx.txType}
                     </div>
                     <div style={{
-                      fontSize: 11,
+                      fontSize: 'var(--text-xs)',
                       color: 'var(--text-secondary)',
                       fontFamily: 'JetBrains Mono, monospace',
                     }}>
@@ -360,7 +360,7 @@ export default function ProfilePage() {
                   </div>
                   <Tag
                     color={tx.status === 'CONFIRMED' ? 'success' : tx.status === 'FAILED' ? 'error' : 'processing'}
-                    style={{ borderRadius: 999, padding: '0 10px', marginInlineEnd: 0 }}
+                    style={{ borderRadius: 'var(--radius-pill)', padding: '0 10px', marginInlineEnd: 0 }}
                   >
                     {tx.status === 'CONFIRMED' ? 'Исполнена' : tx.status === 'FAILED' ? 'Ошибка' : tx.status}
                   </Tag>

@@ -36,6 +36,9 @@ describe('KycStatusBadge', () => {
   it('renders larger badge when large=true', () => {
     const { container } = render(<KycStatusBadge status="VERIFIED" large />)
     const tag = container.querySelector('.ant-tag')
-    expect(tag).toHaveStyle({ fontSize: '14px' })
+    // After UI-CRITIQUE #1 typography sweep, sizes are CSS vars (var(--text-base))
+    // not raw pixels. jsdom doesn't resolve CSS variables, so we inspect
+    // the inline style attribute directly.
+    expect(tag?.getAttribute('style')).toMatch(/font-size:\s*var\(--text-base\)/)
   })
 })

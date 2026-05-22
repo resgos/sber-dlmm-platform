@@ -19,19 +19,19 @@ const strategies: Array<{
     key: 'SPOT',
     name: 'Равномерная',
     description: 'Равномерное распределение ликвидности по диапазону. Подходит для стабильных пар.',
-    icon: <ColumnWidthOutlined style={{ fontSize: 28 }} />,
+    icon: <ColumnWidthOutlined style={{ fontSize: 'var(--text-xl)' }} />,
   },
   {
     key: 'CURVE',
     name: 'Концентрированная',
     description: 'Ликвидность сконцентрирована вокруг текущей цены. Максимальная эффективность.',
-    icon: <LineChartOutlined style={{ fontSize: 28 }} />,
+    icon: <LineChartOutlined style={{ fontSize: 'var(--text-xl)' }} />,
   },
   {
     key: 'BID_ASK',
     name: 'Двусторонняя',
     description: 'Ликвидность размещена по обе стороны от цены. Стратегия маркет-мейкера.',
-    icon: <AimOutlined style={{ fontSize: 28 }} />,
+    icon: <AimOutlined style={{ fontSize: 'var(--text-xl)' }} />,
   },
 ]
 
@@ -50,7 +50,7 @@ export default function StrategySelector({ value, onChange }: StrategySelectorPr
               {s.icon}
             </div>
             <Text strong style={{ display: 'block', marginBottom: 4 }}>{s.name}</Text>
-            <Text type="secondary" style={{ fontSize: 12 }}>{s.description}</Text>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{s.description}</Text>
           </Card>
         </Col>
       ))}

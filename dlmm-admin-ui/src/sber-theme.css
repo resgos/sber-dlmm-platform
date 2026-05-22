@@ -1,13 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --sber-green: #21A038;
-  --sber-green-hover: #1C8A30;
-  --sber-green-light: #E8F5E9;
-  --sber-green-dark: #0E6B1E;
-  --sber-green-vibrant: #00C853;
-  --sber-green-deep: #006B3F;
-  --sber-aqua: #00B5A1;
+  /* UI-CRITIQUE 2026-05-22 #4 — see user-ui sber-theme.css for full
+     rationale. Admin mirrors user-side palette tokens for consistency
+     (drift watchdog enforces this). */
+  --brand-primary: #21A038;
+  --brand-primary-hover: #1C8A30;
+  --brand-primary-soft: #E8F5E9;
+  --brand-primary-strong: #0E6B1E;
+
+  --grad-stop-1: #00C853;
+  --grad-stop-2: #006B3F;
+  --grad-stop-3: #00B5A1;
+
+  --sber-green: var(--brand-primary);
+  --sber-green-hover: var(--brand-primary-hover);
+  --sber-green-light: var(--brand-primary-soft);
+  --sber-green-dark: var(--brand-primary-strong);
+  --sber-green-vibrant: var(--grad-stop-1);
+  --sber-green-deep: var(--grad-stop-2);
+  --sber-aqua: var(--grad-stop-3);
   --sber-violet: #6E5BFF;
   --sber-amber: #FFB320;
 

@@ -45,18 +45,18 @@ export default function PoolRecentSwapsPanel({ pool, limit = 20 }: PoolRecentSwa
   return (
     <Card
       className="sber-card"
-      style={{ borderRadius: 12, border: '1px solid var(--border-light)', marginTop: 16 }}
+      style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginTop: 16 }}
       title={
         <Space size={8}>
           <HistoryOutlined style={{ color: 'var(--sber-green)' }} />
           <Text strong>Последние обмены</Text>
           {data && data.length > 0 && (
-            <Tag style={{ borderRadius: 999, fontSize: 11 }}>{data.length}</Tag>
+            <Tag style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>{data.length}</Tag>
           )}
         </Space>
       }
       extra={
-        <Text type="secondary" style={{ fontSize: 11 }}>
+        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
           Только этот пул
         </Text>
       }
@@ -122,11 +122,11 @@ function SwapRow({
       <div style={{ minWidth: 0, flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <Tag
           color={xToY ? 'blue' : 'green'}
-          style={{ borderRadius: 999, padding: '1px 8px', margin: 0, fontSize: 10, fontWeight: 600 }}
+          style={{ borderRadius: 'var(--radius-pill)', padding: '1px 8px', margin: 0, fontSize: 10, fontWeight: 600 }}
         >
           {xToY ? 'X→Y' : 'Y→X'}
         </Tag>
-        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-secondary)' }}>
+        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
           {tx.id.substring(0, 8)}
         </div>
       </div>
@@ -138,20 +138,20 @@ function SwapRow({
           alignItems: 'center',
           gap: 6,
           fontVariantNumeric: 'tabular-nums',
-          fontSize: 13,
+          fontSize: 'var(--text-sm)',
         }}
       >
         <span style={{ color: inColor, fontWeight: 600 }}>
           {formatCompact(tx.amountIn ?? 0)} {inSym}
         </span>
-        <ArrowRightOutlined style={{ color: 'var(--text-muted)', fontSize: 11 }} />
+        <ArrowRightOutlined style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }} />
         <span style={{ color: outColor, fontWeight: 600 }}>
           {formatCompact(tx.amountOut ?? 0)} {outSym}
         </span>
       </div>
 
       <Tooltip title={whenAbs}>
-        <div style={{ flex: '0 0 auto', fontSize: 11, color: 'var(--text-muted)' }}>
+        <div style={{ flex: '0 0 auto', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
           {whenRel}
         </div>
       </Tooltip>

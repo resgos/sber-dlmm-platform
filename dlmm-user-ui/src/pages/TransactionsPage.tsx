@@ -135,7 +135,7 @@ export default function TransactionsPage() {
             dataIndex: 'createdAt',
             width: 150,
             render: (d: string) => (
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5 }}>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-sm)' }}>
                 {dayjs(d).format('DD.MM.YYYY HH:mm')}
               </span>
             ),

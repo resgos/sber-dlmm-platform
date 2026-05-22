@@ -22,7 +22,7 @@ export default function StatCard({ title, value, icon, iconBg, iconColor, format
     <Card
       className="sber-card"
       hoverable
-      style={{ borderRadius: 12, border: '1px solid #E5E7EB' }}
+      style={{ borderRadius: 'var(--radius-md)', border: '1px solid #E5E7EB' }}
       styles={{ body: { padding: '20px' } }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
@@ -30,11 +30,11 @@ export default function StatCard({ title, value, icon, iconBg, iconColor, format
           style={{
             width: 44,
             height: 44,
-            borderRadius: 10,
+            borderRadius: 'var(--radius-sm)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 20,
+            fontSize: 'var(--text-lg)',
             background: iconBg,
             color: iconColor,
             flexShrink: 0,
@@ -43,7 +43,7 @@ export default function StatCard({ title, value, icon, iconBg, iconColor, format
           {icon}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: '#6B7280', fontWeight: 500, marginBottom: 4 }}>{title}</div>
+          <div style={{ fontSize: 'var(--text-sm)', color: '#6B7280', fontWeight: 500, marginBottom: 4 }}>{title}</div>
           <div style={{ fontSize: 24, fontWeight: 700, color: '#1F2937', lineHeight: 1.2 }}>{displayValue}</div>
         </div>
       </div>

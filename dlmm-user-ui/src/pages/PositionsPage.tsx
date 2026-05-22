@@ -166,11 +166,11 @@ export default function PositionsPage() {
             Будут последовательно сняты <b>{activePositions.length}</b> активных
             позиций. С каждой будут одновременно забраны накопленные комиссии.
           </Text>
-          <Text type="warning" style={{ fontSize: 12 }}>
+          <Text type="warning" style={{ fontSize: 'var(--text-xs)' }}>
             Операция необратима. Каждое снятие выполняется как обычная транзакция
             и может изменить цену пула.
           </Text>
-          <Text type="secondary" style={{ fontSize: 11 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             Позиции закрываются последовательно — это даёт более предсказуемое
             влияние на цены пулов и помогает локализовать любую ошибку.
           </Text>
@@ -347,7 +347,7 @@ export default function PositionsPage() {
             actions zone in Card extras. */}
         {allActive.length > 1 && (
           <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>Фильтр по здоровью:</Text>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Фильтр по здоровью:</Text>
             <Segmented
               size="small"
               value={healthFilter}
@@ -409,7 +409,7 @@ export default function PositionsPage() {
               render: (_: unknown, r: Position) => {
                 const pool = poolById.get(r.poolId)
                 return (
-                  <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>
+                  <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 'var(--text-sm)' }}>
                     {formatBinPriceRange(
                       r.binRangeMin,
                       r.binRangeMax,
@@ -466,7 +466,7 @@ export default function PositionsPage() {
                       style={{
                         color: positive ? 'var(--sber-green)' : 'var(--color-negative)',
                         fontVariantNumeric: 'tabular-nums',
-                        fontSize: 13,
+                        fontSize: 'var(--text-sm)',
                       }}
                     >
                       {positive ? <RiseOutlined /> : <FallOutlined />}{' '}
@@ -476,7 +476,7 @@ export default function PositionsPage() {
                     <Text
                       type="secondary"
                       style={{
-                        fontSize: 11,
+                        fontSize: 'var(--text-xs)',
                         color: positive ? 'var(--sber-green)' : 'var(--color-negative)',
                         fontVariantNumeric: 'tabular-nums',
                       }}
@@ -506,12 +506,12 @@ export default function PositionsPage() {
                 return (
                   <Space size={6} wrap style={{ justifyContent: 'flex-end' }}>
                     {r.unclaimedFeeX > 0 && (
-                      <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px', fontVariantNumeric: 'tabular-nums' }}>
+                      <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', padding: '0 8px', fontVariantNumeric: 'tabular-nums' }}>
                         +{formatTokenAmount(r.unclaimedFeeX, xSym, { compact: true, maxFractionDigits: 4 })}
                       </Tag>
                     )}
                     {r.unclaimedFeeY > 0 && (
-                      <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px', fontVariantNumeric: 'tabular-nums' }}>
+                      <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', padding: '0 8px', fontVariantNumeric: 'tabular-nums' }}>
                         +{formatTokenAmount(r.unclaimedFeeY, ySym, { compact: true, maxFractionDigits: 4 })}
                       </Tag>
                     )}

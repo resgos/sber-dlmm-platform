@@ -130,7 +130,7 @@ export default function SwapPage() {
 
   const slippageMenu = (
     <div style={{ padding: 4, minWidth: 240 }}>
-      <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+      <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 8 }}>
         Допуск проскальзывания
       </Text>
       <Space size={6} style={{ marginBottom: 8 }}>
@@ -173,12 +173,12 @@ export default function SwapPage() {
   }) => (
     <div className="sber-swap-box">
       <div className="sber-swap-box__head">
-        <Text type="secondary" style={{ fontSize: 12, fontWeight: 500 }}>{opts.label}</Text>
+        <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontWeight: 500 }}>{opts.label}</Text>
         {opts.showBalance && inBalance && (
           <Space size={6} style={{ alignItems: 'center' }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
               Доступно:{' '}
-              <Text strong style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+              <Text strong style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
                 {inBalance.available.toLocaleString('ru-RU')}
               </Text>
             </Text>
@@ -194,7 +194,7 @@ export default function SwapPage() {
                 size="small"
                 style={{
                   padding: '0 6px',
-                  fontSize: 11,
+                  fontSize: 'var(--text-xs)',
                   height: 22,
                   color: 'var(--sber-green)',
                   fontWeight: 600,
@@ -209,7 +209,7 @@ export default function SwapPage() {
               size="small"
               style={{
                 padding: '0 6px',
-                fontSize: 11,
+                fontSize: 'var(--text-xs)',
                 height: 22,
                 color: 'var(--sber-green)',
                 fontWeight: 700,
@@ -291,14 +291,14 @@ export default function SwapPage() {
           <Title level={4} className="sber-page-title" style={{ marginBottom: 4 }}>
             {t('swap.title')}
           </Title>
-          <Text type="secondary" style={{ fontSize: 13 }}>{t('swap.subtitle')}</Text>
+          <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>{t('swap.subtitle')}</Text>
         </div>
         <Popover content={slippageMenu} trigger="click" placement="bottomRight">
           <Button
             icon={<SettingOutlined aria-hidden />}
             aria-label={t('swap.settings')}
             aria-haspopup="dialog"
-            style={{ borderRadius: 8 }}
+            style={{ borderRadius: 'var(--radius-sm)' }}
           >
             Скольжение {effectiveSlippage}%
           </Button>
@@ -312,7 +312,7 @@ export default function SwapPage() {
         <Card
           className="sber-card"
           style={{
-            borderRadius: 16,
+            borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border-light)',
             background: 'linear-gradient(135deg, rgba(33,160,56,0.05) 0%, rgba(255,255,255,0) 60%)',
           }}
@@ -321,7 +321,7 @@ export default function SwapPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <Space size={6}>
               <ThunderboltFilled style={{ color: 'var(--sber-green)' }} />
-              <Text strong style={{ fontSize: 13 }}>Популярные пары:</Text>
+              <Text strong style={{ fontSize: 'var(--text-sm)' }}>Популярные пары:</Text>
             </Space>
             {popularPairs.map((p) => (
               <Button
@@ -329,7 +329,7 @@ export default function SwapPage() {
                 size="small"
                 onClick={() => pickPair(p)}
                 style={{
-                  borderRadius: 999,
+                  borderRadius: 'var(--radius-pill)',
                   padding: '0 12px',
                   height: 30,
                   border: '1px solid var(--border-light)',
@@ -338,7 +338,7 @@ export default function SwapPage() {
               >
                 <Space size={4}>
                   <TokenPairChip x={p.tokenXSymbol} y={p.tokenYSymbol} size="sm" />
-                  <Text type="secondary" style={{ fontSize: 11 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                     {bpsToPercent(p.baseFeeBps)}
                   </Text>
                 </Space>
@@ -350,11 +350,11 @@ export default function SwapPage() {
 
       {swapSuccess && (
         <Alert message={t('swap.alerts.success')} type="success" showIcon closable
-          onClose={() => setSwapSuccess(false)} style={{ borderRadius: 12 }} />
+          onClose={() => setSwapSuccess(false)} style={{ borderRadius: 'var(--radius-md)' }} />
       )}
       {swapError && (
         <Alert message={swapError} type="error" showIcon closable
-          onClose={() => setSwapError(null)} style={{ borderRadius: 12 }} />
+          onClose={() => setSwapError(null)} style={{ borderRadius: 'var(--radius-md)' }} />
       )}
 
       <div className="sber-swap-layout">
@@ -425,11 +425,11 @@ export default function SwapPage() {
               </div>
               {selectedPool && (
                 <div className="sber-swap-quote__route">
-                  <Tag color="green" style={{ borderRadius: 999, padding: '2px 10px' }}>
+                  <Tag color="green" style={{ borderRadius: 'var(--radius-pill)', padding: '2px 10px' }}>
                     <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
                     через пул {selectedPool.tokenXSymbol}/{selectedPool.tokenYSymbol}
                   </Tag>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                     комиссия {bpsToPercent(selectedPool.baseFeeBps)} · допуск {effectiveSlippage}%
                   </Text>
                 </div>
@@ -439,7 +439,7 @@ export default function SwapPage() {
 
           {!selectedPool && tokenInId && tokenOutId && (
             <Alert message={t('swap.alerts.noPool')} type="warning" showIcon
-              style={{ borderRadius: 12 }} />
+              style={{ borderRadius: 'var(--radius-md)' }} />
           )}
 
           <Divider style={{ margin: '4px 0' }} />
@@ -522,7 +522,7 @@ function SwapInfoPanel({
         <Card
           className="sber-card"
           style={{
-            borderRadius: 16,
+            borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border-light)',
             background: 'linear-gradient(135deg, rgba(33,160,56,0.06) 0%, rgba(255,255,255,0) 70%)',
           }}
@@ -533,18 +533,18 @@ function SwapInfoPanel({
               <div
                 aria-hidden
                 style={{
-                  width: 36, height: 36, borderRadius: 10,
+                  width: 36, height: 36, borderRadius: 'var(--radius-sm)',
                   background: 'var(--sber-green)', color: '#fff',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 16,
+                  fontSize: 'var(--text-md)',
                 }}
               >
                 <InfoCircleOutlined />
               </div>
               <div>
-                <Text strong style={{ fontSize: 14 }}>Готовы к обмену?</Text>
+                <Text strong style={{ fontSize: 'var(--text-base)' }}>Готовы к обмену?</Text>
                 <div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                     Выберите пару — увидите маршрут и влияние на цену
                   </Text>
                 </div>
@@ -556,13 +556,13 @@ function SwapInfoPanel({
         {popularPairs.length > 0 && (
           <Card
             className="sber-card"
-            style={{ borderRadius: 16, border: '1px solid var(--border-light)' }}
+            style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
             styles={{ body: { padding: 16 } }}
           >
             <Text
               type="secondary"
               style={{
-                fontSize: 11,
+                fontSize: 'var(--text-xs)',
                 letterSpacing: '0.04em',
                 textTransform: 'uppercase',
                 fontWeight: 500,
@@ -589,7 +589,7 @@ function SwapInfoPanel({
                   <div style={{ textAlign: 'right', minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: 12,
+                        fontSize: 'var(--text-xs)',
                         fontWeight: 600,
                         fontVariantNumeric: 'tabular-nums',
                         color: 'var(--text-primary)',
@@ -617,7 +617,7 @@ function SwapInfoPanel({
         <Card
           className="sber-card"
           style={{
-            borderRadius: 16,
+            borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border-light)',
             background: 'linear-gradient(135deg, rgba(33,160,56,0.08) 0%, rgba(33,160,56,0.02) 100%)',
           }}
@@ -627,16 +627,16 @@ function SwapInfoPanel({
             <TokenPairChip x={tokenIn.symbol} y={tokenOut.symbol} size="lg" />
             {pool ? (
               <Space size={6} wrap>
-                <Tag color="green" style={{ borderRadius: 999, fontSize: 11 }}>
+                <Tag color="green" style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>
                   <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
                   активный пул
                 </Tag>
-                <Text type="secondary" style={{ fontSize: 11 }}>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                   шаг {bpsToPercent(pool.binStep)} · комиссия {bpsToPercent(pool.baseFeeBps)}
                 </Text>
               </Space>
             ) : (
-              <Text type="warning" style={{ fontSize: 12 }}>
+              <Text type="warning" style={{ fontSize: 'var(--text-xs)' }}>
                 Прямого пула для этой пары нет
               </Text>
             )}
@@ -648,10 +648,10 @@ function SwapInfoPanel({
       {pool && (
         <Card
           className="sber-card"
-          style={{ borderRadius: 16, border: '1px solid var(--border-light)' }}
+          style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
           styles={{ body: { padding: 16 } }}
         >
-          <Text type="secondary" style={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
             Параметры пула
           </Text>
           <div style={{ marginTop: 10 }}>
@@ -690,26 +690,26 @@ function SwapInfoPanel({
       {quote && tokenIn && tokenOut && amountIn && (
         <Card
           className="sber-card"
-          style={{ borderRadius: 16, border: '1px solid var(--border-light)' }}
+          style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
           styles={{ body: { padding: 16 } }}
         >
-          <Text type="secondary" style={{ fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
             Предварительный расчёт
           </Text>
           <div style={{ marginTop: 12 }}>
             <Row gutter={[8, 8]}>
               <Col span={12}>
-                <Text type="secondary" style={{ fontSize: 11 }}>Вы отдаёте</Text>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Вы отдаёте</Text>
                 <Tooltip title={`${amountIn.toLocaleString('ru-RU')} ${tokenIn.symbol}`}>
-                  <div style={{ fontSize: 16, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                     {formatTokenAmount(amountIn, tokenIn.symbol, { compact: true, maxFractionDigits: 4 })}
                   </div>
                 </Tooltip>
               </Col>
               <Col span={12} style={{ textAlign: 'right' }}>
-                <Text type="secondary" style={{ fontSize: 11 }}>Получите</Text>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Получите</Text>
                 <Tooltip title={`${quote.amountOut.toLocaleString('ru-RU')} ${tokenOut.symbol}`}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--sber-green-deep)', fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: 'var(--sber-green-deep)', fontVariantNumeric: 'tabular-nums' }}>
                     {formatTokenAmount(quote.amountOut, tokenOut.symbol, { compact: true, maxFractionDigits: 4 })}
                   </div>
                 </Tooltip>
@@ -779,12 +779,12 @@ function InfoRow({
     >
       <Space size={6} style={{ flex: 1, minWidth: 0 }}>
         {icon}
-        <Text type="secondary" style={{ fontSize: 12 }}>{label}</Text>
+        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{label}</Text>
       </Space>
       <Text
         strong
         style={{
-          fontSize: 13,
+          fontSize: 'var(--text-sm)',
           color: valueColour,
           fontVariantNumeric: 'tabular-nums',
           textAlign: 'right',

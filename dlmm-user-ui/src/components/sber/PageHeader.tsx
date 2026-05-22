@@ -39,7 +39,7 @@ export default function PageHeader({ title, subtitle, status, actions }: PageHea
           {status}
         </Space>
         {subtitle && (
-          <Text type="secondary" style={{ fontSize: 13, display: 'block', marginTop: 2 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-sm)', display: 'block', marginTop: 2 }}>
             {subtitle}
           </Text>
         )}

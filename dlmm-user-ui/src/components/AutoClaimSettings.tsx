@@ -138,10 +138,10 @@ export default function AutoClaimSettings() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <Space direction="vertical" size={0}>
             <Text strong>Порог</Text>
-            <Text type="secondary" style={{ fontSize: 11 }}>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
               Минимальная накопленная комиссия (X+Y, базовые единицы) для запуска
               {thresholdRubHint && (
-                <> · <Text type="secondary" style={{ fontSize: 11 }}>~{thresholdRubHint} в SRUB</Text></>
+                <> · <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>~{thresholdRubHint} в SRUB</Text></>
               )}
             </Text>
           </Space>
@@ -158,7 +158,7 @@ export default function AutoClaimSettings() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <Space direction="vertical" size={0}>
             <Text strong>Дневной лимит</Text>
-            <Text type="secondary" style={{ fontSize: 11 }}>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
               Сколько срабатываний в сутки максимум · сейчас {last24h} из {policy.dailyCap || '∞'}
             </Text>
           </Space>
@@ -187,7 +187,7 @@ export default function AutoClaimSettings() {
                   : `${fireable.length} позиций превысили порог`}
               </Text>
               {fireable.length === 0 ? (
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                   Когда у активной позиции комиссии (X+Y) превысят {policy.threshold.toLocaleString('ru-RU')}, она появится здесь и будет автоматически забрана при включённом авто-сборе.
                 </Text>
               ) : (
@@ -196,10 +196,10 @@ export default function AutoClaimSettings() {
                   renderItem={(p) => (
                     <List.Item style={{ padding: '6px 0' }}>
                       <Space>
-                        <Tag color="green" style={{ borderRadius: 999, marginInlineEnd: 0 }}>
+                        <Tag color="green" style={{ borderRadius: 'var(--radius-pill)', marginInlineEnd: 0 }}>
                           {p.tokenXSymbol}/{p.tokenYSymbol}
                         </Tag>
-                        <Text style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                        <Text style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
                           {(p.unclaimedFeeX + p.unclaimedFeeY).toLocaleString('ru-RU')}
                         </Text>
                       </Space>
@@ -212,18 +212,18 @@ export default function AutoClaimSettings() {
         >
           <Button icon={<EyeOutlined />} block>
             Предпросмотр: что сработает сейчас
-            {fireable.length > 0 && <Tag color="orange" style={{ marginInlineStart: 8, borderRadius: 999 }}>{fireable.length}</Tag>}
+            {fireable.length > 0 && <Tag color="orange" style={{ marginInlineStart: 8, borderRadius: 'var(--radius-pill)' }}>{fireable.length}</Tag>}
           </Button>
         </Popover>
 
         {/* Per-pool exception list */}
         <div>
           <Text strong style={{ display: 'block', marginBottom: 6 }}>Исключения по пулам</Text>
-          <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 8 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 8 }}>
             Позиции из этих пулов никогда не забираются авто-сбором
           </Text>
           {skippedPools.length === 0 && (
-            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 6 }}>
               Исключений нет.
             </Text>
           )}
@@ -235,7 +235,7 @@ export default function AutoClaimSettings() {
                   closable
                   onClose={() => autoClaimStore.toggleSkipPool(p.id)}
                   icon={<StopOutlined />}
-                  style={{ borderRadius: 999 }}
+                  style={{ borderRadius: 'var(--radius-pill)' }}
                 >
                   {p.tokenXSymbol}/{p.tokenYSymbol}
                 </Tag>
@@ -268,7 +268,7 @@ export default function AutoClaimSettings() {
           )}
         </div>
 
-        <Text type="secondary" style={{ fontSize: 11 }}>
+        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
           <ClockCircleOutlined style={{ marginInlineEnd: 4 }} />
           На одну позицию срабатывает не чаще раза в час — так избегаем «двойного клика» при быстром обновлении данных.
           Backend-версия с серверным расписанием — Sprint 11.
@@ -277,15 +277,15 @@ export default function AutoClaimSettings() {
         {history.length > 0 && (
           <>
             <Divider style={{ margin: '4px 0' }} />
-            <Text strong style={{ fontSize: 12 }}>Последние срабатывания (с момента открытия вкладки)</Text>
+            <Text strong style={{ fontSize: 'var(--text-xs)' }}>Последние срабатывания (с момента открытия вкладки)</Text>
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               {history.slice(0, 8).map((h, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)' }}>
                   <Space size={6}>
-                    <Tag color="green" style={{ borderRadius: 999 }}>{h.symbol}</Tag>
+                    <Tag color="green" style={{ borderRadius: 'var(--radius-pill)' }}>{h.symbol}</Tag>
                     <Text type="secondary">{h.amount.toLocaleString('ru-RU')}</Text>
                   </Space>
-                  <Text type="secondary" style={{ fontSize: 11 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                     {new Date(h.firedAt).toLocaleTimeString('ru-RU')}
                   </Text>
                 </div>

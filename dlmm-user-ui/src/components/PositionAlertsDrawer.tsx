@@ -113,11 +113,11 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
       message="Браузерные уведомления заблокированы"
       description={
         <Space direction="vertical" size={4}>
-          <Text style={{ fontSize: 12 }}>
+          <Text style={{ fontSize: 'var(--text-xs)' }}>
             Алерты всё равно покажутся внутри страницы (правый верхний угол), но звуковых браузерных
             уведомлений не будет даже если вкладка скрыта.
           </Text>
-          <Text style={{ fontSize: 11 }} type="secondary">
+          <Text style={{ fontSize: 'var(--text-xs)' }} type="secondary">
             Чтобы включить: нажмите 🔒 / ⓘ слева от адресной строки → «Уведомления» → «Разрешить» → обновите страницу.
           </Text>
         </Space>
@@ -145,7 +145,7 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
         items={[
           {
             key: 'rules',
-            label: <Space size={6}><BellOutlined />Правила {alerts.length > 0 && <Tag style={{ marginInlineStart: 0, borderRadius: 999 }}>{alerts.length}</Tag>}</Space>,
+            label: <Space size={6}><BellOutlined />Правила {alerts.length > 0 && <Tag style={{ marginInlineStart: 0, borderRadius: 'var(--radius-pill)' }}>{alerts.length}</Tag>}</Space>,
             children: (
               <Space direction="vertical" size={16} style={{ width: '100%' }}>
                 {permissionBanner}
@@ -172,7 +172,7 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
                   style={{
                     padding: 12,
                     border: '1px solid var(--border-light)',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-sm)',
                     background: a.active ? 'var(--bg-card)' : 'var(--surface-1)',
                     opacity: stale ? 0.55 : 1,
                   }}
@@ -180,15 +180,15 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <Space size={6} wrap>
-                        <Tag color={a.active ? 'green' : 'default'} style={{ borderRadius: 999 }}>{opt?.label}</Tag>
-                        {stale && <Tag color="default" style={{ borderRadius: 999 }}>позиция закрыта</Tag>}
+                        <Tag color={a.active ? 'green' : 'default'} style={{ borderRadius: 'var(--radius-pill)' }}>{opt?.label}</Tag>
+                        {stale && <Tag color="default" style={{ borderRadius: 'var(--radius-pill)' }}>позиция закрыта</Tag>}
                       </Space>
-                      <div style={{ marginTop: 4, fontSize: 13, fontWeight: 500 }}>{a.label}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                      <div style={{ marginTop: 4, fontSize: 'var(--text-sm)', fontWeight: 500 }}>{a.label}</div>
+                      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
                         {positionLabel(a.positionId)}
                       </div>
                       {a.lastFiredAt && (
-                        <Text type="secondary" style={{ fontSize: 11 }}>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                           Последнее срабатывание: {new Date(a.lastFiredAt).toLocaleString('ru-RU')}
                         </Text>
                       )}
@@ -236,7 +236,7 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
         )}
 
         {showForm && (
-          <div style={{ padding: 14, border: '1px solid var(--border-light)', borderRadius: 8 }}>
+          <div style={{ padding: 14, border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)' }}>
             <Form form={form} layout="vertical" requiredMark={false}>
               <Form.Item
                 name="positionId"
@@ -262,7 +262,7 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
                     value: o.value,
                     label: <Space direction="vertical" size={0}>
                       <Text>{o.label}</Text>
-                      <Text type="secondary" style={{ fontSize: 11 }}>{o.help}</Text>
+                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{o.help}</Text>
                     </Space>,
                   }))}
                   onChange={(v) => {
@@ -314,7 +314,7 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
             // in-line on Rules tab is fine for "is this rule alive?";
             // this tab answers "what happened recently?".
             key: 'history',
-            label: <Space size={6}><HistoryOutlined />История {history.length > 0 && <Tag style={{ marginInlineStart: 0, borderRadius: 999 }}>{history.length}</Tag>}</Space>,
+            label: <Space size={6}><HistoryOutlined />История {history.length > 0 && <Tag style={{ marginInlineStart: 0, borderRadius: 'var(--radius-pill)' }}>{history.length}</Tag>}</Space>,
             children: (
               <Space direction="vertical" size={10} style={{ width: '100%' }}>
                 {history.length === 0 ? (
@@ -325,7 +325,7 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
                 ) : (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
+                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                         Последние {history.length} срабатываний (хранятся в памяти вкладки)
                       </Text>
                       <Button size="small" type="text" onClick={() => alertHistoryStore.clear()}>
@@ -338,19 +338,19 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
                         style={{
                           padding: 10,
                           border: '1px solid var(--border-light)',
-                          borderRadius: 8,
+                          borderRadius: 'var(--radius-sm)',
                           background: 'var(--bg-card)',
                         }}
                       >
                         <Space size={6} wrap style={{ marginBottom: 4 }}>
-                          <Tag color="orange" style={{ borderRadius: 999 }}>{h.alertType}</Tag>
-                          <Tag style={{ borderRadius: 999 }}>{h.delivery === 'browser' ? 'браузер' : 'в приложении'}</Tag>
-                          <Text type="secondary" style={{ fontSize: 11 }}>
+                          <Tag color="orange" style={{ borderRadius: 'var(--radius-pill)' }}>{h.alertType}</Tag>
+                          <Tag style={{ borderRadius: 'var(--radius-pill)' }}>{h.delivery === 'browser' ? 'браузер' : 'в приложении'}</Tag>
+                          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                             {new Date(h.firedAt).toLocaleString('ru-RU')}
                           </Text>
                         </Space>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{h.alertLabel}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{h.alertLabel}</div>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2 }}>
                           {h.message}
                         </div>
                       </div>

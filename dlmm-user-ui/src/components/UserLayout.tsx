@@ -184,7 +184,7 @@ export default function UserLayout() {
               >
                 СБЕР <span style={{ color: 'var(--sber-green)' }}>DLMM</span>
               </Text>
-              <Text style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              <Text style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                 Платформа ликвидности
               </Text>
             </div>
@@ -227,7 +227,7 @@ export default function UserLayout() {
               type="text"
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={() => setCollapsed(!collapsed)}
-              style={{ fontSize: 16, color: 'var(--text-secondary)' }}
+              style={{ fontSize: 'var(--text-md)', color: 'var(--text-secondary)' }}
               aria-label={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
               aria-expanded={!collapsed}
               aria-controls="sider-navigation"
@@ -251,10 +251,10 @@ export default function UserLayout() {
                   style={{ backgroundColor: 'var(--sber-green)', width: 36, height: 36, lineHeight: '36px' }}
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
-                  <Text strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+                  <Text strong style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
                     {user?.email || 'Пользователь'}
                   </Text>
-                  <Text style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  <Text style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                     {user?.kycStatus === 'VERIFIED' ? 'Верифицирован' : 'Не верифицирован'}
                   </Text>
                 </div>

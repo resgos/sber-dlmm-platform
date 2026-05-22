@@ -41,7 +41,7 @@ export default function PoolActionTabs({
   return (
     <Card
       className="sber-card"
-      style={{ borderRadius: 16, border: '1px solid var(--border-light)' }}
+      style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
       styles={{ body: { padding: '8px 16px 16px' } }}
     >
       <Tabs

@@ -376,11 +376,11 @@ export default function HedgePage() {
             Будут последовательно закрыты <b>{openHedges.length}</b> открытых хеджа
             на общую сумму <b>{totalHedged.toLocaleString('ru-RU')} SRUB</b>.
           </Text>
-          <Text type="warning" style={{ fontSize: 12 }}>
+          <Text type="warning" style={{ fontSize: 'var(--text-xs)' }}>
             Операция необратима. Каждое закрытие выполняется как обычный
             своп по текущему курсу.
           </Text>
-          <Text type="secondary" style={{ fontSize: 11 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             Хеджи закрываются последовательно — это даёт более предсказуемое
             влияние на цены пулов, чем параллельное исполнение.
           </Text>
@@ -416,7 +416,7 @@ export default function HedgePage() {
     <div style={{ maxWidth: 1080, margin: '0 auto' }}>
       <div style={{ marginBottom: 24 }}>
         <Space size={12} align="center">
-          <SafetyCertificateOutlined style={{ fontSize: 22, color: 'var(--sber-green)' }} />
+          <SafetyCertificateOutlined style={{ fontSize: 'var(--text-lg)', color: 'var(--sber-green)' }} />
           <Title level={4} className="sber-page-title" style={{ margin: 0 }}>
             Хеджирование валютного риска
           </Title>
@@ -444,7 +444,7 @@ export default function HedgePage() {
         <Row align="middle" gutter={24}>
           <Col xs={24} sm={12}>
             <Space size={6}>
-              <Text type="secondary" style={{ fontSize: 13 }}>Подверженность валютному риску</Text>
+              <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>Подверженность валютному риску</Text>
               <Tooltip title="Сумма доступных рублей, которые можно конвертировать в иностранную валюту в качестве хеджа.">
                 <InfoCircleOutlined style={{ color: 'var(--text-muted)' }} />
               </Tooltip>
@@ -452,20 +452,20 @@ export default function HedgePage() {
             <Tooltip title={`${(srubBalance?.available ?? 0).toLocaleString('ru-RU')} SRUB`}>
               <div style={{
                 color: 'var(--sber-green-deep)',
-                fontSize: 28,
+                fontSize: 'var(--text-xl)',
                 fontWeight: 700,
                 fontVariantNumeric: 'tabular-nums',
                 marginTop: 4,
               }}>
-                {formatCompact(srubBalance?.available ?? 0)} <span style={{ fontSize: 18, fontWeight: 500 }}>SRUB</span>
+                {formatCompact(srubBalance?.available ?? 0)} <span style={{ fontSize: 'var(--text-md)', fontWeight: 500 }}>SRUB</span>
               </div>
             </Tooltip>
           </Col>
           <Col xs={24} sm={12} style={{ textAlign: 'right' }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>В заморозке</Text>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>В заморозке</Text>
             <Tooltip title={`${(srubBalance?.locked ?? 0).toLocaleString('ru-RU')} SRUB`}>
               <div style={{
-                fontSize: 16,
+                fontSize: 'var(--text-md)',
                 fontWeight: 600,
                 color: 'var(--text-primary)',
                 fontVariantNumeric: 'tabular-nums',
@@ -480,12 +480,12 @@ export default function HedgePage() {
       {success && (
         <Alert message="Хедж выполнен — токены зачислены на счёт" type="success" showIcon
           closable onClose={() => setSuccess(false)}
-          style={{ marginBottom: 16, borderRadius: 12 }} />
+          style={{ marginBottom: 16, borderRadius: 'var(--radius-md)' }} />
       )}
       {error && (
         <Alert message={error} type="error" showIcon closable
           onClose={() => setError(null)}
-          style={{ marginBottom: 16, borderRadius: 12 }} />
+          style={{ marginBottom: 16, borderRadius: 'var(--radius-md)' }} />
       )}
 
       <Row gutter={20}>
@@ -507,7 +507,7 @@ export default function HedgePage() {
                       style={{
                         cursor: 'pointer',
                         padding: 14,
-                        borderRadius: 12,
+                        borderRadius: 'var(--radius-md)',
                         border: `1px solid ${selected ? 'var(--sber-green)' : 'var(--border-light)'}`,
                         background: selected ? 'var(--sber-green-light)' : '#FFFFFF',
                         transition: 'all 0.15s ease',
@@ -516,15 +516,15 @@ export default function HedgePage() {
                       <Row justify="space-between" align="middle">
                         <Col>
                           <Space size={10}>
-                            <Tag color="green" style={{ fontWeight: 600, fontSize: 13 }}>
+                            <Tag color="green" style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>
                               {c.baseToken.symbol} → {c.hedgeToken.symbol}
                             </Tag>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
+                            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                               {c.hedgeToken.name}
                             </Text>
                           </Space>
                           <div style={{ marginTop: 6 }}>
-                            <Text type="secondary" style={{ fontSize: 11 }}>
+                            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                               Текущая котировка
                             </Text>
                             <div style={{ fontSize: 15, fontWeight: 600 }}>
@@ -548,7 +548,7 @@ export default function HedgePage() {
                           </div>
                         </Col>
                         <Col>
-                          <Tag style={{ borderRadius: 999, fontSize: 11 }}>
+                          <Tag style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>
                             комиссия {bpsToPercent(c.pool.baseFeeBps)}
                           </Tag>
                         </Col>
@@ -568,7 +568,7 @@ export default function HedgePage() {
             title="Калькулятор хеджа"
             extra={
               selectedCandidate && (
-                <Tag color="green" style={{ borderRadius: 999 }}>
+                <Tag color="green" style={{ borderRadius: 'var(--radius-pill)' }}>
                   <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
                   активный пул
                 </Tag>
@@ -580,14 +580,14 @@ export default function HedgePage() {
                 type="info"
                 showIcon
                 message="Выберите пару слева, чтобы рассчитать хедж"
-                style={{ borderRadius: 12 }}
+                style={{ borderRadius: 'var(--radius-md)' }}
               />
             )}
 
             {selectedCandidate && (
               <Space direction="vertical" size={18} style={{ width: '100%' }}>
                 <div>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 6 }}>
                     Какую долю SRUB-позиции хеджируем?
                   </Text>
                   <Space wrap size={6}>
@@ -606,7 +606,7 @@ export default function HedgePage() {
                 </div>
 
                 <div>
-                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 6 }}>
                     Или укажите сумму вручную (SRUB)
                   </Text>
                   <InputNumber
@@ -633,16 +633,16 @@ export default function HedgePage() {
                   <div
                     style={{
                       background: 'var(--grad-brand-soft)',
-                      borderRadius: 12,
+                      borderRadius: 'var(--radius-md)',
                       padding: 16,
                     }}
                   >
                     <Row gutter={[8, 8]}>
                       <Col span={12}>
-                        <Text type="secondary" style={{ fontSize: 11 }}>Получите</Text>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Получите</Text>
                         <Tooltip title={`${quote.amountOut.toLocaleString('ru-RU')} ${selectedCandidate.hedgeToken.symbol}`}>
                           <div style={{
-                            fontSize: 22, fontWeight: 700, color: 'var(--sber-green-deep)',
+                            fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--sber-green-deep)',
                             fontVariantNumeric: 'tabular-nums',
                           }}>
                             {formatTokenAmount(quote.amountOut, selectedCandidate.hedgeToken.symbol, { compact: true, maxFractionDigits: 2 })}
@@ -650,8 +650,8 @@ export default function HedgePage() {
                         </Tooltip>
                       </Col>
                       <Col span={12} style={{ textAlign: 'right' }}>
-                        <Text type="secondary" style={{ fontSize: 11 }}>Эффективный курс</Text>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Эффективный курс</Text>
+                        <div style={{ fontSize: 'var(--text-base)', fontWeight: 600 }}>
                           {/* Same "foreign currency first" convention as
                               the quote display above — "1 USDT ≈ N SRUB"
                               not "1 SRUB ≈ 0.0105 USDT". Effective rate
@@ -663,15 +663,15 @@ export default function HedgePage() {
                         </div>
                       </Col>
                       <Col span={12}>
-                        <Text type="secondary" style={{ fontSize: 11 }}>Комиссия пула</Text>
-                        <div style={{ fontSize: 13 }}>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Комиссия пула</Text>
+                        <div style={{ fontSize: 'var(--text-sm)' }}>
                           {quote.fee.toLocaleString('ru-RU')} {selectedCandidate.baseToken.symbol}
                         </div>
                       </Col>
                       <Col span={12} style={{ textAlign: 'right' }}>
-                        <Text type="secondary" style={{ fontSize: 11 }}>Влияние на цену</Text>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Влияние на цену</Text>
                         <div style={{
-                          fontSize: 13,
+                          fontSize: 'var(--text-sm)',
                           color: quote.priceImpact < 0.5 ? 'var(--sber-green)'
                             : quote.priceImpact < 2 ? 'var(--sber-amber)' : 'var(--color-negative-strong)',
                         }}>
@@ -682,7 +682,7 @@ export default function HedgePage() {
                         </div>
                       </Col>
                       <Col span={24}>
-                        <Text type="secondary" style={{ fontSize: 11 }}>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                           Мин. к получению (slippage 0.3%): {minAmountOut.toLocaleString('ru-RU')}{' '}
                           {selectedCandidate.hedgeToken.symbol}
                         </Text>
@@ -709,7 +709,7 @@ export default function HedgePage() {
                     : `Захеджировать ${amountSrub.toLocaleString('ru-RU')} SRUB`}
                 </Button>
 
-                <Text type="secondary" style={{ fontSize: 11, textAlign: 'center', display: 'block' }}>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)', textAlign: 'center', display: 'block' }}>
                   История хеджей ниже + полная — на странице «Транзакции».
                 </Text>
               </Space>

@@ -224,7 +224,7 @@ export default function RebalancePage() {
       )
     }
     const portfolioCols = [
-      { title: 'Токен', dataIndex: 'symbol', key: 'symbol', render: (s: string) => <Tag color="green" style={{ borderRadius: 999, fontWeight: 600 }}>{s}</Tag> },
+      { title: 'Токен', dataIndex: 'symbol', key: 'symbol', render: (s: string) => <Tag color="green" style={{ borderRadius: 'var(--radius-pill)', fontWeight: 600 }}>{s}</Tag> },
       { title: 'Кол-во', dataIndex: 'amount', key: 'amount', align: 'right' as const, render: (a: number) => a.toLocaleString('ru-RU') },
       { title: 'Стоимость, ₽', key: 'value', align: 'right' as const, render: (_: unknown, r: PortfolioTokenView) => formatRub(r.amount * r.priceRub) },
       {
@@ -278,7 +278,7 @@ export default function RebalancePage() {
         />
         <Table
           columns={[
-            { title: 'Токен', dataIndex: 'symbol', key: 'symbol', render: (s: string) => <Tag color="green" style={{ borderRadius: 999 }}>{s}</Tag> },
+            { title: 'Токен', dataIndex: 'symbol', key: 'symbol', render: (s: string) => <Tag color="green" style={{ borderRadius: 'var(--radius-pill)' }}>{s}</Tag> },
             {
               title: 'Текущая доля',
               key: 'current',
@@ -335,7 +335,7 @@ export default function RebalancePage() {
       { title: 'В', dataIndex: 'toSymbol', key: 'to', render: (s: string) => <Tag color="green">{s}</Tag> },
       { title: 'Кол-во', dataIndex: 'amountIn', key: 'amount', align: 'right' as const, render: (a: number) => a.toLocaleString('ru-RU') },
       { title: '≈ ₽', dataIndex: 'approxRubValue', key: 'rub', align: 'right' as const, render: (r: number) => formatRub(r) },
-      { title: 'Причина', dataIndex: 'reason', key: 'reason', render: (r: string) => <Text type="secondary" style={{ fontSize: 12 }}>{r}</Text> },
+      { title: 'Причина', dataIndex: 'reason', key: 'reason', render: (r: string) => <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{r}</Text> },
     ]
     return (
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -354,7 +354,7 @@ export default function RebalancePage() {
                 <Space direction="vertical" size={4}>
                   <Text>Будет перенесено: <Text strong>{formatRub(plan.totalRubMoved)}</Text></Text>
                   <Text>Оценочная комиссия (≈ 30 bps): <Text strong>{formatRub(estimatedTotalFeeRub)}</Text></Text>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                     Маршрут через SRUB как pivot-валюту. При сбое одного шага выполнение останавливается — балансы откатывать не нужно.
                   </Text>
                 </Space>
@@ -380,7 +380,7 @@ export default function RebalancePage() {
             description={
               <Space direction="vertical" size={4} style={{ width: '100%' }}>
                 {plan.skipped.map((s, i) => (
-                  <Text key={i} type="secondary" style={{ fontSize: 12 }}>· {s.symbol}: {s.reason}</Text>
+                  <Text key={i} type="secondary" style={{ fontSize: 'var(--text-xs)' }}>· {s.symbol}: {s.reason}</Text>
                 ))}
               </Space>
             }
@@ -394,7 +394,7 @@ export default function RebalancePage() {
                   {l.status === 'ok'
                     ? <CheckCircleFilled style={{ color: 'var(--sber-green)' }} />
                     : <WarningFilled style={{ color: 'var(--plasma-critical)' }} />}
-                  <Text type={l.status === 'fail' ? 'danger' : undefined} style={{ fontSize: 13 }}>{l.msg}</Text>
+                  <Text type={l.status === 'fail' ? 'danger' : undefined} style={{ fontSize: 'var(--text-sm)' }}>{l.msg}</Text>
                 </div>
               ))}
             </Space>

@@ -76,7 +76,7 @@ export default function TeamPage() {
             description={
               <Space direction="vertical" size={6} align="center">
                 <Text strong>У вас пока нет организации</Text>
-                <Text type="secondary" style={{ fontSize: 13 }}>
+                <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
                   Создайте — и сможете приглашать членов команды с разными ролями.
                 </Text>
               </Space>
@@ -104,15 +104,15 @@ export default function TeamPage() {
       render: (n: string, r: TeamMember) => (
         <Space size={6}>
           <Text strong>{n}</Text>
-          {r.id === state.ownerId && <Tag color="gold" style={{ borderRadius: 999 }}>OWNER</Tag>}
-          {r.email === me?.email && <Tag color="blue" style={{ borderRadius: 999 }}>это вы</Tag>}
+          {r.id === state.ownerId && <Tag color="gold" style={{ borderRadius: 'var(--radius-pill)' }}>OWNER</Tag>}
+          {r.email === me?.email && <Tag color="blue" style={{ borderRadius: 'var(--radius-pill)' }}>это вы</Tag>}
         </Space>
       ),
     },
     {
       title: 'Email',
       dataIndex: 'email',
-      render: (e: string) => <Text style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{e}</Text>,
+      render: (e: string) => <Text style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-xs)' }}>{e}</Text>,
     },
     {
       title: 'Роль',
@@ -122,7 +122,7 @@ export default function TeamPage() {
         if (isOwner || !canPerform(myRole, 'CHANGE_ROLE')) {
           return (
             <Tooltip title={ROLE_HINTS[r.role]}>
-              <Tag color={roleColor(r.role)} style={{ borderRadius: 999 }}>
+              <Tag color={roleColor(r.role)} style={{ borderRadius: 'var(--radius-pill)' }}>
                 {ROLE_LABELS[r.role]}
               </Tag>
             </Tooltip>
@@ -153,10 +153,10 @@ export default function TeamPage() {
       title: 'Статус',
       dataIndex: 'status',
       render: (s: TeamMember['status'], r: TeamMember) => {
-        if (s === 'ACTIVE') return <Tag color="green" icon={<CheckCircleOutlined />} style={{ borderRadius: 999 }}>активен</Tag>
+        if (s === 'ACTIVE') return <Tag color="green" icon={<CheckCircleOutlined />} style={{ borderRadius: 'var(--radius-pill)' }}>активен</Tag>
         return (
           <Space size={4}>
-            <Tag color="default" style={{ borderRadius: 999 }}>ожидает</Tag>
+            <Tag color="default" style={{ borderRadius: 'var(--radius-pill)' }}>ожидает</Tag>
             <Button
               size="small"
               type="link"
@@ -175,7 +175,7 @@ export default function TeamPage() {
       title: 'Присоединился',
       dataIndex: 'joinedAt',
       render: (d: string) => (
-        <Text type="secondary" style={{ fontSize: 12 }}>
+        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
           {new Date(d).toLocaleDateString('ru-RU')}
         </Text>
       ),
@@ -244,7 +244,7 @@ export default function TeamPage() {
       </Card>
 
       <Card className="sber-card" size="small">
-        <Text type="secondary" style={{ fontSize: 12 }}>
+        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
           <strong>Frontend MVP (Sprint 11):</strong> состояние команды хранится локально в браузере владельца.
           Backend-версия (Sprint 12) — POST /api/v1/orgs/{`{id}`}/members + permission middleware на gateway —
           разнесёт состояние между всеми членами команды и обеспечит cross-device sync.
@@ -299,7 +299,7 @@ function CreateOrgModal({ open, onClose, defaultEmail }: { open: boolean; onClos
         >
           <Input placeholder="Имя Фамилия" />
         </Form.Item>
-        <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 0 }}>
+        <Paragraph type="secondary" style={{ fontSize: 'var(--text-xs)', marginBottom: 0 }}>
           Email-владельца: <Text code>{defaultEmail}</Text> (взят из вашего профиля)
         </Paragraph>
       </Form>
@@ -346,7 +346,7 @@ function InviteMemberModal({ open, onClose }: { open: boolean; onClose: () => vo
               value: role,
               label: <Space direction="vertical" size={0}>
                 <Text>{ROLE_LABELS[role]}</Text>
-                <Text type="secondary" style={{ fontSize: 11 }}>{ROLE_HINTS[role]}</Text>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{ROLE_HINTS[role]}</Text>
               </Space>,
             }))}
           />

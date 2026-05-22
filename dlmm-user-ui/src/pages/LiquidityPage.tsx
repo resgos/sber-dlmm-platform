@@ -140,7 +140,7 @@ export default function LiquidityPage() {
                 style={{ width: 140 }}
               />
             </Space>
-            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: '#9CA3AF', marginTop: 4 }}>
               Текущая цена в бине #{pool.activeBinId}. Рекомендуемый диапазон концентрации:
               {' '}±10 бинов вокруг текущей цены (узкий диапазон = выше комиссии, но риск выхода из диапазона).
             </div>
@@ -152,10 +152,10 @@ export default function LiquidityPage() {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text>{pool.tokenXSymbol}</Text>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                     Доступно: {formatCompact(balanceX?.available ?? 0)}
                     {balanceX && (
-                      <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 12 }}
+                      <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 'var(--text-xs)' }}
                         onClick={() => setAmountX(balanceX.available)}>MAX</Button>
                     )}
                   </Text>
@@ -173,10 +173,10 @@ export default function LiquidityPage() {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text>{pool.tokenYSymbol}</Text>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                     Доступно: {formatCompact(balanceY?.available ?? 0)}
                     {balanceY && (
-                      <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 12 }}
+                      <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 'var(--text-xs)' }}
                         onClick={() => setAmountY(balanceY.available)}>MAX</Button>
                     )}
                   </Text>
@@ -202,7 +202,7 @@ export default function LiquidityPage() {
             disabled={!canAdd}
             loading={addMutation.isPending}
             onClick={() => addMutation.mutate()}
-            style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 10 }}
+            style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-sm)' }}
           >
             Добавить ликвидность
           </Button>

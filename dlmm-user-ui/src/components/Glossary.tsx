@@ -108,11 +108,11 @@ export default function Glossary({ term, children }: GlossaryProps) {
       content={
         <div style={{ maxWidth: 320 }}>
           <Text strong style={{ display: 'block', marginBottom: 6 }}>{def.term}</Text>
-          <Paragraph style={{ fontSize: 13, marginBottom: def.example ? 8 : 0 }}>
+          <Paragraph style={{ fontSize: 'var(--text-sm)', marginBottom: def.example ? 8 : 0 }}>
             {def.definition}
           </Paragraph>
           {def.example && (
-            <Text type="secondary" style={{ fontSize: 11, fontStyle: 'italic', display: 'block' }}>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontStyle: 'italic', display: 'block' }}>
               Пример: {def.example}
             </Text>
           )}
@@ -121,7 +121,7 @@ export default function Glossary({ term, children }: GlossaryProps) {
     >
       <span style={{ borderBottom: '1px dotted var(--text-muted)', cursor: 'help' }}>
         {children}
-        <QuestionCircleOutlined style={{ fontSize: 11, marginInlineStart: 4, color: 'var(--text-muted)' }} />
+        <QuestionCircleOutlined style={{ fontSize: 'var(--text-xs)', marginInlineStart: 4, color: 'var(--text-muted)' }} />
       </span>
     </Popover>
   )

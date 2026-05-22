@@ -108,20 +108,20 @@ const makeTooltip = (
   const userSharePct = d?.binId != null ? userBinSharePctByBinId?.get(d.binId) : undefined
   return (
     <div style={{
-      background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8,
-      padding: '10px 14px', fontSize: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+      background: '#fff', border: '1px solid #E5E7EB', borderRadius: 'var(--radius-sm)',
+      padding: '10px 14px', fontSize: 'var(--text-xs)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
       minWidth: 200,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
         {d?.isActive && (
           <span style={{ background: '#FEF3C7', color: '#D97706', fontSize: 10,
-            padding: '1px 6px', borderRadius: 999, fontWeight: 600 }}>
+            padding: '1px 6px', borderRadius: 'var(--radius-pill)', fontWeight: 600 }}>
             ★ Активный бин
           </span>
         )}
         {d?.isMine && !d?.isActive && (
           <span style={{ background: 'rgba(147,51,234,0.12)', color: '#7C3AED', fontSize: 10,
-            padding: '1px 6px', borderRadius: 999, fontWeight: 600 }}>
+            padding: '1px 6px', borderRadius: 'var(--radius-pill)', fontWeight: 600 }}>
             Ваш бин
           </span>
         )}
@@ -172,7 +172,7 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
   }
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '40px 0' }}><Spin tip="Загрузка бинов..." /></div>
-  if (error) return <Alert message="Не удалось загрузить данные бинов" type="error" showIcon style={{ borderRadius: 8 }} />
+  if (error) return <Alert message="Не удалось загрузить данные бинов" type="error" showIcon style={{ borderRadius: 'var(--radius-sm)' }} />
   if (!pool?.bins || pool.bins.length === 0) return <Empty description="Нет данных по бинам" />
 
   const activeIdx = pool.bins.findIndex((b) => b.binId === pool.activeBinId)
@@ -273,7 +273,7 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
           alignItems: 'center',
           gap: 16,
           marginBottom: 12,
-          fontSize: 12,
+          fontSize: 'var(--text-xs)',
           color: '#6B7280',
           flexWrap: 'wrap',
           justifyContent: 'space-between',
@@ -330,7 +330,7 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
               onClick={() => setZoomIndex(Math.min(ZOOM_LEVELS.length - 1, zoomIndex + 1))}
             />
           </AntTooltip>
-          <span style={{ fontSize: 11, color: '#9CA3AF', minWidth: 48, textAlign: 'right' }}>
+          <span style={{ fontSize: 'var(--text-xs)', color: '#9CA3AF', minWidth: 48, textAlign: 'right' }}>
             ±{windowRadius}
           </span>
         </Space>
@@ -339,8 +339,8 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
         <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }} barCategoryGap="4%">
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
           <XAxis dataKey="binId" tick={false} axisLine={{ stroke: '#E5E7EB' }}
-            label={{ value: `← ниже цены   |   ${activePrice != null ? activePrice.toFixed(4) : 'текущая цена'}   |   выше цены →`, position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false}
+            label={{ value: `← ниже цены   |   ${activePrice != null ? activePrice.toFixed(4) : 'текущая цена'}   |   выше цены →`, position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 'var(--text-xs)' }} />
+          <YAxis tick={{ fontSize: 'var(--text-xs)', fill: '#9CA3AF' }} axisLine={false} tickLine={false}
             width={60}
             tickFormatter={(v) => {
               // Sprint 9-DS-r4 (P2-5) — previous formatter produced

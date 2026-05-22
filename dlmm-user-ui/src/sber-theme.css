@@ -1,13 +1,39 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --sber-green: #21A038;
-  --sber-green-hover: #1C8A30;
-  --sber-green-light: #E8F5E9;
-  --sber-green-dark: #0E6B1E;
-  --sber-green-vibrant: #00C853;
-  --sber-green-deep: #006B3F;
-  --sber-aqua: #00B5A1;
+  /* ============================================================
+     UI-CRITIQUE 2026-05-22 #4 — Brand colour roles.
+
+     Before: 7 brand greens used inconsistently — `--sber-green-dark`
+     served as both hover-state AND "winner highlight" AND secondary
+     CTA. After: explicit semantic roles (--brand-primary[-soft|-hover|
+     -strong]); the older `--sber-green*` names stay as ALIASES for
+     backward compat но новый код пишет через семантику.
+
+     `--grad-stop-*` — PRIVATE; используются ТОЛЬКО внутри .sber-hero
+     gradient. Не использовать как text/border colour.
+     ============================================================ */
+  --brand-primary: #21A038;        /* primary CTA, brand mark */
+  --brand-primary-hover: #1C8A30;  /* hover state ONLY */
+  --brand-primary-soft: #E8F5E9;   /* bg tints, success Alert */
+  --brand-primary-strong: #0E6B1E; /* "winners" highlights, secondary CTAs */
+
+  /* Private gradient stops — only consumed by .sber-hero ::before */
+  --grad-stop-1: #00C853;
+  --grad-stop-2: #006B3F;
+  --grad-stop-3: #00B5A1;
+
+  /* Legacy aliases — kept so existing call sites don't break.
+     Migration is gradual: новые компоненты пишут --brand-primary*.
+     Sprint 13+ — sweep + remove these aliases once codebase clean. */
+  --sber-green: var(--brand-primary);
+  --sber-green-hover: var(--brand-primary-hover);
+  --sber-green-light: var(--brand-primary-soft);
+  --sber-green-dark: var(--brand-primary-strong);
+  --sber-green-vibrant: var(--grad-stop-1);
+  --sber-green-deep: var(--grad-stop-2);
+  --sber-aqua: var(--grad-stop-3);
+
   --sber-violet: #6E5BFF;
   --sber-amber: #FFB320;
 
@@ -85,6 +111,43 @@
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-xl: 28px;
+  /* UI-CRITIQUE 2026-05-22 #5 — explicit pill radius (was bare 999
+     everywhere). */
+  --radius-pill: 999px;
+
+  /* ============================================================
+     UI-CRITIQUE 2026-05-22 #1 — Typography scale tokens.
+
+     Before: 14 inline fontSize values across codebase (10/11/12/13/
+     14/15/16/18/20/22/24/26/28/32). After: 7 semantic tokens with
+     clear roles. Migrate inline `fontSize: 12` → `fontSize: 'var(--text-sm)'`.
+
+     Roles (use the smallest token that gets the job done):
+       --text-xs    11px  metadata, captions, "via pool {pair}"
+       --text-sm    13px  body small, table cells, popover content
+       --text-base  14px  default body (AntD also defaults here)
+       --text-md    16px  card titles, key metric labels
+       --text-lg    20px  page subtitles, dialog headers
+       --text-xl    28px  page titles (.sber-page-title)
+       --text-display 48px hero numbers (.sber-hero-value)
+
+     Plasma reference scale uses similar 7-step ladder. Inter +
+     SB Sans Text both render crisply at all sizes; do NOT introduce
+     intermediates — pick the closest semantic role.
+     ============================================================ */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --text-display: 48px;
+
+  /* Line-height ladder — tighter for big numbers, looser for body. */
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-base: 1.5;
+  --leading-loose: 1.7;
 }
 
 /* Sprint 9-DS-r4 P2-15 — dark mode.

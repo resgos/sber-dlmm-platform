@@ -201,7 +201,7 @@ export default function PoolDetailPage() {
             стратегией и шириной диапазона, но вокруг текущей цены
             (бин <code>{pool.activeBinId}</code>).
           </Text>
-          <Text type="warning" style={{ fontSize: 12 }}>
+          <Text type="warning" style={{ fontSize: 'var(--text-xs)' }}>
             Операция последовательная — если что-то сломается на
             половине, ранее перенесённые позиции остаются перенесёнными.
             Не закрывайте вкладку до завершения.
@@ -280,7 +280,7 @@ export default function PoolDetailPage() {
 
       <Card
         className="sber-card"
-        style={{ borderRadius: 16, border: '1px solid var(--border-light)', overflow: 'hidden' }}
+        style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', overflow: 'hidden' }}
         styles={{ body: { padding: 0 } }}
       >
         <div
@@ -308,13 +308,13 @@ export default function PoolDetailPage() {
               </Space>
               <div style={{ marginTop: 8 }}>
                 <Space size={16} wrap>
-                  <Text type="secondary" style={{ fontSize: 13 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
                     Шаг бина: <strong style={{ color: 'var(--text-primary)' }}>{bpsToPercent(pool.binStep)}</strong>
                   </Text>
-                  <Text type="secondary" style={{ fontSize: 13 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
                     Базовая комиссия: <strong style={{ color: 'var(--text-primary)' }}>{bpsToPercent(pool.baseFeeBps)}</strong>
                   </Text>
-                  <Text type="secondary" style={{ fontSize: 13 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
                     Создан: <strong style={{ color: 'var(--text-primary)' }}>{dayjs(pool.createdAt).format('DD.MM.YYYY')}</strong>
                   </Text>
                 </Space>
@@ -406,12 +406,12 @@ export default function PoolDetailPage() {
               type="primary"
               loading={rebalancing}
               onClick={confirmRebalanceAll}
-              style={{ borderRadius: 8 }}
+              style={{ borderRadius: 'var(--radius-sm)' }}
             >
               Ребаланс ({outOfRangeCount})
             </Button>
           }
-          style={{ borderRadius: 12 }}
+          style={{ borderRadius: 'var(--radius-md)' }}
         />
       )}
 
@@ -430,12 +430,12 @@ export default function PoolDetailPage() {
           </div>
           <Card
             className="sber-card"
-            style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+            style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
             title={
               <Space size={8}>
                 <Text strong>Распределение ликвидности</Text>
                 {userBinRanges.length > 0 && (
-                  <Tag color="purple" style={{ borderRadius: 999, fontSize: 11 }}>
+                  <Tag color="purple" style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>
                     ваши бины подсвечены
                   </Tag>
                 )}
@@ -453,12 +453,12 @@ export default function PoolDetailPage() {
           {poolPositions.length > 0 && (
             <Card
               className="sber-card"
-              style={{ borderRadius: 12, border: '1px solid var(--border-light)', marginTop: 16 }}
+              style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', marginTop: 16 }}
               title={
                 <Space size={8}>
                   <PieChartOutlined style={{ color: '#9333EA' }} />
                   <Text strong>Мои позиции в этом пуле</Text>
-                  <Tag style={{ borderRadius: 999 }}>{poolPositions.length}</Tag>
+                  <Tag style={{ borderRadius: 'var(--radius-pill)' }}>{poolPositions.length}</Tag>
                 </Space>
               }
               extra={
@@ -467,7 +467,7 @@ export default function PoolDetailPage() {
                   type="primary"
                   icon={<PlusOutlined />}
                   onClick={() => navigate(`/pools/${id}/liquidity`)}
-                  style={{ borderRadius: 8 }}
+                  style={{ borderRadius: 'var(--radius-sm)' }}
                 >
                   Добавить
                 </Button>
@@ -500,14 +500,14 @@ export default function PoolDetailPage() {
                             </Tag>
                           )}
                         </Space>
-                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, fontFamily: 'JetBrains Mono, monospace' }}>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2, fontFamily: 'JetBrains Mono, monospace' }}>
                           бины {p.binRangeMin} — {p.binRangeMax}
                         </div>
                       </div>
                       <div style={{ minWidth: 0, flex: '1 1 200px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                         {hasFees ? (
                           <>
-                            <div style={{ fontSize: 12, color: 'var(--sber-green)', fontWeight: 600 }}>
+                            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--sber-green)', fontWeight: 600 }}>
                               +{formatTokenAmount(p.unclaimedFeeX, pool.tokenXSymbol, { compact: true })}
                               {' · '}
                               +{formatTokenAmount(p.unclaimedFeeY, pool.tokenYSymbol, { compact: true })}
@@ -515,7 +515,7 @@ export default function PoolDetailPage() {
                             <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>незабранные</div>
                           </>
                         ) : (
-                          <Text type="secondary" style={{ fontSize: 11 }}>нет комиссий к получению</Text>
+                          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>нет комиссий к получению</Text>
                         )}
                       </div>
                       <Space size={6}>
@@ -567,7 +567,7 @@ export default function PoolDetailPage() {
 
       <Card
         className="sber-card"
-        style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+        style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
         styles={{ body: { padding: '8px 16px 16px' } }}
       >
         <Tabs
@@ -633,10 +633,10 @@ function ProfileRow({ label, value }: { label: string; value: string }) {
         gap: 12,
       }}
     >
-      <Text type="secondary" style={{ fontSize: 12 }}>{label}</Text>
+      <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{label}</Text>
       <Text
         style={{
-          fontSize: 13,
+          fontSize: 'var(--text-sm)',
           fontWeight: 500,
           textAlign: 'right',
           fontVariantNumeric: 'tabular-nums',

@@ -30,37 +30,37 @@ export default function RiskDisclosure({ variant }: Props) {
   const content = {
     lp: (
       <Space direction="vertical" size={4}>
-        <Text style={{ fontSize: 13 }}>
+        <Text style={{ fontSize: 'var(--text-sm)' }}>
           <Glossary term="il"><Text strong>Impermanent loss</Text></Glossary> возможен, если цена токенов в паре изменится.
           Это значит, что ваша доля в пуле может стоить меньше, чем если бы вы просто держали токены.
         </Text>
-        <Text style={{ fontSize: 13 }}>
+        <Text style={{ fontSize: 'var(--text-sm)' }}>
           <Text strong>Это не банковский депозит.</Text> Страхование АСВ <Text strong>не распространяется</Text> на LP-позиции — оно покрывает только балансы SRUB в качестве депозита (до 1.4 млн ₽).
         </Text>
-        <Text style={{ fontSize: 13 }}>
+        <Text style={{ fontSize: 'var(--text-sm)' }}>
           Прошлая доходность пула не гарантирует будущую.
         </Text>
       </Space>
     ),
     swap: (
       <Space direction="vertical" size={4}>
-        <Text style={{ fontSize: 13 }}>
+        <Text style={{ fontSize: 'var(--text-sm)' }}>
           <Glossary term="slippage"><Text strong>Проскальзывание</Text></Glossary> может быть выше ожидаемого, если в пуле мало ликвидности или сделка крупная.
         </Text>
-        <Text style={{ fontSize: 13 }}>
+        <Text style={{ fontSize: 'var(--text-sm)' }}>
           Обратный своп (продать и купить обратно) может стоить дороже за счёт комиссий ×2 + price impact.
         </Text>
       </Space>
     ),
     hedge: (
       <Space direction="vertical" size={4}>
-        <Text style={{ fontSize: 13 }}>
+        <Text style={{ fontSize: 'var(--text-sm)' }}>
           Зафиксированный курс действует только до даты исполнения. После — конвертация по курсу момента.
         </Text>
-        <Text style={{ fontSize: 13 }}>
+        <Text style={{ fontSize: 'var(--text-sm)' }}>
           Если рыночный курс пойдёт в вашу пользу, хедж <Text strong>будет стоить</Text> разницы. Это плата за защиту от противоположного движения.
         </Text>
-        <Text style={{ fontSize: 13 }}>
+        <Text style={{ fontSize: 'var(--text-sm)' }}>
           Хедж — обязательство, не опцион. Закрыть досрочно можно, но фактическая цена закрытия зависит от рынка на момент закрытия.
         </Text>
       </Space>
@@ -74,7 +74,7 @@ export default function RiskDisclosure({ variant }: Props) {
       icon={<WarningFilled />}
       message={<Text strong>Важно знать о рисках</Text>}
       description={content}
-      style={{ borderRadius: 8 }}
+      style={{ borderRadius: 'var(--radius-sm)' }}
     />
   )
 }

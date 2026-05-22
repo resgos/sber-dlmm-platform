@@ -49,7 +49,7 @@ export default function HealthScoreBadge({ position, pool, size = 'small' }: Pro
       <FactorRow label="Соответствие диапазону" weight="45%" {...health.factors.rangeFit} />
       <FactorRow label="Доходность по комиссиям" weight="35%" {...health.factors.feeEarning} />
       <FactorRow label="Возраст позиции" weight="20%" {...health.factors.age} />
-      <Text style={{ color: 'var(--bg-card)', fontSize: 11, opacity: 0.75, display: 'block', marginTop: 4 }}>
+      <Text style={{ color: 'var(--bg-card)', fontSize: 'var(--text-xs)', opacity: 0.75, display: 'block', marginTop: 4 }}>
         Эвристический индикатор. Не является инвестиционной рекомендацией.
       </Text>
       {/* Sprint 12 G-03 — actionable CTA. */}
@@ -116,14 +116,14 @@ function FactorRow({ label, weight, contribution, reason }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <Text style={{ color: 'var(--bg-card)', fontSize: 12, fontWeight: 500 }}>
+        <Text style={{ color: 'var(--bg-card)', fontSize: 'var(--text-xs)', fontWeight: 500 }}>
           {label} <span style={{ opacity: 0.6, fontSize: 10 }}>({weight})</span>
         </Text>
-        <Text style={{ color: 'var(--bg-card)', fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+        <Text style={{ color: 'var(--bg-card)', fontSize: 'var(--text-xs)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
           +{contribution}
         </Text>
       </div>
-      <Text style={{ color: 'var(--bg-card)', fontSize: 11, opacity: 0.75 }}>{reason}</Text>
+      <Text style={{ color: 'var(--bg-card)', fontSize: 'var(--text-xs)', opacity: 0.75 }}>{reason}</Text>
     </div>
   )
 }

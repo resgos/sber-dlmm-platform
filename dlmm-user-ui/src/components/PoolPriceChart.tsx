@@ -133,17 +133,17 @@ export default function PoolPriceChart({ poolId, quoteSymbol }: PoolPriceChartPr
   return (
     <Card
       className="sber-card"
-      style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}
+      style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
       title={
         <Space size={8}>
           <LineChartOutlined style={{ color: 'var(--sber-green)' }} />
           <Text strong>Цена ({quoteSymbol} за единицу)</Text>
-          <Tag style={{ borderRadius: 999, fontSize: 11 }}>1m · OHLCV</Tag>
+          <Tag style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>1m · OHLCV</Tag>
         </Space>
       }
       extra={
         data && data.length > 0 && (
-          <Text type="secondary" style={{ fontSize: 11 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             {data.length} свечей
           </Text>
         )

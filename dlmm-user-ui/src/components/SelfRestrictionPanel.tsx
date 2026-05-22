@@ -97,7 +97,7 @@ export default function SelfRestrictionPanel() {
               showIcon
               message="У вас нет активного самозапрета"
               description="Вы можете установить самозапрет в любой момент. Это защитная мера — будет полезна если вы планируете перерыв в торговле или хотите ограничить себя от импульсивных операций."
-              style={{ borderRadius: 12 }}
+              style={{ borderRadius: 'var(--radius-md)' }}
             />
             <Button
               type="primary"
@@ -118,7 +118,7 @@ export default function SelfRestrictionPanel() {
               showIcon
               message="Самозапрет активен"
               description="Открытие новых позиций (своп, хедж, добавление ликвидности) запрещено. Чтобы снять — запросите снятие, начнётся 7-дневный период охлаждения."
-              style={{ borderRadius: 12 }}
+              style={{ borderRadius: 'var(--radius-md)' }}
             />
             <Button
               icon={<UnlockOutlined />}
@@ -142,12 +142,12 @@ export default function SelfRestrictionPanel() {
                   Снятие будет доступно <b>{dayjs(latestLiftRequest.effectiveAt).format('DD.MM.YYYY HH:mm')}</b>
                   {' '}({dayjs(latestLiftRequest.effectiveAt).fromNow()}).
                 </Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                   До этого момента самозапрет остаётся активным. Это требование ЦБ РФ для защиты пользователей.
                 </Text>
               </Space>
             }
-            style={{ borderRadius: 12 }}
+            style={{ borderRadius: 'var(--radius-md)' }}
           />
         )}
 
@@ -158,7 +158,7 @@ export default function SelfRestrictionPanel() {
               showIcon
               message="Период охлаждения истёк"
               description="Вы можете завершить снятие самозапрета."
-              style={{ borderRadius: 12 }}
+              style={{ borderRadius: 'var(--radius-md)' }}
             />
             <Button
               type="primary"
@@ -174,12 +174,12 @@ export default function SelfRestrictionPanel() {
         {/* History timeline */}
         {history.length > 0 && (
           <>
-            <Text strong style={{ fontSize: 13 }}>История</Text>
+            <Text strong style={{ fontSize: 'var(--text-sm)' }}>История</Text>
             <Timeline
               items={history.map((r: SelfRestrictionRow) => ({
-                dot: r.action === 'SET' ? <LockOutlined style={{ fontSize: 14, color: '#DC2626' }} /> :
-                     r.action === 'LIFTED' ? <UnlockOutlined style={{ fontSize: 14, color: '#21A038' }} /> :
-                     <ClockCircleOutlined style={{ fontSize: 14, color: '#F59E0B' }} />,
+                dot: r.action === 'SET' ? <LockOutlined style={{ fontSize: 'var(--text-base)', color: '#DC2626' }} /> :
+                     r.action === 'LIFTED' ? <UnlockOutlined style={{ fontSize: 'var(--text-base)', color: '#21A038' }} /> :
+                     <ClockCircleOutlined style={{ fontSize: 'var(--text-base)', color: '#F59E0B' }} />,
                 children: (
                   <Space direction="vertical" size={2}>
                     <Text strong>
@@ -187,7 +187,7 @@ export default function SelfRestrictionPanel() {
                       {r.action === 'LIFT_REQUESTED' && 'Запрошено снятие (период охлаждения)'}
                       {r.action === 'LIFTED' && 'Самозапрет снят'}
                     </Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
+                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                       {dayjs(r.createdAt).format('DD.MM.YYYY HH:mm')}
                       {r.action === 'LIFT_REQUESTED' && (
                         <Tooltip title={`Снятие доступно с ${dayjs(r.effectiveAt).format('DD.MM.YYYY HH:mm')}`}>
@@ -195,7 +195,7 @@ export default function SelfRestrictionPanel() {
                         </Tooltip>
                       )}
                     </Text>
-                    {r.reason && <Text type="secondary" style={{ fontSize: 12 }}>«{r.reason}»</Text>}
+                    {r.reason && <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>«{r.reason}»</Text>}
                   </Space>
                 ),
               }))}

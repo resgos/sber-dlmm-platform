@@ -104,7 +104,7 @@ function EnabledCard({ state }: { state: TwoFactorState }) {
           <Text strong>Двухфакторная аутентификация (2FA)</Text>
         </Space>
       }
-      extra={<Tag color="green" icon={<CheckCircleFilled />} style={{ borderRadius: 999 }}>включена</Tag>}
+      extra={<Tag color="green" icon={<CheckCircleFilled />} style={{ borderRadius: 'var(--radius-pill)' }}>включена</Tag>}
     >
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
         <Alert
@@ -113,10 +113,10 @@ function EnabledCard({ state }: { state: TwoFactorState }) {
           message="2FA активна"
           description={
             <Space direction="vertical" size={2}>
-              <Text style={{ fontSize: 13 }}>
+              <Text style={{ fontSize: 'var(--text-sm)' }}>
                 Активировано {state.enabledAt ? new Date(state.enabledAt).toLocaleString('ru-RU') : '—'}
               </Text>
-              <Text style={{ fontSize: 13 }}>
+              <Text style={{ fontSize: 'var(--text-sm)' }}>
                 Резервных кодов осталось: <Text strong>{remaining} из {state.recoveryCodes.length}</Text>
               </Text>
             </Space>
@@ -151,7 +151,7 @@ function EnabledCard({ state }: { state: TwoFactorState }) {
           </Popconfirm>
         </Space>
 
-        <Text type="secondary" style={{ fontSize: 11 }}>
+        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
           На клиентской стороне (Sprint 11 MVP). Backend-валидация TOTP → Sprint 12: POST /api/v1/users/me/2fa/verify
           с HMAC-SHA1 проверкой кода. Текущая реализация принимает любой 6-значный код.
         </Text>
@@ -262,7 +262,7 @@ function SetupWizard({ open, onClose }: { open: boolean; onClose: () => void }) 
             message="QR-код"
             description={
               <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                   Графический QR — в Sprint 12. Пока — копируйте URI и используйте «ввести вручную» в приложении.
                 </Text>
                 <CopyableBlock value={buildOtpauthUri(account, secret)} fontSize={11} />
@@ -273,7 +273,7 @@ function SetupWizard({ open, onClose }: { open: boolean; onClose: () => void }) 
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <Text strong>Или введите секрет вручную:</Text>
             <CopyableBlock value={secret} fontSize={14} />
-            <Text type="secondary" style={{ fontSize: 11 }}>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
               Аккаунт: <Text code>{account}</Text>; алгоритм: SHA1; цифры: 6; период: 30 сек.
             </Text>
           </Space>
@@ -294,7 +294,7 @@ function SetupWizard({ open, onClose }: { open: boolean; onClose: () => void }) 
             value={code}
             onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(null) }}
             size="large"
-            style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums', textAlign: 'center', letterSpacing: 6 }}
+            style={{ fontSize: 'var(--text-lg)', fontVariantNumeric: 'tabular-nums', textAlign: 'center', letterSpacing: 6 }}
             maxLength={6}
             onPressEnter={handleVerify}
             autoFocus
@@ -306,7 +306,7 @@ function SetupWizard({ open, onClose }: { open: boolean; onClose: () => void }) 
               Подтвердить
             </Button>
           </Space>
-          <Text type="secondary" style={{ fontSize: 11 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             MVP: принимаем любой 6-значный код. Реальная TOTP-валидация — Sprint 12 backend.
           </Text>
         </Space>
@@ -348,7 +348,7 @@ function CopyableBlock({ value, fontSize = 14 }: { value: string; fontSize?: num
       style={{
         padding: '8px 10px',
         background: 'var(--surface-2)',
-        borderRadius: 6,
+        borderRadius: 'var(--radius-sm)',
         fontFamily: 'JetBrains Mono, ui-monospace, monospace',
         fontSize,
         wordBreak: 'break-all',
@@ -388,9 +388,9 @@ function RecoveryCodesGrid({ codes }: { codes: ReadonlyArray<string> }) {
         gap: 6,
         padding: 12,
         background: 'var(--surface-1)',
-        borderRadius: 8,
+        borderRadius: 'var(--radius-sm)',
         fontFamily: 'JetBrains Mono, ui-monospace, monospace',
-        fontSize: 13,
+        fontSize: 'var(--text-sm)',
       }}
     >
       {codes.map((c, i) => (

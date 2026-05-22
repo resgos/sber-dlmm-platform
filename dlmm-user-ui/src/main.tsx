@@ -23,10 +23,13 @@ const sberTheme = {
     colorPrimary: '#21A038',
     colorLink: '#21A038',
     colorSuccess: '#21A038',
-    borderRadius: 8,
+    borderRadius: 8, // AntD ConfigProvider needs numeric — UI-CRITIQUE #5
     colorBgContainer: '#FFFFFF',
     colorBorder: '#E5E7EB',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    // AntD ConfigProvider token wants a numeric base. Don't replace
+    // with CSS var — это значение AntD читает в JS для расчётов
+    // (line-heights, scaling factors), не как CSS string.
     fontSize: 14,
     colorText: '#1F2937',
     colorTextSecondary: '#6B7280',
@@ -51,10 +54,10 @@ const sberTheme = {
       borderRadiusLG: 12,
     },
     Input: {
-      borderRadius: 8,
+      borderRadius: 8, // AntD ConfigProvider needs numeric — UI-CRITIQUE #5 vars are for inline style only
     },
     Select: {
-      borderRadius: 8,
+      borderRadius: 8, // AntD ConfigProvider needs numeric — UI-CRITIQUE #5 vars are for inline style only
     },
   },
 }

@@ -50,12 +50,12 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
           </div>
           <div className="sber-pool-pair__label">
             <Text strong style={{ fontSize: 15 }}>{x}/{y}</Text>
-            <Text type="secondary" style={{ fontSize: 12 }}>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
               {t('pools.card.binStep', { value: bpsToPercent(pool.binStep) })} · {t('pools.card.fee', { value: bpsToPercent(pool.baseFeeBps) })}
             </Text>
           </div>
         </div>
-        <Tag color={statusColors[pool.status] || 'default'} style={{ borderRadius: 999, padding: '2px 10px' }}>
+        <Tag color={statusColors[pool.status] || 'default'} style={{ borderRadius: 'var(--radius-pill)', padding: '2px 10px' }}>
           {t(`pools.status.${pool.status}`, { defaultValue: pool.status })}
         </Tag>
       </div>
@@ -72,7 +72,7 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
         <div className="sber-pool-metric">
           <div className="sber-pool-metric__label">{t('pools.card.apy')}</div>
           <div className="sber-pool-metric__value sber-pool-metric__value--accent">
-            <ThunderboltFilled style={{ fontSize: 12, marginRight: 4 }} />
+            <ThunderboltFilled style={{ fontSize: 'var(--text-xs)', marginRight: 4 }} />
             {apy.toFixed(2)}%
           </div>
         </div>
@@ -140,13 +140,13 @@ export default function PoolsPage() {
             // class drops to width:100% under .sber-pools-search-mobile media
             // query in sber-theme.css.
             className="sber-pools-search"
-            style={{ height: 40, borderRadius: 10 }}
+            style={{ height: 40, borderRadius: 'var(--radius-sm)' }}
           />
           {/* Sprint 10 (new feature) — pool comparator entry point. */}
           <Button
             icon={<BarChartOutlined />}
             onClick={() => navigate('/pools/compare')}
-            style={{ height: 40, borderRadius: 10 }}
+            style={{ height: 40, borderRadius: 'var(--radius-sm)' }}
           >
             Сравнить
           </Button>

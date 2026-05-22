@@ -20,7 +20,7 @@ export default function KycStatusBadge({ status, large }: { status: string; larg
     <Tag
       color={cfg.color}
       icon={cfg.icon}
-      style={large ? { fontSize: 14, padding: '4px 16px' } : undefined}
+      style={large ? { fontSize: 'var(--text-base)', padding: '4px 16px' } : undefined}
     >
       {cfg.text}
     </Tag>

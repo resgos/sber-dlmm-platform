@@ -166,7 +166,7 @@ export default function DashboardPage() {
     >
       <div
         style={{
-          fontSize: 11,
+          fontSize: 'var(--text-xs)',
           color: 'rgba(255,255,255,0.7)',
           letterSpacing: '0.04em',
           textTransform: 'uppercase',
@@ -177,7 +177,7 @@ export default function DashboardPage() {
       </div>
       <div
         style={{
-          fontSize: 22,
+          fontSize: 'var(--text-lg)',
           fontWeight: 600,
           color: 'var(--bg-card)',
           lineHeight: 1.1,
@@ -188,7 +188,7 @@ export default function DashboardPage() {
       </div>
       <div
         style={{
-          fontSize: 11,
+          fontSize: 'var(--text-xs)',
           color: 'rgba(255,255,255,0.65)',
         }}
       >
@@ -209,7 +209,7 @@ export default function DashboardPage() {
           <Col flex="0 0 320px" style={{ padding: '0 20px 0 4px', minWidth: 240 }}>
             <div
               style={{
-                fontSize: 11,
+                fontSize: 'var(--text-xs)',
                 color: 'rgba(255,255,255,0.75)',
                 letterSpacing: '0.04em',
                 textTransform: 'uppercase',
@@ -327,8 +327,8 @@ export default function DashboardPage() {
             className="sber-card"
             title={<Text strong>Последние операции</Text>}
             extra={
-              <a onClick={() => navigate('/transactions')} style={{ color: 'var(--sber-green)', fontSize: 13, cursor: 'pointer' }}>
-                Вся история <ArrowRightOutlined style={{ fontSize: 11 }} />
+              <a onClick={() => navigate('/transactions')} style={{ color: 'var(--sber-green)', fontSize: 'var(--text-sm)', cursor: 'pointer' }}>
+                Вся история <ArrowRightOutlined style={{ fontSize: 'var(--text-xs)' }} />
               </a>
             }
             styles={{ body: { padding: 0 } }}
@@ -356,21 +356,21 @@ export default function DashboardPage() {
                       }}
                     >
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>
+                        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
                           {txTypeLabels[tx.txType]?.text ?? tx.txType}
                           {pair && (
-                            <Text type="secondary" style={{ fontSize: 12, marginLeft: 6 }}>
+                            <Text type="secondary" style={{ fontSize: 'var(--text-xs)', marginLeft: 6 }}>
                               {pair}
                             </Text>
                           )}
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
                           {dayjs(tx.createdAt).format('DD.MM HH:mm')}
                         </div>
                       </div>
                       <Tag
                         color={tx.status === 'CONFIRMED' ? 'success' : tx.status === 'FAILED' ? 'error' : 'processing'}
-                        style={{ borderRadius: 999, marginInlineEnd: 0, padding: '0 8px' }}
+                        style={{ borderRadius: 'var(--radius-pill)', marginInlineEnd: 0, padding: '0 8px' }}
                       >
                         {statusLabels[tx.status]?.text ?? tx.status}
                       </Tag>
@@ -399,9 +399,9 @@ export default function DashboardPage() {
               render: (sym: string) => (
                 <Space>
                   <div style={{
-                    width: 32, height: 32, borderRadius: 16,
+                    width: 32, height: 32, borderRadius: 'var(--radius-md)',
                     background: 'var(--sber-green-light)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 700, fontSize: 12, color: 'var(--sber-green)',
+                    fontWeight: 700, fontSize: 'var(--text-xs)', color: 'var(--sber-green)',
                   }}>
                     {sym?.slice(0, 2)}
                   </div>
@@ -494,7 +494,7 @@ export default function DashboardPage() {
                   const fmt = (n: number) =>
                     n.toLocaleString('ru-RU', { maximumFractionDigits: n >= 100 ? 2 : 4 })
                   return (
-                    <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 'var(--text-sm)' }}>
                       {fmt(lo)} — {fmt(hi)} {pool.tokenYSymbol}
                     </span>
                   )
@@ -514,12 +514,12 @@ export default function DashboardPage() {
                   return (
                     <Space size={6} wrap style={{ justifyContent: 'flex-end' }}>
                       {r.unclaimedFeeX > 0 && (
-                        <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px' }}>
+                        <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', padding: '0 8px' }}>
                           +{r.unclaimedFeeX.toLocaleString('ru-RU')} {xSym}
                         </Tag>
                       )}
                       {r.unclaimedFeeY > 0 && (
-                        <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 999, padding: '0 8px' }}>
+                        <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', padding: '0 8px' }}>
                           +{r.unclaimedFeeY.toLocaleString('ru-RU')} {ySym}
                         </Tag>
                       )}

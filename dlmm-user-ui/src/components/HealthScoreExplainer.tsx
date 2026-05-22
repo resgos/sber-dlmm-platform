@@ -34,7 +34,7 @@ export default function HealthScoreExplainer() {
   return (
     <Alert
       type="info"
-      style={{ borderRadius: 12 }}
+      style={{ borderRadius: 'var(--radius-md)' }}
       showIcon
       icon={<HeartFilled style={{ color: 'var(--sber-green)' }} />}
       closable={false}
@@ -46,17 +46,17 @@ export default function HealthScoreExplainer() {
       }
       description={
         <Space direction="vertical" size={6} style={{ marginTop: 4 }}>
-          <Text style={{ fontSize: 13 }}>
+          <Text style={{ fontSize: 'var(--text-sm)' }}>
             Колонка <Text strong>«Здоровье»</Text> показывает число от 0 до 100, которое отвечает на простой вопрос —
             «работает ли эта позиция?».
           </Text>
           <Space size={6} wrap>
-            <Tag color="green" style={{ borderRadius: 999 }}>80–100 — отлично, ничего не делайте</Tag>
-            <Tag color="lime" style={{ borderRadius: 999 }}>60–79 — нормально, посматривайте</Tag>
-            <Tag color="orange" style={{ borderRadius: 999 }}>35–59 — так себе, подумайте о ребалансе</Tag>
-            <Tag color="red" style={{ borderRadius: 999 }}>0–34 — плохо, требуется внимание</Tag>
+            <Tag color="green" style={{ borderRadius: 'var(--radius-pill)' }}>80–100 — отлично, ничего не делайте</Tag>
+            <Tag color="lime" style={{ borderRadius: 'var(--radius-pill)' }}>60–79 — нормально, посматривайте</Tag>
+            <Tag color="orange" style={{ borderRadius: 'var(--radius-pill)' }}>35–59 — так себе, подумайте о ребалансе</Tag>
+            <Tag color="red" style={{ borderRadius: 'var(--radius-pill)' }}>0–34 — плохо, требуется внимание</Tag>
           </Space>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             Наведите на оценку, чтобы увидеть, из чего она складывается: соответствие диапазону пула,
             доходность по комиссиям и срок жизни позиции.
           </Text>

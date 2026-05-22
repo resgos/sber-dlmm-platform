@@ -109,7 +109,7 @@ export default function NotificationBell() {
               style={{
                 padding: '10px 0',
                 background: item.isRead ? 'transparent' : 'var(--sber-green-light)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-sm)',
                 paddingLeft: 8,
                 paddingRight: 8,
                 cursor: item.isRead ? 'default' : 'pointer',
@@ -120,22 +120,22 @@ export default function NotificationBell() {
             >
               <Space direction="vertical" size={2} style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Tag color={NOTIFICATION_TYPE_COLORS[item.type] || NOTIFICATION_TAG_DEFAULT} style={{ fontSize: 11 }}>
+                  <Tag color={NOTIFICATION_TYPE_COLORS[item.type] || NOTIFICATION_TAG_DEFAULT} style={{ fontSize: 'var(--text-xs)' }}>
                     {typeRussianLabels[item.type] || item.type.replace(/_/g, ' ')}
                   </Tag>
-                  <Text type="secondary" style={{ fontSize: 11 }}>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                     {dayjs(item.createdAt).fromNow()}
                   </Text>
                 </div>
-                <Text strong style={{ fontSize: 13 }}>{item.title}</Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>{item.message}</Text>
+                <Text strong style={{ fontSize: 'var(--text-sm)' }}>{item.title}</Text>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{item.message}</Text>
                 {/* Sprint 6 #6.15 — margin alerts get a "перейти к позиции" link */}
                 {(item.type === 'MARGIN_WARNING' || item.type === 'MARGIN_CALL') && (
                   <Button
                     type="link"
                     size="small"
                     icon={<ArrowRightOutlined />}
-                    style={{ padding: 0, height: 'auto', marginTop: 2, fontSize: 12 }}
+                    style={{ padding: 0, height: 'auto', marginTop: 2, fontSize: 'var(--text-xs)' }}
                     onClick={(e) => {
                       e.stopPropagation()
                       navigateForMarginAlert(item)
@@ -164,7 +164,7 @@ export default function NotificationBell() {
         {/* Sprint 8 UX-A11Y-1 — icon-only trigger needs an accessible name */}
         {/* and a button role so screen readers + keyboard navigation work. */}
         <BellOutlined
-          style={{ fontSize: 20, color: 'var(--text-secondary)', cursor: 'pointer' }}
+          style={{ fontSize: 'var(--text-lg)', color: 'var(--text-secondary)', cursor: 'pointer' }}
           role="button"
           tabIndex={0}
           aria-label={unreadCount > 0 ? `Уведомления (${unreadCount} непрочитанных)` : 'Уведомления'}

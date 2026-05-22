@@ -211,12 +211,12 @@ export default function KycUploadPanel({ kycStatus, rejectionReason }: KycUpload
           return (
             <div key={doc.key}>
               <Space style={{ marginBottom: 6 }} size={8}>
-                <Tag color={files.length > 0 ? 'green' : 'default'} style={{ borderRadius: 999 }}>
+                <Tag color={files.length > 0 ? 'green' : 'default'} style={{ borderRadius: 'var(--radius-pill)' }}>
                   {idx + 1} / {REQUIRED_DOCS.length}
                 </Tag>
                 <Text strong>{doc.label}</Text>
               </Space>
-              <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 8 }}>
+              <Text type="secondary" style={{ display: 'block', fontSize: 'var(--text-xs)', marginBottom: 8 }}>
                 {doc.hint}
               </Text>
               <Dragger {...uploadProps}>
@@ -233,7 +233,7 @@ export default function KycUploadPanel({ kycStatus, rejectionReason }: KycUpload
                     'Перетащите файл сюда или нажмите для выбора'
                   )}
                 </p>
-                <p className="ant-upload-hint" style={{ fontSize: 11 }}>
+                <p className="ant-upload-hint" style={{ fontSize: 'var(--text-xs)' }}>
                   JPG / PNG / HEIC / PDF · до {MAX_SIZE_MB} МБ
                 </p>
               </Dragger>
@@ -251,12 +251,12 @@ export default function KycUploadPanel({ kycStatus, rejectionReason }: KycUpload
           Отправить на верификацию
         </Button>
         {!allReady && (
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             Загрузите все {REQUIRED_DOCS.length} документа, чтобы продолжить.
           </Text>
         )}
         {onCooldown && (
-          <Text type="warning" style={{ fontSize: 12 }}>
+          <Text type="warning" style={{ fontSize: 'var(--text-xs)' }}>
             Следующая отправка возможна через {Math.ceil(cooldownRemainingMs / 60_000)} мин.
           </Text>
         )}

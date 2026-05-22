@@ -162,7 +162,7 @@ export default function PoolComparePage() {
       <Statistic
         value={value as never}
         valueStyle={{
-          fontSize: 18,
+          fontSize: 'var(--text-md)',
           fontWeight: 600,
           color: isWinner ? 'var(--sber-green-dark)' : 'var(--text-primary)',
         }}
@@ -229,7 +229,7 @@ export default function PoolComparePage() {
             disabled={selectedIds.length >= MAX_COMPARE}
           />
           {selectedIds.length >= MAX_COMPARE && (
-            <Text type="secondary" style={{ fontSize: 12 }}>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
               Максимум {MAX_COMPARE} пула одновременно. Уберите один, чтобы добавить новый.
             </Text>
           )}
@@ -260,10 +260,10 @@ export default function PoolComparePage() {
                     size="small"
                     title={
                       <Space>
-                        <Tag color="green" style={{ borderRadius: 999, fontWeight: 600 }}>
+                        <Tag color="green" style={{ borderRadius: 'var(--radius-pill)', fontWeight: 600 }}>
                           {p.tokenXSymbol} / {p.tokenYSymbol}
                         </Tag>
-                        <Tag color={p.status === 'ACTIVE' ? 'success' : 'warning'} style={{ borderRadius: 999 }}>
+                        <Tag color={p.status === 'ACTIVE' ? 'success' : 'warning'} style={{ borderRadius: 'var(--radius-pill)' }}>
                           {p.status === 'ACTIVE' ? 'Активен' : p.status}
                         </Tag>
                       </Space>
@@ -361,7 +361,7 @@ export default function PoolComparePage() {
 
       {selected.length >= 2 && (
         <Card className="sber-card" size="small">
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             <InfoCircleOutlined style={{ marginRight: 6 }} />
             Зелёная подсветка отмечает «победителя» в каждой строке. Это эвристический индикатор, а не инвестиционная рекомендация. APY рассчитывается по реализованной комиссии за последние 30 дней и может не отражать будущую доходность.
           </Text>
@@ -382,28 +382,28 @@ function ProMetricsBlock({ pool }: { pool: Pool }) {
   return (
     <div style={{ borderTop: '1px dashed var(--border-light)', paddingTop: 10, marginTop: 6 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+        <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
           Pro метрики
         </Text>
         {m.isSynthetic && (
           <Tooltip title="Synthetic метрики на базе APY + volume24h. Реальные исторические значения по OHLCV — Sprint 13.">
-            <Tag color="default" style={{ fontSize: 10, borderRadius: 999, marginInlineEnd: 0 }}>
+            <Tag color="default" style={{ fontSize: 10, borderRadius: 'var(--radius-pill)', marginInlineEnd: 0 }}>
               синтет.
             </Tag>
           </Tooltip>
         )}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', marginBottom: 2 }}>
         <Text type="secondary">Волатильность 30д</Text>
         <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>{m.volatilityPct30d.toFixed(1)}%</Text>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', marginBottom: 2 }}>
         <Text type="secondary">Max drawdown</Text>
         <Text strong style={{ fontVariantNumeric: 'tabular-nums', color: m.maxDrawdownPct > 10 ? 'var(--color-negative)' : 'var(--text-primary)' }}>
           −{m.maxDrawdownPct.toFixed(1)}%
         </Text>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)' }}>
         <Text type="secondary">Sharpe (vs 14% RFR)</Text>
         <Text strong style={{ fontVariantNumeric: 'tabular-nums', color: m.sharpe > 1 ? 'var(--sber-green)' : m.sharpe < 0 ? 'var(--color-negative)' : 'var(--text-primary)' }}>
           {m.sharpe >= 0 ? '+' : ''}{m.sharpe.toFixed(2)}

@@ -108,7 +108,7 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
           showIcon
           closable
           onClose={() => setSuccess(null)}
-          style={{ marginBottom: 12, borderRadius: 10 }}
+          style={{ marginBottom: 12, borderRadius: 'var(--radius-sm)' }}
         />
       )}
       {error && (
@@ -118,7 +118,7 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
           showIcon
           closable
           onClose={() => setError(null)}
-          style={{ marginBottom: 12, borderRadius: 10 }}
+          style={{ marginBottom: 12, borderRadius: 'var(--radius-sm)' }}
         />
       )}
 
@@ -126,22 +126,22 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
       <div
         style={{
           background: 'var(--surface-1, #F9FAFB)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-md)',
           padding: 14,
           marginBottom: 8,
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>Вы отдаёте</Text>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Вы отдаёте</Text>
           {inBalance && (
             <Space size={4}>
-              <Text type="secondary" style={{ fontSize: 11 }}>
+              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                 Доступно: {formatCompact(inBalance.available)}
               </Text>
               <Button
                 type="link"
                 size="small"
-                style={{ padding: '0 4px', fontSize: 11, height: 18, fontWeight: 600 }}
+                style={{ padding: '0 4px', fontSize: 'var(--text-xs)', height: 18, fontWeight: 600 }}
                 onClick={() => setAmountIn(inBalance.available)}
               >
                 MAX
@@ -150,11 +150,11 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Tag color="green" style={{ borderRadius: 999, padding: '4px 12px', margin: 0, fontWeight: 600 }}>
+          <Tag color="green" style={{ borderRadius: 'var(--radius-pill)', padding: '4px 12px', margin: 0, fontWeight: 600 }}>
             {tokenInSym}
           </Tag>
           <InputNumber
-            style={{ flex: 1, fontSize: 18, fontWeight: 600 }}
+            style={{ flex: 1, fontSize: 'var(--text-md)', fontWeight: 600 }}
             variant="borderless"
             placeholder="0.0"
             value={amountIn}
@@ -182,20 +182,20 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
       <div
         style={{
           background: 'var(--surface-1, #F9FAFB)',
-          borderRadius: 12,
+          borderRadius: 'var(--radius-md)',
           padding: 14,
           marginTop: 8,
           marginBottom: 12,
         }}
       >
-        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>
+        <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 6 }}>
           Вы получаете
         </Text>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Tag color="blue" style={{ borderRadius: 999, padding: '4px 12px', margin: 0, fontWeight: 600 }}>
+          <Tag color="blue" style={{ borderRadius: 'var(--radius-pill)', padding: '4px 12px', margin: 0, fontWeight: 600 }}>
             {tokenOutSym}
           </Tag>
-          <div style={{ flex: 1, fontSize: 18, fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
+          <div style={{ flex: 1, fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
             {quoteLoading ? <Spin size="small" /> : quote?.amountOut ? quote.amountOut.toLocaleString('ru-RU') : '0.0'}
           </div>
         </div>
@@ -203,7 +203,7 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
 
       {/* Quote summary */}
       {quote && !quoteLoading && (
-        <div style={{ padding: '8px 12px', background: 'var(--surface-1, #F9FAFB)', borderRadius: 10, marginBottom: 12 }}>
+        <div style={{ padding: '8px 12px', background: 'var(--surface-1, #F9FAFB)', borderRadius: 'var(--radius-sm)', marginBottom: 12 }}>
           <Row label="Курс" value={`1 ${tokenInSym} ≈ ${(quote.amountOut / quote.amountIn).toFixed(6)} ${tokenOutSym}`} />
           <Row
             label="Влияние на цену"
@@ -221,7 +221,7 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
           message={`Недостаточно ${tokenInSym} — доступно ${formatCompact(inBalance?.available ?? 0)}`}
           type="warning"
           showIcon
-          style={{ marginBottom: 12, borderRadius: 10 }}
+          style={{ marginBottom: 12, borderRadius: 'var(--radius-sm)' }}
         />
       )}
 
@@ -257,7 +257,7 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
   return (
     <Card
       className="sber-card"
-      style={{ borderRadius: 16, border: '1px solid var(--border-light)' }}
+      style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
       title={
         <Space size={8}>
           <SwapOutlined style={{ color: 'var(--sber-green)' }} />
@@ -265,7 +265,7 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
         </Space>
       }
       extra={
-        <Tag color="default" style={{ borderRadius: 999, fontSize: 11 }}>
+        <Tag color="default" style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>
           допуск {SLIPPAGE}%
         </Tag>
       }
@@ -282,12 +282,12 @@ function Row({ label, value, colour, last }: { label: string; value: string; col
         display: 'flex',
         justifyContent: 'space-between',
         padding: '4px 0',
-        fontSize: 12,
+        fontSize: 'var(--text-xs)',
         borderBottom: last ? 'none' : '1px solid var(--border-light)',
       }}
     >
-      <Text type="secondary" style={{ fontSize: 12 }}>{label}</Text>
-      <Text strong style={{ fontSize: 12, color: colour, fontVariantNumeric: 'tabular-nums' }}>{value}</Text>
+      <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{label}</Text>
+      <Text strong style={{ fontSize: 'var(--text-xs)', color: colour, fontVariantNumeric: 'tabular-nums' }}>{value}</Text>
     </div>
   )
 }
