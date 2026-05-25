@@ -15,6 +15,7 @@ import com.sber.dlmm.pool.dto.AddLiquidityRequest;
 import com.sber.dlmm.pool.dto.AddLiquidityResponse;
 import com.sber.dlmm.pool.dto.BinAllocation;
 import com.sber.dlmm.pool.dto.PositionResponse;
+import com.sber.dlmm.pool.dto.PreviewAddLiquidityResponse;
 import com.sber.dlmm.pool.dto.RemoveLiquidityRequest;
 import com.sber.dlmm.pool.dto.RemoveLiquidityResponse;
 import com.sber.dlmm.pool.entity.LiquidityPool;
@@ -189,49 +190,12 @@ public class LiquidityService {
             // us; encapsulated so a future careless edit can't undo it.
             BigDecimal binPrice = BinMath.binPriceAtBin(basePrice, binStep, binId, activeBinId);
 
-            long amountX = 0;
-            long amountY = 0;
-
-            if (binId < activeBinId) {
-                // Below active price: bin holds Y only (canonical DLMM).
-                // amountY = binLiquidity (Y units), amountX = 0.
-                amountX = 0;
-                amountY = binLiquidity;
-            } else if (binId > activeBinId) {
-                // Above active price: bin holds X only.
-                // amountX = binLiquidity / price (convert Y-denominated
-                // liquidity into X units at this bin's price).
-                amountX = binPrice.compareTo(BigDecimal.ZERO) > 0
-                        ? BigDecimal.valueOf(binLiquidity)
-                                .divide(binPrice, 0, RoundingMode.FLOOR).longValue()
-                        : 0;
-                amountY = 0;
-            } else {
-                // Active bin: both legs based on composition factor c.
-                // Sprint 9-DS-r3 — c can exceed 1.0 in this codebase
-                // because `binLiquidity` is stored as mixed-unit sum
-                // (amountX + amountY) rather than canonical LB-DLMM "L"
-                // units, so after multiple adds reserveY/liquidity drifts
-                // past 1.0. Without the clamp `1 - c` goes negative and
-                // amountX comes out negative — which then *increases* the
-                // pool's X reserve when subtracted later. Clamp c to
-                // [0,1] so the active bin contribution stays sensible.
-                // Proper fix is to switch to canonical L-units throughout,
-                // which is a much larger refactor.
-                BigDecimal cRaw = getOrDefaultCompositionFactor(pool.getId(), binId);
-                BigDecimal c = cRaw.max(BigDecimal.ZERO).min(BigDecimal.ONE);
-                amountY = BigDecimal.valueOf(binLiquidity).multiply(c, MC)
-                        .setScale(0, RoundingMode.FLOOR).longValue();
-                BigDecimal oneMinusC = BigDecimal.ONE.subtract(c, MC);
-                amountX = binPrice.compareTo(BigDecimal.ZERO) > 0
-                        ? BigDecimal.valueOf(binLiquidity).multiply(oneMinusC, MC)
-                                .divide(binPrice, 0, RoundingMode.FLOOR).longValue()
-                        : 0;
-            }
-
-            // Cap amounts by what user provided
-            amountX = Math.min(amountX, req.amountX() - totalDepositedX);
-            amountY = Math.min(amountY, req.amountY() - totalDepositedY);
+            // Sprint 11 G-22 — shared with previewAddLiquidity. See
+            // computeBinAmounts() Javadoc for the canonical-DLMM side
+            // assignment + Sprint 9-DS-r3 composition-factor clamp.
+            long[] amounts = computeBinAmounts(pool, binId, binLiquidity, binPrice);
+            long amountX = Math.min(amounts[0], req.amountX() - totalDepositedX);
+            long amountY = Math.min(amounts[1], req.amountY() - totalDepositedY);
 
             if (amountX <= 0 && amountY <= 0) {
                 continue;
@@ -340,6 +304,181 @@ public class LiquidityService {
         // 9. Return response
         return new AddLiquidityResponse(positionId, pool.getId(), binRangeMin, binRangeMax,
                 req.strategy(), totalDepositedX, totalDepositedY, totalShares, allocations);
+    }
+
+    /**
+     * Sprint 11 G-22 — read-only "what-if" pricing for an add-liquidity
+     * call. Computes the same bin distribution as
+     * {@link #addLiquidity(AddLiquidityRequest, UUID)} but writes
+     * nothing — no DB mutation, no balance deduction, no idempotency
+     * check, no Kafka event.
+     *
+     * <p>UI fetches this on every form-field change (debounced) so the
+     * user sees TVL share, in-range chip, fee-per-day projection, and
+     * warnings before committing. Solves Dmitry's "how much does my
+     * add shift the price?" question (medium-business request,
+     * Sprint 11 backlog).
+     */
+    @Transactional(readOnly = true)
+    public PreviewAddLiquidityResponse previewAddLiquidity(AddLiquidityRequest req) {
+        // Same pool + bin-range validation as the write path. Cheaper to
+        // throw early than dump invalid data into the preview response.
+        LiquidityPool pool = poolRepository.findById(req.poolId())
+                .orElseThrow(() -> new PoolNotFoundException("Pool not found: " + req.poolId()));
+        if (pool.getStatus() != PoolStatus.ACTIVE) {
+            throw new PoolNotActiveException("Pool is not active: " + pool.getStatus());
+        }
+
+        int binRangeMin = req.binRangeMin();
+        int binRangeMax = req.binRangeMax();
+        if (binRangeMin > binRangeMax) {
+            throw new InvalidBinRangeException("binRangeMin must be <= binRangeMax");
+        }
+        int numBins = binRangeMax - binRangeMin + 1;
+        if (numBins <= 0 || numBins > 1000) {
+            throw new InvalidBinRangeException("Bin range must be between 1 and 1000 bins");
+        }
+
+        int activeBinId = pool.getActiveBinId();
+        BigDecimal basePrice = pool.getBasePrice();
+        int binStep = pool.getBinStep();
+
+        // Reuse the exact distribution formula the write path uses so
+        // the preview's per-bin allocation matches what addLiquidity
+        // will actually deposit. Diverging here would mislead the user.
+        long totalLiquidity = req.amountX() + req.amountY();
+        double[] weights = calculateDistributionWeights(req.strategy(), binRangeMin, binRangeMax, activeBinId);
+
+        List<BinAllocation> allocations = new ArrayList<>();
+        long totalDepositedX = 0;
+        long totalDepositedY = 0;
+
+        for (int binId = binRangeMin; binId <= binRangeMax; binId++) {
+            int idx = binId - binRangeMin;
+            long binLiquidity = (long) (totalLiquidity * weights[idx]);
+            if (binLiquidity <= 0) continue;
+
+            BigDecimal binPrice = BinMath.binPriceAtBin(basePrice, binStep, binId, activeBinId);
+            long[] amounts = computeBinAmounts(pool, binId, binLiquidity, binPrice);
+            long amountX = Math.min(amounts[0], req.amountX() - totalDepositedX);
+            long amountY = Math.min(amounts[1], req.amountY() - totalDepositedY);
+
+            if (amountX <= 0 && amountY <= 0) continue;
+
+            allocations.add(new BinAllocation(binId, amountX, amountY, binLiquidity));
+            totalDepositedX += amountX;
+            totalDepositedY += amountY;
+        }
+
+        boolean inRange = binRangeMin <= activeBinId && activeBinId <= binRangeMax;
+
+        long tvlBeforeX = pool.getTotalTvlX();
+        long tvlBeforeY = pool.getTotalTvlY();
+        long tvlAfterX = tvlBeforeX + totalDepositedX;
+        long tvlAfterY = tvlBeforeY + totalDepositedY;
+
+        // Same mixed-unit sum the rest of the engine uses
+        // (Sprint 9-DS-r3 — canonical L-units is a future refactor).
+        long totalAfter = tvlAfterX + tvlAfterY;
+        double tvlSharePct = totalAfter > 0
+                ? ((double) (totalDepositedX + totalDepositedY) / totalAfter) * 100.0
+                : 0.0;
+
+        // Heuristic: in-range adds don't shift the active price (you're
+        // adding alongside existing liquidity at the current bin). Out-
+        // of-range adds shift implied price toward the new liquidity by
+        // a fraction proportional to how much you're adding vs existing
+        // TVL — capped at 10000 bps (100%) for sanity.
+        int priceImpactBps = 0;
+        if (!inRange && totalAfter > 0) {
+            // The midpoint of the user's range tells us which side of the
+            // book is getting bid up. We don't model order-book depth
+            // here — this is a rough "if you dumped X into a side bin,
+            // the implied marginal price would move by ~yourShare × 10000".
+            long depositTotal = totalDepositedX + totalDepositedY;
+            long impactRaw = (depositTotal * 10_000L) / Math.max(totalAfter, 1L);
+            priceImpactBps = (int) Math.min(impactRaw, 10_000L);
+        }
+
+        // Fee projection: pool's 24h volume × pool's base fee % × your share.
+        // Pool's volume24h is denominated in Y units (rouble side for SRUB pairs);
+        // the projection lands in the same unit. Caps at 0 when there's no
+        // recent activity — don't show fake earnings on an idle pool.
+        long estimatedFeesPerDayY = 0L;
+        if (pool.getVolume24h() > 0 && tvlSharePct > 0 && inRange) {
+            // Out-of-range positions earn no fees until price re-enters, so
+            // the projection is meaningfully zero for them. The UI already
+            // shows the warning; double-counting "earn rate = 0" here keeps
+            // the number honest.
+            double dailyFee = (double) pool.getVolume24h() * pool.getBaseFeeBps() / 10_000.0;
+            estimatedFeesPerDayY = (long) (dailyFee * tvlSharePct / 100.0);
+        }
+
+        // Build warnings. Ordered by severity — UI renders top-down.
+        List<String> warnings = new ArrayList<>();
+        if (!inRange) {
+            warnings.add(
+                    "Ваш диапазон не включает активный бин — позиция простаивает пока цена не вернётся в диапазон.");
+        }
+        if (tvlSharePct > 10.0) {
+            warnings.add(String.format(
+                    "Доля TVL %.1f%% — большая концентрация, возможен высокий impermanent loss при движении цены.",
+                    tvlSharePct));
+        }
+        if (allocations.isEmpty()) {
+            warnings.add("При выбранных суммах и диапазоне ни в один бин не попадает ликвидность.");
+        }
+        long unusedX = req.amountX() - totalDepositedX;
+        long unusedY = req.amountY() - totalDepositedY;
+        if (unusedX > 0 || unusedY > 0) {
+            warnings.add(String.format(
+                    "Часть суммы не будет использована (X=%d, Y=%d) — расширьте диапазон или измените пропорции.",
+                    unusedX, unusedY));
+        }
+
+        return new PreviewAddLiquidityResponse(
+                tvlBeforeX, tvlBeforeY, tvlAfterX, tvlAfterY,
+                tvlSharePct, inRange, priceImpactBps,
+                totalDepositedX, totalDepositedY,
+                allocations, estimatedFeesPerDayY, warnings);
+    }
+
+    /**
+     * Sprint 11 G-22 — extracted side-assignment logic so preview +
+     * write path share the same per-bin amount calculation. The
+     * Sprint 9-DS-r3 bugfix lives here now (canonical DLMM: Y below
+     * active, X above, both at active). Touching this without reading
+     * that incident note will likely reintroduce the bug.
+     *
+     * <p>Returns {@code long[2] = {amountX, amountY}}.
+     */
+    private long[] computeBinAmounts(LiquidityPool pool, int binId, long binLiquidity, BigDecimal binPrice) {
+        long amountX;
+        long amountY;
+        int activeBinId = pool.getActiveBinId();
+        if (binId < activeBinId) {
+            amountX = 0;
+            amountY = binLiquidity;
+        } else if (binId > activeBinId) {
+            amountX = binPrice.compareTo(BigDecimal.ZERO) > 0
+                    ? BigDecimal.valueOf(binLiquidity)
+                            .divide(binPrice, 0, RoundingMode.FLOOR).longValue()
+                    : 0;
+            amountY = 0;
+        } else {
+            // Active bin: composition-factor split, clamped to [0,1]
+            // (see Sprint 9-DS-r3 note in addLiquidity).
+            BigDecimal cRaw = getOrDefaultCompositionFactor(pool.getId(), binId);
+            BigDecimal c = cRaw.max(BigDecimal.ZERO).min(BigDecimal.ONE);
+            amountY = BigDecimal.valueOf(binLiquidity).multiply(c, MC)
+                    .setScale(0, RoundingMode.FLOOR).longValue();
+            BigDecimal oneMinusC = BigDecimal.ONE.subtract(c, MC);
+            amountX = binPrice.compareTo(BigDecimal.ZERO) > 0
+                    ? BigDecimal.valueOf(binLiquidity).multiply(oneMinusC, MC)
+                            .divide(binPrice, 0, RoundingMode.FLOOR).longValue()
+                    : 0;
+        }
+        return new long[]{amountX, amountY};
     }
 
     @Transactional

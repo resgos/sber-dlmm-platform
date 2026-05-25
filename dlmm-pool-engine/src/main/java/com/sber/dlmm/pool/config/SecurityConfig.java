@@ -38,6 +38,11 @@ public class SecurityConfig {
                         .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/pools", "/api/v1/pools/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/pools/swap/quote").permitAll()
+                        // Sprint 11 G-22 — read-only preview, no balance
+                        // mutation. Matches the /swap/quote permitAll
+                        // policy. Gateway throttles unauthenticated POSTs
+                        // by IP for abuse protection.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/pools/preview-add-liquidity").permitAll()
                         // Sprint 9 R-M-33 — Public Data API tiers. No auth;
                         // gateway rate-limits by IP per the public tier config.
                         .requestMatchers(HttpMethod.GET, "/api/v1/public/**").permitAll()
