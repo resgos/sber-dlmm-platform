@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import {
   Card,
   Space,
@@ -47,8 +47,20 @@ export default function TeamPage() {
   const state = useSyncExternalStore(
     teamStore.subscribe,
     teamStore.get,
-    () => ({ orgName: '', members: [], ownerId: '', createdAt: '' }),
+    // SSR fallback — same shape as DEFAULT_STATE in teamStore. orgId
+    // added in G-21 wave-2 so the gateway permission middleware can
+    // route mutation calls; UI continues to use orgName as the
+    // "do I have an org?" sentinel.
+    () => ({ orgName: '', members: [], ownerId: '', createdAt: '', orgId: '' }),
   )
+
+  // G-21 wave-2 — pull authoritative server state on mount. If the
+  // user has an org, we hydrate; if not (404), state stays at default
+  // so the onboarding card renders. Fire-and-forget — failures are
+  // logged inside the store.
+  useEffect(() => {
+    teamStore.loadOrg()
+  }, [])
 
   const me = authStore.getUser()
   const myMember = state.members.find((m) => m.email === me?.email)

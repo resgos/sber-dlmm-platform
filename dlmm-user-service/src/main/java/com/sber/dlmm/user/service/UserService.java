@@ -15,6 +15,7 @@ import com.sber.dlmm.user.dto.UpdateKycRequest;
 import com.sber.dlmm.user.dto.UpdateProfileRequest;
 import com.sber.dlmm.user.dto.UpdateRoleRequest;
 import com.sber.dlmm.user.dto.UserProfileResponse;
+import com.sber.dlmm.user.entity.OrgMember;
 import com.sber.dlmm.user.entity.User;
 import com.sber.dlmm.user.event.KafkaProducerService;
 import com.sber.dlmm.user.event.UserBlockedEvent;
@@ -25,6 +26,7 @@ import com.sber.dlmm.common.security.JwtRevocationService;
 import com.sber.dlmm.user.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -34,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -46,6 +49,16 @@ public class UserService {
     private final JwtTokenProvider jwtTokenProvider;
     private final KafkaProducerService kafkaProducerService;
     private final JwtRevocationService jwtRevocationService;
+    /**
+     * Sprint 11 G-21 — looked up at token-issue time to embed the
+     * caller's {@code orgId} + {@code orgRole} claims. Setter injection
+     * (rather than ctor) so the UserService bean wires even if the
+     * org module hasn't loaded yet — and to keep the existing
+     * {@code @RequiredArgsConstructor} signature stable for the rest
+     * of the codebase / tests.
+     */
+    @Autowired(required = false)
+    private OrgService orgService;
 
     @Transactional
     public AuthResponse register(RegisterRequest req) {
@@ -74,8 +87,7 @@ public class UserService {
                 user.getId(), user.getSberId(), user.getEmail(), user.getCreatedAt()
         ));
 
-        String accessToken = jwtTokenProvider.generateAccessToken(
-                user.getId(), user.getRole(), user.getKycStatus());
+        String accessToken = issueAccessToken(user);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
 
         return new AuthResponse(
@@ -95,8 +107,7 @@ public class UserService {
             throw new UnauthorizedException("Invalid email or password");
         }
 
-        String accessToken = jwtTokenProvider.generateAccessToken(
-                user.getId(), user.getRole(), user.getKycStatus());
+        String accessToken = issueAccessToken(user);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
 
         return new AuthResponse(
@@ -119,8 +130,7 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
 
-        String accessToken = jwtTokenProvider.generateAccessToken(
-                user.getId(), user.getRole(), user.getKycStatus());
+        String accessToken = issueAccessToken(user);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());
 
         return new AuthResponse(
@@ -129,6 +139,26 @@ public class UserService {
                 jwtTokenProvider.getAccessTokenExpirySeconds(),
                 toProfileResponse(user)
         );
+    }
+
+    /**
+     * Sprint 11 G-21 — single chokepoint for embedding org claims into
+     * the access token. Falls through to the no-org overload when
+     * {@link OrgService} is absent (e.g. test contexts that wire only
+     * UserService) or the user has no ACTIVE membership.
+     */
+    private String issueAccessToken(User user) {
+        UUID orgId = null;
+        String orgRole = null;
+        if (orgService != null) {
+            Optional<OrgMember> active = orgService.findActiveMembership(user.getId());
+            if (active.isPresent()) {
+                orgId = active.get().getOrgId();
+                orgRole = active.get().getRole().name();
+            }
+        }
+        return jwtTokenProvider.generateAccessToken(
+                user.getId(), user.getRole(), user.getKycStatus(), orgId, orgRole);
     }
 
     /**
