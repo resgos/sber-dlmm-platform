@@ -297,6 +297,31 @@
   background: var(--surface-1) !important;
 }
 
+/* HOT-1-followup 2026-05-25 — default AntD Buttons (no type="primary")
+   inherited the hard-coded ConfigProvider colorText '#1F2937' from
+   main.tsx, which on dark bg = dark text on dark surface = invisible
+   (seen on PoolsPage "Сравнить" button + likely others). ConfigProvider
+   token can't be CSS-var-reactive without subscribing to themeStore,
+   so we override at CSS layer for the dark variant only. ant-btn-primary
+   keeps its white-on-green via the AntD primaryColor token. */
+[data-theme="dark"] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link) {
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border-color: var(--border-strong);
+}
+[data-theme="dark"] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):hover {
+  color: var(--text-primary);
+  background: var(--surface-2);
+  border-color: var(--brand-primary);
+}
+[data-theme="dark"] .ant-btn-text {
+  color: var(--text-secondary);
+}
+[data-theme="dark"] .ant-btn-text:hover {
+  color: var(--text-primary);
+  background: var(--surface-1) !important;
+}
+
 /* Login glass-card — light-mode used rgba(255,255,255,0.6) alpha which
    becomes invisible on dark. Switch to surface-1 with subtle border. */
 [data-theme="dark"] .sber-glass-card {
