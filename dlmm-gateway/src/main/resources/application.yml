@@ -12,6 +12,14 @@ spring:
           uri: ${USER_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/v1/users/**
+        # Sprint 11 G-21 — organisation + role-based-membership endpoints
+        # live in user-service. Same upstream as user-service, separate
+        # route so the Path predicate matches (gateway routes are
+        # exact-match-by-prefix; orgs/** wouldn't fall into users/**).
+        - id: orgs-service
+          uri: ${USER_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/orgs/**
         - id: token-service
           uri: ${TOKEN_SERVICE_URL:http://localhost:8082}
           predicates:

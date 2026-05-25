@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 11 G-21 — Multi-user organisations + role-based membership
+        (Dmitry medium-business blocker).
+
+        Two tables:
+          * orgs         — the org itself (id, name, ownerId for audit
+                            provenance, createdAt).
+          * org_members  — N:1 to orgs; one row per (member ∈ org).
+                            userId is nullable so we can hold PENDING
+                            invites for emails that haven't signed up
+                            yet. status flips PENDING → ACTIVE when
+                            the invitee accepts.
+
+        Per CLAUDE.md TD-1: preConditions wrap the createTable so this
+        coexists with init-db.sql (where orgs aren't seeded today, but
+        will be once we move schema to Liquibase wholesale). Indices
+        cover the three hot reads:
+          1. /orgs/me        → findByUserIdAndStatus(userId, ACTIVE)
+          2. listMembers     → findByOrgId(orgId)
+          3. invite-dedup    → findByOrgIdAndEmail(orgId, email)
+    -->
+    <changeSet id="005-create-orgs-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="orgs"/></not>
+        </preConditions>
+        <createTable tableName="orgs">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(200)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="owner_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex indexName="idx_orgs_owner_id" tableName="orgs">
+            <column name="owner_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="005-create-org-members-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="org_members"/></not>
+        </preConditions>
+        <createTable tableName="org_members">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="org_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <!-- nullable: PENDING invites before the invitee has signed up -->
+            <column name="user_id" type="UUID"/>
+            <column name="email" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="VARCHAR(120)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="role" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="joined_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex indexName="idx_org_members_org_id" tableName="org_members">
+            <column name="org_id"/>
+        </createIndex>
+        <createIndex indexName="idx_org_members_user_status" tableName="org_members">
+            <column name="user_id"/>
+            <column name="status"/>
+        </createIndex>
+        <!-- Lookup hot path for invite dedup; case-sensitivity matches the
+             trim+lowercase normalisation in OrgService.invite(). -->
+        <createIndex indexName="idx_org_members_org_email" tableName="org_members" unique="true">
+            <column name="org_id"/>
+            <column name="email"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

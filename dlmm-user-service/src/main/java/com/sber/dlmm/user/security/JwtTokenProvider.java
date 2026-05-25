@@ -39,20 +39,37 @@ public class JwtTokenProvider {
     }
 
     public String generateAccessToken(UUID userId, UserRole role, KycStatus kycStatus) {
+        return generateAccessToken(userId, role, kycStatus, null, null);
+    }
+
+    /**
+     * Sprint 11 G-21 — overload that embeds the caller's
+     * organisation membership when present. {@code orgId} /
+     * {@code orgRole} may be null (user has no org), in which case
+     * the claims are omitted; the gateway filter treats absent
+     * claims as "no org" without erroring.
+     */
+    public String generateAccessToken(UUID userId, UserRole role, KycStatus kycStatus,
+                                       UUID orgId, String orgRole) {
         Instant now = Instant.now();
         Instant expiry = now.plus(Duration.ofMinutes(accessTokenExpiryMinutes));
 
         // Sprint 8 AU-3 — jti enables denylist on logout. Without it, revocation
         // would have no key to write against (Redis SET membership keyed by jti).
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .id(UUID.randomUUID().toString())
                 .subject(userId.toString())
                 .claim("role", role.name())
                 .claim("kycStatus", kycStatus.name())
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(expiry))
-                .signWith(secretKey)
-                .compact();
+                .expiration(Date.from(expiry));
+        if (orgId != null) {
+            builder.claim("orgId", orgId.toString());
+        }
+        if (orgRole != null) {
+            builder.claim("orgRole", orgRole);
+        }
+        return builder.signWith(secretKey).compact();
     }
 
     public String generateRefreshToken(UUID userId) {

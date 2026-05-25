@@ -8,5 +8,8 @@
     <include file="001-create-users-table.xml" relativeToChangelogFile="true"/>
     <include file="002-create-user-self-restrictions-table.xml" relativeToChangelogFile="true"/>
     <include file="003-create-admin-audit-log-table.xml" relativeToChangelogFile="true"/>
+    <!-- 004 (two-factor) belongs to G-20 PR #4 which lands separately;
+         intentionally NOT included here so 005 stays additive. -->
+    <include file="005-create-orgs-tables.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

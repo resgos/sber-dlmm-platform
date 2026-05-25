@@ -37,6 +37,12 @@ public class JwtValidationFilter implements GlobalFilter, Ordered {
     private static final String HEADER_KYC_STATUS = "X-Kyc-Status";
     /** Sprint 9 #6.6 — propagated downstream + consumed by TierKeyResolver. */
     public static final String HEADER_API_TIER = "X-Api-Tier";
+    /** Sprint 11 G-21 — organisation membership headers. Both are
+     *  absent (header not added at all) when the JWT carries no
+     *  {@code orgId}/{@code orgRole} claims; downstream services
+     *  treat absence as "user has no org". */
+    public static final String HEADER_ORG_ID = "X-Org-Id";
+    public static final String HEADER_ORG_ROLE = "X-Org-Role";
 
     private static final List<String> SKIP_PATHS = List.of(
             "/api/v1/auth/login",
@@ -89,15 +95,26 @@ public class JwtValidationFilter implements GlobalFilter, Ordered {
             if (tier == null || tier.isBlank()) {
                 tier = "FREE";
             }
+            // Sprint 11 G-21 — optional org claims. Additive, must NOT
+            // alter the user/role/kyc header path above; absence is fine
+            // (most users had no org before this commit, and tokens
+            // issued by the pre-G-21 release still validate).
+            String orgId = claims.get("orgId", String.class);
+            String orgRole = claims.get("orgRole", String.class);
 
-            ServerHttpRequest mutatedRequest = request.mutate()
+            ServerHttpRequest.Builder requestBuilder = request.mutate()
                     .header(HEADER_USER_ID, userId != null ? userId : "")
                     .header(HEADER_USER_ROLE, userRole != null ? userRole : "")
                     .header(HEADER_KYC_STATUS, kycStatus != null ? kycStatus : "")
-                    .header(HEADER_API_TIER, tier)
-                    .build();
+                    .header(HEADER_API_TIER, tier);
+            if (orgId != null && !orgId.isBlank()) {
+                requestBuilder.header(HEADER_ORG_ID, orgId);
+            }
+            if (orgRole != null && !orgRole.isBlank()) {
+                requestBuilder.header(HEADER_ORG_ROLE, orgRole);
+            }
 
-            return chain.filter(exchange.mutate().request(mutatedRequest).build());
+            return chain.filter(exchange.mutate().request(requestBuilder.build()).build());
 
         } catch (ExpiredJwtException e) {
             log.warn("Expired JWT token for path: {}", path);
