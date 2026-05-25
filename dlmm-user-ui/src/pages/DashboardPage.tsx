@@ -52,7 +52,7 @@ export default function DashboardPage() {
     queryFn: balances.getMyBalances,
   })
 
-  const { data: myPositions } = useQuery({
+  const { data: myPositions, isLoading: loadingPositions } = useQuery({
     queryKey: ['myPositions'],
     queryFn: pools.getMyPositions,
   })
@@ -135,7 +135,15 @@ export default function DashboardPage() {
     return sum + (b.available + b.locked) * price
   }, 0)
 
-  const activePositions = (myPositions || []).filter((p: Position) => p.isActive)
+  // HOT-2 fix — wrap in useMemo so reference is stable across renders
+  // (same shape as PositionsPage). Also handles the render race:
+  // myPositions starts undefined → filter returns [] → hero shows "0
+  // позиций в работе". With loadingPositions guard at the call-site
+  // we now render "—" until data lands.
+  const activePositions = useMemo(
+    () => (myPositions || []).filter((p: Position) => p.isActive),
+    [myPositions],
+  )
 
   if (loadingBalances) {
     return <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
@@ -250,8 +258,18 @@ export default function DashboardPage() {
 
           {heroSubMetric(
             'Активные позиции',
-            activePositions.length,
-            <span style={{ color: 'rgba(255,255,255,0.65)' }}>{activePositions.length === 1 ? 'позиция' : 'позиций'} в работе</span>,
+            // HOT-2 fix — show "—" while myPositions query is in
+            // flight; otherwise the hero rendered "0 позиций в работе"
+            // for a render-cycle before data arrived (observed during
+            // UI walkthrough 2026-05-22: Dashboard said 0, /positions
+            // said 11, because balances/positions queries race and
+            // balances resolves first).
+            loadingPositions ? '—' : activePositions.length,
+            <span style={{ color: 'rgba(255,255,255,0.65)' }}>
+              {loadingPositions
+                ? 'загружается'
+                : `${activePositions.length === 1 ? 'позиция' : 'позиций'} в работе`}
+            </span>,
           )}
           {heroSubMetric(
             'Незабр. комиссии',
