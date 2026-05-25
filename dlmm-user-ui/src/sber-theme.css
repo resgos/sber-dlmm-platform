@@ -326,21 +326,27 @@
    token can't be CSS-var-reactive without subscribing to themeStore,
    so we override at CSS layer for the dark variant only. ant-btn-primary
    keeps its white-on-green via the AntD primaryColor token. */
+/* Task #13 — AntD v5 uses CSS-in-JS; the generated class names beat
+   plain CSS selectors on specificity. !important is required to win
+   the cascade for default Buttons (Сравнить on /pools, Алерты /
+   Закрыть всё / Удалить on /positions etc). Primary + link variants
+   excluded — they have their own brand-color tokens. */
 [data-theme="dark"] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link) {
-  color: var(--text-primary);
-  background: var(--surface-1);
-  border-color: var(--border-strong);
+  color: var(--text-primary) !important;
+  background: var(--surface-1) !important;
+  border-color: var(--border-strong) !important;
 }
-[data-theme="dark"] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):hover {
-  color: var(--text-primary);
-  background: var(--surface-2);
-  border-color: var(--brand-primary);
+[data-theme="dark"] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):hover,
+[data-theme="dark"] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):focus {
+  color: var(--text-primary) !important;
+  background: var(--surface-2) !important;
+  border-color: var(--brand-primary) !important;
 }
 [data-theme="dark"] .ant-btn-text {
-  color: var(--text-secondary);
+  color: var(--text-secondary) !important;
 }
 [data-theme="dark"] .ant-btn-text:hover {
-  color: var(--text-primary);
+  color: var(--text-primary) !important;
   background: var(--surface-1) !important;
 }
 
@@ -349,37 +355,84 @@
    colorText for the description text. Same root cause as button-readability
    above: main.tsx hard-codes '#1F2937' which becomes invisible on dark.
    The HealthScoreExplainer banner on PositionsPage triggered this. */
+/* Task #13 — !important required to beat AntD CSS-in-JS specificity. */
 [data-theme="dark"] .ant-alert-message,
 [data-theme="dark"] .ant-alert-description,
 [data-theme="dark"] .ant-alert-description .ant-typography {
-  color: var(--text-primary);
+  color: var(--text-primary) !important;
 }
 [data-theme="dark"] .ant-alert-description .ant-typography-secondary {
-  color: var(--text-secondary);
+  color: var(--text-secondary) !important;
 }
 
-/* HOT-1-followup 2026-05-25 — global .ant-card dark-mode background.
-   HOT-1 PR fixed .sber-card / .sber-bento / .sber-pool-card explicitly
-   but `.sber-swap-card` (and any future custom-class card) still
-   inherits the AntD ConfigProvider default white. Triggered visually
-   on /swap (entire swap form invisible) and /hedge (pair selector
-   cards bright white in dark mode).
-   Fix: apply var(--bg-card) at the base .ant-card layer so every card
-   variant cascades correctly. Modals / Drawers / Popovers use their
-   own .ant-modal-content etc selectors (already covered) so they're
-   not affected. */
+/* Task #13 — global .ant-card dark-mode bg (sber-swap-card etc).
+   Also need !important for the same CSS-in-JS reason. */
 [data-theme="dark"] .ant-card {
-  background: var(--bg-card);
-  color: var(--text-primary);
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
 }
 [data-theme="dark"] .ant-card-head {
-  background: transparent;
-  color: var(--text-primary);
-  border-bottom-color: var(--border-light);
+  background: transparent !important;
+  color: var(--text-primary) !important;
+  border-bottom-color: var(--border-light) !important;
 }
 [data-theme="dark"] .ant-card-body {
-  background: transparent;
-  color: var(--text-primary);
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+/* Task #13 — Typography (Title/Text/Paragraph) — page titles + subtitles
+   sit on the page bg (not in a card). AntD's generated .ant-typography
+   gets colorText from ConfigProvider which we can't make CSS-var-reactive
+   without subscribing to themeStore. Override at element level. */
+[data-theme="dark"] .ant-typography,
+[data-theme="dark"] .ant-typography h1,
+[data-theme="dark"] .ant-typography h2,
+[data-theme="dark"] .ant-typography h3,
+[data-theme="dark"] .ant-typography h4,
+[data-theme="dark"] .ant-typography h5,
+[data-theme="dark"] h1.ant-typography,
+[data-theme="dark"] h2.ant-typography,
+[data-theme="dark"] h3.ant-typography,
+[data-theme="dark"] h4.ant-typography,
+[data-theme="dark"] h5.ant-typography,
+[data-theme="dark"] .ant-typography p {
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .ant-typography-secondary,
+[data-theme="dark"] .ant-typography .ant-typography-secondary {
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .ant-typography-disabled {
+  color: var(--text-muted) !important;
+}
+
+/* Task #13 — Table column headers + cells. The thead/tbody bg fix at
+   line 210 had !important, but the cell text was missing. Add explicit
+   text color for thead labels and tbody cells. */
+[data-theme="dark"] .ant-table-thead > tr > th {
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .ant-table-tbody > tr > td {
+  color: var(--text-primary) !important;
+}
+
+/* Task #13 — Form Input / InputNumber / Select fields: dark bg + light text.
+   Was: white-on-white in dark mode. */
+[data-theme="dark"] .ant-input,
+[data-theme="dark"] .ant-input-affix-wrapper,
+[data-theme="dark"] .ant-input-number,
+[data-theme="dark"] .ant-input-number-input-wrap,
+[data-theme="dark"] .ant-input-number-input,
+[data-theme="dark"] .ant-select:not(.ant-select-disabled) .ant-select-selector,
+[data-theme="dark"] .ant-picker {
+  background-color: var(--surface-1) !important;
+  border-color: var(--border-strong) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .ant-input::placeholder,
+[data-theme="dark"] .ant-input-number-input::placeholder {
+  color: var(--text-muted) !important;
 }
 
 /* Login glass-card — light-mode used rgba(255,255,255,0.6) alpha which

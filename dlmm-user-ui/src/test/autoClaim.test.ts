@@ -9,21 +9,25 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 // invariant, etc.) still hold — the server hydration is best-effort
 // and never blocks the sync API surface.
 
+// G-16 follow-up — explicit `: Type[]` on skipPoolIds and `: any[]` on
+// the empty history seed so TypeScript doesn't lock the mock return into
+// `never[]` (which would then reject `mockResolvedValueOnce` calls in
+// tests with real values like `skipPoolIds: ['pool-srv']`).
 const apiMocks = vi.hoisted(() => ({
   getAutoClaimPolicy: vi.fn(async () => ({
     enabled: false,
     thresholdAmount: 1000,
     dailyCap: 20,
-    skipPoolIds: [],
+    skipPoolIds: [] as string[],
   })),
   putAutoClaimPolicy: vi.fn(async (p: any) => p),
   resetAutoClaimPolicy: vi.fn(async () => ({
     enabled: false,
     thresholdAmount: 1000,
     dailyCap: 20,
-    skipPoolIds: [],
+    skipPoolIds: [] as string[],
   })),
-  getAutoClaimHistory: vi.fn(async () => []),
+  getAutoClaimHistory: vi.fn(async () => [] as any[]),
 }))
 
 vi.mock('@/api/services', () => ({
