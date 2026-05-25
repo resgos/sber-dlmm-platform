@@ -37,6 +37,13 @@ dlmm:
     secret: ${JWT_SECRET:?JWT_SECRET env var is required (≥32 bytes)}
   token-service:
     url: ${TOKEN_SERVICE_URL:http://dlmm-token-service:8082}
+  # Sprint 12 G-16 — server-side auto-claim watcher. Disable with
+  # dlmm.auto-claim.enabled=false (the @ConditionalOnProperty on
+  # AutoClaimScheduler skips bean creation entirely).
+  auto-claim:
+    enabled: ${AUTO_CLAIM_ENABLED:true}
+    poll-interval-ms: ${AUTO_CLAIM_POLL_MS:60000}
+    initial-delay-ms: ${AUTO_CLAIM_INITIAL_DELAY_MS:30000}
 
 logging:
   level:
