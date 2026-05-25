@@ -322,6 +322,20 @@
   background: var(--surface-1) !important;
 }
 
+/* HOT-1-followup 2026-05-25 — AntD Alert (info/warning/success/error)
+   uses its own per-type background but inherits the ConfigProvider
+   colorText for the description text. Same root cause as button-readability
+   above: main.tsx hard-codes '#1F2937' which becomes invisible on dark.
+   The HealthScoreExplainer banner on PositionsPage triggered this. */
+[data-theme="dark"] .ant-alert-message,
+[data-theme="dark"] .ant-alert-description,
+[data-theme="dark"] .ant-alert-description .ant-typography {
+  color: var(--text-primary);
+}
+[data-theme="dark"] .ant-alert-description .ant-typography-secondary {
+  color: var(--text-secondary);
+}
+
 /* Login glass-card — light-mode used rgba(255,255,255,0.6) alpha which
    becomes invisible on dark. Switch to surface-1 with subtle border. */
 [data-theme="dark"] .sber-glass-card {
