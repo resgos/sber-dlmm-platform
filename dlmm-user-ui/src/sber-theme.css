@@ -239,7 +239,22 @@
 }
 
 /* Card — kill the bright inset highlight (looks like an outline on
-   dark) and replace with a subtle 1px line that matches surface-2. */
+   dark) and replace with a subtle 1px line that matches surface-2.
+   Sprint 12 dark-mode contrast fix: the base rules below now set
+   `background: var(--bg-card)` (was `#FFFFFF`), so the surface flips
+   automatically via the [data-theme="dark"] token override. We only
+   need to force the AntD-inlined text colour: ConfigProvider in
+   src/main.tsx hard-codes `colorText: '#1F2937'`, which reads as
+   dark-grey-on-near-black in dark mode (~2.1:1, fails WCAG AA). */
+[data-theme="dark"] .sber-card,
+[data-theme="dark"] .sber-bento,
+[data-theme="dark"] .sber-pool-card,
+[data-theme="dark"] .sber-card .ant-card-body,
+[data-theme="dark"] .sber-bento .ant-card-body,
+[data-theme="dark"] .sber-pool-card .ant-card-body,
+[data-theme="dark"] .sber-card .ant-card-head {
+  color: var(--text-primary);
+}
 [data-theme="dark"] .sber-card {
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.35),
@@ -258,6 +273,13 @@
     0 12px 28px -10px rgba(33, 160, 56, 0.30),
     0 4px 8px rgba(0, 0, 0, 0.30),
     0 0 0 1px rgba(33, 160, 56, 0.35) !important;
+}
+
+/* Inner metrics tray on .sber-pool-card uses a light-gradient backdrop;
+   on dark that flashes brighter than the surrounding card. Replace with
+   a surface-1 fill so the tray reads as "recessed panel inside card". */
+[data-theme="dark"] .sber-pool-card__metrics {
+  background: var(--surface-1) !important;
 }
 
 /* AntD Modal / Drawer / Popover / Dropdown menus — explicit dark bg.
@@ -348,6 +370,24 @@
   --color-warning-amber: #FBBF24;
 }
 
+/* AntD Typography in dark — ConfigProvider in src/main.tsx hardcodes
+   colorText: '#1F2937', which AntD applies inline to .ant-typography.
+   That colour reads as dark-grey-on-near-black in dark mode (~2.1:1
+   contrast, fails WCAG AA). Override so Text / Title pick up the theme
+   token; keep the secondary variant on its own override so it stays
+   muted rather than fully primary. */
+[data-theme="dark"] .ant-typography,
+[data-theme="dark"] h1.ant-typography,
+[data-theme="dark"] h2.ant-typography,
+[data-theme="dark"] h3.ant-typography,
+[data-theme="dark"] h4.ant-typography,
+[data-theme="dark"] h5.ant-typography {
+  color: var(--text-primary);
+}
+[data-theme="dark"] .ant-typography-secondary {
+  color: var(--text-secondary) !important;
+}
+
 body {
   /* Sprint 9 — Plasma's house typeface is SB Sans Text. Loaded from
      the official Sber CDN in index.html, with Onest as the
@@ -426,6 +466,7 @@ body {
 .sber-card {
   border-radius: 12px !important;
   border: 1px solid var(--border-light) !important;
+  background: var(--bg-card) !important;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
 }
 .sber-card .ant-card-head {
@@ -614,7 +655,7 @@ body {
 .sber-bento {
   border-radius: var(--radius-lg) !important;
   border: 1px solid var(--border-light) !important;
-  background: #FFFFFF !important;
+  background: var(--bg-card) !important;
   box-shadow: var(--shadow-xs) !important;
   transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.2s ease;
 }
@@ -646,7 +687,7 @@ body {
 .sber-pool-card {
   border-radius: var(--radius-lg) !important;
   border: 1px solid var(--border-light) !important;
-  background: #FFFFFF !important;
+  background: var(--bg-card) !important;
   box-shadow: var(--shadow-xs) !important;
   transition: transform 0.18s ease, box-shadow 0.22s ease, border-color 0.18s ease;
   overflow: hidden;
