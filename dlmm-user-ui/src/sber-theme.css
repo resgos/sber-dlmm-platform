@@ -1497,9 +1497,17 @@ body {
   font-size: 11px !important;
   text-transform: uppercase !important;
   letter-spacing: 0.8px !important;
-  color: var(--text-muted) !important;
+  /* Task #15 — was var(--text-muted) which resolved to rgba(255,255,255,0.32)
+     in dark mode = unreadable column headers on PositionsPage. Use a token
+     with enough contrast for the uppercased 11px labels in both themes. */
+  color: var(--text-secondary) !important;
   font-weight: 600 !important;
   padding: 14px 16px !important;
+}
+/* Task #15 — dark-mode-specific bump to fully readable so the uppercase
+   header text reads cleanly on the dark surface. */
+[data-theme="dark"] .sber-table .ant-table-thead > tr > th {
+  color: rgba(255, 255, 255, 0.85) !important;
 }
 
 /* — Focus rings: brand green for everything keyboard-reachable — */
