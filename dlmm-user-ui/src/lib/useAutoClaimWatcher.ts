@@ -4,12 +4,21 @@ import { autoClaimStore } from '@/store/autoClaimStore'
 import { fees } from '@/api/services'
 import type { Position } from '@/api/types'
 
-// Sprint 10 (new feature) — auto-claim watcher hook.
+// Sprint 10 (new feature) → Sprint 12 G-16 (backend swap-in).
 //
-// Mounted on PositionsPage. On every (positions) refresh, walks the
-// active positions and fires fees.claimFees() for any whose unclaimed
-// total >= the user's threshold AND not on cooldown. Sequential — one
-// inflight claim at a time, so we don't hammer the server.
+// The browser watcher is now an OPTIONAL fast-path. By default
+// (`policy.useFrontendFallback === false`) it does nothing — the
+// fee-service @Scheduled job in AutoClaimScheduler.tick() is the
+// source of truth and runs even when the user has no tab open.
+//
+// When useFrontendFallback === true the hook reverts to its
+// Sprint 10 behaviour: walk active positions on every refresh, fire
+// claim for the first eligible one, record locally + invoke onClaimed
+// callback. The frontend cooldown / dailyCap apply; they're a
+// belt-and-braces over the server-side equivalents.
+//
+// Migration done; this hook stays in the bundle so power users who
+// want immediate response (vs. the 60s scheduler tick) can opt in.
 
 export interface AutoClaimContext {
   position: Position
@@ -63,6 +72,9 @@ export function useAutoClaimWatcher(
     if (inFlightRef.current) return
     const policy = autoClaimStore.get()
     if (!policy.enabled) return
+    // Sprint 12 G-16 — backend scheduler owns the fire by default.
+    // Skip unless the user has opted into the optional fast-path.
+    if (!policy.useFrontendFallback) return
 
     // Sprint 10 wave 3 — rolling-24h cap honoured at the watcher level
     // too (not just the per-position cooldown). Belt-and-braces in case

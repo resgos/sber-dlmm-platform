@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 12 G-16 — auto-claim backend swap-in.
+        Three tables:
+          - auto_claim_policies  : per-user policy (the row exists only
+                                   once the user opens the settings).
+          - auto_claim_log       : idempotent fire-log (1 row per @Scheduled
+                                   auto-fire). Cooldown / dailyCap derive from this.
+          - shedlock             : the ShedLock single-leader table, shared
+                                   schema; columns are dictated by the lib.
+
+        TD-1 workaround: every createTable wrapped in a preCondition so
+        the changeset MARK_RANs cleanly on DBs where init-db.sql already
+        seeded the tables. (Today only fee_accruals lives in init-db.sql,
+        but the convention is unconditional.)
+    -->
+
+    <changeSet id="002-create-auto-claim-policies-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="auto_claim_policies"/></not>
+        </preConditions>
+        <createTable tableName="auto_claim_policies">
+            <column name="user_id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="threshold_amount" type="NUMERIC(38,0)" defaultValueNumeric="1000">
+                <constraints nullable="false"/>
+            </column>
+            <column name="daily_cap" type="INT" defaultValueNumeric="20">
+                <constraints nullable="false"/>
+            </column>
+            <!-- JSON array of pool UUIDs; nullable because empty is the common case. -->
+            <column name="skip_pool_ids" type="TEXT"/>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="002-create-auto-claim-log-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="auto_claim_log"/></not>
+        </preConditions>
+        <createTable tableName="auto_claim_log">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="position_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="pool_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="error_message" type="TEXT"/>
+            <column name="fired_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="idx_auto_claim_log_user_id" tableName="auto_claim_log">
+            <column name="user_id"/>
+            <column name="fired_at"/>
+        </createIndex>
+
+        <createIndex indexName="idx_auto_claim_log_position_id" tableName="auto_claim_log">
+            <column name="position_id"/>
+            <column name="fired_at"/>
+        </createIndex>
+    </changeSet>
+
+    <!--
+        ShedLock's recommended schema for the JDBC-template provider. The
+        column types are dictated by the lib — see
+        net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider.Configuration
+    -->
+    <changeSet id="002-create-shedlock-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="shedlock"/></not>
+        </preConditions>
+        <createTable tableName="shedlock">
+            <column name="name" type="VARCHAR(64)">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="lock_until" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="locked_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="locked_by" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+</databaseChangeLog>
