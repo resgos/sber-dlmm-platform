@@ -187,7 +187,9 @@ export default function DashboardPage() {
         style={{
           fontSize: 'var(--text-lg)',
           fontWeight: 600,
-          color: 'var(--bg-card)',
+          // HOT-1-followup — text on brand-green hero must stay white
+          // in dark mode (was var(--bg-card) which flipped to #131820).
+          color: 'var(--text-on-brand)',
           lineHeight: 1.1,
           fontVariantNumeric: 'tabular-nums',
         }}
@@ -235,7 +237,9 @@ export default function DashboardPage() {
                 // — this inline только для случаев когда class не применён.
                 fontSize: 'var(--text-xl)',
                 fontWeight: 700,
-                color: 'var(--bg-card)',
+                // HOT-1-followup — hero value on green BG must stay
+                // white in dark mode (was var(--bg-card)).
+                color: 'var(--text-on-brand)',
                 lineHeight: 'var(--leading-tight)',
                 letterSpacing: '-0.015em',
                 fontVariantNumeric: 'tabular-nums',
@@ -246,11 +250,14 @@ export default function DashboardPage() {
             </div>
             <Space size={10}>
               <Button size="middle" onClick={() => navigate('/swap')}
-                style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)', color: 'var(--bg-card)' }}>
+                style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)', color: 'var(--text-on-brand)' }}>
                 Обменять
               </Button>
               <Button size="middle" onClick={() => navigate('/pools')}
-                style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-card)', color: 'var(--sber-green-dark)', fontWeight: 600 }}>
+                // HOT-1-followup — white button on green hero must
+                // stay white in dark mode (was var(--bg-card) which
+                // flipped to #131820 = invisible chip on green).
+                style={{ background: 'var(--text-on-brand)', borderColor: 'var(--text-on-brand)', color: 'var(--sber-green-dark)', fontWeight: 600 }}>
                 В пулы <ArrowRightOutlined />
               </Button>
             </Space>
@@ -275,7 +282,7 @@ export default function DashboardPage() {
             'Незабр. комиссии',
             formatRub(feeSummary?.totalUnclaimed ?? 0),
             (feeSummary?.totalUnclaimed ?? 0) > 0 ? (
-              <span style={{ color: 'var(--bg-card)', fontWeight: 500 }}>можно забрать сейчас</span>
+              <span style={{ color: 'var(--text-on-brand)', fontWeight: 500 }}>можно забрать сейчас</span>
             ) : (
               <span>пока ничего не начислено</span>
             ),

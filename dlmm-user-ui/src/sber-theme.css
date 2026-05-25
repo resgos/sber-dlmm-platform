@@ -61,6 +61,14 @@
   --bg-card: #FFFFFF;
   --bg-sidebar: #FFFFFF;
 
+  /* HOT-1-followup 2026-05-25 — "text on brand surface" token. Brand
+     green hero/CTAs are always dark green (not theme-reactive), so
+     text on top must always be white. Previously code used
+     `color: var(--bg-card)` for this — broke in dark mode when
+     --bg-card flipped to #131820 (text became near-invisible on
+     green hero). This token stays #FFFFFF in both themes. */
+  --text-on-brand: #FFFFFF;
+
   /* Plasma surface scale — used for nested cards, hover backgrounds,
      ghost-button fills. surfaceSolid01 = #FAFAFA is essentially our
      page bg, so we promote it to "the layer above the card". */
