@@ -16,10 +16,14 @@ import com.sber.dlmm.common.audit.AdminAuditLog;
 import com.sber.dlmm.common.audit.AdminAuditService;
 import com.sber.dlmm.user.entity.UserSelfRestriction;
 import com.sber.dlmm.user.service.SelfRestrictionService;
+import com.sber.dlmm.user.service.TwoFactorService;
 import com.sber.dlmm.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -35,6 +39,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -45,6 +50,7 @@ public class UserController {
     private final UserService userService;
     private final SelfRestrictionService selfRestrictionService;
     private final AdminAuditService adminAuditService;
+    private final TwoFactorService twoFactorService;
 
     @PostMapping("/auth/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
@@ -260,4 +266,82 @@ public class UserController {
     public record SetSelfRestrictionRequest(@Size(max = 500) String reason) {}
     public record SelfRestrictionStatus(boolean active, java.util.List<UserSelfRestriction> history) {}
     public record SelfRestrictionActiveResponse(boolean active) {}
+
+    // ── Sprint 11 G-20 — 2FA TOTP ──────────────────────────────────────────
+
+    /**
+     * Begin 2FA enrolment. Generates a fresh secret + 10 recovery codes
+     * and returns them WITHOUT persisting — the client renders the
+     * QR / secret / recovery-codes UI, the user types a TOTP code from
+     * their authenticator app, and the actual enable() call commits.
+     *
+     * <p>This separation means an abandoned setup (tab close, network
+     * fail) leaves no half-state — the next /begin returns a fresh
+     * secret. The user's authenticator app entry made during the
+     * abandoned attempt is harmless because it was never persisted
+     * server-side.
+     */
+    @PostMapping("/users/me/2fa/begin")
+    @Operation(summary = "Begin 2FA enrolment — returns secret + recovery codes (not persisted yet)")
+    public ResponseEntity<TwoFactorService.SetupChallenge> beginTwoFactor(Authentication auth) {
+        UUID userId = (UUID) auth.getPrincipal();
+        String label = userService.getProfile(userId).email();
+        return ResponseEntity.ok(twoFactorService.beginSetup(userId, label));
+    }
+
+    /**
+     * Commit 2FA enrolment. Validates the user-typed TOTP code against
+     * the secret returned by /begin, then persists the enrolment
+     * (secret + bcrypt-hashed recovery codes). 400 if the code doesn't
+     * validate.
+     */
+    @PostMapping("/users/me/2fa/enable")
+    @Operation(summary = "Enable 2FA — requires valid TOTP code derived from /begin secret")
+    public ResponseEntity<Void> enableTwoFactor(Authentication auth,
+                                                  @Valid @RequestBody EnableTwoFactorRequest req) {
+        UUID userId = (UUID) auth.getPrincipal();
+        twoFactorService.enable(userId, req.secret(), req.recoveryCodes(), req.code());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Second-factor check during login. Accepts a 6-digit TOTP code OR
+     * a recovery code (recovery codes consume on success).
+     */
+    @PostMapping("/users/me/2fa/verify")
+    @Operation(summary = "Verify 2FA code (TOTP or recovery) during login")
+    public ResponseEntity<Void> verifyTwoFactor(Authentication auth,
+                                                  @Valid @RequestBody VerifyTwoFactorRequest req) {
+        UUID userId = (UUID) auth.getPrincipal();
+        twoFactorService.verify(userId, req.code());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Disable 2FA. Idempotent — returns 204 whether or not the user
+     * was enrolled. Wipes the secret + recovery codes; re-enable
+     * goes through /begin from scratch.
+     */
+    @PostMapping("/users/me/2fa/disable")
+    @Operation(summary = "Disable 2FA (idempotent)")
+    public ResponseEntity<Void> disableTwoFactor(Authentication auth) {
+        UUID userId = (UUID) auth.getPrincipal();
+        twoFactorService.disable(userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/users/me/2fa/status")
+    @Operation(summary = "Current 2FA state: enabled + enrolment time + recovery codes remaining")
+    public ResponseEntity<TwoFactorService.StatusView> twoFactorStatus(Authentication auth) {
+        UUID userId = (UUID) auth.getPrincipal();
+        return ResponseEntity.ok(twoFactorService.status(userId));
+    }
+
+    public record EnableTwoFactorRequest(
+            @NotBlank String secret,
+            @NotNull @Size(min = 10, max = 10) List<@NotBlank String> recoveryCodes,
+            @NotBlank @Pattern(regexp = "\\d{6}", message = "TOTP code must be exactly 6 digits") String code
+    ) {}
+
+    public record VerifyTwoFactorRequest(@NotBlank String code) {}
 }

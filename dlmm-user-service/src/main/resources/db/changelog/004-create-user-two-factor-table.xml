@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 11 G-20 — per-user 2FA TOTP state.
+
+        Backend backing for the Dmitry-driven 2FA blocker. The old flow
+        had the secret in browser localStorage and "accept any 6-digit code"
+        as verification — security theatre. This table stores the real
+        RFC 6238 secret + bcrypt-hashed recovery codes server-side.
+
+        Schema notes:
+          * user_id doubles as PK — each user has at most one 2FA row.
+            No surrogate UUID; would be ceremony.
+          * recovery_codes_hashed is varchar[] (Postgres-native array) —
+            consumed codes are removed in-place, so array.length is the
+            authoritative "remaining count". recovery_codes_used is the
+            monotonic counter (informational).
+          * No FK to users.id — keeping it loose because users.id may
+            originate from a different shard during migrations; the
+            application enforces the relationship.
+    -->
+    <changeSet id="004-create-user-two-factor-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="user_two_factor"/></not>
+        </preConditions>
+        <!-- Raw SQL rather than <createTable> because Liquibase's typed-column
+             parser mangles "VARCHAR(255)[]" into "VARCHAR[](255)" (parses the
+             trailing [] as part of the type token, then re-emits in the wrong
+             order). Postgres array types are second-class in Liquibase's
+             abstraction; the SQL is short enough that the workaround is just
+             "write the DDL directly". -->
+        <sql>
+            CREATE TABLE user_two_factor (
+                user_id UUID NOT NULL,
+                secret VARCHAR(64) NOT NULL,
+                enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                enabled_at TIMESTAMP,
+                recovery_codes_hashed VARCHAR(255)[],
+                recovery_codes_used INT NOT NULL DEFAULT 0,
+                CONSTRAINT user_two_factor_pkey PRIMARY KEY (user_id)
+            )
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>
