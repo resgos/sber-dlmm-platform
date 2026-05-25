@@ -14,7 +14,14 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * entities/repos in com.sber.dlmm.pool and the shared library
  * components are invisible to the JPA / Spring Data autoconfig.
  */
-@SpringBootApplication
+// Task #11 — added `common.exception` to scanBasePackages so
+// `GlobalExceptionHandler` @ControllerAdvice + DlmmException subclasses
+// are picked up. Without this, throwing PoolNotFoundException /
+// InvalidBinRangeException etc fell through to Spring Security's 403
+// instead of the declared httpStatus (verified by G-22 PR #10 on the
+// /preview-add-liquidity endpoint + the pre-existing /swap/quote).
+// Same fix G-21 PR #8 applies to user-service.
+@SpringBootApplication(scanBasePackages = {"com.sber.dlmm.pool", "com.sber.dlmm.common.exception"})
 @EnableScheduling
 @EntityScan(basePackages = {"com.sber.dlmm.pool", "com.sber.dlmm.common.outbox", "com.sber.dlmm.common.audit"})
 @EnableJpaRepositories(basePackages = {"com.sber.dlmm.pool", "com.sber.dlmm.common.outbox", "com.sber.dlmm.common.audit"})
