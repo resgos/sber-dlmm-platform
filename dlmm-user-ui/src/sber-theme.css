@@ -1781,3 +1781,165 @@ a:focus-visible {
   color: #DC2626 !important;
   padding-top: 4px !important;
 }
+
+/* ============================================================
+   Dark-mode comprehensive sweep — 2026-05-25.
+   After all 9 PR merges + 6 css polish commits, several custom
+   sber-* classes still had hex backgrounds (#F9FAFB / #FFFFFF)
+   hardcoded outside the [data-theme="dark"] block. This section
+   overrides ALL of them so dark mode reads cleanly end-to-end.
+   ============================================================ */
+
+/* SwapPage main form — .sber-swap-box was bright #F9FAFB.
+   Flip button (.sber-swap-flip__btn) was bright #FFFFFF.
+   Token picker inside it had .ant-select-selector bright too. */
+[data-theme="dark"] .sber-swap-box {
+  background: var(--surface-1) !important;
+  border-color: var(--border-light) !important;
+}
+[data-theme="dark"] .sber-swap-box:focus-within {
+  background: var(--surface-2) !important;
+  border-color: var(--brand-primary) !important;
+}
+[data-theme="dark"] .sber-swap-flip__btn {
+  background: var(--bg-card) !important;
+  border-color: var(--surface-1) !important;
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .sber-swap-flip__btn:hover {
+  border-color: var(--brand-primary) !important;
+  color: var(--brand-primary) !important;
+}
+[data-theme="dark"] .sber-swap-tokenpick .ant-select-selector {
+  background: var(--bg-card) !important;
+  border-color: var(--border-strong) !important;
+}
+[data-theme="dark"] .sber-swap-amount .ant-input-number-input {
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .sber-swap-amount .ant-input-number-input::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Generic AntD Table (Dashboard "Мои токены", Profile etc) —
+   the .sber-table-specific overrides above don't catch tables
+   without that wrapper class. Hit the base .ant-table layer. */
+[data-theme="dark"] .ant-table {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .ant-table-thead > tr > th.ant-table-cell {
+  background: var(--surface-1) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  border-bottom-color: var(--border-light) !important;
+}
+[data-theme="dark"] .ant-table-tbody > tr > td.ant-table-cell {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-bottom-color: var(--border-light) !important;
+}
+[data-theme="dark"] .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: var(--surface-1) !important;
+}
+
+/* AntD Divider — was inheriting default light border. */
+[data-theme="dark"] .ant-divider {
+  border-color: var(--border-light) !important;
+  background: transparent !important;
+}
+
+/* Disabled primary buttons render with near-white bg. Soften. */
+[data-theme="dark"] .ant-btn-primary:disabled,
+[data-theme="dark"] .ant-btn-primary[disabled] {
+  background: var(--surface-2) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border-strong) !important;
+}
+
+/* AntD Menu / sidebar items — readable labels. */
+[data-theme="dark"] .ant-menu-item,
+[data-theme="dark"] .ant-menu-item a {
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .ant-menu-item:hover,
+[data-theme="dark"] .ant-menu-item:hover a {
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .ant-menu-item-selected,
+[data-theme="dark"] .ant-menu-item-selected a {
+  color: var(--brand-primary) !important;
+}
+[data-theme="dark"] .ant-menu-item-group-title {
+  color: var(--text-muted) !important;
+}
+
+/* AntD Tabs — tab labels should match text-primary. */
+[data-theme="dark"] .ant-tabs-tab {
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .ant-tabs-tab:hover {
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .ant-tabs-tab-active,
+[data-theme="dark"] .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--brand-primary) !important;
+}
+[data-theme="dark"] .ant-tabs-ink-bar {
+  background: var(--brand-primary) !important;
+}
+
+/* AntD Tag — was inheriting light bg with dark text. The colored
+   variants (success/warning/etc) keep their semantic bg; only
+   default uncolored ones flip. */
+[data-theme="dark"] .ant-tag:not([class*="ant-tag-"]) {
+  background: var(--surface-1) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-light) !important;
+}
+
+/* AntD Statistic — KpiTile + bento metrics value colour. */
+[data-theme="dark"] .ant-statistic-content,
+[data-theme="dark"] .ant-statistic-content-value,
+[data-theme="dark"] .ant-statistic-content-prefix,
+[data-theme="dark"] .ant-statistic-content-suffix {
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .ant-statistic-title {
+  color: var(--text-secondary) !important;
+}
+
+/* AntD Segmented — health-filter chips on PositionsPage. */
+[data-theme="dark"] .ant-segmented {
+  background: var(--surface-1) !important;
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .ant-segmented .ant-segmented-item {
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .ant-segmented .ant-segmented-item-selected,
+[data-theme="dark"] .ant-segmented .ant-segmented-item:hover {
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] .ant-segmented .ant-segmented-item-selected {
+  background: var(--bg-card) !important;
+}
+
+/* AntD Pagination */
+[data-theme="dark"] .ant-pagination .ant-pagination-item,
+[data-theme="dark"] .ant-pagination .ant-pagination-prev,
+[data-theme="dark"] .ant-pagination .ant-pagination-next {
+  background: var(--surface-1) !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .ant-pagination .ant-pagination-item-active {
+  background: var(--brand-primary) !important;
+  border-color: var(--brand-primary) !important;
+  color: var(--text-on-brand) !important;
+}
+
+/* Sidebar — .sber-sidebar with bg #FFFFFF override. */
+[data-theme="dark"] .sber-sidebar {
+  background: var(--bg-sidebar) !important;
+  border-right-color: var(--border-sidebar) !important;
+}
