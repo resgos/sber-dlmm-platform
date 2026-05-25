@@ -146,6 +146,121 @@ Before signing off a production cluster:
 
 ---
 
+## Runtime fail-fast + Vault swap-in
+
+Shipped in the same TD-2 commit as this runbook revision. Two pieces
+of code now back the operational discipline above:
+
+### 1. `SecretValidationOnStartup` — runtime fail-fast
+
+Lives in `dlmm-common` and is auto-registered for every service via
+`DlmmSecretValidationAutoConfiguration` (no per-service wiring). On
+`ApplicationRunner.run()` it checks `dlmm.jwt.secret` and either:
+
+- **In `prod` profile** (`SPRING_PROFILES_ACTIVE=prod[,...]`): throws
+  `IllegalStateException` and the service refuses to start when the
+  secret is one of:
+  - the verbatim dev-default shipped in `docker/.env.example`,
+  - any value beginning with `change-me` (historical
+    `application.yml` placeholder before fail-fast was wired),
+  - an empty string,
+  - shorter than 32 bytes (HS256 minimum per RFC 7518).
+- **In any non-prod profile**: logs a loud WARN and continues so
+  local dev with `docker/.env.example` defaults keeps working.
+
+The exact error message operators will see in their logs:
+
+```
+REFUSING TO START: dlmm.jwt.secret is set to a documented dev-default
+value while running with the 'prod' profile active (active=[prod]).
+This means JWT tokens could be forged by anyone who has read
+docker/.env.example. Provide a real production secret (>= 32 bytes,
+generated via 'openssl rand -base64 48') via JWT_SECRET env var,
+Vault, or AWS Secrets Manager. See docs/OPS-SECRETS-RUNBOOK.md for
+the full procedure.
+```
+
+The blocklist of known dev defaults lives in `DevDefaultSecrets` so
+adding a new historical placeholder is a one-line change.
+
+Healthy startup logs the validation result:
+
+```
+INFO  c.s.d.c.s.SecretValidationOnStartup - SecretValidationOnStartup:
+      dlmm.jwt.secret validated (48 bytes, profile=prod)
+```
+
+Services that don't carry a `dlmm.jwt.secret` property at all (e.g.
+`dlmm-price-oracle`, which has no jjwt on its classpath) skip the
+check silently in non-prod and continue.
+
+### 2. Enabling Spring Cloud Vault (Option A above)
+
+The auto-config skeleton ships in `dlmm-common/src/main/resources/application-vault.yml`
+and is OFF by default. To turn it on in a deployment:
+
+1. **Add the Maven deps to that service's pom.** The `dlmm-common`
+   declarations are `<optional>true</optional>` so they don't leak
+   into services that don't want Vault. In the service that needs
+   Vault:
+
+   ```xml
+   <dependency>
+       <groupId>org.springframework.cloud</groupId>
+       <artifactId>spring-cloud-starter-vault-config</artifactId>
+   </dependency>
+   ```
+
+2. **Set the deployment env vars** (in compose, k8s, or a `.env`
+   file consumed by the operator):
+
+   ```bash
+   SPRING_PROFILES_ACTIVE=prod,vault
+   DLMM_VAULT_ENABLED=true
+   SPRING_CLOUD_VAULT_URI=https://vault.sber.internal:8200
+   SPRING_CLOUD_VAULT_AUTH=APPROLE
+   SPRING_CLOUD_VAULT_APP_ROLE_ROLE_ID=<from-SRE>
+   SPRING_CLOUD_VAULT_APP_ROLE_SECRET_ID=<wrapped-by-init-container>
+   ```
+
+   The `vault` profile activates `application-vault.yml`; the
+   `DLMM_VAULT_ENABLED=true` is the second master switch (the YAML
+   reads `spring.cloud.vault.enabled: ${dlmm.vault.enabled:false}`,
+   so the default everywhere is OFF).
+
+3. **Place real secrets in Vault** under
+   `secret/dlmm/<service-name>/*` (e.g.
+   `secret/dlmm/dlmm-user-service/dlmm.jwt.secret`) for
+   service-scoped keys, or under `secret/dlmm/` for the
+   cross-service `dlmm.jwt.secret` value.
+
+   Sber-internal Vault is the recommended target. For non-Sber-cloud
+   deployments, AWS Secrets Manager via
+   `spring-cloud-starter-aws-secrets-manager-config` is the
+   equivalent (drop-in replacement at the `application-vault.yml`
+   level — no application code changes).
+
+4. **Verify**: `docker logs <service> | grep -i vault` should show
+   `Vault config initialized` and the `SecretValidationOnStartup`
+   line should report the secret length matching what's in Vault
+   (not what's in `docker/.env`, which should now be absent).
+
+5. **Remove `docker/.env`** from prod hosts once Vault is the
+   source of truth — Vault values land in Spring property
+   resolution AHEAD of env vars, but leaving stale `.env` files
+   around invites future drift.
+
+### What's still TODO
+
+- Two-key rotation (`jwt_secret` + `jwt_secret_next`) for zero-downtime
+  key rotation. See "Rotating JWT_SECRET" above — currently a hard
+  cutover.
+- DB connection pool refresh on `DB_PASSWORD` change without
+  rolling restart (`/actuator/restart-datasource` Hikari refresh
+  endpoint). Sprint 10.
+
+---
+
 ## Related work
 
 - `docker/.env.example` — template that lives in the repo.
@@ -153,5 +268,11 @@ Before signing off a production cluster:
   `dlmm.jwt.secret: ${JWT_SECRET:?required}` (fails fast on
   missing).
 - `dlmm-common/.../JwtTokenProvider.java` — token signing.
+- `dlmm-common/.../SecretValidationOnStartup.java` — runtime
+  fail-fast for dev-default / weak / missing secrets.
+- `dlmm-common/.../DevDefaultSecrets.java` — single source of
+  truth for the blocklist.
+- `dlmm-common/src/main/resources/application-vault.yml` — Vault
+  opt-in skeleton (OFF by default).
 - `OPS-DB-BACKUP-RUNBOOK.md` (TD-6) — companion runbook for DB
   snapshot strategy.

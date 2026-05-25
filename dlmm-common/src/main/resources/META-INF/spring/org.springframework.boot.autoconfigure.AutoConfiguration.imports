@@ -1,5 +1,6 @@
 com.sber.dlmm.common.security.DlmmJwtAutoConfiguration
 com.sber.dlmm.common.security.DlmmJwtRedisRevocationAutoConfiguration
+com.sber.dlmm.common.security.DlmmSecretValidationAutoConfiguration
 com.sber.dlmm.common.security.DlmmWebClientAutoConfiguration
 com.sber.dlmm.common.outbox.DlmmOutboxAutoConfiguration
 com.sber.dlmm.common.calendar.DlmmCalendarAutoConfiguration

@@ -1,0 +1,81 @@
+# ============================================================================
+# Spring Cloud Vault opt-in skeleton (TD-2)
+# ----------------------------------------------------------------------------
+# Activated only when this profile is on: SPRING_PROFILES_ACTIVE=prod,vault
+# AND the env flag DLMM_VAULT_ENABLED=true. Both must be set together —
+# the profile alone does nothing because spring.cloud.vault.enabled below
+# reads from dlmm.vault.enabled, which defaults to false.
+#
+# Wiring procedure (full detail: docs/OPS-SECRETS-RUNBOOK.md):
+#   1. Provision Vault path: secret/dlmm/<env>/{jwt,db}
+#   2. Issue AppRole for each service (role_id baked into container env,
+#      secret_id wrapped per-pod-start by the SRE team's init-container)
+#   3. Set env vars per service:
+#        SPRING_PROFILES_ACTIVE=prod,vault
+#        DLMM_VAULT_ENABLED=true
+#        SPRING_CLOUD_VAULT_URI=https://vault.sber.internal:8200
+#        SPRING_CLOUD_VAULT_TOKEN=<wrapped-secret-id>     # or AppRole creds
+#        SPRING_CLOUD_VAULT_APP_ROLE_ROLE_ID=<role-id>
+#        SPRING_CLOUD_VAULT_APP_ROLE_SECRET_ID=<wrapped-secret-id>
+#   4. Remove DB_PASSWORD / JWT_SECRET from docker-compose env (Vault
+#      injects them as properties — application.yml's ${JWT_SECRET:?...}
+#      still works because Spring property resolution picks the Vault
+#      value first).
+#
+# This file ships as part of dlmm-common so every service inherits the
+# skeleton the moment its operator flips the flag. Until then it costs
+# nothing — no Vault client is instantiated.
+# ============================================================================
+
+spring:
+  cloud:
+    vault:
+      # Master OFF switch. Leave at dlmm.vault.enabled=false (the default)
+      # for any environment without a Vault cluster — Spring Cloud Vault
+      # skips its entire auto-config when this is false, so price-oracle
+      # et al. don't try to introspect the missing client.
+      enabled: ${dlmm.vault.enabled:false}
+
+      # TODO operator: Vault server URI. Sber-internal Vault sits at
+      # https://vault.sber.internal:8200 (see OPS-SECRETS-RUNBOOK.md).
+      uri: ${SPRING_CLOUD_VAULT_URI:http://localhost:8200}
+
+      # AppRole auth (recommended for service-to-Vault). Token auth is
+      # supported as a fallback (set spring.cloud.vault.token) for local
+      # smoke-testing with `vault server -dev`.
+      authentication: ${SPRING_CLOUD_VAULT_AUTH:APPROLE}
+      app-role:
+        role-id: ${SPRING_CLOUD_VAULT_APP_ROLE_ROLE_ID:}
+        secret-id: ${SPRING_CLOUD_VAULT_APP_ROLE_SECRET_ID:}
+        # TODO operator: bake role-id into the container env, have the
+        # init-container wrap the secret-id at pod-start time so it
+        # rotates on every restart (default Vault TTL: 60s).
+
+      # kv-v2 backend. Spring Cloud Vault rewrites paths from
+      #   secret/dlmm/jwt   → secret/data/dlmm/jwt
+      # automatically when kv.backend matches the v2 mount point.
+      kv:
+        enabled: true
+        backend: secret
+        # Application name maps to the path slot under secret/dlmm/<app>.
+        # Each service overrides via spring.application.name (already set
+        # in every service's application.yml) — so dlmm-user-service
+        # reads secret/dlmm/dlmm-user-service/* by default, with the
+        # shared "application" slot below as fallback for cross-service
+        # values like jwt.secret.
+        application-name: ${spring.application.name}
+        default-context: dlmm
+        profile-separator: "/"
+
+      # Connection tuning. fail-fast=true means a Vault outage at
+      # startup blocks the service from coming up — preferred for prod
+      # (we'd rather refuse to start than serve traffic with stale
+      # cached secrets and no rotation visibility).
+      fail-fast: true
+      config:
+        lifecycle:
+          # Auto-renew leases. Vault's default lease TTL on kv-v2 is
+          # 768h; we ask for refresh at 2/3 of remaining lease.
+          enabled: true
+          min-renewal: 10s
+          expiry-threshold: 1m
