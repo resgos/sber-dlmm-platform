@@ -50,7 +50,7 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
             {y.slice(0, 4)}
           </div>
           <div className="sber-pool-pair__label">
-            <Text strong style={{ fontSize: 15 }}>{x}/{y}</Text>
+            <Text strong style={{ fontSize: 'var(--text-md)' }}>{x}/{y}</Text>
             <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
               {t('pools.card.binStep', { value: bpsToPercent(pool.binStep) })} · {t('pools.card.fee', { value: bpsToPercent(pool.baseFeeBps) })}
             </Text>
