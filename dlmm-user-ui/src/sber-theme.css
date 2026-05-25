@@ -336,6 +336,30 @@
   color: var(--text-secondary);
 }
 
+/* HOT-1-followup 2026-05-25 — global .ant-card dark-mode background.
+   HOT-1 PR fixed .sber-card / .sber-bento / .sber-pool-card explicitly
+   but `.sber-swap-card` (and any future custom-class card) still
+   inherits the AntD ConfigProvider default white. Triggered visually
+   on /swap (entire swap form invisible) and /hedge (pair selector
+   cards bright white in dark mode).
+   Fix: apply var(--bg-card) at the base .ant-card layer so every card
+   variant cascades correctly. Modals / Drawers / Popovers use their
+   own .ant-modal-content etc selectors (already covered) so they're
+   not affected. */
+[data-theme="dark"] .ant-card {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+[data-theme="dark"] .ant-card-head {
+  background: transparent;
+  color: var(--text-primary);
+  border-bottom-color: var(--border-light);
+}
+[data-theme="dark"] .ant-card-body {
+  background: transparent;
+  color: var(--text-primary);
+}
+
 /* Login glass-card — light-mode used rgba(255,255,255,0.6) alpha which
    becomes invisible on dark. Switch to surface-1 with subtle border. */
 [data-theme="dark"] .sber-glass-card {
