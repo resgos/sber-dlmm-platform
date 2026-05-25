@@ -416,6 +416,15 @@
 [data-theme="dark"] .ant-table-tbody > tr > td {
   color: var(--text-primary) !important;
 }
+/* Task #15 — sortable header titles render in their own .ant-table-column-title
+   wrapper inside .ant-table-column-sorters, which the .ant-table-thead override
+   doesn't reach. Show the actual column name (PositionsPage table). */
+[data-theme="dark"] .ant-table-column-title,
+[data-theme="dark"] .ant-table-column-sorters,
+[data-theme="dark"] .ant-table-cell-fix-left,
+[data-theme="dark"] .ant-table-cell-fix-right {
+  color: var(--text-secondary) !important;
+}
 
 /* Task #13 — Form Input / InputNumber / Select fields: dark bg + light text.
    Was: white-on-white in dark mode. */
