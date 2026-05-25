@@ -1,0 +1,1 @@
+{{- include "dlmm.deployment" (dict "root" . "name" "token-service" "svc" .Values.services.tokenService "kind" "spring") }}

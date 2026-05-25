@@ -1,0 +1,1 @@
+{{- include "dlmm.service" (dict "root" . "name" "pool-engine" "svc" .Values.services.poolEngine) }}

@@ -1,0 +1,1 @@
+{{- include "dlmm.deployment" (dict "root" . "name" "price-oracle" "svc" .Values.services.priceOracle "kind" "spring") }}

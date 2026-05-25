@@ -1,0 +1,318 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sber DLMM platform — Helm values
+# ─────────────────────────────────────────────────────────────────────────────
+# Single source of truth for cluster deployable config. Mirrors the layout
+# in `docker/docker-compose.yml`. Service-named subkeys (gateway, userService,
+# etc.) match the docker-compose service names so the migration from
+# compose -> Helm is 1:1 traceable.
+#
+# Production deployments override this file (or sections of it) via
+# `--values production-values.yaml` or `--set` flags from the deploy
+# pipeline. Never bake real secrets here — see the `secrets` section.
+# ─────────────────────────────────────────────────────────────────────────────
+
+global:
+  # Registry hosting the platform images. Set per-environment.
+  # Examples: ghcr.io/sber, registry.sber-online.ru/dlmm, docker.io/sber
+  imageRegistry: ghcr.io/sber
+  # Image tag applied to ALL platform services unless overridden per-service
+  # under `services.<name>.image.tag`. CI/CD pipeline sets this to the
+  # release tag (e.g. `v0.11.0`) or a git short SHA.
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
+  # K8s secrets containing registry credentials (typically dockerconfigjson).
+  # imagePullSecrets:
+  #   - name: ghcr-pull-secret
+  imagePullSecrets: []
+
+# ─── Infrastructure (off by default — typically managed externally) ──────────
+# Flip `enabled: true` only for dev/ephemeral clusters. Production should
+# point at managed services (RDS, MSK, ElastiCache, or on-prem equivalents)
+# via environment variables in the `services.*.env` blocks.
+
+postgres:
+  enabled: false
+  image: postgres:16
+  port: 5432
+  env:
+    POSTGRES_DB: dlmm
+    POSTGRES_USER: dlmm
+    # Password comes from secrets.postgresPassword (never inline)
+
+redis:
+  enabled: false
+  image: redis:7
+  port: 6379
+  env: {}
+
+zookeeper:
+  enabled: false
+  image: confluentinc/cp-zookeeper:7.6.0
+  port: 2181
+  env:
+    ZOOKEEPER_CLIENT_PORT: "2181"
+    ZOOKEEPER_TICK_TIME: "2000"
+
+kafka:
+  enabled: false
+  image: confluentinc/cp-kafka:7.6.0
+  port: 9092
+  env:
+    KAFKA_BROKER_ID: "1"
+    KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+
+clickhouse:
+  enabled: false
+  image: clickhouse/clickhouse-server:24.1
+  port: 8123
+  env: {}
+
+prometheus:
+  enabled: false
+  image: prom/prometheus:v2.54.1
+  port: 9090
+  env: {}
+
+grafana:
+  enabled: false
+  image: grafana/grafana:11.2.2
+  port: 3000
+  env:
+    GF_AUTH_ANONYMOUS_ENABLED: "true"
+    GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    GF_USERS_ALLOW_SIGN_UP: "false"
+
+# ─── Shared config (consumed by every service via ConfigMap) ─────────────────
+# These resolve to the cluster-internal DNS names (Kubernetes ClusterIP
+# Services) for the corresponding infra components. Override per-env via
+# values file when pointing at externally managed infra.
+
+config:
+  springProfilesActive: prod
+  # Postgres connection. JDBC URL pattern; password comes from Secret.
+  dbHost: postgres
+  dbPort: "5432"
+  dbName: dlmm
+  dbUser: dlmm
+  # Redis
+  redisHost: redis
+  redisPort: "6379"
+  # Kafka
+  kafkaServers: kafka:9092
+  kafkaBootstrapServers: kafka:9092
+  # Logging
+  logLevel: INFO
+
+# ─── Secrets (placeholders — production swap-in via external-secrets / Vault)
+# DO NOT commit real values here. The Secret manifest in templates/secrets.yaml
+# uses these as placeholders; production deploys should:
+#   - Provision a K8s Secret named `<release>-dlmm-platform-secrets` via
+#     external-secrets-operator pointing at Vault / AWS Secrets Manager /
+#     SBSC, OR
+#   - Pass --set secrets.jwtSecret=... at deploy time (CI keeps the value
+#     in GitHub encrypted secrets, never echoed to logs).
+secrets:
+  # TODO: production — replace with external-secrets / Vault reference.
+  # Placeholder values below are NOT used for real auth; the deploy
+  # pipeline must override via `--set secrets.jwtSecret=$JWT_SECRET`.
+  jwtSecret: "CHANGE_ME_via_deploy_pipeline"
+  dbPassword: "CHANGE_ME_via_deploy_pipeline"
+  grafanaAdminPassword: "CHANGE_ME_via_deploy_pipeline"
+  # If pointing at a managed Kafka cluster with SASL, fill these:
+  # kafkaUsername: ""
+  # kafkaPassword: ""
+
+# ─── Platform services ───────────────────────────────────────────────────────
+# Keyed by service name (matches docker-compose `dlmm-<name>` stripped of
+# the `dlmm-` prefix, camelCased). Each block:
+#   image:    { repository, tag (optional, falls back to global.imageTag) }
+#   replicas: pod count
+#   resources: { requests: {…}, limits: {…} }
+#   env:      service-specific env vars (merged on top of ConfigMap)
+#   port:     container port (matches Spring server.port / nginx 80)
+#   path:     health-check path (Spring services: /actuator/health,
+#             UIs: /)
+
+services:
+  gateway:
+    # Spring Cloud Gateway — single public entry point. JWT validation,
+    # rate limiting, route table. All client traffic enters here.
+    image:
+      repository: dlmm-gateway
+      # tag: ""  # falls back to global.imageTag
+    replicas: 2
+    port: 8080
+    path: /actuator/health
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+    env:
+      USER_SERVICE_URL: http://dlmm-user-service:8081
+      TOKEN_SERVICE_URL: http://dlmm-token-service:8082
+      POOL_ENGINE_URL: http://dlmm-pool-engine:8083
+      FEE_SERVICE_URL: http://dlmm-fee-service:8084
+      TRANSACTION_SERVICE_URL: http://dlmm-transaction-service:8085
+      PRICE_ORACLE_URL: http://dlmm-price-oracle:8086
+      NOTIFICATION_SERVICE_URL: http://dlmm-notification-service:8087
+      ADMIN_BFF_URL: http://dlmm-admin-bff:8088
+
+  userService:
+    image:
+      repository: dlmm-user-service
+    replicas: 2
+    port: 8081
+    path: /actuator/health
+    resources:
+      requests: { cpu: 100m, memory: 384Mi }
+      limits: { cpu: 1000m, memory: 512Mi }
+    env: {}
+
+  tokenService:
+    image:
+      repository: dlmm-token-service
+    replicas: 2
+    port: 8082
+    path: /actuator/health
+    resources:
+      requests: { cpu: 100m, memory: 384Mi }
+      limits: { cpu: 1000m, memory: 512Mi }
+    env: {}
+
+  poolEngine:
+    # Slightly higher mem cap — pool-engine carries Caffeine token cache,
+    # outbox dispatcher (@Scheduled), and the hottest swap pipeline.
+    image:
+      repository: dlmm-pool-engine
+    replicas: 2
+    port: 8083
+    path: /actuator/health
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits: { cpu: 1500m, memory: 640Mi }
+    env:
+      TOKEN_SERVICE_URL: http://dlmm-token-service:8082
+      USER_SERVICE_URL: http://dlmm-user-service:8081
+
+  feeService:
+    image:
+      repository: dlmm-fee-service
+    replicas: 1
+    port: 8084
+    path: /actuator/health
+    resources:
+      requests: { cpu: 100m, memory: 384Mi }
+      limits: { cpu: 1000m, memory: 512Mi }
+    env: {}
+
+  transactionService:
+    image:
+      repository: dlmm-transaction-service
+    replicas: 2
+    port: 8085
+    path: /actuator/health
+    resources:
+      requests: { cpu: 100m, memory: 384Mi }
+      limits: { cpu: 1000m, memory: 512Mi }
+    env:
+      TOKEN_SERVICE_URL: http://dlmm-token-service:8082
+
+  priceOracle:
+    image:
+      repository: dlmm-price-oracle
+    replicas: 1
+    port: 8086
+    path: /actuator/health
+    resources:
+      requests: { cpu: 100m, memory: 384Mi }
+      limits: { cpu: 1000m, memory: 512Mi }
+    env: {}
+
+  notificationService:
+    image:
+      repository: dlmm-notification-service
+    replicas: 1
+    port: 8087
+    path: /actuator/health
+    resources:
+      requests: { cpu: 100m, memory: 384Mi }
+      limits: { cpu: 1000m, memory: 512Mi }
+    env: {}
+
+  adminBff:
+    image:
+      repository: dlmm-admin-bff
+    replicas: 1
+    port: 8088
+    path: /actuator/health
+    resources:
+      requests: { cpu: 100m, memory: 384Mi }
+      limits: { cpu: 1000m, memory: 512Mi }
+    env:
+      USER_SERVICE_URL: http://dlmm-user-service:8081
+      TOKEN_SERVICE_URL: http://dlmm-token-service:8082
+      POOL_ENGINE_URL: http://dlmm-pool-engine:8083
+      FEE_SERVICE_URL: http://dlmm-fee-service:8084
+      TRANSACTION_SERVICE_URL: http://dlmm-transaction-service:8085
+      PRICE_ORACLE_URL: http://dlmm-price-oracle:8086
+
+  adminUi:
+    # React/AntD admin UI, served by nginx on port 80
+    image:
+      repository: dlmm-admin-ui
+    replicas: 1
+    port: 80
+    path: /
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 200m, memory: 128Mi }
+    env: {}
+
+  userUi:
+    # React/AntD user-facing UI, served by nginx on port 80
+    image:
+      repository: dlmm-user-ui
+    replicas: 2
+    port: 80
+    path: /
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 200m, memory: 128Mi }
+    env: {}
+
+# ─── Ingress ─────────────────────────────────────────────────────────────────
+# Single Ingress fans out to gateway, admin UI, and user UI. Adjust host +
+# TLS for the target environment.
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 8m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+  host: dlmm.example.com
+  # Path routing (order matters — most specific first):
+  #   /api/v1/*  -> gateway:8080
+  #   /admin/*   -> admin-ui:80
+  #   /          -> user-ui:80
+  tls:
+    enabled: true
+    secretName: dlmm-tls-cert
+    # TODO: when cert-manager is installed in the cluster, add:
+    # annotations.cert-manager.io/cluster-issuer: letsencrypt-prod
+
+# ─── ServiceAccount ──────────────────────────────────────────────────────────
+# Per-release ServiceAccount, used by all pods. Set `create: false` and
+# `name: <existing-sa>` to use a pre-provisioned account (e.g. one bound
+# to IAM/Workload Identity for managed-cloud secret access).
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

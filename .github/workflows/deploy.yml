@@ -1,0 +1,286 @@
+name: deploy
+
+# Production deploy pipeline scaffold for the DLMM platform.
+#
+# TD-4 + TD-5: scaffold only. Cluster wiring (KUBE_CONFIG, registry
+# credentials, environment URLs) lands when the target K8s cluster is
+# provisioned — until then the `deploy` job runs helm template only so
+# the workflow ships green without touching infra. Search "TODO" for
+# the activation points.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+      image_tag:
+        description: Image tag override (default = git SHA)
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*.*.*"
+
+# Prevent overlapping deploys to the same environment — second invocation
+# queues and the in-flight one finishes first. Cancelling an in-flight
+# deploy is dangerous (partial rollout) so cancel-in-progress=false.
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'production' }}
+  cancel-in-progress: false
+
+# Resolve target env once for downstream jobs:
+#   - tag push (v*) -> production (regardless of branch)
+#   - workflow_dispatch -> the `environment` input
+env:
+  TARGET_ENV: ${{ github.event.inputs.environment || (startsWith(github.ref, 'refs/tags/v') && 'production') || 'staging' }}
+  # Image tag fallback: explicit input > git tag (vX.Y.Z) > short SHA.
+  IMAGE_TAG: ${{ github.event.inputs.image_tag || github.ref_name }}
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+  packages: write   # push to GHCR
+  id-token: write   # OIDC token for cloud auth (Workload Identity etc.)
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Job 1 — chart lint + template render.
+  # Doesn't need a cluster. Catches structural chart bugs before we waste
+  # 12 image builds on a broken deploy.
+  # ───────────────────────────────────────────────────────────────────────────
+  helm-lint:
+    name: helm lint + template
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
+
+      - name: helm lint
+        run: helm lint helm/dlmm-platform/
+
+      - name: helm template (default values)
+        run: helm template dlmm-platform helm/dlmm-platform/ --debug > /tmp/rendered.yaml
+
+      # YAML structural validation — kubectl --dry-run=client needs an API
+      # server for the openapi schema, which we don't have here. Python
+      # yaml.safe_load_all catches any unparseable manifest before deploy.
+      - name: Validate rendered manifests parse as YAML
+        run: |
+          python3 -c "
+          import yaml, sys
+          docs = list(yaml.safe_load_all(open('/tmp/rendered.yaml')))
+          kinds = {}
+          for d in docs:
+              if d is None: continue
+              kinds[d.get('kind', '?')] = kinds.get(d.get('kind', '?'), 0) + 1
+          print('Rendered:', kinds)
+          assert kinds.get('Deployment', 0) >= 11, f'expected >=11 Deployments, got {kinds.get(\"Deployment\", 0)}'
+          assert kinds.get('Service', 0) >= 11, f'expected >=11 Services, got {kinds.get(\"Service\", 0)}'
+          "
+
+      - name: Upload rendered manifests artefact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-rendered-${{ github.run_id }}
+          path: /tmp/rendered.yaml
+          retention-days: 7
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Job 2 — build + push 11 images (9 Java services + 2 UIs).
+  # Reuses the existing root Dockerfile (MODULE arg) for Java services
+  # and the two frontend Dockerfiles for the UIs.
+  # ───────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: build ${{ matrix.service.name }}
+    runs-on: ubuntu-latest
+    needs: helm-lint
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          # Java services — single Dockerfile parameterised by MODULE
+          - { name: dlmm-gateway,              dockerfile: Dockerfile,                module: dlmm-gateway }
+          - { name: dlmm-user-service,         dockerfile: Dockerfile,                module: dlmm-user-service }
+          - { name: dlmm-token-service,        dockerfile: Dockerfile,                module: dlmm-token-service }
+          - { name: dlmm-pool-engine,          dockerfile: Dockerfile,                module: dlmm-pool-engine }
+          - { name: dlmm-fee-service,          dockerfile: Dockerfile,                module: dlmm-fee-service }
+          - { name: dlmm-transaction-service,  dockerfile: Dockerfile,                module: dlmm-transaction-service }
+          - { name: dlmm-price-oracle,         dockerfile: Dockerfile,                module: dlmm-price-oracle }
+          - { name: dlmm-notification-service, dockerfile: Dockerfile,                module: dlmm-notification-service }
+          - { name: dlmm-admin-bff,            dockerfile: Dockerfile,                module: dlmm-admin-bff }
+          # Frontends — own Dockerfiles, no MODULE arg
+          - { name: dlmm-admin-ui,             dockerfile: Dockerfile.frontend,       module: "" }
+          - { name: dlmm-user-ui,              dockerfile: Dockerfile.user-frontend,  module: "" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service.name }}"
+          TAG="${{ env.IMAGE_TAG }}"
+          # Fall back to short SHA if IMAGE_TAG is the branch name (workflow_dispatch with empty input).
+          if [ "$TAG" = "main" ] || [ -z "$TAG" ]; then
+            TAG=$(echo "${{ github.sha }}" | cut -c1-7)
+          fi
+          # Strip refs/tags/ prefix if present.
+          TAG=${TAG#refs/tags/}
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "tag=$TAG"      >> $GITHUB_OUTPUT
+          echo "full=$IMAGE:$TAG" >> $GITHUB_OUTPUT
+          echo "Built ref: $IMAGE:$TAG"
+
+      - name: Build and push ${{ matrix.service.name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./${{ matrix.service.dockerfile }}
+          build-args: |
+            ${{ matrix.service.module != '' && format('MODULE={0}', matrix.service.module) || '' }}
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.full }}
+            ${{ steps.tags.outputs.image }}:latest
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,scope=${{ matrix.service.name }},mode=max
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Job 3 — helm upgrade --install against target cluster.
+  # Currently runs in template-only mode pending cluster wiring (see TODOs).
+  # ───────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: deploy to ${{ needs.build-and-push.result == 'success' && (github.event.inputs.environment || 'production') || 'staging' }}
+    runs-on: ubuntu-latest
+    needs: [helm-lint, build-and-push]
+    timeout-minutes: 20
+    # GitHub Environments provide required-reviewers gating, secrets scoping,
+    # and a deployment history. Configure `staging` and `production` envs in
+    # repo Settings -> Environments and attach the relevant kubeconfig +
+    # secrets to each before flipping the deploy step from dry-run to live.
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      # url: https://${{ github.event.inputs.environment || 'production' }}.dlmm.sber-online.ru
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
+
+      # TODO (cluster admin step):
+      #   Add KUBE_CONFIG as a base64-encoded environment secret in
+      #   GitHub Settings -> Environments -> {staging|production}.
+      #   Example local prep:
+      #     base64 -w0 ~/.kube/config | gh secret set KUBE_CONFIG -e staging
+      - name: Configure kubectl
+        if: env.KUBE_CONFIG != ''
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+        run: |
+          mkdir -p $HOME/.kube
+          echo "$KUBE_CONFIG" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          kubectl config current-context
+
+      - name: Resolve image tag
+        id: tags
+        run: |
+          TAG="${{ env.IMAGE_TAG }}"
+          if [ "$TAG" = "main" ] || [ -z "$TAG" ]; then
+            TAG=$(echo "${{ github.sha }}" | cut -c1-7)
+          fi
+          TAG=${TAG#refs/tags/}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: helm upgrade --install (dry-run when cluster not configured)
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          set -e
+          IMAGE_REG="${{ env.REGISTRY }}/${{ github.repository_owner }}"
+          IMAGE_TAG="${{ steps.tags.outputs.tag }}"
+
+          # Build a values override file from env-scoped secrets. Never
+          # echo the secret values; only confirm presence.
+          cat > /tmp/values-${{ env.TARGET_ENV }}.yaml <<EOF
+          global:
+            imageRegistry: $IMAGE_REG
+            imageTag: $IMAGE_TAG
+          # Secrets supplied here come from GitHub encrypted env secrets.
+          # The `secrets:` block in values.yaml is the placeholder schema.
+          secrets:
+            jwtSecret: "${JWT_SECRET:-CHANGE_ME}"
+            dbPassword: "${DB_PASSWORD:-CHANGE_ME}"
+          EOF
+
+          if [ -z "$KUBE_CONFIG" ]; then
+            echo "::warning::KUBE_CONFIG secret not set for ${{ env.TARGET_ENV }} — running helm template only (dry-run mode)."
+            helm template dlmm-platform helm/dlmm-platform/ \
+              --values /tmp/values-${{ env.TARGET_ENV }}.yaml \
+              --namespace dlmm \
+              > /tmp/dry-run-${{ env.TARGET_ENV }}.yaml
+            echo "Rendered manifests (first 60 lines):"
+            head -60 /tmp/dry-run-${{ env.TARGET_ENV }}.yaml
+            echo "Full manifest uploaded as artefact."
+            exit 0
+          fi
+
+          echo "Deploying dlmm-platform $IMAGE_TAG to ${{ env.TARGET_ENV }}…"
+          helm upgrade --install dlmm-platform helm/dlmm-platform/ \
+            --namespace dlmm \
+            --create-namespace \
+            --values /tmp/values-${{ env.TARGET_ENV }}.yaml \
+            --wait \
+            --timeout 10m \
+            --atomic
+
+          # Post-deploy smoke check — gateway must answer health within 2 min.
+          kubectl -n dlmm rollout status deployment/dlmm-gateway --timeout=2m
+
+      - name: Upload dry-run artefact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-run-${{ env.TARGET_ENV }}-${{ github.run_id }}
+          path: /tmp/dry-run-${{ env.TARGET_ENV }}.yaml
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Deploy summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: \`${{ env.TARGET_ENV }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image tag**: \`${{ steps.tags.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster wired**: \`${{ secrets.KUBE_CONFIG != '' && 'yes' || 'no — dry-run only' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "When the target cluster is provisioned, set the \`KUBE_CONFIG\`," >> $GITHUB_STEP_SUMMARY
+          echo "\`JWT_SECRET\`, and \`DB_PASSWORD\` secrets in the matching" >> $GITHUB_STEP_SUMMARY
+          echo "GitHub environment to flip from dry-run to live deploy." >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,1 @@
+{{- include "dlmm.service" (dict "root" . "name" "transaction-service" "svc" .Values.services.transactionService) }}

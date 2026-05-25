@@ -1,0 +1,1 @@
+{{- include "dlmm.deployment" (dict "root" . "name" "admin-ui" "svc" .Values.services.adminUi "kind" "nginx") }}

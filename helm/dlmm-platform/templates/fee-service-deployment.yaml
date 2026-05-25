@@ -1,0 +1,1 @@
+{{- include "dlmm.deployment" (dict "root" . "name" "fee-service" "svc" .Values.services.feeService "kind" "spring") }}

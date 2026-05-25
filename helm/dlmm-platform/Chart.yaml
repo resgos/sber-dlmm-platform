@@ -1,0 +1,27 @@
+apiVersion: v2
+name: dlmm-platform
+description: |
+  Sber DLMM (Dynamic Liquidity Market Maker) platform — 10 backend services
+  (gateway, 8 domain services, admin BFF) plus admin and user React UIs.
+  Mirrors `docker/docker-compose.yml` for a production Kubernetes target.
+type: application
+# Chart version: SemVer of THIS chart's packaging. Bump on chart edits.
+version: 0.1.0
+# App version: SemVer of the DLMM platform itself (matches release tag).
+# Override per-deploy via `--set global.imageTag=X.Y.Z` if needed.
+appVersion: "0.11.0"
+home: https://github.com/sber/dlmm-platform
+sources:
+  - https://github.com/sber/dlmm-platform
+keywords:
+  - dlmm
+  - liquidity
+  - sber
+  - market-maker
+maintainers:
+  - name: Sber DLMM platform team
+    email: dlmm-platform@sber-online.ru
+# Infra dependencies (Postgres / Redis / Kafka / Prometheus / Grafana) are
+# expected to be deployed and managed externally for production. Stubs are
+# provided in values.yaml under `postgres`, `redis`, `kafka`, etc. with
+# `enabled: false` defaults — flip to true for ephemeral dev clusters.

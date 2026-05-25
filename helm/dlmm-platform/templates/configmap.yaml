@@ -1,0 +1,30 @@
+{{/*
+Shared environment vars consumed by every Spring service via envFrom.
+Mirrors the non-secret keys that docker-compose sets on each container:
+DB_HOST/PORT/USER, REDIS_HOST/PORT, KAFKA_SERVERS, etc.
+
+Per-service overrides (e.g. TOKEN_SERVICE_URL on pool-engine) live in
+the Deployment's `env` block and take precedence over these defaults.
+Secrets (DB_PASSWORD, JWT_SECRET) come from the Secret manifest.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dlmm.fullname" . }}-config
+  labels:
+    {{- include "dlmm.labels" . | nindent 4 }}
+data:
+  SPRING_PROFILES_ACTIVE: {{ .Values.config.springProfilesActive | quote }}
+  DB_HOST: {{ .Values.config.dbHost | quote }}
+  DB_PORT: {{ .Values.config.dbPort | quote }}
+  DB_NAME: {{ .Values.config.dbName | quote }}
+  DB_USER: {{ .Values.config.dbUser | quote }}
+  REDIS_HOST: {{ .Values.config.redisHost | quote }}
+  REDIS_PORT: {{ .Values.config.redisPort | quote }}
+  KAFKA_SERVERS: {{ .Values.config.kafkaServers | quote }}
+  KAFKA_BOOTSTRAP_SERVERS: {{ .Values.config.kafkaBootstrapServers | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  # JVM options shared across all Spring services. Mirrors what
+  # docker-compose sets via JAVA_TOOL_OPTIONS — UTF-8 default encoding
+  # (TD-3) plus container-aware heap sizing.
+  JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8 -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0"
