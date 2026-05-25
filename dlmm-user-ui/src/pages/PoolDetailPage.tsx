@@ -91,6 +91,43 @@ export default function PoolDetailPage() {
   // can't double-fire.
   const [rebalancing, setRebalancing] = useState(false)
 
+  /**
+   * Task #20 fix — useMemo MUST be called before any conditional early
+   * return so React's hook-order invariant holds. Was below at line 143
+   * after the `if (isLoading|error)` guards → React error #310 on
+   * every PoolDetailPage navigation. Internal guards (`!pool?.bins ||
+   * poolPositions.length === 0`) handle the loading / not-found cases
+   * without crashing.
+   *
+   * Sprint 9-DS-r4 (P2-6) — per-bin user share map for the
+   * BinLiquidityChart tooltip ("Ваша доля: X%"). Approximation that
+   * distributes each position's totalLiquidityShares across its bin
+   * range via strategy weights, divides by bin total liquidity.
+   */
+  const userBinSharePctByBinId = useMemo(() => {
+    const map = new Map<number, number>()
+    if (!pool?.bins || poolPositions.length === 0) return map
+    const binTotalById = new Map<number, number>()
+    for (const b of pool.bins) binTotalById.set(b.binId, b.liquidity)
+    for (const pos of poolPositions) {
+      const weights = calculateStrategyWeights(
+        pos.strategy,
+        pos.binRangeMin,
+        pos.binRangeMax,
+        pool.activeBinId,
+      )
+      for (let i = 0; i < weights.length; i++) {
+        const binId = pos.binRangeMin + i
+        const total = binTotalById.get(binId)
+        if (!total || total <= 0) continue
+        const userLiq = pos.totalLiquidityShares * weights[i]
+        const pct = (userLiq / total) * 100
+        map.set(binId, (map.get(binId) ?? 0) + pct)
+      }
+    }
+    return map
+  }, [pool, poolPositions])
+
   if (isLoading) return <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
   if (error || !pool) return <Alert message="Пул не найден" type="error" showIcon />
 
@@ -126,43 +163,9 @@ export default function PoolDetailPage() {
     binMax: p.binRangeMax,
   }))
 
-  /**
-   * Sprint 9-DS-r4 (P2-6) — per-bin user share map for the
-   * BinLiquidityChart tooltip ("Ваша доля: X%"). Computed by
-   * distributing each position's totalLiquidityShares across its
-   * bin range according to the strategy weights (same formula
-   * the backend uses to allocate the initial deposit), then
-   * dividing by the bin's total liquidity from pool.bins.
-   *
-   * <p>This is an APPROXIMATION — exact per-bin shares live in
-   * `PositionResponse.binAllocations` which we don't currently
-   * fetch on this page. Accurate to within rounding for SPOT,
-   * close for CURVE/BID_ASK. Good enough for the tooltip's
-   * "where do I sit" intent.
-   */
-  const userBinSharePctByBinId = useMemo(() => {
-    const map = new Map<number, number>()
-    if (!pool?.bins || poolPositions.length === 0) return map
-    const binTotalById = new Map<number, number>()
-    for (const b of pool.bins) binTotalById.set(b.binId, b.liquidity)
-    for (const pos of poolPositions) {
-      const weights = calculateStrategyWeights(
-        pos.strategy,
-        pos.binRangeMin,
-        pos.binRangeMax,
-        pool.activeBinId,
-      )
-      for (let i = 0; i < weights.length; i++) {
-        const binId = pos.binRangeMin + i
-        const total = binTotalById.get(binId)
-        if (!total || total <= 0) continue
-        const userLiq = pos.totalLiquidityShares * weights[i]
-        const pct = (userLiq / total) * 100
-        map.set(binId, (map.get(binId) ?? 0) + pct)
-      }
-    }
-    return map
-  }, [pool, poolPositions])
+  // userBinSharePctByBinId moved above the early-return guards — see
+  // Task #20 fix note. Keeping this comment as a marker so future
+  // readers don't put it back here.
 
   /**
    * Sprint 9-DS-r4 (P1-8) — one-click rebalance for OOR positions.
