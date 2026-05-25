@@ -4,7 +4,7 @@ import {
   Card, Typography, Space, Button, InputNumber, Tabs, Table, Tag, Slider, Modal,
   Alert, Spin, Divider, message,
 } from 'antd'
-import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined, DollarOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined, DollarOutlined, WarningOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, balances, fees } from '@/api/services'
 import type { Position, LiquidityStrategy } from '@/api/types'
@@ -12,6 +12,8 @@ import StrategySelector from '@/components/StrategySelector'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
 import RiskDisclosure from '@/components/RiskDisclosure'
 import ModalHeader from '@/components/ModalHeader'
+import AddLiquidityPreview from '@/components/AddLiquidityPreview'
+import { useDebouncedValue } from '@/lib/useDebouncedValue'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
 
 const { Title, Text } = Typography
@@ -52,6 +54,32 @@ export default function LiquidityPage() {
 
   const balanceX = myBalances?.find((b) => b.symbol === pool?.tokenXSymbol)
   const balanceY = myBalances?.find((b) => b.symbol === pool?.tokenYSymbol)
+
+  // Same debounced inputs + query key as the AddLiquidityPreview
+  // component so both share one React Query cache entry (single
+  // network round-trip per pause). Submit button reads from this to
+  // surface a warning chip when the preview returns warnings.
+  const dAmountX = useDebouncedValue(amountX, 300)
+  const dAmountY = useDebouncedValue(amountY, 300)
+  const dBinMin = useDebouncedValue(binMin, 300)
+  const dBinMax = useDebouncedValue(binMax, 300)
+  const previewEnabled = !!(
+    id && dAmountX && dAmountY && dBinMin != null && dBinMax != null && dBinMin <= dBinMax
+  )
+  const { data: previewData } = useQuery({
+    queryKey: ['preview-add-liquidity', id, dAmountX, dAmountY, dBinMin, dBinMax, strategy],
+    queryFn: () => pools.previewAddLiquidity({
+      poolId: id!,
+      amountX: dAmountX!,
+      amountY: dAmountY!,
+      binRangeMin: dBinMin!,
+      binRangeMax: dBinMax!,
+      strategy,
+    }),
+    enabled: previewEnabled,
+    staleTime: 5000,
+    retry: false,
+  })
 
   const addMutation = useMutation({
     mutationFn: () =>
@@ -195,6 +223,20 @@ export default function LiquidityPage() {
             </Space>
           </div>
 
+          {/* Sprint 11 G-22 — server-computed preview. Shows TVL share,
+              in-range chip, fee/day projection, and warnings before user
+              clicks Submit. Hidden until both amounts + bin range are
+              filled in (matches the backend's @Min(1) constraint). */}
+          <AddLiquidityPreview
+            poolId={id!}
+            amountX={amountX}
+            amountY={amountY}
+            binMin={binMin}
+            binMax={binMax}
+            strategy={strategy}
+            tokenYSymbol={pool.tokenYSymbol}
+          />
+
           <Button
             type="primary"
             block
@@ -207,6 +249,18 @@ export default function LiquidityPage() {
           >
             Добавить ликвидность
           </Button>
+          {/* G-22 — surface warning chip near Submit so user sees the
+              flag even if they scrolled past the preview card. Submit
+              stays enabled — preview is informational, not blocking. */}
+          {previewData && previewData.warnings.length > 0 && (
+            <div style={{ textAlign: 'center', marginTop: -8 }}>
+              <Tag icon={<WarningOutlined />} color="orange">
+                {previewData.warnings.length === 1
+                  ? '1 предупреждение — проверьте превью'
+                  : `${previewData.warnings.length} предупреждений — проверьте превью`}
+              </Tag>
+            </div>
+          )}
         </Space>
       ),
     },

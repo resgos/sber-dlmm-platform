@@ -177,6 +177,41 @@ export interface AddLiquidityRequest {
   idempotencyKey: string
 }
 
+// Sprint 11 G-22 — server-computed preview of an add-liquidity call.
+// Backend: POST /api/v1/pools/preview-add-liquidity returns this shape.
+// Fetched on every form-field change (debounced) so user sees TVL share,
+// in-range chip, fee-per-day projection, and warnings before submitting.
+export interface PreviewBinAllocation {
+  binId: number
+  amountX: number
+  amountY: number
+  liquidityShares: number
+}
+
+export interface PreviewAddLiquidityRequest {
+  poolId: string
+  amountX: number
+  amountY: number
+  binRangeMin: number
+  binRangeMax: number
+  strategy: LiquidityStrategy
+}
+
+export interface PreviewAddLiquidityResponse {
+  tvlBeforeX: number
+  tvlBeforeY: number
+  tvlAfterX: number
+  tvlAfterY: number
+  tvlSharePct: number
+  inRange: boolean
+  priceImpactBps: number
+  depositedX: number
+  depositedY: number
+  binAllocations: PreviewBinAllocation[]
+  estimatedFeesPerDayY: number
+  warnings: string[]
+}
+
 export interface RemoveLiquidityRequest {
   positionId: string
   percentage: number

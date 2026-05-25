@@ -6,6 +6,8 @@ import type {
   SwapRequest,
   SwapQuote,
   AddLiquidityRequest,
+  PreviewAddLiquidityRequest,
+  PreviewAddLiquidityResponse,
   RemoveLiquidityRequest,
   Position,
 } from './types'
@@ -72,6 +74,18 @@ export const pools = {
 
   addLiquidity: async (req: AddLiquidityRequest): Promise<void> => {
     await apiClient.post('/pools/add-liquidity', req)
+  },
+
+  /**
+   * Sprint 11 G-22 — server-computed preview of an add-liquidity call.
+   * Read-only: no balance deduction, no idempotency. Fetched on every
+   * form-field change so the user sees TVL share, in-range chip, fee-
+   * per-day projection, and warnings before submitting. Backend treats
+   * idempotencyKey as optional — we just don't send it.
+   */
+  previewAddLiquidity: async (req: PreviewAddLiquidityRequest): Promise<PreviewAddLiquidityResponse> => {
+    const { data } = await apiClient.post<PreviewAddLiquidityResponse>('/pools/preview-add-liquidity', req)
+    return data
   },
 
   removeLiquidity: async (req: RemoveLiquidityRequest): Promise<void> => {

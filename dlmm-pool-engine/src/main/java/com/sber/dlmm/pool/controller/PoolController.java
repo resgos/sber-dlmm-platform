@@ -10,6 +10,7 @@ import com.sber.dlmm.pool.dto.BinResponse;
 import com.sber.dlmm.pool.dto.PoolDetailResponse;
 import com.sber.dlmm.pool.dto.PoolResponse;
 import com.sber.dlmm.pool.dto.PositionResponse;
+import com.sber.dlmm.pool.dto.PreviewAddLiquidityResponse;
 import com.sber.dlmm.pool.dto.RemoveLiquidityRequest;
 import com.sber.dlmm.pool.dto.RemoveLiquidityResponse;
 import com.sber.dlmm.pool.dto.SwapQuoteRequest;
@@ -170,6 +171,26 @@ public class PoolController {
         JwtUserDetails user = getCurrentUser();
         AddLiquidityResponse response = liquidityService.addLiquidity(request, user.userIdAsUUID());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Sprint 11 G-22 — server-computed preview of an add-liquidity call.
+     *
+     * <p>Read-only "what-if": returns TVL share, in-range chip data,
+     * per-bin allocation, fee-per-day projection, and human-readable
+     * warnings without mutating any state. UI fetches this on every
+     * form-field change (debounced) so the user sees the picture
+     * before clicking Submit.
+     *
+     * <p>No auth requirement (matches {@code /swap/quote}) — the
+     * compute is cheap and read-only, and the gateway already
+     * rate-limits per IP for unauthenticated requests.
+     */
+    @PostMapping("/preview-add-liquidity")
+    @Operation(summary = "Preview an add-liquidity call (TVL share, in-range, warnings) — read-only")
+    public ResponseEntity<PreviewAddLiquidityResponse> previewAddLiquidity(
+            @Valid @RequestBody AddLiquidityRequest request) {
+        return ResponseEntity.ok(liquidityService.previewAddLiquidity(request));
     }
 
     @PostMapping("/remove-liquidity")
