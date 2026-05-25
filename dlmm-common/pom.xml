@@ -142,6 +142,31 @@
             <artifactId>jackson-databind</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <!--
+          TD-2: Spring Cloud Vault opt-in skeleton. Both deps are
+          OPTIONAL so a service only pulls them in when its operator
+          explicitly enables Vault (SPRING_PROFILES_ACTIVE=prod,vault +
+          DLMM_VAULT_ENABLED=true). Until then no Vault client is on the
+          classpath and the auto-config in application-vault.yml never
+          activates. Version comes from spring-cloud-dependencies BOM
+          imported in the parent pom (spring-cloud.version=2023.0.1).
+
+          Once a service decides to use Vault, the operator promotes
+          these to non-optional in that service's own pom (or adds
+          spring-cloud-starter-vault-config explicitly there).
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-vault-config</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-vault-config</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
