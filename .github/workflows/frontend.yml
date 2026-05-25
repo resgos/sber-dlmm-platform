@@ -12,6 +12,8 @@ on:
       - "scripts/check-no-hex-in-tsx.mjs"
       - "scripts/hex-baseline.json"
       - "scripts/check-ui-shared-drift.mjs"
+      - "scripts/check-inline-styles.mjs"
+      - "scripts/inline-style-baseline.json"
       - ".github/workflows/frontend.yml"
   pull_request:
     branches: [main]
@@ -21,6 +23,8 @@ on:
       - "scripts/check-no-hex-in-tsx.mjs"
       - "scripts/hex-baseline.json"
       - "scripts/check-ui-shared-drift.mjs"
+      - "scripts/check-inline-styles.mjs"
+      - "scripts/inline-style-baseline.json"
       - ".github/workflows/frontend.yml"
   workflow_dispatch:
 
@@ -54,6 +58,19 @@ jobs:
       # manifest + rationale.
       - name: Check UI shared-code drift
         run: node scripts/check-ui-shared-drift.mjs
+
+      # Sprint 13 UI-CRITIQUE HOT-3 — inline-style ratchet.
+      # Blocks new `fontSize: <number>` / `borderRadius: <number>` literals
+      # in .tsx files. Snapshot baseline in scripts/inline-style-baseline.json
+      # captures the existing backlog; only NEW violations fail the build.
+      # Use `var(--text-*)` / `var(--radius-*)` from sber-theme.css instead.
+      - name: Check no new inline pixel literals
+        run: node scripts/check-inline-styles.mjs
+
+      # Unit tests for the ratchet scripts themselves — guards against
+      # accidental regressions in the regex or de-dup logic.
+      - name: Test ratchet scripts
+        run: node --test scripts/__tests__/
 
   ui:
     needs: hex-ratchet
