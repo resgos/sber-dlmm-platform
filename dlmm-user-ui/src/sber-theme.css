@@ -410,20 +410,19 @@
 /* Task #13 — Table column headers + cells. The thead/tbody bg fix at
    line 210 had !important, but the cell text was missing. Add explicit
    text color for thead labels and tbody cells. */
-[data-theme="dark"] .ant-table-thead > tr > th {
-  color: var(--text-secondary) !important;
+/* Task #13 + #15 — table headers in dark mode. var(--text-secondary)
+   resolved to a too-faint rgba(255,255,255,0.32) at the .ant-table-cell
+   level because AntD's colorTextDescription token overrides our CSS var.
+   Hardcode to rgba(255,255,255,0.85) — readable but slightly softer than
+   primary so the header still reads as "label not data". */
+[data-theme="dark"] .ant-table-thead > tr > th,
+[data-theme="dark"] .ant-table-thead > tr > th *,
+[data-theme="dark"] .ant-table-column-title,
+[data-theme="dark"] .ant-table-column-sorters {
+  color: rgba(255, 255, 255, 0.85) !important;
 }
 [data-theme="dark"] .ant-table-tbody > tr > td {
   color: var(--text-primary) !important;
-}
-/* Task #15 — sortable header titles render in their own .ant-table-column-title
-   wrapper inside .ant-table-column-sorters, which the .ant-table-thead override
-   doesn't reach. Show the actual column name (PositionsPage table). */
-[data-theme="dark"] .ant-table-column-title,
-[data-theme="dark"] .ant-table-column-sorters,
-[data-theme="dark"] .ant-table-cell-fix-left,
-[data-theme="dark"] .ant-table-cell-fix-right {
-  color: var(--text-secondary) !important;
 }
 
 /* Task #13 — Form Input / InputNumber / Select fields: dark bg + light text.
