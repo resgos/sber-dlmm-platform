@@ -132,33 +132,67 @@ DRILL_SKIP_DESTROY=1 docker/scripts/dr-drill.sh
 
 ---
 
-## Production rollout — what's NOT in scope for Sprint 9
+## Production rollout — WAL-G + S3 (TD-6 part 2, Sprint 10+)
 
-The `pg-snapshot.sh` script and runbook are dev-grade. **Do not
-ship to production as-is.** Production needs:
+The `pg-snapshot.sh` script above stays as the dev-grade story.
+Production uses **WAL-G** to push base backups (and, in a follow-up
+PR, continuous WAL stream) to S3-compatible storage. Скрипты,
+override compose-файл и runbook лежат в репозитории и подключаются
+оп-ин в продакшене.
 
-1. **Continuous archiving (WAL-G or pgBackRest)** for
-   point-in-time recovery, not just nightly snapshots.
-2. **Off-host storage** — S3-compatible (Sber Cloud Object Storage)
-   with bucket versioning + lifecycle rule (30-day hot, 1-year
-   cold, indefinite glacier).
-3. **Cross-region replication** if SLA requires it (today no SLA
-   exists; once Sber Treasury is an LP — see P1-16 — the RPO
-   target will drop from "hours" to "minutes" and WAL streaming
-   becomes mandatory).
-4. **Encryption at rest** — pgcrypto for column-level on
-   `users.password_hash` already in place; backup-level encryption
-   via WAL-G's libsodium AEAD.
-5. **Automated restore drills.** Quarterly restore-from-tape into
-   a staging environment, with automated row-count and FK
-   integrity checks. Without this, the backup might *exist* but
-   not be *restorable* — common failure mode.
-6. **Backup health monitoring.** Grafana alarm if
-   `last_successful_snapshot_age_seconds` > 26h (one missed
-   nightly + 2h grace).
+### Что добавлено
 
-These are Sprint 10+ work. Effort estimate: 5-8 days including
-WAL-G provisioning + S3 bucket setup + restore-drill automation.
+| Файл | Назначение |
+|---|---|
+| `docker/scripts/walg-backup.sh` | Оркестратор `wal-g backup-push` против running `dlmm-postgres`. Cron-runnable, читает `.env.walg`. |
+| `docker/scripts/walg-restore.sh` | Восстановление: `wal-g backup-fetch` + опциональный PITR (`--target-time`). Guard rail — отказывается работать на running контейнере без `--force`. |
+| `docker/docker-compose.walg.yml` | Override-compose c WAL-G sidecar, который держит cron 02:30 UTC ежедневно. Дев `docker-compose up` не трогается. |
+| `docker/.env.walg.example` | Шаблон env с `WALG_S3_PREFIX`, `AWS_*`. `.env.walg` gitignored. |
+| `docs/runbooks/walg-disaster-recovery.md` | Step-by-step DR runbook для on-call SRE. |
+
+### Запуск в production / staging
+
+```bash
+# 1. Заполнить creds
+cp docker/.env.walg.example docker/.env.walg
+$EDITOR docker/.env.walg   # WALG_S3_PREFIX + AWS_*
+
+# 2. Поднять стек с override
+cd docker
+docker-compose -f docker-compose.yml -f docker-compose.walg.yml up -d
+
+# 3. Проверить, что sidecar поднялся и cron установлен
+docker logs dlmm-walg   # ожидаем "cron installed: daily 02:30 UTC"
+
+# 4. (опционально) запустить backup вручную для smoke
+docker exec dlmm-walg /scripts/walg-backup.sh
+```
+
+### Что осталось вне MVP (follow-up PR)
+
+1. **Continuous WAL archiving** для PITR. Требует
+   `archive_mode = on` + `archive_command = 'wal-g wal-push %p'` в
+   `postgresql.conf`. Это требует рестарта Postgres + изменения
+   main compose-файла, поэтому отделено в follow-up PR (нельзя
+   ронять дев-стек). До тех пор `--target-time` в restore не имеет
+   эффекта — восстанавливаем только base backup.
+2. **Per-region cross-replication** — не нужно сегодня; включить
+   когда Sber Treasury станет LP (см. P1-16) и RPO упадёт с часов
+   до минут.
+3. **Backup health Prometheus exporter** — sidecar пишет в
+   `/var/log/walg-cron.log`, но Grafana алерт на
+   `last_successful_backup_age_seconds > 26h` ещё не настроен.
+   Сделать после следующего spike в Prometheus alerts.
+4. **Custom postgres image с предустановленным wal-g** — сейчас
+   sidecar делает runtime install (`apk add docker-cli`). Чище
+   собрать собственный `postgres:16+wal-g` Dockerfile.
+5. **Docker socket proxy** перед `dlmm-walg` — сейчас sidecar
+   маунтит `/var/run/docker.sock` напрямую (полный API).
+   Production should front it with `tecnativa/docker-socket-proxy`
+   с whitelist `containers/json` + `containers/<id>/exec`.
+
+См. также `docs/runbooks/walg-disaster-recovery.md` для подробного
+DR-сценария.
 
 ---
 
@@ -183,22 +217,25 @@ It does **not** contain:
 
 ## What we explicitly are NOT doing in this sprint
 
-- **`pg_basebackup` + WAL streaming.** Heavyweight; defer until
-  production storage decision (TD-6 part 2).
 - **Cross-cluster logical replication.** Premature; single-tenant
   for now.
 - **Per-table backups.** All-or-nothing snapshot is fine at our
   scale (4 MB today, projected 200 MB in 6 months).
-- **In-tree restore script.** The dev restore path is one
-  `pg_restore` invocation documented above; codifying it would be
-  cargo-cult until prod backup story is finalised.
+- **In-tree dev restore script.** Dev users restore from one
+  `pg_restore` invocation documented above; for production restore
+  see `walg-restore.sh` + the DR runbook.
 
 ---
 
 ## Related work
 
-- `docker/scripts/pg-snapshot.sh` — the snapshot script itself.
-- `.gitignore` — adds `docker/backups/`.
+- `docker/scripts/pg-snapshot.sh` — dev snapshot script.
+- `docker/scripts/walg-backup.sh` — production WAL-G base-backup.
+- `docker/scripts/walg-restore.sh` — production WAL-G restore.
+- `docker/docker-compose.walg.yml` — opt-in sidecar override.
+- `docker/.env.walg.example` — env template for WAL-G credentials.
+- `docs/runbooks/walg-disaster-recovery.md` — DR runbook for SRE on-call.
+- `.gitignore` — adds `docker/backups/` and `docker/.env.walg`.
 - `OPS-SECRETS-RUNBOOK.md` — companion for secret management.
 - `OutboxDispatcher.cleanup` (Sprint 9) — same 3:17 AM
   off-peak window.

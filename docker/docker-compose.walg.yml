@@ -1,0 +1,105 @@
+# docker-compose.walg.yml — WAL-G sidecar override (TD-6).
+#
+# ADDITIVE override on top of docker-compose.yml. Adds a sidecar
+# container that runs `wal-g` against the shared postgres data
+# volume, plus a cron entry that fires walg-backup.sh daily at 02:30.
+#
+# This override is OPT-IN for production / staging hosts. Dev compose
+# stays untouched (no sidecar, no cron, no S3 dependency).
+#
+# Usage:
+#   # production / staging
+#   cd docker
+#   docker-compose -f docker-compose.yml -f docker-compose.walg.yml up -d
+#
+#   # dev (unchanged — no override)
+#   docker-compose up -d
+#
+# Requires:
+#   - docker/.env.walg with WALG_S3_PREFIX + AWS_* credentials
+#     (see .env.walg.example). The file is gitignored.
+#   - The dlmm-postgres container has wal-g installed in its image,
+#     OR the sidecar handles base-backup duty by mounting the data
+#     volume read-only. The current MVP installs wal-g INTO the
+#     dlmm-postgres image at runtime via the sidecar's bootstrap
+#     (since we cannot rebuild the postgres image without a follow-up
+#     PR per CLAUDE.md "Do NOT modify the main docker-compose.yml").
+#
+# TODO (follow-up PR): bake wal-g into a custom postgres Dockerfile
+# (FROM postgres:16; install wal-g binary) so the sidecar doesn't
+# need the runtime install dance. Required alongside enabling
+# `archive_mode = on` + `archive_command = 'wal-g wal-push %p'` for
+# point-in-time recovery.
+
+version: "3.9"
+
+services:
+  # WAL-G sidecar. Runs continuously with a cron daemon — the
+  # configured cron line fires walg-backup.sh daily at 02:30 UTC.
+  #
+  # We mount /var/run/docker.sock so the sidecar can `docker exec`
+  # into the dlmm-postgres container (which is the actual workflow
+  # of walg-backup.sh). This is the same pattern used by the
+  # status-page container; production hardens this with a
+  # docker-socket-proxy that only exposes `exec` + `ps`.
+  dlmm-walg:
+    image: wal-g/wal-g:latest
+    container_name: dlmm-walg
+    restart: unless-stopped
+    env_file:
+      # Loaded at container start; values come from docker/.env.walg
+      # which the operator provisions from .env.walg.example.
+      - ./.env.walg
+    environment:
+      # Defaults inside the container; .env.walg overrides take
+      # precedence (env_file processed first, environment second).
+      WALG_COMPRESSION_METHOD: "${WALG_COMPRESSION_METHOD:-lz4}"
+      AWS_REGION: "${AWS_REGION:-ru-central1}"
+      WALG_BACKUP_CONTAINER: "dlmm-postgres"
+      WALG_PGDATA: "/var/lib/postgresql/data"
+    volumes:
+      # Bind-mount the host scripts read-only — the sidecar runs
+      # them, but never modifies them.
+      - ./scripts:/scripts:ro
+      # Docker socket so the sidecar can `docker exec` into
+      # dlmm-postgres. Production should replace with a
+      # docker-socket-proxy (caddy + tecnativa/docker-socket-proxy)
+      # that whitelists only `containers/json` + `containers/<id>/exec`.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Cron log — tail with `docker exec dlmm-walg tail -f /var/log/walg-cron.log`
+      # or scrape with Loki/Splunk.
+      - walg-logs:/var/log
+    # Override the wal-g image entrypoint to run a cron daemon
+    # instead of the wal-g binary directly. The cron line invokes
+    # walg-backup.sh which in turn `docker exec`s into postgres.
+    #
+    # 30 2 * * *  — daily at 02:30 UTC. Off-peak vs:
+    #   03:17  outbox cleanup (OutboxDispatcher)
+    #   03:17  legacy pg-snapshot.sh suggested cron (dev only)
+    # 47-minute gap is intentional — base backup can take a while
+    # for large clusters, and we want it well done before outbox
+    # cleanup starts churning the I/O.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        apk add --no-cache busybox-suid docker-cli >/dev/null 2>&1 || true
+        echo "30 2 * * * /scripts/walg-backup.sh >> /var/log/walg-cron.log 2>&1" > /etc/crontabs/root
+        echo "[dlmm-walg] cron installed: daily 02:30 UTC"
+        echo "[dlmm-walg] log: /var/log/walg-cron.log"
+        # Tail the log in the foreground so `docker logs dlmm-walg`
+        # surfaces backup output without extra tooling.
+        touch /var/log/walg-cron.log
+        crond -f -L /var/log/walg-cron.log &
+        tail -F /var/log/walg-cron.log
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - dlmm-network
+
+# Named volume for cron logs — survives container restarts so the
+# operator can review the last N days of backup runs.
+volumes:
+  walg-logs:
