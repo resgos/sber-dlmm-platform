@@ -223,6 +223,9 @@ export const teamStore = {
 
   __resetForTests(): void {
     try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+    // Same reason as autoClaimStore — drop the module-level snapshot
+    // cache so tests start fresh.
+    cache = null
     notify()
   },
 }

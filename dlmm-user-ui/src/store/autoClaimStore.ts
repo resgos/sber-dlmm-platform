@@ -192,6 +192,11 @@ export const autoClaimStore = {
     // change. `history` is now `let`, not `const`.
     history = []
     lastFiredAtByPosition.clear()
+    // Also drop the localStorage cache — `localStorage.clear()` in the
+    // test beforeEach doesn't reach our module-level cache, so without
+    // this any cached AutoClaimPolicy from a prior test leaks into the
+    // next one (test "rejects malformed persisted value" hit this).
+    cache = null
     notify()
   },
 }

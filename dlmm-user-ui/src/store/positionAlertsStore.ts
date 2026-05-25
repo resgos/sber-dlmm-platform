@@ -137,6 +137,18 @@ export const positionAlertsStore = {
     listeners.add(listener)
     return () => listeners.delete(listener)
   },
+
+  /**
+   * Test-only reset. Localstorage clear in the test beforeEach doesn't
+   * reach our module-level snapshot cache (added 72df39d for the
+   * useSyncExternalStore stable-reference fix). Without this, the
+   * previous test's alerts leak through into the next test's read.
+   */
+  __resetForTests(): void {
+    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+    cache = null
+    notify()
+  },
 }
 
 // Cooldown: 5 minutes between fires of the same rule. Prevents a

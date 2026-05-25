@@ -230,6 +230,9 @@ export const twoFactorStore = {
   /** Test-only reset. */
   __resetForTests(): void {
     try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+    // Same reason as autoClaimStore / teamStore — drop module-level
+    // cache so each test starts with a fresh read.
+    cache = null
     notify()
   },
 }

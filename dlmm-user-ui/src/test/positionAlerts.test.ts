@@ -50,6 +50,10 @@ function mkPool(over: Partial<Pool> = {}): Pool {
 describe('positionAlertsStore', () => {
   beforeEach(() => {
     localStorage.clear()
+    // Module-level snapshot cache (added 72df39d for the
+    // useSyncExternalStore stable-reference fix) survives a plain
+    // localStorage.clear() — drop it explicitly so tests see fresh state.
+    positionAlertsStore.__resetForTests()
   })
 
   it('starts empty', () => {
