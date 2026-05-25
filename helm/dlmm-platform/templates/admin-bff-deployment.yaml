@@ -1,0 +1,1 @@
+{{- include "dlmm.deployment" (dict "root" . "name" "admin-bff" "svc" .Values.services.adminBff "kind" "spring") }}

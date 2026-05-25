@@ -1,0 +1,59 @@
+{{/*
+Ingress fan-out:
+  /api/v1/*  -> dlmm-gateway:8080    (single backend entry point)
+  /admin     -> dlmm-admin-ui:80     (operator console SPA)
+  /          -> dlmm-user-ui:80      (user-facing SPA)
+
+Disable by setting ingress.enabled=false (e.g. when the cluster fronts
+traffic with a separate API gateway / IngressGateway / nginx outside
+the chart's scope).
+*/}}
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "dlmm.fullname" . }}
+  labels:
+    {{- include "dlmm.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tls.secretName | quote }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # Order matters — most-specific prefix first so /api/v1/* doesn't
+          # get caught by the catch-all "/" rule below.
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: dlmm-gateway
+                port:
+                  number: {{ .Values.services.gateway.port }}
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: dlmm-admin-ui
+                port:
+                  number: {{ .Values.services.adminUi.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dlmm-user-ui
+                port:
+                  number: {{ .Values.services.userUi.port }}
+{{- end }}
