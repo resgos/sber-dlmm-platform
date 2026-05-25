@@ -32,6 +32,10 @@ Thumbs.db
 .env
 *.log
 
+# WAL-G backup credentials — TD-6, see docs/runbooks/walg-disaster-recovery.md.
+# Contains S3 access keys; per-environment, never enters the repo.
+docker/.env.walg
+
 # Local DB snapshots — TD-6, see docs/OPS-DB-BACKUP-RUNBOOK.md.
 # The pg-snapshot.sh script writes timestamped .dump files here;
 # they're per-host and must never enter the repo.
