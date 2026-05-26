@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useSyncExternalStore, useState } from 'react'
 import { Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Button, Avatar, Space, Typography, Dropdown } from 'antd'
 import {
@@ -14,9 +14,11 @@ import {
   MenuUnfoldOutlined,
   RetweetOutlined,
   TeamOutlined,
+  StarOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 import { auth } from '@/api/services'
+import { uiPrefStore } from '@/store/uiPrefStore'
 import NotificationBell from './NotificationBell'
 import LanguageSwitcher from './LanguageSwitcher'
 
@@ -34,38 +36,46 @@ const { Text } = Typography
  * Sprint 4 #4.1 — hedge reuses swap-API but UX заточен под казначеев.
  * Sprint 10 F-07 — portfolio rebalancer wizard.
  * Sprint 11 G-21 — team / multi-user management.
+ * S14-03 — Reviews page + simple-mode hides advanced items (Ребаланс, Команда).
  */
-const menuItems = [
-  {
-    type: 'group' as const,
-    label: 'Торговля',
-    children: [
-      { key: '/', icon: <HomeOutlined />, label: 'Главная' },
-      { key: '/swap', icon: <SwapOutlined />, label: 'Обмен' },
-      { key: '/hedge', icon: <SafetyCertificateOutlined />, label: 'Хедж FX' },
-      { key: '/pools', icon: <FundOutlined />, label: 'Пулы' },
-    ],
-  },
-  { type: 'divider' as const },
-  {
-    type: 'group' as const,
-    label: 'Управление',
-    children: [
-      { key: '/positions', icon: <PieChartOutlined />, label: 'Мои позиции' },
-      { key: '/rebalance', icon: <RetweetOutlined />, label: 'Ребаланс' },
-      { key: '/transactions', icon: <TransactionOutlined />, label: 'Транзакции' },
-    ],
-  },
-  { type: 'divider' as const },
-  {
-    type: 'group' as const,
-    label: 'Аккаунт',
-    children: [
-      { key: '/team', icon: <TeamOutlined />, label: 'Команда' },
-      { key: '/profile', icon: <UserOutlined />, label: 'Профиль' },
-    ],
-  },
-]
+
+function buildMenuItems(simpleMode: boolean) {
+  return [
+    {
+      type: 'group' as const,
+      label: 'Торговля',
+      children: [
+        { key: '/', icon: <HomeOutlined />, label: 'Главная' },
+        { key: '/swap', icon: <SwapOutlined />, label: 'Обмен' },
+        { key: '/hedge', icon: <SafetyCertificateOutlined />, label: 'Хедж FX' },
+        { key: '/pools', icon: <FundOutlined />, label: 'Пулы' },
+      ],
+    },
+    { type: 'divider' as const },
+    {
+      type: 'group' as const,
+      label: 'Управление',
+      children: [
+        { key: '/positions', icon: <PieChartOutlined />, label: 'Мои позиции' },
+        ...(!simpleMode ? [{ key: '/rebalance', icon: <RetweetOutlined />, label: 'Ребаланс' }] : []),
+        { key: '/transactions', icon: <TransactionOutlined />, label: 'Транзакции' },
+      ],
+    },
+    { type: 'divider' as const },
+    {
+      type: 'group' as const,
+      label: 'Аккаунт',
+      children: [
+        ...(!simpleMode ? [{ key: '/team', icon: <TeamOutlined />, label: 'Команда' }] : []),
+        { key: '/reviews', icon: <StarOutlined />, label: 'Отзывы' },
+        { key: '/profile', icon: <UserOutlined />, label: 'Профиль' },
+      ],
+    },
+  ]
+}
+
+/** All possible leaf items (simpleMode=false) — used by selectedKey lookup. */
+const ALL_LEAF_KEYS = buildMenuItems(false)
 
 interface LeafMenuItem {
   key: string
@@ -73,8 +83,8 @@ interface LeafMenuItem {
   label: string
 }
 
-/** Flat list of leaf items — used by selectedKey lookup. */
-const flatMenuItems: LeafMenuItem[] = menuItems
+/** Flat list of all leaf items — used by selectedKey lookup. */
+const flatMenuItems: LeafMenuItem[] = ALL_LEAF_KEYS
   .flatMap((m) => ('children' in m ? m.children : []))
   .filter((m): m is LeafMenuItem => m != null && 'key' in m)
 
@@ -98,6 +108,8 @@ export default function UserLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const user = authStore.getUser()
+  const prefs = useSyncExternalStore(uiPrefStore.subscribe, uiPrefStore.getSnapshot)
+  const menuItems = buildMenuItems(prefs.simpleMode)
 
   if (!authStore.isAuthenticated()) {
     return <Navigate to="/login" replace />
