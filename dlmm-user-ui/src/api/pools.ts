@@ -105,4 +105,29 @@ export const pools = {
     const { data } = await apiClient.get<Position[]>('/pools/positions/me')
     return data
   },
+
+  /**
+   * G-23 (Sprint 15) — pro risk metrics from the backend. Returns
+   * server-computed 30-day realised vol / Sharpe / max drawdown.
+   * Distinct from `lib/poolMetrics.ts` which still emits synthetic
+   * metrics — the swap-in to use this endpoint as the primary source
+   * is a follow-up PR (would change PoolComparePage's data path).
+   */
+  getProMetrics: async (poolId: string): Promise<PoolProMetricsBackend> => {
+    const { data } = await apiClient.get<PoolProMetricsBackend>(`/pools/${poolId}/pro-metrics`)
+    return data
+  },
+}
+
+/**
+ * G-23 — wire shape of the backend response (matches
+ * com.sber.dlmm.pool.dto.ProMetricsDto). Numeric fields are
+ * dimensionless ratios (0.0234 = 2.34% vol; 1.42 = 1.42 Sharpe).
+ */
+export interface PoolProMetricsBackend {
+  volatility30d: number
+  maxDrawdown30d: number
+  sharpe30d: number
+  sampleSize: number
+  isReliable: boolean
 }
