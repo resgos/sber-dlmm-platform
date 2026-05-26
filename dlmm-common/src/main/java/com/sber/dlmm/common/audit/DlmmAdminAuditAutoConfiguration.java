@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.security.core.Authentication;
 
 /**
  * Sprint 9-DS-r4 (P2-13) — auto-config for the moved
@@ -33,9 +34,25 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
  * <p>{@link EnableAspectJAutoProxy} enables Spring AOP weaving for the
  * aspect — without it, the {@code @Around} advice never fires.
  */
+/**
+ * HOTFIX 2026-05-26 — added {@link Authentication} to the
+ * {@code @ConditionalOnClass} guard. Before this fix, the aspect was
+ * registered on services without spring-security (price-oracle,
+ * notification-service), and Spring's AOP proxy creator tried to
+ * reflect on the aspect's method signatures (which reference
+ * {@code Authentication.class}), triggering {@code NoClassDefFoundError}
+ * during startup → crashloop until R-01 restart policy gave up.
+ *
+ * The aspect's only purpose is to capture the authenticated user's
+ * identity — without spring-security on the classpath there's nothing
+ * to capture, so the entire audit chain self-skipping is the correct
+ * behaviour for those services. Audit-enabled services (user-service,
+ * pool-engine, fee-service, transaction-service, admin-bff, gateway)
+ * all transitively pull spring-security via the dlmm-common JWT stack.
+ */
 @AutoConfiguration
 @AutoConfigureAfter(JpaRepositoriesAutoConfiguration.class)
-@ConditionalOnClass({EntityManagerFactory.class, Aspect.class})
+@ConditionalOnClass({EntityManagerFactory.class, Aspect.class, Authentication.class})
 @ConditionalOnProperty(name = "dlmm.audit.enabled", havingValue = "true", matchIfMissing = true)
 @EnableAspectJAutoProxy
 public class DlmmAdminAuditAutoConfiguration {
