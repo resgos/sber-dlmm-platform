@@ -71,6 +71,49 @@ describe('twoFactorStore (G-20 backend-backed)', () => {
     expect(mockedApi.post).toHaveBeenCalledWith('/users/me/2fa/begin')
   })
 
+  it('beginSetupAsync resolves with real secret + codes after POST settles (task #19)', async () => {
+    mockedApi.post.mockResolvedValueOnce({
+      data: {
+        secret: VALID_SECRET,
+        otpauthUri: `otpauth://totp/Sber%20DLMM:demo?secret=${VALID_SECRET}`,
+        recoveryCodes: RECOVERY_CODES,
+      },
+    })
+    const { secret, recoveryCodes } = await twoFactorStore.beginSetupAsync()
+    // Real 32-char base32 secret, NOT the PENDING placeholder — this is
+    // the regression bar for task #19.
+    expect(secret).toBe(VALID_SECRET)
+    expect(secret).not.toMatch(/PENDING/)
+    expect(secret).toHaveLength(32)
+    expect(recoveryCodes).toEqual(RECOVERY_CODES)
+    // Store cache is also updated so useSyncExternalStore consumers
+    // see the same values.
+    const cached = twoFactorStore.get()
+    expect(cached.secret).toBe(VALID_SECRET)
+    expect(cached.recoveryCodes).toEqual(RECOVERY_CODES)
+    expect(mockedApi.post).toHaveBeenCalledWith('/users/me/2fa/begin')
+  })
+
+  it('beginSetupAsync rejects on backend failure without mutating cache', async () => {
+    mockedApi.post.mockRejectedValueOnce({ response: { status: 500 } })
+    await expect(twoFactorStore.beginSetupAsync()).rejects.toBeDefined()
+    // Cache untouched — the modal is responsible for showing an error.
+    const cached = twoFactorStore.get()
+    expect(cached.secret).toBeNull()
+    expect(cached.recoveryCodes).toHaveLength(0)
+  })
+
+  it('beginSetupAsync notifies subscribers when it resolves', async () => {
+    mockedApi.post.mockResolvedValueOnce({
+      data: { secret: VALID_SECRET, otpauthUri: '', recoveryCodes: RECOVERY_CODES },
+    })
+    let n = 0
+    const unsub = twoFactorStore.subscribe(() => { n++ })
+    await twoFactorStore.beginSetupAsync()
+    expect(n).toBeGreaterThan(0)
+    unsub()
+  })
+
   it('enable: optimistically flips state on 6-digit input, fires backend POST', async () => {
     mockedApi.post.mockResolvedValueOnce({ data: {} })
     const ok = twoFactorStore.enable(VALID_SECRET, RECOVERY_CODES, '123456')
