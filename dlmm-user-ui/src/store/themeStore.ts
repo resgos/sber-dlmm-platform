@@ -58,6 +58,13 @@ function notify(): void {
   })
 }
 
+// Stable-reference cache for useSyncExternalStore.
+// useSyncExternalStore requires getSnapshot to return the same reference
+// when the value hasn't changed — otherwise React will bail-out then
+// re-render in an infinite loop. We cache the last returned value and
+// only replace it when the resolved theme actually differs.
+let _cachedResolved: 'light' | 'dark' = resolveEffective(safeRead())
+
 export const themeStore = {
   /** Current preference (may be 'system'). */
   getMode(): ThemeMode {
@@ -67,6 +74,19 @@ export const themeStore = {
   /** Effective theme after resolving 'system' against the OS. */
   getEffective(): 'light' | 'dark' {
     return resolveEffective(safeRead())
+  },
+
+  /**
+   * Stable-ref snapshot for useSyncExternalStore.
+   * Returns the same string reference when the resolved theme hasn't
+   * changed, satisfying React 18's Object.is equality check.
+   */
+  getResolvedSnapshot(): 'light' | 'dark' {
+    const current = resolveEffective(safeRead())
+    if (current !== _cachedResolved) {
+      _cachedResolved = current
+    }
+    return _cachedResolved
   },
 
   /** Persist a new preference and re-apply to <html>. */
