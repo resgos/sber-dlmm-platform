@@ -1,5 +1,5 @@
 {
-  "_comment": "Sprint 8 C-4 — Russian translation source-of-truth. Top-5 page strings extracted in this first wave (Dashboard / Swap / Hedge / Pools / Login). Sprint 9+ extends to the rest of the app and adds EN translation.",
+  "_comment": "Sprint 8 C-4 — Russian translation source-of-truth. Sprint 15 NEW-3 — extended to all 12 priority pages (Dashboard, Swap, Pools, PoolDetail, Positions, Profile, Transactions, Hedge, Team, Rebalance, Reviews, Login, Register, PoolCompare).",
 
   "common": {
     "loading": "Загрузка...",
@@ -17,13 +17,62 @@
     "all": "Все",
     "none": "Нет",
     "open": "Открыть",
-    "details": "Подробнее"
+    "details": "Подробнее",
+    "or": "или",
+    "search": "Поиск",
+    "compare": "Сравнить",
+    "share": "Поделиться",
+    "clear": "Очистить",
+    "remove": "Удалить",
+    "claim": "Забрать",
+    "withdraw": "Снять",
+    "add": "Добавить",
+    "refresh": "Обновить",
+    "reset": "Сбросить",
+    "actions": "Действия",
+    "status": "Статус",
+    "date": "Дата",
+    "amount": "Сумма",
+    "type": "Тип",
+    "name": "Имя",
+    "email": "Email",
+    "role": "Роль",
+    "submit": "Отправить",
+    "create": "Создать",
+    "update": "Обновить",
+    "saving": "Сохранение...",
+    "loadingDots": "Загрузка..."
   },
 
   "brand": {
     "sber": "СБЕР",
     "product": "DLMM",
     "tagline": "Платформа ликвидности"
+  },
+
+  "nav": {
+    "tradeGroup": "Торговля",
+    "manageGroup": "Управление",
+    "accountGroup": "Аккаунт",
+    "home": "Главная",
+    "swap": "Обмен",
+    "hedge": "Хедж FX",
+    "pools": "Пулы",
+    "positions": "Мои позиции",
+    "rebalance": "Ребаланс",
+    "transactions": "Транзакции",
+    "team": "Команда",
+    "reviews": "Отзывы",
+    "profile": "Профиль",
+    "logout": "Выйти",
+    "expandMenu": "Развернуть меню",
+    "collapseMenu": "Свернуть меню",
+    "skipToContent": "Перейти к содержимому",
+    "userMenu": "Меню пользователя {{name}}",
+    "mainNav": "Основная навигация",
+    "verified": "Верифицирован",
+    "notVerified": "Не верифицирован",
+    "defaultUser": "Пользователь"
   },
 
   "auth": {
@@ -38,12 +87,46 @@
       "submit": "Войти",
       "noAccount": "Нет аккаунта?",
       "register": "Зарегистрироваться",
-      "errorFallback": "Неверный email или пароль. Попробуйте снова."
+      "errorFallback": "Неверный email или пароль. Попробуйте снова.",
+      "ssoButton": "Войти через корпоративный SSO"
+    },
+    "register": {
+      "subtitle": "Создайте аккаунт",
+      "firstNameLabel": "Имя",
+      "firstNamePlaceholder": "Иван",
+      "firstNameRequired": "Введите имя",
+      "firstNameMin": "Минимум 2 символа",
+      "lastNameLabel": "Фамилия",
+      "lastNamePlaceholder": "Иванов",
+      "lastNameRequired": "Введите фамилию",
+      "lastNameMin": "Минимум 2 символа",
+      "sberIdLabel": "Сбер ID",
+      "sberIdPlaceholder": "SBER-USR-12345",
+      "sberIdRequired": "Введите Сбер ID",
+      "phoneLabel": "Телефон",
+      "phonePlaceholder": "+79001234567",
+      "phoneRequired": "Введите номер телефона",
+      "phonePattern": "Формат: +7XXXXXXXXXX",
+      "emailLabel": "Электронная почта",
+      "emailRequired": "Введите email",
+      "emailInvalid": "Введите корректный email",
+      "passwordLabel": "Пароль",
+      "passwordRequired": "Введите пароль",
+      "passwordMin": "Минимум 8 символов",
+      "passwordPattern": "Должен содержать буквы и цифры",
+      "confirmPasswordLabel": "Подтверждение пароля",
+      "confirmPasswordRequired": "Подтвердите пароль",
+      "passwordMismatch": "Пароли не совпадают",
+      "submit": "Зарегистрироваться",
+      "hasAccount": "Уже есть аккаунт?",
+      "loginLink": "Войти",
+      "errorFallback": "Ошибка регистрации. Попробуйте снова."
     }
   },
 
   "dashboard": {
     "title": "Ваш портфель",
+    "portfolioLabel": "Ваш портфель",
     "activePositions_one": "{{count}} активная позиция",
     "activePositions_few": "{{count}} активных позиции",
     "activePositions_many": "{{count}} активных позиций",
@@ -55,8 +138,46 @@
     "tiles": {
       "totalBalance": "Общий баланс",
       "activePositions": "Активные позиции",
-      "unclaimedFees": "Незабранные комиссии",
-      "totalEarned": "Всего заработано"
+      "unclaimedFees": "Незабр. комиссии",
+      "totalEarned": "Доход за всё время"
+    },
+    "tiles_sub": {
+      "positionsLoading": "загружается",
+      "positionsInWork_one": "позиция в работе",
+      "positionsInWork_few": "позиции в работе",
+      "positionsInWork_many": "позиций в работе",
+      "claimNow": "можно забрать сейчас",
+      "nothingAccrued": "пока ничего не начислено",
+      "earnedDelta": "+{{value}}% к балансу",
+      "startEarning": "начните зарабатывать в пулах"
+    },
+    "quickActions": {
+      "title": "Быстрые действия",
+      "swapUsdt": "Свопнуть SUSDT → SRUB",
+      "openHedge": "Открыть FX-хедж",
+      "addLiquidity": "Добавить ликвидность"
+    },
+    "recentOps": {
+      "title": "Последние операции",
+      "viewAll": "Вся история",
+      "empty": "Транзакций пока нет"
+    },
+    "myTokens": {
+      "title": "Мои токены",
+      "swap": "Обменять",
+      "symbol": "Токен",
+      "available": "Доступно",
+      "locked": "Заблокировано",
+      "price": "Цена",
+      "value": "Стоимость"
+    },
+    "activePositionsCard": {
+      "title": "Активные позиции",
+      "viewAll": "Все позиции",
+      "pool": "Пул",
+      "strategy": "Стратегия",
+      "priceRange": "Диапазон цен",
+      "unclaimedFees": "Незабранные комиссии"
     },
     "tokens": {
       "title": "Мои токены",
@@ -74,6 +195,21 @@
       "type": "Тип",
       "amount": "Сумма",
       "status": "Статус"
+    },
+    "txType": {
+      "SWAP": "Обмен",
+      "ADD_LIQUIDITY": "Добавление",
+      "REMOVE_LIQUIDITY": "Удаление",
+      "CLAIM_FEE": "Комиссии",
+      "TRANSFER": "Перевод",
+      "MINT": "Выпуск",
+      "BURN": "Сжигание"
+    },
+    "txStatus": {
+      "PENDING": "Ожидание",
+      "CONFIRMED": "Подтверждена",
+      "FAILED": "Ошибка",
+      "CANCELLED": "Отменена"
     }
   },
 
@@ -115,17 +251,68 @@
 
   "hedge": {
     "title": "Хедж FX",
+    "pageTitle": "Хеджирование валютного риска",
+    "intro": "Зафиксируйте курс рубля к иностранной валюте через DLMM-пулы — без выхода в SWIFT. Хедж работает как мгновенный своп: SRUB конвертируется в выбранную валюту, вы получаете токенизированную позицию, которую можно держать или развернуть обратно.",
+    "exposure": {
+      "label": "Подверженность валютному риску",
+      "tooltip": "Сумма доступных рублей, которые можно конвертировать в иностранную валюту в качестве хеджа.",
+      "locked": "В заморозке"
+    },
+    "candidates": {
+      "title": "Доступные пары хеджирования",
+      "empty": "Нет доступных FX-пар. Проверьте, что в каталоге есть активные пулы SRUB ↔ FIAT_BACKED.",
+      "currentQuote": "Текущая котировка",
+      "feeTag": "комиссия {{value}}"
+    },
+    "calculator": {
+      "title": "Калькулятор хеджа",
+      "activePoolBadge": "активный пул",
+      "selectPair": "Выберите пару слева, чтобы рассчитать хедж",
+      "ratioLabel": "Какую долю SRUB-позиции хеджируем?",
+      "manualLabel": "Или укажите сумму вручную (SRUB)",
+      "manualPlaceholder": "0",
+      "quoteLoading": "Расчёт котировки…",
+      "receive": "Получите",
+      "effectiveRate": "Эффективный курс",
+      "poolFee": "Комиссия пула",
+      "priceImpact": "Влияние на цену",
+      "minReceived": "Мин. к получению (slippage 0.3%): {{value}} {{symbol}}",
+      "ctaEnterAmount": "Введите сумму или выберите долю",
+      "ctaWaitQuote": "Ждём котировку…",
+      "ctaExecuting": "Выполнение хеджа…",
+      "ctaConfirm": "Захеджировать {{amount}} SRUB",
+      "footerNote": "История хеджей ниже + полная — на странице «Транзакции»."
+    },
+    "alerts": {
+      "success": "Хедж выполнен — токены зачислены на счёт",
+      "errorFallback": "Не удалось выполнить хедж"
+    },
     "openHedges": "Открытые хеджи",
     "closeAll": "Закрыть всё",
     "close": "Закрыть",
+    "openHedgesEmpty": "Нет открытых хеджей. Создайте хедж в калькуляторе выше — он появится здесь с кнопкой быстрого закрытия.",
+    "table": {
+      "date": "Дата",
+      "pair": "Пара",
+      "hedgedAmount": "Хеджировано (SRUB)",
+      "receivedAmount": "Получено"
+    },
     "confirmClose": {
       "title": "Закрыть хедж?",
       "body": "Будет выполнен обратный своп {{amount}} единиц обратно в SRUB.",
       "expected": "Ориентировочно получите ~{{amount}} SRUB; фактическая сумма зависит от курса на момент исполнения.",
       "okText": "Закрыть хедж"
     },
+    "confirmCloseAll": {
+      "title": "Закрыть все хеджи ({{count}})?",
+      "body": "Будут последовательно закрыты {{count}} открытых хеджа на общую сумму {{total}} SRUB.",
+      "warning": "Операция необратима. Каждое закрытие выполняется как обычный своп по текущему курсу.",
+      "note": "Хеджи закрываются последовательно — это даёт более предсказуемое влияние на цены пулов, чем параллельное исполнение.",
+      "okText": "Закрыть все {{count}}"
+    },
     "errors": {
-      "unwindFallback": "Не удалось закрыть хедж"
+      "unwindFallback": "Не удалось закрыть хедж",
+      "noPoolData": "Хедж-транзакция не содержит данных для разворота"
     }
   },
 
@@ -135,6 +322,7 @@
     "subtitle_few": "{{count}} пары доступны для торговли и предоставления ликвидности",
     "subtitle_many": "{{count}} пар доступны для торговли и предоставления ликвидности",
     "searchPlaceholder": "Найти пару (SBER, GAZP, SRUB…)",
+    "compareButton": "Сравнить",
     "card": {
       "tvl": "TVL",
       "volume24h": "Объём 24ч",
@@ -151,7 +339,433 @@
     },
     "empty": {
       "noResults": "Пары \"{{query}}\" не найдены",
+      "noResultsHint": "Попробуйте изменить поисковый запрос или сбросить фильтр.",
       "noPools": "Пулы пока не созданы"
     }
+  },
+
+  "poolDetail": {
+    "backToPools": "К списку пулов",
+    "notFound": "Пул не найден",
+    "feeRaisedBadge": "комиссия повышена",
+    "binStep": "Шаг бина",
+    "baseFee": "Базовая комиссия",
+    "createdAt": "Создан",
+    "kpi": {
+      "tvl": "TVL пула",
+      "volume24h": "Объём за 24ч",
+      "volume24hSub": "свопов за сутки",
+      "apy": "Расч. APY",
+      "apyForLp": "для LP-провайдеров",
+      "apyNoData": "недостаточно данных",
+      "myShare": "Моя доля",
+      "myShareEmpty": "у вас нет позиций",
+      "positions_one": "{{count}} позиция",
+      "positions_few": "{{count}} позиции",
+      "positions_many": "{{count}} позиций"
+    },
+    "outOfRange": {
+      "title": "{{count}} ваших позиций — вне диапазона цены",
+      "description": "Позиция вне диапазона не получает комиссий. Нажмите «Ребаланс», чтобы перенести её к текущей цене с тем же объёмом капитала и той же стратегией.",
+      "cta": "Ребаланс ({{count}})"
+    },
+    "liquidityDist": {
+      "title": "Распределение ликвидности",
+      "yourBinsTag": "ваши бины подсвечены"
+    },
+    "myPositions": {
+      "title": "Мои позиции в этом пуле",
+      "addButton": "Добавить",
+      "bins": "бины {{from}} — {{to}}",
+      "outOfRangeTag": "вне диапазона",
+      "unclaimed": "незабранные",
+      "noFeesYet": "нет комиссий к получению",
+      "claimButton": "Забрать",
+      "removeButton": "Снять",
+      "feesClaimed": "Комиссии забраны",
+      "claimErrorFallback": "Не удалось забрать комиссии"
+    },
+    "rebalanceAll": {
+      "title": "Ребалансировать {{count}} позиций?",
+      "body": "Каждая позиция вне диапазона будет последовательно закрыта, а затем заново открыта с тем же объёмом капитала, той же стратегией и шириной диапазона, но вокруг текущей цены (бин {{binId}}).",
+      "warning": "Операция последовательная — если что-то сломается на половине, ранее перенесённые позиции остаются перенесёнными. Не закрывайте вкладку до завершения.",
+      "okText": "Перенести {{count}}",
+      "moved": "Перенесено позиций: {{count}}",
+      "failure": "Не удалось перенести позицию {{id}}…: {{error}}. Перенесено {{done}} из {{total}}.",
+      "errorWord": "ошибка"
+    },
+    "params": {
+      "title": "Параметры пула",
+      "binStepLabel": "Шаг цены между бинами",
+      "baseFee": "Базовая комиссия",
+      "currentFee": "Текущая комиссия",
+      "currentFeeRaised": "(повышена)",
+      "currentPrice": "Текущая цена",
+      "reserve": "Резерв {{symbol}}",
+      "feesCollected": "Комиссии собрано в {{symbol}}"
+    }
+  },
+
+  "positions": {
+    "title": "Мои позиции",
+    "subtitle": "Ваши LP-позиции в DLMM-пулах — диапазоны бинов, незабранные комиссии, история выплат",
+    "kpi": {
+      "activePositions": "Активных позиций",
+      "activeNone": "нет открытых",
+      "activeProvide": "предоставляют ликвидность",
+      "unclaimedFees": "Незабранные комиссии",
+      "readyToClaim": "готовы к claim",
+      "totalEarned": "Всего заработано",
+      "allTime": "за всё время"
+    },
+    "card": {
+      "title": "Позиции",
+      "alertsButton": "Алерты{{suffix}}",
+      "alertsAriaLabel": "Открыть оповещения по позициям",
+      "claimAll": "Забрать всё ({{count}})",
+      "closeAll": "Закрыть всё ({{count}})"
+    },
+    "healthFilter": {
+      "label": "Фильтр по здоровью:",
+      "all": "Все ({{count}})",
+      "excellent": "Отлично",
+      "good": "Хорошо",
+      "fair": "Так себе",
+      "poor": "Плохо"
+    },
+    "table": {
+      "pool": "Пул",
+      "poolFallback": "пул {{id}}…",
+      "health": "Здоровье",
+      "healthTooltip": "Эвристическая оценка состояния позиции: соответствие диапазону, доходность по комиссиям, возраст. Не является инвестиционной рекомендацией.",
+      "strategy": "Стратегия",
+      "priceRange": "Диапазон цен",
+      "pnl": "P&L",
+      "pnlTooltip": "Текущая стоимость позиции минус её первоначальная стоимость (в единицах второй монеты пары). Не включает комиссии — они в отдельной колонке.",
+      "pnlLegacyTooltip": "Позиция открыта до Sprint 9-DS-r4 — нет исходной стоимости.",
+      "unclaimed": "Незабранные комиссии",
+      "createdAt": "Создана",
+      "actions": "Действия",
+      "claimButton": "Забрать",
+      "removeButton": "Удалить"
+    },
+    "feeHistory": {
+      "title": "История комиссий",
+      "date": "Дата",
+      "amount": "Сумма",
+      "status": "Статус",
+      "claimed": "Забрано",
+      "accrued": "Начислено",
+      "claimedAt": "Дата выплаты"
+    },
+    "confirmClaimAll": {
+      "title": "Забрать комиссии со всех позиций ({{count}})?",
+      "body": "Будут забраны накопленные комиссии с {{count}} позиций. Позиции остаются открытыми и продолжают зарабатывать.",
+      "okText": "Забрать с {{count}} позиций"
+    },
+    "confirmCloseAll": {
+      "title": "Закрыть все позиции ({{count}})?",
+      "body": "Будут последовательно сняты {{count}} активных позиций. С каждой будут одновременно забраны накопленные комиссии.",
+      "warning": "Операция необратима. Каждое снятие выполняется как обычная транзакция и может изменить цену пула.",
+      "note": "Позиции закрываются последовательно — это даёт более предсказуемое влияние на цены пулов и помогает локализовать любую ошибку.",
+      "okText": "Закрыть все {{count}}"
+    },
+    "removeModal": {
+      "title": "Удаление ликвидности",
+      "okText": "Удалить",
+      "body": "Какой процент ликвидности удалить из позиции {{pair}}?"
+    },
+    "messages": {
+      "feesClaimed": "Комиссии забраны",
+      "liquidityRemoved": "Ликвидность удалена",
+      "errorFallback": "Ошибка",
+      "claimedCount": "Забрано с позиций: {{count}}",
+      "closedCount": "Закрыто позиций: {{count}}",
+      "removeFailure": "Снятие позиции {{id}}… не удалось: {{error}}. Закрыто {{done}} из {{total}}.",
+      "claimFailure": "Claim позиции {{id}}… не удалось: {{error}}. Забрано с {{done}} из {{total}}.",
+      "autoClaim": "Авто-сбор: {{pair}} — забрано {{amount}}",
+      "errorWord": "ошибка"
+    }
+  },
+
+  "transactions": {
+    "title": "История транзакций",
+    "filters": {
+      "txTypePlaceholder": "Тип транзакции",
+      "statusPlaceholder": "Статус",
+      "dateFrom": "Дата от",
+      "dateTo": "Дата до",
+      "refresh": "Обновить",
+      "reset": "Сбросить"
+    },
+    "pagination": {
+      "totalCount_one": "Всего {{count}} транзакция",
+      "totalCount_few": "Всего {{count}} транзакции",
+      "totalCount_many": "Всего {{count}} транзакций"
+    },
+    "table": {
+      "date": "Дата",
+      "type": "Тип",
+      "pair": "Пара / направление",
+      "amountIn": "Сумма входа",
+      "amountOut": "Сумма выхода",
+      "fee": "Комиссия",
+      "status": "Статус"
+    },
+    "txType": {
+      "SWAP": "Обмен",
+      "ADD_LIQUIDITY": "Добавление ликвидности",
+      "REMOVE_LIQUIDITY": "Удаление ликвидности",
+      "CLAIM_FEE": "Получение комиссий",
+      "TRANSFER": "Перевод",
+      "MINT": "Выпуск",
+      "BURN": "Сжигание"
+    },
+    "txStatus": {
+      "PENDING": "Ожидание",
+      "CONFIRMED": "Подтверждена",
+      "FAILED": "Ошибка",
+      "CANCELLED": "Отменена"
+    }
+  },
+
+  "profile": {
+    "title": "Профиль",
+    "kyc": {
+      "label": "Статус верификации (KYC)",
+      "pendingTitle": "Ваша заявка на верификацию находится на рассмотрении",
+      "pendingBody": "Обычно проверка занимает 1-2 рабочих дня. После верификации вам будут доступны все функции платформы.",
+      "notSubmittedTitle": "Верификация не пройдена",
+      "notSubmittedBody": "Для доступа к торговле и управлению ликвидностью необходимо пройти KYC верификацию.",
+      "rejectedTitle": "Верификация отклонена",
+      "rejectedBody": "Ваша заявка на верификацию была отклонена. Пожалуйста, свяжитесь с поддержкой."
+    },
+    "edit": {
+      "title": "Редактирование профиля",
+      "firstName": "Имя",
+      "firstNamePlaceholder": "Иван",
+      "firstNameRequired": "Введите имя",
+      "lastName": "Фамилия",
+      "lastNamePlaceholder": "Иванов",
+      "lastNameRequired": "Введите фамилию",
+      "email": "Электронная почта",
+      "submit": "Сохранить",
+      "updateSuccess": "Профиль обновлён",
+      "updateError": "Ошибка обновления профиля"
+    },
+    "info": {
+      "title": "Информация об аккаунте",
+      "userId": "ID пользователя",
+      "role": "Роль",
+      "createdAt": "Дата регистрации"
+    },
+    "tabs": {
+      "overview": "Обзор",
+      "security": "Безопасность",
+      "settings": "Настройки"
+    },
+    "summary": {
+      "title": "Сводка по аккаунту",
+      "portfolioValue": "Стоимость портфеля",
+      "assetsHeld": "Активов в кошельке",
+      "activePositions": "Активных позиций",
+      "earnedOnLiquidity": "Заработано на ликвидности",
+      "toClaim": "{{amount}} к получению"
+    },
+    "activity": {
+      "title": "Последняя активность",
+      "empty": "Активности пока нет",
+      "executed": "Исполнена",
+      "failed": "Ошибка"
+    },
+    "settings": {
+      "interfaceModeTitle": "Режим интерфейса",
+      "simpleMode": "Простой режим",
+      "simpleModeHint": "Скрывает расширенные пункты меню (Ребаланс, Команда)",
+      "languageTitle": "Язык интерфейса",
+      "languageHint": "Выберите язык для отображения подписей и текстов",
+      "languageRu": "Русский",
+      "languageEn": "English"
+    }
+  },
+
+  "team": {
+    "pageTitle": "Команда",
+    "onboarding": {
+      "subtitle": "Пригласите фин-менеджеров, бухгалтеров и аудиторов работать с одним юр-лицом. Каждое действие приписывается конкретному пользователю — audit log готов к регуляторной проверке.",
+      "empty": "У вас пока нет организации",
+      "emptyDescription": "Создайте — и сможете приглашать членов команды с разными ролями.",
+      "createButton": "Создать организацию"
+    },
+    "header": {
+      "title": "Команда «{{name}}»",
+      "memberCount_one": "{{count}} участник",
+      "memberCount_few": "{{count}} участника",
+      "memberCount_many": "{{count}} участников",
+      "createdAt": "создано {{date}}",
+      "inviteButton": "Пригласить"
+    },
+    "auditAlert": {
+      "title": "Audit log с user-attribution",
+      "description": "Каждое действие любого члена команды (открытие позиции, своп, изменение настроек) фиксируется с указанием конкретного пользователя. Это видно в Транзакциях и используется для compliance-проверок."
+    },
+    "table": {
+      "name": "Имя",
+      "email": "Email",
+      "role": "Роль",
+      "status": "Статус",
+      "joinedAt": "Присоединился",
+      "you": "это вы",
+      "active": "активен",
+      "pending": "ожидает",
+      "simulateAccept": "Имитировать принятие",
+      "removeAriaLabel": "Удалить",
+      "removeConfirmTitle": "Удалить {{name}} из организации?",
+      "removeConfirmDescription": "После удаления пользователь потеряет доступ ко всем операциям организации. Audit log по его предыдущим действиям сохраняется.",
+      "removeConfirmOk": "Удалить",
+      "roleChangedMsg": "Роль {{name}} изменена на «{{role}}»",
+      "acceptedMsg": "(имитация) {{name}} принял приглашение",
+      "removedMsg": "{{name}} удалён"
+    },
+    "footnote": "<strong>Frontend MVP (Sprint 11):</strong> состояние команды хранится локально в браузере владельца. Backend-версия (Sprint 12) — POST /api/v1/orgs/{orgId}/members + permission middleware на gateway — разнесёт состояние между всеми членами команды и обеспечит cross-device sync.",
+    "createOrg": {
+      "title": "Создание организации",
+      "okText": "Создать",
+      "orgNameLabel": "Название организации",
+      "orgNamePlaceholder": "Транспортхолдинг, ИП Иванов, ООО «Контур»…",
+      "orgNameRequired": "Введите название",
+      "ownerNameLabel": "Ваше имя",
+      "ownerNamePlaceholder": "Имя Фамилия",
+      "ownerNameRequired": "Введите ваше имя",
+      "ownerEmailNote": "Email-владельца: {{email}} (взят из вашего профиля)",
+      "successMessage": "Организация «{{name}}» создана. Вы — Владелец."
+    },
+    "invite": {
+      "title": "Пригласить участника",
+      "okText": "Отправить приглашение",
+      "nameLabel": "Имя",
+      "namePlaceholder": "Иван Петров",
+      "nameRequired": "Введите имя",
+      "emailLabel": "Email",
+      "emailPlaceholder": "ivan@company.ru",
+      "emailRequired": "Введите email",
+      "emailInvalid": "Невалидный email",
+      "roleLabel": "Роль",
+      "roleRequired": "Выберите роль",
+      "duplicateError": "Пользователь с этим email уже в команде",
+      "successMessage": "{{name}} приглашён как «{{role}}». Письмо отправлено (имитация)."
+    }
+  },
+
+  "rebalance": {
+    "title": "Ребаланс портфеля",
+    "subtitle": "Привести фактические доли активов к желаемой структуре одним кликом",
+    "steps": {
+      "view": "Текущая структура",
+      "target": "Цель",
+      "execute": "План + исполнение"
+    },
+    "view": {
+      "empty": "В портфеле нет активов для ребаланса",
+      "alertTitle": "Текущее распределение",
+      "alertBody": "Общая стоимость портфеля: {{total}}. Перейдите к шагу «Цель», чтобы задать желаемые доли.",
+      "cols": {
+        "token": "Токен",
+        "amount": "Кол-во",
+        "value": "Стоимость, ₽",
+        "share": "Доля"
+      },
+      "nextBtn": "Задать цель →"
+    },
+    "plan": {
+      "alertTitle": "Задайте целевые доли",
+      "alertBody": "Сумма всех долей должна быть 100%. Сейчас: {{sum}}%. Допуск: ±0.5% — ребаланс не будет переключать токены в пределах допуска.",
+      "cols": {
+        "token": "Токен",
+        "current": "Текущая доля",
+        "target": "Целевая доля, %",
+        "targetTooltip": "Положительное число от 0 до 100"
+      },
+      "backBtn": "← Назад",
+      "nextBtn": "Показать план →"
+    },
+    "execute": {
+      "noOpAlert": "Все доли уже в пределах допуска — ребаланс не нужен",
+      "planAlertTitle": "План ребаланса: {{count}} обмен(а/ов)",
+      "moved": "Будет перенесено:",
+      "estFee": "Оценочная комиссия (≈ 30 bps):",
+      "note": "Маршрут через SRUB как pivot-валюту. При сбое одного шага выполнение останавливается — балансы откатывать не нужно.",
+      "skippedTitle": "Пропущено",
+      "logTitle": "Журнал выполнения",
+      "backBtn": "← Изменить цель",
+      "executeBtn": "Выполнить ребаланс",
+      "hopCols": {
+        "from": "Из",
+        "to": "В",
+        "amount": "Кол-во",
+        "rub": "≈ ₽",
+        "reason": "Причина"
+      },
+      "logTokenNotFound": "Не найден токен {{from}} или {{to}}",
+      "logNoPool": "Нет пула {{from}}/{{to}}",
+      "logHopFail": "Шаг {{step}} ({{from}} → {{to}}): {{error}}",
+      "logSwapError": "ошибка обмена",
+      "logSuccess": "{{from}} → {{to}}: {{amount}} (≈ {{rub}})"
+    }
+  },
+
+  "reviews": {
+    "title": "Отзывы клиентов",
+    "subtitle": "Мнения пилотных участников платформы DLMM"
+  },
+
+  "poolCompare": {
+    "title": "Сравнение пулов",
+    "subtitle": "Выберите до {{max}} пулов, чтобы сравнить APY, объём, TVL и комиссии",
+    "addCardTitle": "Добавить пул в сравнение",
+    "viewMode": {
+      "cards": "Карты",
+      "table": "Таблица"
+    },
+    "shareTooltip": "Скопировать ссылку на это сравнение",
+    "shareButton": "Поделиться",
+    "clearTooltip": "Очистить выбор",
+    "clearButton": "Очистить",
+    "searchPlaceholder": "Найти пул по символам (например, SBER)",
+    "maxNote": "Максимум {{max}} пула одновременно. Уберите один, чтобы добавить новый.",
+    "emptyState": "Выберите хотя бы один пул, чтобы начать сравнение",
+    "alreadyAdded": "Этот пул уже в сравнении",
+    "maxReached": "Максимум {{max}} пула. Уберите один, чтобы добавить новый.",
+    "shareCopied": "Ссылка для сравнения скопирована — отправьте коллегам",
+    "shareManual": "Скопируйте ссылку вручную:",
+    "removeAria": "Убрать пул {{pair}} из сравнения",
+    "removeAriaShort": "Убрать {{pair}}",
+    "openPool": "Открыть пул",
+    "openPoolArrow": "Открыть пул →",
+    "status": {
+      "ACTIVE": "Активен"
+    },
+    "metrics": {
+      "apy": "APY",
+      "volume24h": "Объём 24ч",
+      "tvlX": "TVL {{symbol}}",
+      "baseFee": "Базовая комиссия",
+      "binStep": "Шаг бина",
+      "binStepTooltip": "Меньше шаг = точнее размещение ликвидности, выше комиссии за поддержание",
+      "tvlXShort": "TVL X",
+      "vol30d": "Волатильность 30д",
+      "maxDrawdown": "Max drawdown",
+      "sharpe": "Sharpe (vs 14% RFR)",
+      "label": "Метрика"
+    },
+    "pro": {
+      "title": "Pro метрики",
+      "syntheticTooltip": "Synthetic метрики на базе APY + volume24h. Реальные исторические значения по OHLCV — Sprint 13.",
+      "syntheticTag": "синтет.",
+      "vol30d": "Волатильность 30д",
+      "maxDrawdown": "Max drawdown",
+      "sharpe": "Sharpe (vs 14% RFR)"
+    },
+    "disclaimer": "Зелёная подсветка отмечает «победителя» в каждой строке. Это эвристический индикатор, а не инвестиционная рекомендация. APY рассчитывается по реализованной комиссии за последние 30 дней и может не отражать будущую доходность."
   }
 }

@@ -156,7 +156,7 @@ export default function PoolsPage() {
             onClick={() => navigate('/pools/compare')}
             style={{ height: 40, borderRadius: 'var(--radius-sm)' }}
           >
-            Сравнить
+            {t('pools.compareButton')}
           </Button>
         </Space>
       </div>
@@ -172,7 +172,7 @@ export default function PoolsPage() {
       ) : pagePools.length === 0 ? (
         <EmptyState
           title={search ? t('pools.empty.noResults', { query: search }) : t('pools.empty.noPools')}
-          description={search ? 'Попробуйте изменить поисковый запрос или сбросить фильтр.' : undefined}
+          description={search ? t('pools.empty.noResultsHint') : undefined}
         />
       ) : (
         <>

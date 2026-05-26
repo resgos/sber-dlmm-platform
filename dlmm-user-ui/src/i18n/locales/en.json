@@ -1,5 +1,5 @@
 {
-  "_comment": "Sprint 9-DS-r4 P2-14 — English translation. Mirrors the ru.json structure 1:1. Activated via i18n.changeLanguage('en'); see store/languageStore for the persistence hook + dropdown wiring (Sprint 10 surface). For now the bundle is loaded and ready — flipping language proves end-to-end coverage of the strings extracted in Sprint 8 C-4.",
+  "_comment": "Sprint 9-DS-r4 P2-14 — English translation. Sprint 15 NEW-3 — extended to mirror the full ru.json key tree across 12 priority pages. Professional treasury / DeFi vocabulary (Position Health, Total Earned, Unclaimed Fees, etc.). i18n bundle parity tested in src/test/i18n.test.ts.",
 
   "common": {
     "loading": "Loading…",
@@ -17,13 +17,62 @@
     "all": "All",
     "none": "None",
     "open": "Open",
-    "details": "Details"
+    "details": "Details",
+    "or": "or",
+    "search": "Search",
+    "compare": "Compare",
+    "share": "Share",
+    "clear": "Clear",
+    "remove": "Remove",
+    "claim": "Claim",
+    "withdraw": "Withdraw",
+    "add": "Add",
+    "refresh": "Refresh",
+    "reset": "Reset",
+    "actions": "Actions",
+    "status": "Status",
+    "date": "Date",
+    "amount": "Amount",
+    "type": "Type",
+    "name": "Name",
+    "email": "Email",
+    "role": "Role",
+    "submit": "Submit",
+    "create": "Create",
+    "update": "Update",
+    "saving": "Saving…",
+    "loadingDots": "Loading…"
   },
 
   "brand": {
     "sber": "SBER",
     "product": "DLMM",
     "tagline": "Liquidity platform"
+  },
+
+  "nav": {
+    "tradeGroup": "Trading",
+    "manageGroup": "Manage",
+    "accountGroup": "Account",
+    "home": "Home",
+    "swap": "Swap",
+    "hedge": "FX Hedge",
+    "pools": "Pools",
+    "positions": "My Positions",
+    "rebalance": "Rebalance",
+    "transactions": "Transactions",
+    "team": "Team",
+    "reviews": "Reviews",
+    "profile": "Profile",
+    "logout": "Sign out",
+    "expandMenu": "Expand menu",
+    "collapseMenu": "Collapse menu",
+    "skipToContent": "Skip to content",
+    "userMenu": "User menu {{name}}",
+    "mainNav": "Main navigation",
+    "verified": "Verified",
+    "notVerified": "Not verified",
+    "defaultUser": "User"
   },
 
   "auth": {
@@ -38,12 +87,46 @@
       "submit": "Sign in",
       "noAccount": "No account yet?",
       "register": "Sign up",
-      "errorFallback": "Invalid email or password. Please try again."
+      "errorFallback": "Invalid email or password. Please try again.",
+      "ssoButton": "Sign in with corporate SSO"
+    },
+    "register": {
+      "subtitle": "Create your account",
+      "firstNameLabel": "First name",
+      "firstNamePlaceholder": "John",
+      "firstNameRequired": "Enter your first name",
+      "firstNameMin": "At least 2 characters",
+      "lastNameLabel": "Last name",
+      "lastNamePlaceholder": "Smith",
+      "lastNameRequired": "Enter your last name",
+      "lastNameMin": "At least 2 characters",
+      "sberIdLabel": "Sber ID",
+      "sberIdPlaceholder": "SBER-USR-12345",
+      "sberIdRequired": "Enter your Sber ID",
+      "phoneLabel": "Phone number",
+      "phonePlaceholder": "+79001234567",
+      "phoneRequired": "Enter your phone number",
+      "phonePattern": "Format: +7XXXXXXXXXX",
+      "emailLabel": "Email address",
+      "emailRequired": "Enter your email",
+      "emailInvalid": "Enter a valid email address",
+      "passwordLabel": "Password",
+      "passwordRequired": "Enter your password",
+      "passwordMin": "At least 8 characters",
+      "passwordPattern": "Must contain letters and digits",
+      "confirmPasswordLabel": "Confirm password",
+      "confirmPasswordRequired": "Confirm your password",
+      "passwordMismatch": "Passwords do not match",
+      "submit": "Sign up",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Sign in",
+      "errorFallback": "Registration failed. Please try again."
     }
   },
 
   "dashboard": {
     "title": "Your portfolio",
+    "portfolioLabel": "Your portfolio",
     "activePositions_one": "{{count}} active position",
     "activePositions_other": "{{count}} active positions",
     "totalEarned": "earned {{amount}}",
@@ -56,6 +139,43 @@
       "activePositions": "Active positions",
       "unclaimedFees": "Unclaimed fees",
       "totalEarned": "Total earned"
+    },
+    "tiles_sub": {
+      "positionsLoading": "loading",
+      "positionsInWork_one": "position working",
+      "positionsInWork_other": "positions working",
+      "claimNow": "ready to claim now",
+      "nothingAccrued": "nothing accrued yet",
+      "earnedDelta": "+{{value}}% of balance",
+      "startEarning": "start earning in pools"
+    },
+    "quickActions": {
+      "title": "Quick actions",
+      "swapUsdt": "Swap SUSDT → SRUB",
+      "openHedge": "Open FX hedge",
+      "addLiquidity": "Add liquidity"
+    },
+    "recentOps": {
+      "title": "Recent operations",
+      "viewAll": "Full history",
+      "empty": "No transactions yet"
+    },
+    "myTokens": {
+      "title": "My tokens",
+      "swap": "Swap",
+      "symbol": "Token",
+      "available": "Available",
+      "locked": "Locked",
+      "price": "Price",
+      "value": "Value"
+    },
+    "activePositionsCard": {
+      "title": "Active positions",
+      "viewAll": "All positions",
+      "pool": "Pool",
+      "strategy": "Strategy",
+      "priceRange": "Price range",
+      "unclaimedFees": "Unclaimed fees"
     },
     "tokens": {
       "title": "My tokens",
@@ -73,6 +193,21 @@
       "type": "Type",
       "amount": "Amount",
       "status": "Status"
+    },
+    "txType": {
+      "SWAP": "Swap",
+      "ADD_LIQUIDITY": "Add",
+      "REMOVE_LIQUIDITY": "Remove",
+      "CLAIM_FEE": "Fees",
+      "TRANSFER": "Transfer",
+      "MINT": "Mint",
+      "BURN": "Burn"
+    },
+    "txStatus": {
+      "PENDING": "Pending",
+      "CONFIRMED": "Confirmed",
+      "FAILED": "Failed",
+      "CANCELLED": "Cancelled"
     }
   },
 
@@ -114,17 +249,68 @@
 
   "hedge": {
     "title": "FX Hedge",
+    "pageTitle": "Currency risk hedging",
+    "intro": "Lock in the ruble exchange rate against a foreign currency through DLMM pools — without leaving for SWIFT. A hedge works like an instant swap: SRUB converts to your chosen currency, you receive a tokenized position you can hold or unwind back.",
+    "exposure": {
+      "label": "Currency-risk exposure",
+      "tooltip": "The amount of available rubles that can be converted into a foreign currency as a hedge.",
+      "locked": "Locked"
+    },
+    "candidates": {
+      "title": "Available hedge pairs",
+      "empty": "No FX pairs available. Check that the catalog has active SRUB ↔ FIAT_BACKED pools.",
+      "currentQuote": "Current quote",
+      "feeTag": "fee {{value}}"
+    },
+    "calculator": {
+      "title": "Hedge calculator",
+      "activePoolBadge": "active pool",
+      "selectPair": "Select a pair on the left to compute a hedge",
+      "ratioLabel": "What share of the SRUB position should we hedge?",
+      "manualLabel": "Or enter the amount manually (SRUB)",
+      "manualPlaceholder": "0",
+      "quoteLoading": "Fetching quote…",
+      "receive": "You receive",
+      "effectiveRate": "Effective rate",
+      "poolFee": "Pool fee",
+      "priceImpact": "Price impact",
+      "minReceived": "Min. received (slippage 0.3%): {{value}} {{symbol}}",
+      "ctaEnterAmount": "Enter an amount or pick a share",
+      "ctaWaitQuote": "Waiting for a quote…",
+      "ctaExecuting": "Executing hedge…",
+      "ctaConfirm": "Hedge {{amount}} SRUB",
+      "footerNote": "Hedge history below + full history on the Transactions page."
+    },
+    "alerts": {
+      "success": "Hedge executed — tokens credited to your account",
+      "errorFallback": "Hedge failed"
+    },
     "openHedges": "Open hedges",
     "closeAll": "Close all",
     "close": "Close",
+    "openHedgesEmpty": "No open hedges. Create one with the calculator above — it will appear here with a quick-close button.",
+    "table": {
+      "date": "Date",
+      "pair": "Pair",
+      "hedgedAmount": "Hedged (SRUB)",
+      "receivedAmount": "Received"
+    },
     "confirmClose": {
       "title": "Close hedge?",
       "body": "A reverse swap of {{amount}} units back to SRUB will be executed.",
-      "expected": "You'll get approximately ~{{amount}} SRUB; final amount depends on the exchange rate at execution time.",
+      "expected": "You'll receive approximately ~{{amount}} SRUB; the actual amount depends on the rate at execution time.",
       "okText": "Close hedge"
     },
+    "confirmCloseAll": {
+      "title": "Close all hedges ({{count}})?",
+      "body": "{{count}} open hedges totaling {{total}} SRUB will be closed sequentially.",
+      "warning": "This action cannot be undone. Each close is executed as a normal swap at the current rate.",
+      "note": "Hedges are closed sequentially — this gives more predictable pool price impact than parallel execution.",
+      "okText": "Close all {{count}}"
+    },
     "errors": {
-      "unwindFallback": "Failed to close hedge"
+      "unwindFallback": "Failed to close hedge",
+      "noPoolData": "Hedge transaction is missing data needed to unwind"
     }
   },
 
@@ -133,6 +319,7 @@
     "subtitle_one": "{{count}} pair available for trading and providing liquidity",
     "subtitle_other": "{{count}} pairs available for trading and providing liquidity",
     "searchPlaceholder": "Find a pair (SBER, GAZP, SRUB…)",
+    "compareButton": "Compare",
     "card": {
       "tvl": "TVL",
       "volume24h": "Volume 24h",
@@ -149,7 +336,430 @@
     },
     "empty": {
       "noResults": "No pairs match \"{{query}}\"",
+      "noResultsHint": "Try adjusting the search query or clearing the filter.",
       "noPools": "No pools yet"
     }
+  },
+
+  "poolDetail": {
+    "backToPools": "Back to pool list",
+    "notFound": "Pool not found",
+    "feeRaisedBadge": "fee raised",
+    "binStep": "Bin step",
+    "baseFee": "Base fee",
+    "createdAt": "Created",
+    "kpi": {
+      "tvl": "Pool TVL",
+      "volume24h": "24h volume",
+      "volume24hSub": "swaps in last 24h",
+      "apy": "Est. APY",
+      "apyForLp": "for LPs",
+      "apyNoData": "insufficient data",
+      "myShare": "My share",
+      "myShareEmpty": "you have no positions",
+      "positions_one": "{{count}} position",
+      "positions_other": "{{count}} positions"
+    },
+    "outOfRange": {
+      "title": "{{count}} of your positions — out of price range",
+      "description": "An out-of-range position earns no fees. Click \"Rebalance\" to migrate it to the current price with the same capital and strategy.",
+      "cta": "Rebalance ({{count}})"
+    },
+    "liquidityDist": {
+      "title": "Liquidity distribution",
+      "yourBinsTag": "your bins highlighted"
+    },
+    "myPositions": {
+      "title": "My positions in this pool",
+      "addButton": "Add",
+      "bins": "bins {{from}} — {{to}}",
+      "outOfRangeTag": "out of range",
+      "unclaimed": "unclaimed",
+      "noFeesYet": "no fees to claim",
+      "claimButton": "Claim",
+      "removeButton": "Remove",
+      "feesClaimed": "Fees claimed",
+      "claimErrorFallback": "Failed to claim fees"
+    },
+    "rebalanceAll": {
+      "title": "Rebalance {{count}} positions?",
+      "body": "Each out-of-range position will be closed sequentially, then reopened with the same capital, strategy and range width but centered on the current price (bin {{binId}}).",
+      "warning": "This is a sequential operation — if something fails mid-way, already-migrated positions stay migrated. Do not close this tab until it finishes.",
+      "okText": "Migrate {{count}}",
+      "moved": "Positions migrated: {{count}}",
+      "failure": "Failed to migrate position {{id}}…: {{error}}. Migrated {{done}} of {{total}}.",
+      "errorWord": "error"
+    },
+    "params": {
+      "title": "Pool parameters",
+      "binStepLabel": "Price step between bins",
+      "baseFee": "Base fee",
+      "currentFee": "Current fee",
+      "currentFeeRaised": "(raised)",
+      "currentPrice": "Current price",
+      "reserve": "Reserve {{symbol}}",
+      "feesCollected": "Fees collected in {{symbol}}"
+    }
+  },
+
+  "positions": {
+    "title": "My positions",
+    "subtitle": "Your LP positions in DLMM pools — bin ranges, unclaimed fees, payout history",
+    "kpi": {
+      "activePositions": "Active positions",
+      "activeNone": "none open",
+      "activeProvide": "providing liquidity",
+      "unclaimedFees": "Unclaimed fees",
+      "readyToClaim": "ready to claim",
+      "totalEarned": "Total earned",
+      "allTime": "all-time"
+    },
+    "card": {
+      "title": "Positions",
+      "alertsButton": "Alerts{{suffix}}",
+      "alertsAriaLabel": "Open position alerts",
+      "claimAll": "Claim all ({{count}})",
+      "closeAll": "Close all ({{count}})"
+    },
+    "healthFilter": {
+      "label": "Filter by health:",
+      "all": "All ({{count}})",
+      "excellent": "Excellent",
+      "good": "Good",
+      "fair": "Fair",
+      "poor": "Poor"
+    },
+    "table": {
+      "pool": "Pool",
+      "poolFallback": "pool {{id}}…",
+      "health": "Health",
+      "healthTooltip": "Heuristic position health score: range fit, fee earning, age. Not investment advice.",
+      "strategy": "Strategy",
+      "priceRange": "Price range",
+      "pnl": "P&L",
+      "pnlTooltip": "Current position value minus initial deposit (in quote-token units). Excludes fees — those have their own column.",
+      "pnlLegacyTooltip": "Position opened before Sprint 9-DS-r4 — no initial deposit recorded.",
+      "unclaimed": "Unclaimed fees",
+      "createdAt": "Created",
+      "actions": "Actions",
+      "claimButton": "Claim",
+      "removeButton": "Remove"
+    },
+    "feeHistory": {
+      "title": "Fee history",
+      "date": "Date",
+      "amount": "Amount",
+      "status": "Status",
+      "claimed": "Claimed",
+      "accrued": "Accrued",
+      "claimedAt": "Claim date"
+    },
+    "confirmClaimAll": {
+      "title": "Claim fees on all positions ({{count}})?",
+      "body": "Accrued fees will be collected from {{count}} positions. Positions stay open and keep earning.",
+      "okText": "Claim from {{count}} positions"
+    },
+    "confirmCloseAll": {
+      "title": "Close all positions ({{count}})?",
+      "body": "{{count}} active positions will be removed sequentially. Accrued fees from each are claimed at the same time.",
+      "warning": "This action cannot be undone. Each removal is a real transaction and may shift the pool price.",
+      "note": "Positions close sequentially — this gives more predictable price impact and helps localize any failure.",
+      "okText": "Close all {{count}}"
+    },
+    "removeModal": {
+      "title": "Remove liquidity",
+      "okText": "Remove",
+      "body": "What percentage of liquidity should be removed from position {{pair}}?"
+    },
+    "messages": {
+      "feesClaimed": "Fees claimed",
+      "liquidityRemoved": "Liquidity removed",
+      "errorFallback": "Error",
+      "claimedCount": "Claimed from {{count}} positions",
+      "closedCount": "Closed {{count}} positions",
+      "removeFailure": "Failed to remove position {{id}}…: {{error}}. Closed {{done}} of {{total}}.",
+      "claimFailure": "Failed to claim position {{id}}…: {{error}}. Claimed from {{done}} of {{total}}.",
+      "autoClaim": "Auto-claim: {{pair}} — claimed {{amount}}",
+      "errorWord": "error"
+    }
+  },
+
+  "transactions": {
+    "title": "Transaction history",
+    "filters": {
+      "txTypePlaceholder": "Transaction type",
+      "statusPlaceholder": "Status",
+      "dateFrom": "Date from",
+      "dateTo": "Date to",
+      "refresh": "Refresh",
+      "reset": "Reset"
+    },
+    "pagination": {
+      "totalCount_one": "{{count}} transaction total",
+      "totalCount_other": "{{count}} transactions total"
+    },
+    "table": {
+      "date": "Date",
+      "type": "Type",
+      "pair": "Pair / direction",
+      "amountIn": "Amount in",
+      "amountOut": "Amount out",
+      "fee": "Fee",
+      "status": "Status"
+    },
+    "txType": {
+      "SWAP": "Swap",
+      "ADD_LIQUIDITY": "Add liquidity",
+      "REMOVE_LIQUIDITY": "Remove liquidity",
+      "CLAIM_FEE": "Claim fees",
+      "TRANSFER": "Transfer",
+      "MINT": "Mint",
+      "BURN": "Burn"
+    },
+    "txStatus": {
+      "PENDING": "Pending",
+      "CONFIRMED": "Confirmed",
+      "FAILED": "Failed",
+      "CANCELLED": "Cancelled"
+    }
+  },
+
+  "profile": {
+    "title": "Profile",
+    "kyc": {
+      "label": "Verification status (KYC)",
+      "pendingTitle": "Your verification request is under review",
+      "pendingBody": "Reviews usually take 1-2 business days. After verification you will have full access to platform features.",
+      "notSubmittedTitle": "Verification not completed",
+      "notSubmittedBody": "Complete KYC verification to unlock trading and liquidity management.",
+      "rejectedTitle": "Verification rejected",
+      "rejectedBody": "Your verification request was rejected. Please contact support."
+    },
+    "edit": {
+      "title": "Edit profile",
+      "firstName": "First name",
+      "firstNamePlaceholder": "John",
+      "firstNameRequired": "Enter your first name",
+      "lastName": "Last name",
+      "lastNamePlaceholder": "Smith",
+      "lastNameRequired": "Enter your last name",
+      "email": "Email address",
+      "submit": "Save",
+      "updateSuccess": "Profile updated",
+      "updateError": "Failed to update profile"
+    },
+    "info": {
+      "title": "Account information",
+      "userId": "User ID",
+      "role": "Role",
+      "createdAt": "Registration date"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "security": "Security",
+      "settings": "Settings"
+    },
+    "summary": {
+      "title": "Account summary",
+      "portfolioValue": "Portfolio value",
+      "assetsHeld": "Assets held",
+      "activePositions": "Active positions",
+      "earnedOnLiquidity": "Earned on liquidity",
+      "toClaim": "{{amount}} to claim"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "empty": "No activity yet",
+      "executed": "Executed",
+      "failed": "Failed"
+    },
+    "settings": {
+      "interfaceModeTitle": "Interface mode",
+      "simpleMode": "Simple mode",
+      "simpleModeHint": "Hides advanced menu items (Rebalance, Team)",
+      "languageTitle": "Interface language",
+      "languageHint": "Choose the language for labels and copy",
+      "languageRu": "Русский",
+      "languageEn": "English"
+    }
+  },
+
+  "team": {
+    "pageTitle": "Team",
+    "onboarding": {
+      "subtitle": "Invite finance managers, accountants and auditors to work on a single legal entity. Every action is attributed to a specific user — the audit log is ready for regulator review.",
+      "empty": "You don't have an organization yet",
+      "emptyDescription": "Create one — and you'll be able to invite team members with different roles.",
+      "createButton": "Create organization"
+    },
+    "header": {
+      "title": "Team \"{{name}}\"",
+      "memberCount_one": "{{count}} member",
+      "memberCount_other": "{{count}} members",
+      "createdAt": "created {{date}}",
+      "inviteButton": "Invite"
+    },
+    "auditAlert": {
+      "title": "Audit log with user attribution",
+      "description": "Every action by any team member (opening a position, swap, settings change) is recorded with the specific user. Visible in Transactions and used for compliance reviews."
+    },
+    "table": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "joinedAt": "Joined",
+      "you": "you",
+      "active": "active",
+      "pending": "pending",
+      "simulateAccept": "Simulate accept",
+      "removeAriaLabel": "Remove",
+      "removeConfirmTitle": "Remove {{name}} from organization?",
+      "removeConfirmDescription": "After removal the user will lose access to all organization operations. The audit log for past actions is retained.",
+      "removeConfirmOk": "Remove",
+      "roleChangedMsg": "{{name}}'s role changed to \"{{role}}\"",
+      "acceptedMsg": "(simulation) {{name}} accepted the invite",
+      "removedMsg": "{{name}} removed"
+    },
+    "footnote": "<strong>Frontend MVP (Sprint 11):</strong> team state is stored locally in the owner's browser. The backend version (Sprint 12) — POST /api/v1/orgs/{orgId}/members + gateway permission middleware — will distribute state across all team members and provide cross-device sync.",
+    "createOrg": {
+      "title": "Create organization",
+      "okText": "Create",
+      "orgNameLabel": "Organization name",
+      "orgNamePlaceholder": "Transport Holding, Sole Proprietor Ivanov, Kontur LLC…",
+      "orgNameRequired": "Enter a name",
+      "ownerNameLabel": "Your name",
+      "ownerNamePlaceholder": "First Last",
+      "ownerNameRequired": "Enter your name",
+      "ownerEmailNote": "Owner email: {{email}} (from your profile)",
+      "successMessage": "Organization \"{{name}}\" created. You are the Owner."
+    },
+    "invite": {
+      "title": "Invite member",
+      "okText": "Send invite",
+      "nameLabel": "Name",
+      "namePlaceholder": "John Doe",
+      "nameRequired": "Enter a name",
+      "emailLabel": "Email",
+      "emailPlaceholder": "john@company.com",
+      "emailRequired": "Enter an email",
+      "emailInvalid": "Invalid email",
+      "roleLabel": "Role",
+      "roleRequired": "Select a role",
+      "duplicateError": "A user with this email is already in the team",
+      "successMessage": "{{name}} invited as \"{{role}}\". Email sent (simulation)."
+    }
+  },
+
+  "rebalance": {
+    "title": "Portfolio rebalance",
+    "subtitle": "Align your actual asset allocation with the target structure in one click",
+    "steps": {
+      "view": "Current structure",
+      "target": "Target",
+      "execute": "Plan + execution"
+    },
+    "view": {
+      "empty": "No portfolio assets to rebalance",
+      "alertTitle": "Current allocation",
+      "alertBody": "Total portfolio value: {{total}}. Move to the \"Target\" step to set desired shares.",
+      "cols": {
+        "token": "Token",
+        "amount": "Quantity",
+        "value": "Value, ₽",
+        "share": "Share"
+      },
+      "nextBtn": "Set target →"
+    },
+    "plan": {
+      "alertTitle": "Set target allocations",
+      "alertBody": "Allocations must sum to 100%. Currently: {{sum}}%. Tolerance: ±0.5% — rebalance will not swap tokens within the tolerance band.",
+      "cols": {
+        "token": "Token",
+        "current": "Current share",
+        "target": "Target share, %",
+        "targetTooltip": "A positive number from 0 to 100"
+      },
+      "backBtn": "← Back",
+      "nextBtn": "Show plan →"
+    },
+    "execute": {
+      "noOpAlert": "All shares are within tolerance — rebalance not needed",
+      "planAlertTitle": "Rebalance plan: {{count}} swap(s)",
+      "moved": "Total to move:",
+      "estFee": "Estimated fee (≈ 30 bps):",
+      "note": "Routed via SRUB as the pivot currency. Execution stops on the first failure — balances do not need to be rolled back.",
+      "skippedTitle": "Skipped",
+      "logTitle": "Execution log",
+      "backBtn": "← Edit target",
+      "executeBtn": "Execute rebalance",
+      "hopCols": {
+        "from": "From",
+        "to": "To",
+        "amount": "Quantity",
+        "rub": "≈ ₽",
+        "reason": "Reason"
+      },
+      "logTokenNotFound": "Token {{from}} or {{to}} not found",
+      "logNoPool": "No pool for {{from}}/{{to}}",
+      "logHopFail": "Step {{step}} ({{from}} → {{to}}): {{error}}",
+      "logSwapError": "swap error",
+      "logSuccess": "{{from}} → {{to}}: {{amount}} (≈ {{rub}})"
+    }
+  },
+
+  "reviews": {
+    "title": "Customer reviews",
+    "subtitle": "Feedback from pilot users of the DLMM platform"
+  },
+
+  "poolCompare": {
+    "title": "Compare pools",
+    "subtitle": "Pick up to {{max}} pools to compare APY, volume, TVL and fees",
+    "addCardTitle": "Add a pool to compare",
+    "viewMode": {
+      "cards": "Cards",
+      "table": "Table"
+    },
+    "shareTooltip": "Copy a link to this comparison",
+    "shareButton": "Share",
+    "clearTooltip": "Clear selection",
+    "clearButton": "Clear",
+    "searchPlaceholder": "Find a pool by symbol (e.g. SBER)",
+    "maxNote": "Max {{max}} pools at once. Remove one to add another.",
+    "emptyState": "Pick at least one pool to start comparing",
+    "alreadyAdded": "This pool is already in the comparison",
+    "maxReached": "Max {{max}} pools. Remove one to add another.",
+    "shareCopied": "Comparison link copied — share with your colleagues",
+    "shareManual": "Copy the link manually:",
+    "removeAria": "Remove pool {{pair}} from comparison",
+    "removeAriaShort": "Remove {{pair}}",
+    "openPool": "Open pool",
+    "openPoolArrow": "Open pool →",
+    "status": {
+      "ACTIVE": "Active"
+    },
+    "metrics": {
+      "apy": "APY",
+      "volume24h": "Volume 24h",
+      "tvlX": "TVL {{symbol}}",
+      "baseFee": "Base fee",
+      "binStep": "Bin step",
+      "binStepTooltip": "Smaller step = more precise liquidity placement, higher maintenance fees",
+      "tvlXShort": "TVL X",
+      "vol30d": "Volatility 30d",
+      "maxDrawdown": "Max drawdown",
+      "sharpe": "Sharpe (vs 14% RFR)",
+      "label": "Metric"
+    },
+    "pro": {
+      "title": "Pro metrics",
+      "syntheticTooltip": "Synthetic metrics derived from APY + volume24h. Real OHLCV-based values land in Sprint 13.",
+      "syntheticTag": "synth.",
+      "vol30d": "Volatility 30d",
+      "maxDrawdown": "Max drawdown",
+      "sharpe": "Sharpe (vs 14% RFR)"
+    },
+    "disclaimer": "Green highlight marks the \"winner\" of each row. This is a heuristic indicator, not investment advice. APY is computed on realized fees over the last 30 days and may not reflect future returns."
   }
 }

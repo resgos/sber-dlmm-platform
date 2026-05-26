@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Card, Typography, Space, Tag, Button, Spin, Alert, Row, Col, Tabs, message, Modal } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -43,6 +44,7 @@ const statusColors: Record<string, string> = {
  * the live metrics; tabbed body with profile + bin chart.
  */
 export default function PoolDetailPage() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()

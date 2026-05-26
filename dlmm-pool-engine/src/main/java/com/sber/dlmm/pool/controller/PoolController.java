@@ -22,8 +22,10 @@ import com.sber.dlmm.pool.dto.CreatePoolRequest;
 import com.sber.dlmm.pool.dto.UpdateCounterpartyLimitsRequest;
 import com.sber.dlmm.pool.dto.UpdateFeeParamsRequest;
 import com.sber.dlmm.pool.dto.UpdateProtocolFeeRequest;
+import com.sber.dlmm.pool.dto.ProMetricsDto;
 import com.sber.dlmm.pool.service.LiquidityService;
 import com.sber.dlmm.pool.service.PoolApyCalibrationService;
+import com.sber.dlmm.pool.service.PoolProMetricsService;
 import com.sber.dlmm.pool.service.PoolService;
 import com.sber.dlmm.pool.service.SwapService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -54,15 +56,18 @@ public class PoolController {
     private final LiquidityService liquidityService;
     private final SwapService swapService;
     private final PoolApyCalibrationService apyCalibrationService;
+    private final PoolProMetricsService proMetricsService;
 
     public PoolController(PoolService poolService,
                           LiquidityService liquidityService,
                           SwapService swapService,
-                          PoolApyCalibrationService apyCalibrationService) {
+                          PoolApyCalibrationService apyCalibrationService,
+                          PoolProMetricsService proMetricsService) {
         this.poolService = poolService;
         this.liquidityService = liquidityService;
         this.swapService = swapService;
         this.apyCalibrationService = apyCalibrationService;
+        this.proMetricsService = proMetricsService;
     }
 
     @PostMapping
@@ -115,6 +120,22 @@ public class PoolController {
     @Operation(summary = "Pool target APY anchor for Health Score calibration (NEW-4)")
     public ResponseEntity<java.util.Map<String, java.math.BigDecimal>> getPoolTargetApy(@PathVariable UUID id) {
         return ResponseEntity.ok(java.util.Map.of("targetApy", apyCalibrationService.getPoolTargetApy(id)));
+    }
+
+    /**
+     * G-23 (Batch #3, Sprint 15) — pro-grade risk metrics for the Pool
+     * comparator: 30-day realised volatility, max drawdown, Sharpe.
+     * Returns {@code isReliable=false} with zeros when the price-history
+     * sample is too small (&lt; 10 points) — UI renders "—" in that case.
+     *
+     * <p>No auth — same rationale as {@code /target-apy}. Cached 1h
+     * per poolId in the service, so high concurrency on the comparator
+     * doesn't hit the DB.
+     */
+    @GetMapping("/{id}/pro-metrics")
+    @Operation(summary = "Pool risk metrics (volatility, max drawdown, Sharpe) — G-23")
+    public ResponseEntity<ProMetricsDto> getPoolProMetrics(@PathVariable UUID id) {
+        return ResponseEntity.ok(proMetricsService.compute(id));
     }
 
     @PostMapping("/{id}/pause")
