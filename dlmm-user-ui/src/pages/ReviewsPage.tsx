@@ -49,7 +49,7 @@ export default function ReviewsPage() {
         {REVIEWS.map((r) => (
           <Card key={r.id} className="sber-card">
             <Space align="start">
-              <Avatar size={48} style={{ background: '#21A038', fontSize: 20 }}>
+              <Avatar size={48} style={{ background: 'var(--sber-primary)', fontSize: 'var(--text-md)' }}>
                 {r.name[0]}
               </Avatar>
               <div style={{ flex: 1 }}>

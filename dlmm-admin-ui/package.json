@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint:colors": "node ../scripts/check-no-hex-in-tsx.mjs"
+    "lint:colors": "node ../scripts/check-no-hex-in-tsx.mjs",
+    "lint:styles": "node ../scripts/check-inline-styles.mjs",
+    "lint:all": "npm run lint:colors && npm run lint:styles"
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.7",

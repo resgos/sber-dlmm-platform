@@ -23,6 +23,7 @@ import com.sber.dlmm.pool.dto.UpdateCounterpartyLimitsRequest;
 import com.sber.dlmm.pool.dto.UpdateFeeParamsRequest;
 import com.sber.dlmm.pool.dto.UpdateProtocolFeeRequest;
 import com.sber.dlmm.pool.service.LiquidityService;
+import com.sber.dlmm.pool.service.PoolApyCalibrationService;
 import com.sber.dlmm.pool.service.PoolService;
 import com.sber.dlmm.pool.service.SwapService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -52,13 +53,16 @@ public class PoolController {
     private final PoolService poolService;
     private final LiquidityService liquidityService;
     private final SwapService swapService;
+    private final PoolApyCalibrationService apyCalibrationService;
 
     public PoolController(PoolService poolService,
                           LiquidityService liquidityService,
-                          SwapService swapService) {
+                          SwapService swapService,
+                          PoolApyCalibrationService apyCalibrationService) {
         this.poolService = poolService;
         this.liquidityService = liquidityService;
         this.swapService = swapService;
+        this.apyCalibrationService = apyCalibrationService;
     }
 
     @PostMapping
@@ -93,6 +97,24 @@ public class PoolController {
             @RequestParam int from,
             @RequestParam int to) {
         return ResponseEntity.ok(poolService.getPoolBins(id, from, to));
+    }
+
+    /**
+     * NEW-4 (Batch #3) — per-pool target APY for the frontend
+     * Position Health Score calibration. Replaces the hard-coded 20%
+     * in {@code positionHealth.ts}. Returns the median realised fee
+     * APY across active positions in the pool (sample &ge; 5, age
+     * &ge; 7 days), or 0.20 (the historical default) when the sample
+     * is too small.
+     *
+     * <p>Decimal fraction: {@code 0.08} = 8% APY, {@code 0.20} = 20%.
+     * No auth required — same as {@code GET /{id}} and the public
+     * stats endpoint; it's a soft calibration signal, not sensitive.
+     */
+    @GetMapping("/{id}/target-apy")
+    @Operation(summary = "Pool target APY anchor for Health Score calibration (NEW-4)")
+    public ResponseEntity<java.util.Map<String, java.math.BigDecimal>> getPoolTargetApy(@PathVariable UUID id) {
+        return ResponseEntity.ok(java.util.Map.of("targetApy", apyCalibrationService.getPoolTargetApy(id)));
     }
 
     @PostMapping("/{id}/pause")

@@ -151,25 +151,25 @@
   },
   {
     "file": "dlmm-admin-ui/src/layouts/AdminLayout.tsx",
-    "line": 114,
+    "line": 120,
     "match": "fontSize: 24",
     "snippet": "style={{ color: '#1890ff', fontSize: 24, minWidth: 24 }} />"
   },
   {
     "file": "dlmm-admin-ui/src/layouts/AdminLayout.tsx",
-    "line": 120,
+    "line": 126,
     "match": "fontSize: 16",
     "snippet": "fontSize: 16,"
   },
   {
     "file": "dlmm-admin-ui/src/layouts/AdminLayout.tsx",
-    "line": 157,
+    "line": 163,
     "match": "fontSize: 18",
     "snippet": "style={{ fontSize: 18 }}"
   },
   {
     "file": "dlmm-admin-ui/src/layouts/AdminLayout.tsx",
-    "line": 165,
+    "line": 171,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>"
   },
@@ -1675,45 +1675,51 @@
   },
   {
     "file": "dlmm-user-ui/src/components/TwoFactorSettings.tsx",
-    "line": 398,
+    "line": 455,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, minWidth: 18 }}>{i + 1}.</Text>"
   },
   {
     "file": "dlmm-user-ui/src/components/UserLayout.tsx",
-    "line": 179,
+    "line": 191,
     "match": "fontSize: 15",
     "snippet": "fontSize: 15,"
   },
   {
     "file": "dlmm-user-ui/src/pages/HedgePage.tsx",
-    "line": 530,
+    "line": 529,
     "match": "fontSize: 15",
     "snippet": "style={{ fontSize: 15, fontWeight: 600 }}>"
   },
   {
     "file": "dlmm-user-ui/src/pages/HedgePage.tsx",
-    "line": 572,
+    "line": 571,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/LiquidityPage.tsx",
-    "line": 206,
+    "line": 248,
     "match": "fontSize: 15",
     "snippet": "style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-"
   },
   {
     "file": "dlmm-user-ui/src/pages/LiquidityPage.tsx",
-    "line": 308,
+    "line": 362,
     "match": "fontSize: 24",
     "snippet": "style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--colo"
   },
   {
     "file": "dlmm-user-ui/src/pages/LoginPage.tsx",
-    "line": 109,
+    "line": 112,
     "match": "fontSize: 15",
     "snippet": "style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-"
+  },
+  {
+    "file": "dlmm-user-ui/src/pages/LoginPage.tsx",
+    "line": 119,
+    "match": "fontSize: 12",
+    "snippet": "style={{ color: 'var(--text-muted)', fontSize: 12 }}>или</Divider>"
   },
   {
     "file": "dlmm-user-ui/src/pages/PoolComparePage.tsx",
@@ -1723,15 +1729,9 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/PoolDetailPage.tsx",
-    "line": 515,
+    "line": 543,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, color: 'var(--text-muted)' }}>незабранные</div>"
-  },
-  {
-    "file": "dlmm-user-ui/src/pages/PoolsPage.tsx",
-    "line": 53,
-    "match": "fontSize: 15",
-    "snippet": "style={{ fontSize: 15 }}>{x}/{y}</Text>"
   },
   {
     "file": "dlmm-user-ui/src/pages/PositionsPage.tsx",
@@ -1741,15 +1741,33 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/ProfilePage.tsx",
-    "line": 330,
+    "line": 332,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/RegisterPage.tsx",
-    "line": 194,
+    "line": 197,
     "match": "fontSize: 15",
     "snippet": "style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-"
+  },
+  {
+    "file": "dlmm-user-ui/src/pages/ReviewsPage.tsx",
+    "line": 58,
+    "match": "fontSize: 12",
+    "snippet": "style={{ fontSize: 12 }}>{r.role}</Text>"
+  },
+  {
+    "file": "dlmm-user-ui/src/pages/ReviewsPage.tsx",
+    "line": 60,
+    "match": "fontSize: 14",
+    "snippet": "style={{ fontSize: 14, margin: '8px 0' }} />"
+  },
+  {
+    "file": "dlmm-user-ui/src/pages/ReviewsPage.tsx",
+    "line": 63,
+    "match": "fontSize: 11",
+    "snippet": "style={{ fontSize: 11, marginTop: 8, display: 'block' }}>"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
@@ -1771,7 +1789,7 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/TeamPage.tsx",
-    "line": 137,
+    "line": 149,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10 }}>{ROLE_HINTS[role]}</Text>"
   }
