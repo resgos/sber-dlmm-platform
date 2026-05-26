@@ -6,6 +6,7 @@ services:
   postgres:
     image: postgres:16
     container_name: dlmm-postgres
+    restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
@@ -33,6 +34,7 @@ services:
   redis:
     image: redis:7
     container_name: dlmm-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     healthcheck:
@@ -46,6 +48,7 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: dlmm-zookeeper
+    restart: unless-stopped
     ports:
       - "2181:2181"
     environment:
@@ -57,6 +60,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: dlmm-kafka
+    restart: unless-stopped
     # Sprint 9 — Kafka JVM defaults to 1 GB heap. On a 7.6 GiB dev host that
     # leaves nothing for the 8 Java services. 512m heap is fine for the dev
     # workload (4 topics, 3 partitions each, RF=1, no consumers driving it
@@ -94,6 +98,7 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.1
     container_name: dlmm-clickhouse
+    restart: unless-stopped
     # ClickHouse defaults are tuned for >16 GB hosts and will happily eat
     # 2-4 GB just sitting idle. Hard cap at 512m + matching ClickHouse
     # config so the OOM-killer doesn't pick it as the largest victim.
@@ -116,6 +121,7 @@ services:
       args:
         MODULE: dlmm-gateway
     container_name: dlmm-gateway
+    restart: unless-stopped
     # Sprint 9 — JVM heap cap to stop the OOM-killer loops on Docker Desktop
     # (7.6 GiB host). Default JVM grabs ~25% of host = ~1.9 GB per service;
     # 8 Java services × 1.9 GB > host RAM long before infra is counted.
@@ -156,6 +162,7 @@ services:
       args:
         MODULE: dlmm-user-service
     container_name: dlmm-user-service
+    restart: unless-stopped
     mem_limit: 512m
     ports:
       - "8081:8081"
@@ -184,6 +191,7 @@ services:
       args:
         MODULE: dlmm-token-service
     container_name: dlmm-token-service
+    restart: unless-stopped
     mem_limit: 512m
     ports:
       - "8082:8082"
@@ -216,6 +224,7 @@ services:
     # used (which inside docker is the pool-engine container itself, not
     # token-service) — swaps would fail with Connection refused.
     container_name: dlmm-pool-engine
+    restart: unless-stopped
     # Slightly higher cap — pool-engine carries Caffeine token cache, outbox
     # dispatcher (@Scheduled), and the swap pipeline's hottest code path.
     mem_limit: 640m
@@ -249,6 +258,7 @@ services:
       args:
         MODULE: dlmm-fee-service
     container_name: dlmm-fee-service
+    restart: unless-stopped
     mem_limit: 512m
     ports:
       - "8084:8084"
@@ -277,6 +287,7 @@ services:
       args:
         MODULE: dlmm-transaction-service
     container_name: dlmm-transaction-service
+    restart: unless-stopped
     mem_limit: 512m
     ports:
       - "8085:8085"
@@ -307,6 +318,7 @@ services:
       args:
         MODULE: dlmm-price-oracle
     container_name: dlmm-price-oracle
+    restart: unless-stopped
     mem_limit: 512m
     ports:
       - "8086:8086"
@@ -335,6 +347,7 @@ services:
       args:
         MODULE: dlmm-notification-service
     container_name: dlmm-notification-service
+    restart: unless-stopped
     mem_limit: 512m
     ports:
       - "8087:8087"
@@ -361,6 +374,7 @@ services:
       args:
         MODULE: dlmm-admin-bff
     container_name: dlmm-admin-bff
+    restart: unless-stopped
     mem_limit: 512m
     ports:
       - "8088:8088"
@@ -394,6 +408,7 @@ services:
       context: ..
       dockerfile: Dockerfile.frontend
     container_name: dlmm-admin-ui
+    restart: unless-stopped
     ports:
       - "3000:80"
     depends_on:
@@ -407,6 +422,7 @@ services:
       context: ..
       dockerfile: Dockerfile.user-frontend
     container_name: dlmm-user-ui
+    restart: unless-stopped
     ports:
       - "3001:80"
     depends_on:
@@ -421,6 +437,7 @@ services:
   dlmm-status-page:
     image: nginx:1.25-alpine
     container_name: dlmm-status-page
+    restart: unless-stopped
     ports:
       - "8090:80"
     volumes:
@@ -436,6 +453,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: dlmm-prometheus
+    restart: unless-stopped
     ports:
       - "9090:9090"
     volumes:
@@ -456,6 +474,7 @@ services:
   grafana:
     image: grafana/grafana:11.2.2
     container_name: dlmm-grafana
+    restart: unless-stopped
     ports:
       - "3030:3000"
     environment:
