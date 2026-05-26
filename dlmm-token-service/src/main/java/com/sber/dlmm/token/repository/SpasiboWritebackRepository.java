@@ -47,11 +47,28 @@ public interface SpasiboWritebackRepository extends JpaRepository<SpasiboWriteba
      * <p>Includes PENDING + RETRY so a flood of in-flight accruals can't
      * race the cap; only REJECTED/DEAD_LETTER are excluded.
      */
+    /**
+     * HOTFIX 2026-05-26 — Hibernate 6 (Spring Boot 3.2.5) rejects the
+     * inline fully-qualified-enum-literal form of IN-clauses at query-
+     * validation time during startup ("Validation failed for query for
+     * method sumPointsByUserSince"). Use parameter binding via a default
+     * method to preserve the public API while routing through a query
+     * Hibernate accepts.
+     */
     @Query("SELECT COALESCE(SUM(e.amountPoints), 0) FROM SpasiboWritebackEntry e " +
            "WHERE e.userId = :userId AND e.createdAt >= :since " +
-           "AND e.status IN (com.sber.dlmm.token.entity.SpasiboWritebackEntry.Status.PENDING, " +
-           "                 com.sber.dlmm.token.entity.SpasiboWritebackEntry.Status.RETRY, " +
-           "                 com.sber.dlmm.token.entity.SpasiboWritebackEntry.Status.ACCEPTED)")
-    long sumPointsByUserSince(@Param("userId") UUID userId,
-                              @Param("since") LocalDateTime since);
+           "AND e.status IN :statuses")
+    long sumPointsByUserSinceInternal(@Param("userId") UUID userId,
+                                      @Param("since") LocalDateTime since,
+                                      @Param("statuses") List<Status> statuses);
+
+    /**
+     * Public API kept stable — implementation hard-codes the cap-counting
+     * statuses (PENDING + RETRY + ACCEPTED, excludes REJECTED/DEAD_LETTER)
+     * matching the original inline query.
+     */
+    default long sumPointsByUserSince(UUID userId, LocalDateTime since) {
+        return sumPointsByUserSinceInternal(userId, since,
+                List.of(Status.PENDING, Status.RETRY, Status.ACCEPTED));
+    }
 }

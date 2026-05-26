@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManagerFactory;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
@@ -57,12 +58,24 @@ import org.springframework.security.core.Authentication;
 @EnableAspectJAutoProxy
 public class DlmmAdminAuditAutoConfiguration {
 
+    /**
+     * HOTFIX#2 2026-05-26 — guard on AdminAuditLogRepository being wired.
+     * notification-service has JPA + spring-security on classpath (so the
+     * class-level @ConditionalOnClass passes) but its
+     * @EnableJpaRepositories scanBasePackages doesn't include
+     * com.sber.dlmm.common.audit, so the repository bean is absent and
+     * autowiring this bean would fail with UnsatisfiedDependencyException.
+     * Self-skip in that case — the service has no @AdminAudit annotations
+     * to capture anyway.
+     */
     @Bean
+    @ConditionalOnBean(AdminAuditLogRepository.class)
     public AdminAuditService adminAuditService(AdminAuditLogRepository repository) {
         return new AdminAuditService(repository);
     }
 
     @Bean
+    @ConditionalOnBean(AdminAuditService.class)
     public AdminAuditAspect adminAuditAspect(AdminAuditService service) {
         return new AdminAuditAspect(service);
     }
