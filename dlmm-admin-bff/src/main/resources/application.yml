@@ -26,7 +26,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        # Sprint 13 S13-01 — circuitbreakers,retries exposed so operators
+        # can curl /actuator/circuitbreakers to see per-downstream state
+        # (CLOSED / OPEN / HALF_OPEN) without needing Prometheus.
+        include: health,info,metrics,prometheus,circuitbreakers,retries
   endpoint:
     health:
       # Surfaces the per-downstream health (token, user, pool, fee, tx) so
@@ -34,6 +37,11 @@ management:
       show-details: always
       probes:
         enabled: true
+    circuitbreakers:
+      enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
 
 # Sprint 8 C-10 (R#33) → Sprint 9-DS-r4 (P1-13) — circuit breaker + retry
 # for ALL outbound bff calls.

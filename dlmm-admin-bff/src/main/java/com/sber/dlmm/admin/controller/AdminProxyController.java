@@ -2,45 +2,42 @@ package com.sber.dlmm.admin.controller;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sber.dlmm.admin.client.BffProxyClient;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.reactive.function.client.WebClient;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Sprint 13 S13-01 — every downstream call now goes through
+ * {@link BffProxyClient} which adds {@code @CircuitBreaker} +
+ * {@code @Retry}. The previous implementation held five raw
+ * {@link org.springframework.web.reactive.function.client.WebClient}
+ * fields with inline {@code .onErrorReturn(...)} per call — that
+ * caught HTTP errors but left threads pinned on slow downstreams for
+ * the full 10s timeout. With CB-OPEN, the bff fails fast and frees its
+ * threads, keeping the admin UI responsive even during a downstream
+ * outage.
+ *
+ * <p>This controller now does only the things proxying can't move
+ * downstream: request-body shape translation (mint/burn), nested-object
+ * flattening (pool detail), and HTTP-shape mapping (404 when pool absent).
+ */
 @RestController
 @RequestMapping("/api/v1/admin")
 @Tag(name = "Admin Proxy", description = "Admin proxy endpoints forwarding to downstream microservices")
 public class AdminProxyController {
 
-    private static final Duration TIMEOUT = Duration.ofSeconds(10);
-    private static final String EMPTY_PAGE = "{\"content\":[],\"page\":0,\"size\":20,\"totalElements\":0,\"totalPages\":0}";
-
-    private final WebClient userServiceClient;
-    private final WebClient tokenServiceClient;
-    private final WebClient poolEngineClient;
-    private final WebClient transactionServiceClient;
+    private final BffProxyClient proxy;
     private final ObjectMapper objectMapper;
 
-    public AdminProxyController(
-            WebClient.Builder webClientBuilder,
-            ObjectMapper objectMapper,
-            @Value("${dlmm.services.user-service-url}") String userServiceUrl,
-            @Value("${dlmm.services.token-service-url}") String tokenServiceUrl,
-            @Value("${dlmm.services.pool-engine-url}") String poolEngineUrl,
-            @Value("${dlmm.services.transaction-service-url}") String transactionServiceUrl
-    ) {
-        this.userServiceClient = webClientBuilder.clone().baseUrl(userServiceUrl).build();
-        this.tokenServiceClient = webClientBuilder.clone().baseUrl(tokenServiceUrl).build();
-        this.poolEngineClient = webClientBuilder.clone().baseUrl(poolEngineUrl).build();
-        this.transactionServiceClient = webClientBuilder.clone().baseUrl(transactionServiceUrl).build();
+    public AdminProxyController(BffProxyClient proxy, ObjectMapper objectMapper) {
+        this.proxy = proxy;
         this.objectMapper = objectMapper;
     }
 
@@ -53,20 +50,7 @@ public class AdminProxyController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String query,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = userServiceClient.get()
-                .uri(u -> {
-                    var b = u.path("/api/v1/users")
-                            .queryParam("page", page)
-                            .queryParam("size", size);
-                    if (query != null && !query.isBlank()) b.queryParam("query", query);
-                    return b.build();
-                })
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn(EMPTY_PAGE)
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.getUsers(page, size, query, auth));
     }
 
     @GetMapping("/users/{id}")
@@ -74,14 +58,7 @@ public class AdminProxyController {
     public ResponseEntity<String> getUser(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = userServiceClient.get()
-                .uri("/api/v1/users/{id}", id)
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.getUser(id, auth));
     }
 
     @PutMapping("/users/{id}/kyc")
@@ -90,16 +67,7 @@ public class AdminProxyController {
             @PathVariable UUID id,
             @RequestBody String body,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = userServiceClient.put()
-                .uri("/api/v1/users/{id}/kyc", id)
-                .header("Authorization", auth != null ? auth : "")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.updateKyc(id, body, auth));
     }
 
     @PutMapping("/users/{id}/role")
@@ -108,16 +76,7 @@ public class AdminProxyController {
             @PathVariable UUID id,
             @RequestBody String body,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = userServiceClient.put()
-                .uri("/api/v1/users/{id}/role", id)
-                .header("Authorization", auth != null ? auth : "")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.updateRole(id, body, auth));
     }
 
     @PostMapping("/users/{id}/block")
@@ -125,13 +84,7 @@ public class AdminProxyController {
     public ResponseEntity<Void> blockUser(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        userServiceClient.post()
-                .uri("/api/v1/users/{id}/block", id)
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(Void.class)
-                .onErrorResume(e -> reactor.core.publisher.Mono.empty())
-                .block(TIMEOUT);
+        proxy.blockUser(id, auth);
         return ResponseEntity.noContent().build();
     }
 
@@ -140,13 +93,7 @@ public class AdminProxyController {
     public ResponseEntity<Void> unblockUser(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        userServiceClient.post()
-                .uri("/api/v1/users/{id}/unblock", id)
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(Void.class)
-                .onErrorResume(e -> reactor.core.publisher.Mono.empty())
-                .block(TIMEOUT);
+        proxy.unblockUser(id, auth);
         return ResponseEntity.noContent().build();
     }
 
@@ -157,17 +104,7 @@ public class AdminProxyController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = transactionServiceClient.get()
-                .uri(u -> u.path("/api/v1/transactions/user/{userId}")
-                        .queryParam("page", page)
-                        .queryParam("size", size)
-                        .build(id))
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn(EMPTY_PAGE)
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.getUserTransactions(id, page, size, auth));
     }
 
     // ============ POOLS ============
@@ -178,17 +115,7 @@ public class AdminProxyController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = poolEngineClient.get()
-                .uri(u -> u.path("/api/v1/pools")
-                        .queryParam("page", page)
-                        .queryParam("size", size)
-                        .build())
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn(EMPTY_PAGE)
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.getPools(page, size, auth));
     }
 
     @GetMapping("/pools/{id}")
@@ -196,19 +123,10 @@ public class AdminProxyController {
     public ResponseEntity<String> getPool(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        // Sprint 9-DS — `.onErrorReturn(null)` was throwing
-        // `NullPointerException: fallbackValue must not be null` on every
-        // call (Reactor 3.5 hardened the null check). Switched to
-        // `.onErrorResume(e -> Mono.empty())` which is the documented way
-        // to "treat any error as no value" — `block()` then returns null
-        // and the null-check below maps to 404 as intended.
-        String raw = poolEngineClient.get()
-                .uri("/api/v1/pools/{id}", id)
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorResume(e -> reactor.core.publisher.Mono.empty())
-                .block(TIMEOUT);
+        // BffProxyClient.getPool returns null on CB-OPEN or absence;
+        // the controller maps that to 404 — same shape as before the
+        // Resilience4j wrap.
+        String raw = proxy.getPool(id, auth);
         if (raw == null) return ResponseEntity.notFound().build();
         // Flatten: {pool: {...}, bins: [...], ...} → {...pool, bins: [...], ...}
         try {
@@ -234,16 +152,7 @@ public class AdminProxyController {
     public ResponseEntity<String> createPool(
             @RequestBody String body,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = poolEngineClient.post()
-                .uri("/api/v1/pools")
-                .header("Authorization", auth != null ? auth : "")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{\"error\":\"Failed to create pool\"}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.createPool(body, auth));
     }
 
     @PostMapping("/pools/{id}/pause")
@@ -251,14 +160,7 @@ public class AdminProxyController {
     public ResponseEntity<String> pausePool(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = poolEngineClient.post()
-                .uri("/api/v1/pools/{id}/pause", id)
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.pausePool(id, auth));
     }
 
     @PostMapping("/pools/{id}/resume")
@@ -266,14 +168,7 @@ public class AdminProxyController {
     public ResponseEntity<String> resumePool(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = poolEngineClient.post()
-                .uri("/api/v1/pools/{id}/resume", id)
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.resumePool(id, auth));
     }
 
     @PostMapping("/pools/{id}/emergency-shutdown")
@@ -281,14 +176,7 @@ public class AdminProxyController {
     public ResponseEntity<String> emergencyShutdown(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = poolEngineClient.post()
-                .uri("/api/v1/pools/{id}/emergency-shutdown", id)
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.emergencyShutdown(id, auth));
     }
 
     // ============ TOKENS ============
@@ -299,17 +187,7 @@ public class AdminProxyController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = tokenServiceClient.get()
-                .uri(u -> u.path("/api/v1/tokens")
-                        .queryParam("page", page)
-                        .queryParam("size", size)
-                        .build())
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn(EMPTY_PAGE)
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.getTokens(page, size, auth));
     }
 
     @GetMapping("/tokens/{id}")
@@ -317,14 +195,7 @@ public class AdminProxyController {
     public ResponseEntity<String> getToken(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = tokenServiceClient.get()
-                .uri("/api/v1/tokens/{id}", id)
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.getToken(id, auth));
     }
 
     @PostMapping("/tokens")
@@ -332,16 +203,7 @@ public class AdminProxyController {
     public ResponseEntity<String> createToken(
             @RequestBody String body,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = tokenServiceClient.post()
-                .uri("/api/v1/tokens")
-                .header("Authorization", auth != null ? auth : "")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{\"error\":\"Failed to create token\"}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.createToken(body, auth));
     }
 
     @PostMapping("/tokens/{id}/mint")
@@ -356,16 +218,7 @@ public class AdminProxyController {
         transformed.put("toUserId", body.get("userId"));
         transformed.put("amount", body.get("amount"));
         try {
-            String result = tokenServiceClient.post()
-                    .uri("/api/v1/tokens/mint")
-                    .header("Authorization", auth != null ? auth : "")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(objectMapper.writeValueAsString(transformed))
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .onErrorReturn("{\"error\":\"Mint failed\"}")
-                    .block(TIMEOUT);
-            return jsonOk(result);
+            return jsonOk(proxy.mintToken(objectMapper.writeValueAsString(transformed), auth));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }
@@ -383,16 +236,7 @@ public class AdminProxyController {
         transformed.put("fromUserId", body.get("userId"));
         transformed.put("amount", body.get("amount"));
         try {
-            String result = tokenServiceClient.post()
-                    .uri("/api/v1/tokens/burn")
-                    .header("Authorization", auth != null ? auth : "")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(objectMapper.writeValueAsString(transformed))
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .onErrorReturn("{\"error\":\"Burn failed\"}")
-                    .block(TIMEOUT);
-            return jsonOk(result);
+            return jsonOk(proxy.burnToken(objectMapper.writeValueAsString(transformed), auth));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }
@@ -408,21 +252,7 @@ public class AdminProxyController {
             @RequestParam(required = false) String txType,
             @RequestParam(required = false) String status,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = transactionServiceClient.get()
-                .uri(u -> {
-                    var b = u.path("/api/v1/transactions")
-                            .queryParam("page", page)
-                            .queryParam("size", size);
-                    if (txType != null) b.queryParam("type", txType);
-                    if (status != null) b.queryParam("status", status);
-                    return b.build();
-                })
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn(EMPTY_PAGE)
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.getTransactions(page, size, txType, status, auth));
     }
 
     /**
@@ -436,14 +266,7 @@ public class AdminProxyController {
     public ResponseEntity<String> reviewTransaction(
             @PathVariable UUID id,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        String result = transactionServiceClient.post()
-                .uri("/api/v1/transactions/{id}/review", id)
-                .header("Authorization", auth != null ? auth : "")
-                .retrieve()
-                .bodyToMono(String.class)
-                .onErrorReturn("{\"error\":\"Failed to mark reviewed\"}")
-                .block(TIMEOUT);
-        return jsonOk(result);
+        return jsonOk(proxy.reviewTransaction(id, auth));
     }
 
     // ============ HELPERS ============
