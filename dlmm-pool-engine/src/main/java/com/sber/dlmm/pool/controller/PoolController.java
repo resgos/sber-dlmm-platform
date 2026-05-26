@@ -1,6 +1,7 @@
 package com.sber.dlmm.pool.controller;
 
 import com.sber.dlmm.common.audit.AdminAudit;
+import com.sber.dlmm.common.audit.UserAudit;
 import com.sber.dlmm.common.dto.PageResponse;
 import com.sber.dlmm.common.exception.ForbiddenException;
 import com.sber.dlmm.pool.config.JwtUserDetails;
@@ -166,6 +167,7 @@ public class PoolController {
 
     @PostMapping("/add-liquidity")
     @Operation(summary = "Add liquidity to a pool (KYC verified users)")
+    @UserAudit(action = "ADD_LIQUIDITY", targetType = "POOL")
     public ResponseEntity<AddLiquidityResponse> addLiquidity(
             @Valid @RequestBody AddLiquidityRequest request) {
         JwtUserDetails user = getCurrentUser();
@@ -195,6 +197,7 @@ public class PoolController {
 
     @PostMapping("/remove-liquidity")
     @Operation(summary = "Remove liquidity from a position (KYC verified users)")
+    @UserAudit(action = "REMOVE_LIQUIDITY", targetType = "POSITION")
     public ResponseEntity<RemoveLiquidityResponse> removeLiquidity(
             @Valid @RequestBody RemoveLiquidityRequest request) {
         JwtUserDetails user = getCurrentUser();
@@ -221,6 +224,7 @@ public class PoolController {
 
     @PostMapping("/swap")
     @Operation(summary = "Execute a token swap (KYC verified users)")
+    @UserAudit(action = "SWAP", targetType = "POOL")
     public ResponseEntity<SwapResponse> swap(@Valid @RequestBody SwapRequest request) {
         JwtUserDetails user = getCurrentUser();
         return ResponseEntity.ok(swapService.swap(request, user.userIdAsUUID()));

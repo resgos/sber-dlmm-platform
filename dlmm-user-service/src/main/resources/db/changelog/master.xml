@@ -10,5 +10,6 @@
     <include file="003-create-admin-audit-log-table.xml" relativeToChangelogFile="true"/>
     <include file="004-create-user-two-factor-table.xml" relativeToChangelogFile="true"/>
     <include file="005-create-orgs-tables.xml" relativeToChangelogFile="true"/>
+    <include file="006-add-actor-type-to-admin-audit-log.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

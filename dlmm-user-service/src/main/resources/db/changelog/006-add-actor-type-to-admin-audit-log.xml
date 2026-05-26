@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 13 G-28 / S13-02 — admin_audit_log was admin-only since
+        Sprint 8 #AU-4. Regulator + 152-ФЗ require we also attribute
+        user-side mutations (swap, add/remove liquidity, fee claim).
+        Add actor_type so a single immutable trail covers both flavours.
+
+        DEFAULT 'ADMIN' so:
+          • pre-existing rows stay valid (no backfill required)
+          • call sites using @AdminAudit without specifying actorType
+            keep writing 'ADMIN' transparently
+
+        Wrapped in a preCondition matching the dlmm-common convention so
+        re-running against a DB that already has the column (e.g. one
+        bootstrapped by init-db.sql) is a no-op MARK_RAN instead of
+        a failing ALTER.
+    -->
+    <changeSet id="006-add-actor-type-to-admin-audit-log" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="admin_audit_log" columnName="actor_type"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="admin_audit_log">
+            <column name="actor_type" type="VARCHAR(10)" defaultValue="ADMIN">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <!--
+            Filter index: dashboards routinely slice "all USER actions in
+            the last hour" (suspicious-activity sweep) or "all ADMIN
+            actions today" (operations review). Without the index those
+            queries seq-scan the whole table.
+        -->
+        <createIndex indexName="idx_admin_audit_actor_type" tableName="admin_audit_log">
+            <column name="actor_type"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

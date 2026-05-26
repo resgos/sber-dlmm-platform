@@ -1,5 +1,6 @@
 package com.sber.dlmm.fee.controller;
 
+import com.sber.dlmm.common.audit.UserAudit;
 import com.sber.dlmm.common.dto.PageResponse;
 import com.sber.dlmm.fee.dto.ClaimFeesRequest;
 import com.sber.dlmm.fee.dto.ClaimFeesResponse;
@@ -36,6 +37,7 @@ public class FeeController {
     }
 
     @PostMapping("/claim")
+    @UserAudit(action = "CLAIM_FEES", targetType = "POSITION")
     public ResponseEntity<ClaimFeesResponse> claimFees(@Valid @RequestBody ClaimFeesRequest request,
                                                        Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
