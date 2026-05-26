@@ -500,18 +500,17 @@ export default function HedgePage() {
               <Space direction="vertical" size={12} style={{ width: '100%' }}>
                 {candidates.map((c) => {
                   const selected = c.pool.id === selectedPoolId
+                  // Sprint 12 R-03 — pair tile uses the `sber-hedge-pair`
+                  // class so dark-mode overrides in sber-theme.css can
+                  // recolor it; was inline white background which stayed
+                  // white on dark page bg. Selected-state border also
+                  // moved to className so it's hover-able without
+                  // re-rendering.
                   return (
                     <div
                       key={c.pool.id}
                       onClick={() => setSelectedPoolId(c.pool.id)}
-                      style={{
-                        cursor: 'pointer',
-                        padding: 14,
-                        borderRadius: 'var(--radius-md)',
-                        border: `1px solid ${selected ? 'var(--sber-green)' : 'var(--border-light)'}`,
-                        background: selected ? 'var(--sber-green-light)' : '#FFFFFF',
-                        transition: 'all 0.15s ease',
-                      }}
+                      className={`sber-hedge-pair${selected ? ' sber-hedge-pair--selected' : ''}`}
                     >
                       <Row justify="space-between" align="middle">
                         <Col>
