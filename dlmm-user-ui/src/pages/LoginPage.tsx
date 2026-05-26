@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Form, Input, Button, Card, Typography, Alert, Space } from 'antd'
-import { UserOutlined, LockOutlined } from '@ant-design/icons'
+import { Form, Input, Button, Card, Typography, Alert, Space, Divider } from 'antd'
+import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { auth } from '@/api/services'
 import { authStore } from '@/store/authStore'
@@ -113,7 +113,18 @@ export default function LoginPage() {
           </Form.Item>
         </Form>
 
-        <div style={{ textAlign: 'center' }}>
+        <Divider plain style={{ color: 'var(--text-muted)', fontSize: 12 }}>или</Divider>
+        <Button
+          block
+          size="large"
+          icon={<SafetyCertificateOutlined />}
+          onClick={() => window.location.href = '/api/v1/auth/saml/initiate'}
+          style={{ marginTop: 8 }}
+        >
+          Войти через корпоративный SSO
+        </Button>
+
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
           <Text style={{ color: '#6B7280' }}>
             {t('auth.login.noAccount')}{' '}
             <Link to="/register" style={{ color: '#21A038', fontWeight: 500 }}>
