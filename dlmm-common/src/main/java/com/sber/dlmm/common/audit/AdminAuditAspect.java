@@ -20,8 +20,13 @@ import java.util.UUID;
  * that captures every {@code @AdminAudit}-marked method call into
  * {@code admin_audit_log}.
  *
+ * <p>Sprint 13 G-28 / S13-02 — now also captures {@link UserAudit @UserAudit}
+ * (pure alias of {@code @AdminAudit(actorType = USER)}). One aspect,
+ * two annotations: avoids duplicate AOP wiring and lets the regulator
+ * read both flavours from the same {@code admin_audit_log} table.
+ *
  * <p>Lives in {@code dlmm-common.audit} so any service (user, pool,
- * transaction, …) gets the same capture path. Registered by
+ * transaction, fee …) gets the same capture path. Registered by
  * {@link DlmmAdminAuditAutoConfiguration} when AOP + JPA are on the
  * classpath.
  *
@@ -50,9 +55,36 @@ public class AdminAuditAspect {
     }
 
     @Around("@annotation(com.sber.dlmm.common.audit.AdminAudit)")
-    public Object aroundAuditedMethod(ProceedingJoinPoint pjp) throws Throwable {
-        AdminAudit annotation = extractAnnotation(pjp);
-        AdminAuditLog.AdminAuditLogBuilder builder = startBuilder(pjp, annotation);
+    public Object aroundAdminAudited(ProceedingJoinPoint pjp) throws Throwable {
+        AdminAudit annotation = requireAnnotation(pjp, AdminAudit.class);
+        return capture(pjp, annotation.action(), annotation.targetType(),
+                annotation.targetIdParam(), annotation.actorType());
+    }
+
+    /**
+     * Sprint 13 G-28 / S13-02 — separate pointcut for {@link UserAudit}
+     * so the aspect catches both annotations. AspectJ doesn't OR
+     * pointcuts cleanly across two different annotation types when each
+     * carries different fields, so two @Around methods (delegating to
+     * one shared capture path) is the simpler shape.
+     */
+    @Around("@annotation(com.sber.dlmm.common.audit.UserAudit)")
+    public Object aroundUserAudited(ProceedingJoinPoint pjp) throws Throwable {
+        UserAudit annotation = requireAnnotation(pjp, UserAudit.class);
+        return capture(pjp, annotation.action(), annotation.targetType(),
+                annotation.targetIdParam(), ActorType.USER);
+    }
+
+    /**
+     * Shared capture path — wraps the proceed() call with builder
+     * setup + SUCCESS/FAILED record. Both annotations route through
+     * here so we only have one place that ever talks to
+     * {@link AdminAuditService}.
+     */
+    private Object capture(ProceedingJoinPoint pjp, String action, String targetType,
+                            String targetIdParam, ActorType actorType) throws Throwable {
+        AdminAuditLog.AdminAuditLogBuilder builder = startBuilder(
+                pjp, action, targetType, targetIdParam, actorType);
 
         try {
             Object result = pjp.proceed();
@@ -67,25 +99,30 @@ public class AdminAuditAspect {
         }
     }
 
-    private AdminAudit extractAnnotation(ProceedingJoinPoint pjp) {
+    private <A extends java.lang.annotation.Annotation> A requireAnnotation(ProceedingJoinPoint pjp, Class<A> type) {
         MethodSignature sig = (MethodSignature) pjp.getSignature();
         Method method = sig.getMethod();
-        AdminAudit ann = method.getAnnotation(AdminAudit.class);
+        A ann = method.getAnnotation(type);
         if (ann == null) {
-            throw new IllegalStateException("@AdminAudit pointcut matched a method without the annotation: "
-                    + method);
+            throw new IllegalStateException("@" + type.getSimpleName()
+                    + " pointcut matched a method without the annotation: " + method);
         }
         return ann;
     }
 
-    private AdminAuditLog.AdminAuditLogBuilder startBuilder(ProceedingJoinPoint pjp, AdminAudit ann) {
+    private AdminAuditLog.AdminAuditLogBuilder startBuilder(ProceedingJoinPoint pjp,
+                                                              String action,
+                                                              String targetType,
+                                                              String targetIdParam,
+                                                              ActorType actorType) {
         MethodSignature sig = (MethodSignature) pjp.getSignature();
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
         return AdminAuditLog.builder()
-                .action(ann.action())
-                .targetType(nullIfBlank(ann.targetType()))
-                .targetId(extractTargetId(pjp, sig, ann.targetIdParam()))
+                .action(action)
+                .actorType(actorType)
+                .targetType(nullIfBlank(targetType))
+                .targetId(extractTargetId(pjp, sig, targetIdParam))
                 .actorUserId(parseActorUserId(auth))
                 .actorRole(extractActorRole(auth))
                 .methodSignature(sig.getDeclaringType().getSimpleName() + "." + sig.getName())

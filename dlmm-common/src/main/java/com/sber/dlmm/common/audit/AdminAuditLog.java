@@ -51,11 +51,33 @@ public class AdminAuditLog {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** UUID of the admin user who triggered the action. Null only for reserved system audits. */
+    /**
+     * Sprint 13 G-28 / S13-02 — distinguishes ADMIN-side mutations
+     * (KYC update, pool pause, OTC quote) from USER-side mutations
+     * (swap, add/remove liquidity, fee claim). Defaults to
+     * {@link ActorType#ADMIN} so call sites that don't specify behave
+     * the same way they did pre-S13-02, and any pre-existing rows in
+     * the DB stay valid (column has DEFAULT 'ADMIN').
+     */
+    @Column(name = "actor_type", nullable = false, length = 10)
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private ActorType actorType = ActorType.ADMIN;
+
+    /**
+     * UUID of the user who triggered the action — admin id for ADMIN-side
+     * audits, end-user id for USER-side audits. Null only for reserved
+     * system audits.
+     */
     @Column(name = "actor_user_id")
     private UUID actorUserId;
 
-    /** "ROLE_ADMIN" or "ROLE_SUPER_ADMIN" — pulled from JWT authorities at write time. */
+    /**
+     * "ROLE_ADMIN" / "ROLE_SUPER_ADMIN" / "ROLE_USER" — pulled from JWT
+     * authorities at write time. Combined with {@link #actorType} this
+     * captures both "what hat are they wearing" and "what permission did
+     * the JWT carry" — useful for spotting privilege-escalation patterns.
+     */
     @Column(name = "actor_role", length = 40)
     private String actorRole;
 

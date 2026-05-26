@@ -2,6 +2,8 @@ package com.sber.dlmm.common.audit;
 
 // Sprint 9-DS-r4 (P2-13) — moved from dlmm-user-service to dlmm-common
 // alongside the aspect + service it tests. Inputs unchanged.
+// Sprint 13 G-28 / S13-02 — added cases covering @UserAudit alias +
+// the new actorType field on @AdminAudit.
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,8 @@ import static org.mockito.Mockito.verify;
 /**
  * Sprint 8 AU-4 — verify the aspect captures the right fields on both
  * SUCCESS and FAILED paths.
+ *
+ * <p>Sprint 13 G-28 / S13-02 — extended with @UserAudit + actorType cases.
  *
  * <p>Uses Spring's {@link AspectJProxyFactory} to wire the aspect around
  * a plain Java target — no Spring context boot, no JPA. The aspect must
@@ -63,6 +67,9 @@ class AdminAuditAspectTest {
         assertThat(row.getStatus()).isEqualTo(AdminAuditLog.Status.SUCCESS);
         assertThat(row.getErrorMessage()).isNull();
         assertThat(row.getMethodSignature()).isEqualTo("AuditedTarget.blockUser");
+        // Sprint 13 G-28 / S13-02 — actor_type defaults to ADMIN when
+        // @AdminAudit doesn't set it (backward compat).
+        assertThat(row.getActorType()).isEqualTo(ActorType.ADMIN);
     }
 
     @Test
@@ -144,6 +151,52 @@ class AdminAuditAspectTest {
         assertThat(row.getErrorMessage()).startsWith("IllegalArgumentException:");
     }
 
+    // ── Sprint 13 G-28 / S13-02 — @UserAudit + actorType cases ──
+
+    @Test
+    void userAuditAnnotation_capturesActorTypeUser() {
+        UUID actorId = UUID.randomUUID();
+        seedActor(actorId, "ROLE_USER");
+
+        proxied.userSwap();
+
+        AdminAuditLog row = capture();
+        assertThat(row.getAction()).isEqualTo("SWAP");
+        assertThat(row.getTargetType()).isEqualTo("POOL");
+        assertThat(row.getActorUserId()).isEqualTo(actorId);
+        assertThat(row.getActorRole()).isEqualTo("ROLE_USER");
+        assertThat(row.getActorType()).isEqualTo(ActorType.USER);
+        assertThat(row.getStatus()).isEqualTo(AdminAuditLog.Status.SUCCESS);
+    }
+
+    @Test
+    void userAuditAnnotation_capturesFailureSameAsAdmin() {
+        seedActor(UUID.randomUUID(), "ROLE_USER");
+
+        assertThatThrownBy(() -> proxied.userClaimFails())
+                .isInstanceOf(IllegalStateException.class);
+
+        AdminAuditLog row = capture();
+        assertThat(row.getAction()).isEqualTo("CLAIM_FEES");
+        assertThat(row.getActorType()).isEqualTo(ActorType.USER);
+        assertThat(row.getStatus()).isEqualTo(AdminAuditLog.Status.FAILED);
+        assertThat(row.getErrorMessage()).contains("IllegalStateException");
+    }
+
+    @Test
+    void adminAuditWithExplicitUserActorType_recordsAsUser() {
+        // Verifies the actorType field on @AdminAudit works too (not just
+        // the @UserAudit alias) — same field both paths drain into.
+        UUID actorId = UUID.randomUUID();
+        seedActor(actorId, "ROLE_USER");
+
+        proxied.explicitUserViaAdminAudit();
+
+        AdminAuditLog row = capture();
+        assertThat(row.getAction()).isEqualTo("EXPLICIT_USER");
+        assertThat(row.getActorType()).isEqualTo(ActorType.USER);
+    }
+
     // ── helpers ──
 
     private void seedActor(UUID actorId, String role) {
@@ -164,7 +217,8 @@ class AdminAuditAspectTest {
     /**
      * Plain class — must be public so Spring's AspectJProxyFactory can
      * generate a CGLIB subclass. Methods exercise each branch of the
-     * aspect (success, failure, no-target, unannotated).
+     * aspect (success, failure, no-target, unannotated, @UserAudit,
+     * actorType override).
      */
     public static class AuditedTarget {
 
@@ -191,6 +245,23 @@ class AdminAuditAspectTest {
         // No @AdminAudit — must not be captured.
         public void notAudited() {
             // no-op
+        }
+
+        // Sprint 13 G-28 / S13-02 — @UserAudit alias.
+        @UserAudit(action = "SWAP", targetType = "POOL")
+        public void userSwap() {
+            // success path, USER actor
+        }
+
+        @UserAudit(action = "CLAIM_FEES", targetType = "POSITION")
+        public void userClaimFails() {
+            throw new IllegalStateException("balance under-funded");
+        }
+
+        // Sprint 13 G-28 / S13-02 — actorType field on @AdminAudit (no alias).
+        @AdminAudit(action = "EXPLICIT_USER", actorType = ActorType.USER)
+        public void explicitUserViaAdminAudit() {
+            // success path
         }
     }
 }

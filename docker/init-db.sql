@@ -319,8 +319,15 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (create
 -- here so any service that boots into a fresh DB sees the table regardless
 -- of which service runs Liquibase first. Append-only — never updated, never
 -- deleted; compliance replay depends on immutability.
+-- Sprint 13 G-28 / S13-02 — actor_type distinguishes ADMIN-side
+-- mutations (KYC update, pool pause, OTC quote) from USER-side
+-- mutations (swap, add/remove liquidity, fee claim). DEFAULT 'ADMIN'
+-- so pre-existing rows stay valid and the user-service Liquibase
+-- changeset 006-add-actor-type-to-admin-audit-log no-ops via
+-- preCondition when the table is pre-bootstrapped here.
 CREATE TABLE IF NOT EXISTS admin_audit_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_type VARCHAR(10) NOT NULL DEFAULT 'ADMIN',
     actor_user_id UUID,
     actor_role VARCHAR(40),
     action VARCHAR(60) NOT NULL,
@@ -339,6 +346,10 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_target
     ON admin_audit_log (target_type, target_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_created
     ON admin_audit_log (created_at DESC);
+-- Sprint 13 G-28 / S13-02 — filter index for "all USER actions" /
+-- "all ADMIN actions" dashboard slices.
+CREATE INDEX IF NOT EXISTS idx_admin_audit_actor_type
+    ON admin_audit_log (actor_type, created_at DESC);
 
 -- ─── outbox_events (token-service, optionally other services) ───────────────
 -- Transactional outbox: domain-mutation @Transactional writes a row here
