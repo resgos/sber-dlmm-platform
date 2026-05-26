@@ -32,7 +32,6 @@
   "dlmm-user-ui/src/components/UserLayout.tsx": 1,
   "dlmm-user-ui/src/components/sber/KpiTile.tsx": 1,
   "dlmm-user-ui/src/components/sber/TokenPairChip.tsx": 14,
-  "dlmm-user-ui/src/pages/HedgePage.tsx": 1,
   "dlmm-user-ui/src/pages/LiquidityPage.tsx": 1,
   "dlmm-user-ui/src/pages/LoginPage.tsx": 6,
   "dlmm-user-ui/src/pages/PoolDetailPage.tsx": 5,

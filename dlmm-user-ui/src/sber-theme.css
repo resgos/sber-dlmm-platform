@@ -1943,3 +1943,84 @@ a:focus-visible {
   background: var(--bg-sidebar) !important;
   border-right-color: var(--border-sidebar) !important;
 }
+
+/* ============================================================
+   Task #R-03 (2026-05-25) — /hedge dark-mode complete sweep.
+
+   The "Доступные пары хеджирования" pair tiles in HedgePage are
+   plain <div>s (not AntD Cards) so the global `.ant-card` dark
+   override above couldn't catch them. They previously had an
+   inline `background: '#FFFFFF'` which stayed white on the dark
+   page bg, producing a stark white block in dark mode.
+
+   Migrated HedgePage.tsx to use the `.sber-hedge-pair` class +
+   `--selected` modifier; light mode keeps the original look
+   (white card, soft-green selected), dark mode flips to bg-card
+   surface + a desaturated green selected state that doesn't
+   scream on the near-black page.
+
+   Also: G-14 RiskDisclosure warning Alert description text was
+   inheriting AntD's hardcoded `colorTextSecondary` (#6B7280)
+   which barely reads on the dark warning-Alert yellow tint.
+   The generic `.ant-alert-description` rule above set color but
+   AntD's warning-variant ramp wins on specificity; pin
+   warning-variant description text to `--text-paragraph`.
+   ============================================================ */
+
+/* Pair tile base — light mode. White card with a 1px border,
+   matches the surrounding sber-card body. */
+.sber-hedge-pair {
+  cursor: pointer;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  transition: all 0.15s ease;
+}
+.sber-hedge-pair:hover {
+  border-color: var(--brand-primary);
+}
+.sber-hedge-pair--selected {
+  border-color: var(--sber-green);
+  background: var(--sber-green-light);
+}
+
+/* Dark-mode pair tile — bg-card surface (already dark via token
+   flip); selected uses a desaturated translucent green tint so
+   the highlight reads as "active" without the daytime
+   #E8F5E9 mint flash. */
+[data-theme="dark"] .sber-hedge-pair {
+  background: var(--bg-card) !important;
+  border-color: var(--border-light) !important;
+}
+[data-theme="dark"] .sber-hedge-pair:hover {
+  border-color: var(--brand-primary) !important;
+  background: var(--surface-1) !important;
+}
+/* Selected state pinned even under hover — `:hover` has higher
+   specificity than `.sber-hedge-pair--selected` alone (pseudo-class
+   bumps specificity above class), so selected+hovered would
+   otherwise revert to the neutral surface-1 hover bg and lose the
+   green highlight. Duplicating the selector with `:hover` matches
+   the same specificity rank as the hover rule above; source order
+   then puts this one last, so it wins. */
+[data-theme="dark"] .sber-hedge-pair--selected,
+[data-theme="dark"] .sber-hedge-pair--selected:hover {
+  background: rgba(33, 160, 56, 0.16) !important;
+  border-color: var(--brand-primary) !important;
+}
+
+/* G-14 RiskDisclosure description text contrast — warning Alert
+   inherits a darker secondary text colour that gets washed out on
+   the dark warning-bg variant. Pin to text-paragraph (rgba 0.80)
+   for both `.ant-alert-description` and its nested typography. */
+[data-theme="dark"] .ant-alert-warning .ant-alert-description,
+[data-theme="dark"] .ant-alert-warning .ant-alert-description .ant-typography,
+[data-theme="dark"] .ant-alert-warning .ant-alert-description .ant-typography strong {
+  color: var(--text-paragraph) !important;
+}
+[data-theme="dark"] .ant-alert-warning .ant-alert-message,
+[data-theme="dark"] .ant-alert-warning .ant-alert-message .ant-typography,
+[data-theme="dark"] .ant-alert-warning .ant-alert-message .ant-typography strong {
+  color: var(--text-primary) !important;
+}
