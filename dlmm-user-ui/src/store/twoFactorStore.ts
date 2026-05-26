@@ -214,6 +214,13 @@ export const twoFactorStore = {
    *
    * <p>If the network call fails (offline, auth expired), notify
    * subscribers with DEFAULT_STATE so the wizard can show an error.
+   *
+   * <p><b>Deprecated for new UI work — prefer {@link beginSetupAsync}.</b>
+   * The synchronous shape was a Sprint 11 backward-compat hack to avoid
+   * touching TwoFactorSettings.tsx in the G-20 PR; task #19 fixed the
+   * modal to await the network. Kept around because (a) callers outside
+   * the modal might still exist and (b) the test suite pins the
+   * placeholder contract.
    */
   beginSetup(): { secret: string; recoveryCodes: string[] } {
     // Placeholder values returned synchronously — real values arrive
@@ -240,6 +247,37 @@ export const twoFactorStore = {
         warn('[twoFactorStore] beginSetup failed:', statusOf(err) ?? err)
       })
     return { secret: placeholderSecret, recoveryCodes: placeholderCodes }
+  },
+
+  /**
+   * Async variant of {@link beginSetup} — awaits POST /begin and
+   * resolves with the real backend-issued secret + recovery codes.
+   * The modal (task #19) uses this so it can show a spinner while the
+   * network is in flight and render the real 32-char base32 secret
+   * once it lands — fixing the previous behaviour where the modal
+   * captured the PENDINGPENDING placeholder synchronously and never
+   * subscribed to the follow-up update.
+   *
+   * <p>Side effects mirror the sync version: on success, the store
+   * cache is updated and subscribers are notified, so any
+   * useSyncExternalStore consumers re-render with the fresh values.
+   *
+   * <p>On network/auth failure the promise rejects (caller decides
+   * UX — typically show an error and let the user retry). The cache
+   * is NOT mutated on failure so subscribers don't flash to a
+   * half-populated state.
+   */
+  async beginSetupAsync(): Promise<{ secret: string; recoveryCodes: string[] }> {
+    const { data } = await apiClient.post<BeginResponse>('/users/me/2fa/begin')
+    const current = safeRead()
+    safeWrite({
+      ...current,
+      secret: data.secret,
+      recoveryCodes: data.recoveryCodes,
+    })
+    lastKnownTotal = data.recoveryCodes.length
+    notify()
+    return { secret: data.secret, recoveryCodes: data.recoveryCodes }
   },
 
   /**

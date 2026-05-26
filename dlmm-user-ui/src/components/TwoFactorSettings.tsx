@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import {
   Card,
   Space,
@@ -11,6 +11,7 @@ import {
   Popconfirm,
   message,
   Modal,
+  Spin,
 } from 'antd'
 import {
   SafetyOutlined,
@@ -191,16 +192,52 @@ function SetupWizard({ open, onClose }: { open: boolean; onClose: () => void }) 
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [acknowledged, setAcknowledged] = useState(false)
+  // Task #19 — modal now awaits POST /begin instead of the old sync
+  // placeholder dance. `loading` covers the in-flight window;
+  // `beginError` covers a backend failure so the user gets a real
+  // message instead of staring at a PENDING string. `fetchTick` is
+  // a monotonic counter the user can bump (via "retry") to refire
+  // the effect without needing it to depend on every state change.
+  const [loading, setLoading] = useState(false)
+  const [beginError, setBeginError] = useState<string | null>(null)
+  const [fetchTick, setFetchTick] = useState(0)
 
   const user = authStore.getUser()
   const account = user?.email ?? 'demo@sber.ru'
 
-  // Lazy-init secret on first open of step 0.
-  if (open && step === 0 && !secret) {
-    const { secret: s, recoveryCodes: rc } = twoFactorStore.beginSetup()
-    setSecret(s)
-    setRecoveryCodes(rc)
-  }
+  // Fetch the real secret as soon as the modal opens. Effect (not
+  // a render-phase side effect like the old code) so React doesn't
+  // complain about setState-during-render. We bail when the modal is
+  // closed OR we already have a secret — both are state, not deps, so
+  // the effect deliberately only re-runs on open-flip or retry-tick.
+  useEffect(() => {
+    if (!open) return
+    if (secret) return
+    let cancelled = false
+    setLoading(true)
+    setBeginError(null)
+    twoFactorStore.beginSetupAsync()
+      .then(({ secret: s, recoveryCodes: rc }) => {
+        if (cancelled) return
+        setSecret(s)
+        setRecoveryCodes(rc)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        const status = (err as { response?: { status?: number } })?.response?.status
+        setBeginError(
+          status === 409
+            ? '2FA уже включена. Перезагрузите страницу.'
+            : 'Не удалось получить секрет. Проверьте подключение и попробуйте ещё раз.',
+        )
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+    // `secret` is intentionally not a dep — when it transitions
+    // null→string the effect would re-fire and double-POST. The guard
+    // above handles the read-on-mount case; fetchTick handles retries.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, fetchTick])
 
   const handleVerify = () => {
     if (!secret) return
@@ -211,6 +248,11 @@ function SetupWizard({ open, onClose }: { open: boolean; onClose: () => void }) 
     } else {
       setError('Введите 6 цифр из приложения-аутентификатора')
     }
+  }
+
+  const handleRetryBegin = () => {
+    setBeginError(null)
+    setFetchTick((n) => n + 1)
   }
 
   const handleClose = () => {
@@ -224,6 +266,8 @@ function SetupWizard({ open, onClose }: { open: boolean; onClose: () => void }) 
     setCode('')
     setError(null)
     setAcknowledged(false)
+    setLoading(false)
+    setBeginError(null)
     onClose()
   }
 
@@ -246,7 +290,20 @@ function SetupWizard({ open, onClose }: { open: boolean; onClose: () => void }) 
         style={{ marginBottom: 20 }}
       />
 
-      {step === 0 && secret && (
+      {step === 0 && loading && (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+          <Spin size="large" tip="Получаем секрет от сервера..." />
+        </div>
+      )}
+
+      {step === 0 && !loading && beginError && (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Alert type="error" showIcon message="Ошибка" description={beginError} />
+          <Button onClick={handleRetryBegin} block>Попробовать снова</Button>
+        </Space>
+      )}
+
+      {step === 0 && !loading && !beginError && secret && (
         <Space direction="vertical" size={14} style={{ width: '100%' }}>
           <Paragraph>
             Откройте Google Authenticator, Microsoft Authenticator, Я.Ключ или другое TOTP-приложение
