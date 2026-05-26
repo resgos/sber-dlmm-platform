@@ -1,4 +1,4 @@
-import { Row, Col, Card, Typography, Space, Form, Input, Button, Descriptions, Avatar, Alert, Divider, message, Tag, Tabs } from 'antd'
+import { Row, Col, Card, Typography, Space, Form, Input, Button, Descriptions, Avatar, Alert, Divider, message, Tag, Tabs, Switch } from 'antd'
 import {
   UserOutlined,
   SaveOutlined,
@@ -11,9 +11,10 @@ import {
   SettingOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { users, balances, pools as poolsApi, fees, transactions as txApi } from '@/api/services'
 import { authStore } from '@/store/authStore'
+import { uiPrefStore } from '@/store/uiPrefStore'
 import KycStatusBadge from '@/components/KycStatusBadge'
 import SelfRestrictionPanel from '@/components/SelfRestrictionPanel'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -47,6 +48,7 @@ const txTypeLabel: Record<string, string> = {
 export default function ProfilePage() {
   const queryClient = useQueryClient()
   const [form] = Form.useForm()
+  const uiPrefs = useSyncExternalStore(uiPrefStore.subscribe, uiPrefStore.getSnapshot)
 
   const { data: user, isLoading } = useQuery<User>({
     queryKey: ['me'],
@@ -405,6 +407,26 @@ export default function ProfilePage() {
             label: <Space size={6}><SettingOutlined />Настройки</Space>,
             children: (
               <Space direction="vertical" size={24} style={{ width: '100%' }}>
+                {/* S14-03 — simple-mode toggle. Hides advanced sidebar items
+                    (Ребаланс, Команда) for users who prefer a cleaner UX.
+                    Persisted to localStorage via uiPrefStore. */}
+                <Card className="sber-card" title={<Text strong>Режим интерфейса</Text>}>
+                  <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <Text strong style={{ display: 'block' }}>Простой режим</Text>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
+                          Скрывает расширенные пункты меню (Ребаланс, Команда)
+                        </Text>
+                      </div>
+                      <Switch
+                        checked={uiPrefs.simpleMode}
+                        onChange={(checked) => uiPrefStore.setSimpleMode(checked)}
+                      />
+                    </div>
+                  </Space>
+                </Card>
+
                 {/* Sprint 10 (new feature) — auto-claim toggle. Pure-frontend
                     MVP; the watcher hook on PositionsPage fires fees.claimFees()
                     on every refresh for positions over threshold. */}

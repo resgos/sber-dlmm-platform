@@ -48,6 +48,10 @@ public class JwtValidationFilter implements GlobalFilter, Ordered {
             "/api/v1/auth/login",
             "/api/v1/auth/register",
             "/api/v1/auth/refresh",
+            // S14-01 — SAML 2.0 SSO endpoints must be reachable without a JWT.
+            // Metadata is fetched by IdPs before any user is logged in;
+            // initiate and callback are part of the pre-auth SSO handshake.
+            "/api/v1/auth/saml/**",
             // Sprint 9 R-M-33 — Public Data API tiers. No auth required;
             // rate-limit applies via the IP-fallback path in TierKeyResolver.
             "/api/v1/public/**",
