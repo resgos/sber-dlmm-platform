@@ -569,20 +569,33 @@ export default function PositionsPage() {
             {
               title: 'Действия',
               key: 'actions',
-              render: (_: unknown, r: Position) => (
-                <Space onClick={(e) => e.stopPropagation()}>
+              render: (_: unknown, r: Position) => {
+                // F-04 (UX-FINDINGS 2026-05-26) — explain WHY the Claim
+                // button is disabled. Without this, users see greyed-out
+                // buttons and assume the feature is broken.
+                const noClaim = r.unclaimedFeeX === 0 && r.unclaimedFeeY === 0
+                const claimBtn = (
                   <Button size="small" type="primary" ghost icon={<DollarOutlined />}
                     onClick={() => claimMutation.mutate(r.id)}
                     loading={claimMutation.isPending}
-                    disabled={r.unclaimedFeeX === 0 && r.unclaimedFeeY === 0}>
+                    disabled={noClaim}>
                     Забрать
                   </Button>
-                  <Button size="small" danger icon={<DeleteOutlined />}
-                    onClick={() => { setRemoveModalPos(r); setRemovePercent(100) }}>
-                    Удалить
-                  </Button>
-                </Space>
-              ),
+                )
+                return (
+                  <Space onClick={(e) => e.stopPropagation()}>
+                    {noClaim ? (
+                      <Tooltip title="Пока нет накопленных комиссий — позиция работает, но fee accrual ещё не начислил">
+                        <span>{claimBtn}</span>
+                      </Tooltip>
+                    ) : claimBtn}
+                    <Button size="small" danger icon={<DeleteOutlined />}
+                      onClick={() => { setRemoveModalPos(r); setRemovePercent(100) }}>
+                      Удалить
+                    </Button>
+                  </Space>
+                )
+              },
             },
           ]}
         />

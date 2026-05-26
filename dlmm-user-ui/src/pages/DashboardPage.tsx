@@ -284,7 +284,15 @@ export default function DashboardPage() {
             (feeSummary?.totalUnclaimed ?? 0) > 0 ? (
               <span style={{ color: 'var(--text-on-brand)', fontWeight: 500 }}>можно забрать сейчас</span>
             ) : (
-              <span>пока ничего не начислено</span>
+              // F-05 (UX-FINDINGS 2026-05-26) — "пока ничего не начислено"
+              // звучит как "не работает". Differentiate: если активных
+              // позиций нет — "откройте позицию"; если есть — "fee accrual
+              // обновляется ~5 мин" (правда — backend job runs every 5min).
+              activePositions.length > 0 ? (
+                <span>fee accrual обновляется каждые ~5 мин</span>
+              ) : (
+                <span>откройте позицию чтобы получать комиссии</span>
+              )
             ),
           )}
           {heroSubMetric(
