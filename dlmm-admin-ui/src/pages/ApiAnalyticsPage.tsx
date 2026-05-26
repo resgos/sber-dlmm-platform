@@ -91,6 +91,13 @@ export default function ApiAnalyticsPage() {
   const samples: Sample[] = useMemo(() => rawText ? parsePrometheusText(rawText) : [], [rawText])
   const rateLimitSamples = useMemo(() => filterByName(samples, 'dlmm_gateway_ratelimit_total'), [samples])
 
+  // NEW-2 (Sprint 14 Batch #3) — per-route counter family, lazily registered
+  // in the gateway TierBasedRateLimitFilter. Labels: tier, outcome, route.
+  const routeSamples = useMemo(
+    () => filterByName(samples, 'dlmm_gateway_ratelimit_route_total'),
+    [samples],
+  )
+
   const tierStats: TierStats[] = useMemo(() => TIERS.map((tier) => {
     const allowed = rateLimitSamples
       .filter((s) => s.labels.tier === tier && s.labels.outcome === 'allowed')
@@ -102,6 +109,28 @@ export default function ApiAnalyticsPage() {
     const throttleRatio = total > 0 ? (throttled / total) : 0
     return { tier, allowed, throttled, total, throttleRatio }
   }), [rateLimitSamples])
+
+  // NEW-2 — per-route stats. Aggregate across all tiers so the card shows
+  // "which endpoints clients hit hardest" rather than per-tier sliced data
+  // (which would multiply rows and obscure the answer the op cares about).
+  const routeStats = useMemo(() => {
+    const byRoute = new Map<string, { allowed: number; throttled: number }>()
+    for (const s of routeSamples) {
+      const route = s.labels.route || 'unknown'
+      const outcome = s.labels.outcome
+      if (outcome !== 'allowed' && outcome !== 'throttled') continue
+      const entry = byRoute.get(route) ?? { allowed: 0, throttled: 0 }
+      entry[outcome] += s.value
+      byRoute.set(route, entry)
+    }
+    return Array.from(byRoute.entries())
+      .map(([route, { allowed, throttled }]) => {
+        const total = allowed + throttled
+        const throttleRatio = total > 0 ? throttled / total : 0
+        return { route, allowed, throttled, total, throttleRatio }
+      })
+      .sort((a, b) => b.throttled - a.throttled || b.total - a.total)
+  }, [routeSamples])
 
   const grandTotal = tierStats.reduce((s, t) => s + t.total, 0)
 
@@ -262,6 +291,96 @@ export default function ApiAnalyticsPage() {
               </Space>
             }
           />
+
+          {/*
+            NEW-2 (Sprint 14 Batch #3) — top-throttled routes card.
+            Renders per-route ratelimit counters from the new
+            dlmm_gateway_ratelimit_route_total counter family. Sorted
+            by absolute throttled count so the noisiest endpoint is
+            top — that's the question an operator asks first ("which
+            endpoint is hitting the wall?"). Hidden when the new
+            counter family hasn't emitted yet — feature works with
+            old gateway images too (graceful upgrade).
+          */}
+          {routeStats.length > 0 && (
+            <Card
+              className="sber-card"
+              title={<Text strong>Топ запрашиваемых маршрутов</Text>}
+              extra={
+                <Tooltip title="Per-route breakdown across all tiers. Throttled = rate-limit-blocked. Источник: dlmm_gateway_ratelimit_route_total.">
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    NEW-2 · per-route
+                    <InfoCircleOutlined style={{ marginInlineStart: 4, fontSize: 11 }} />
+                  </Text>
+                </Tooltip>
+              }
+            >
+              <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                {routeStats.slice(0, 10).map((r) => {
+                  const throttlePct = r.throttleRatio * 100
+                  const tone = throttlePct >= 10
+                    ? 'var(--plasma-critical)'
+                    : throttlePct >= 1
+                      ? 'var(--sber-amber)'
+                      : 'var(--sber-green)'
+                  return (
+                    <div key={r.route}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: 4,
+                        flexWrap: 'wrap',
+                        gap: 8,
+                      }}>
+                        <Space size={8}>
+                          <Tag color="blue" style={{
+                            borderRadius: 999,
+                            fontFamily: 'ui-monospace, monospace',
+                            fontSize: 12,
+                            padding: '0 10px',
+                          }}>
+                            {r.route}
+                          </Tag>
+                        </Space>
+                        <Space size={16}>
+                          <Text style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>
+                            total: <Text strong>{r.total.toLocaleString('ru-RU')}</Text>
+                          </Text>
+                          <Text style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>
+                            throttled: <Text strong style={{ color: tone }}>{r.throttled.toLocaleString('ru-RU')}</Text>
+                          </Text>
+                          <Text style={{
+                            fontSize: 12,
+                            fontVariantNumeric: 'tabular-nums',
+                            color: tone,
+                            fontWeight: 600,
+                          }}>
+                            {throttlePct.toFixed(2)}%
+                          </Text>
+                        </Space>
+                      </div>
+                      <Progress
+                        percent={r.total === 0 ? 0 : 100}
+                        success={{
+                          percent: r.total === 0 ? 0 : (r.allowed / r.total) * 100,
+                          strokeColor: 'var(--sber-green)',
+                        }}
+                        strokeColor={tone}
+                        showInfo={false}
+                        size={['default', 10]}
+                      />
+                    </div>
+                  )
+                })}
+                {routeStats.length > 10 && (
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    + ещё {routeStats.length - 10} маршрутов
+                  </Text>
+                )}
+              </Space>
+            </Card>
+          )}
         </>
       )}
     </Space>

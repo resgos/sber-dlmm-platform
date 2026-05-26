@@ -11,6 +11,8 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.cloud.gateway.filter.ratelimit.RedisRateLimiter;
 import org.springframework.cloud.gateway.filter.ratelimit.RateLimiter;
+import org.springframework.cloud.gateway.route.Route;
+import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpResponse;
@@ -22,6 +24,7 @@ import reactor.core.publisher.Mono;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Sprint 9 #6.6 — runtime per-tier rate limiting at gateway.
@@ -76,12 +79,35 @@ public class TierBasedRateLimitFilter implements GlobalFilter, Ordered {
     private final Map<ApiTier, Counter> allowedCounters;
     private final Map<ApiTier, Counter> throttledCounters;
 
+    /**
+     * NEW-2 (Sprint 14, Batch #3) — per-route throttle observability.
+     *
+     * <p>Same counter family (dlmm.gateway.ratelimit) but with an extra
+     * {@code route} tag (gateway route id like "pool-engine",
+     * "token-service"). Lazily registered per (tier, outcome, route)
+     * triple — cardinality is bounded because routes are pre-defined in
+     * application.yml (~15 entries) and tiers ∈ {FREE, PRO, ENTERPRISE},
+     * so the worst case is 3 × 2 × 15 = 90 series — well inside
+     * Prometheus's per-metric guardrail (default 1k).
+     *
+     * <p>Why a second counter family and not just adding `route` to the
+     * existing one: backward compatibility. The Sprint 9 dashboard
+     * (ApiAnalyticsPage) aggregates by (tier, outcome) only; adding a
+     * tag would change the aggregation arithmetic via Prometheus's
+     * {tier, outcome, route} expansion. Keeping the old family unchanged
+     * means the existing UI keeps working while the new chart reads
+     * the new family.
+     */
+    private final MeterRegistry meterRegistry;
+    private final Map<String, Counter> perRouteCounters = new ConcurrentHashMap<>();
+
     public TierBasedRateLimitFilter(@Qualifier("tierKeyResolver") KeyResolver tierKeyResolver,
                                      @Qualifier("freeRateLimiter") RedisRateLimiter freeRateLimiter,
                                      @Qualifier("proRateLimiter") RedisRateLimiter proRateLimiter,
                                      @Qualifier("enterpriseRateLimiter") RedisRateLimiter enterpriseRateLimiter,
                                      MeterRegistry meterRegistry) {
         this.tierKeyResolver = tierKeyResolver;
+        this.meterRegistry = meterRegistry;
         this.limiters = Map.of(
                 ApiTier.FREE, freeRateLimiter,
                 ApiTier.PRO, proRateLimiter,
@@ -101,6 +127,23 @@ public class TierBasedRateLimitFilter implements GlobalFilter, Ordered {
                     .tag("outcome", "throttled")
                     .register(meterRegistry));
         }
+    }
+
+    /**
+     * NEW-2 — get or lazily create the per-route counter for this
+     * (tier, outcome, route) triple. Key the cache by composite String
+     * for ConcurrentHashMap.computeIfAbsent friendliness; the lookup
+     * cost is one hash + equality, well inside reactive hot-path budget.
+     */
+    private Counter routeCounter(ApiTier tier, String outcome, String routeId) {
+        String key = tier.name() + "|" + outcome + "|" + routeId;
+        return perRouteCounters.computeIfAbsent(key, k ->
+                Counter.builder("dlmm.gateway.ratelimit.route")
+                        .description("Per-route requests after rate-limit check (Sprint 14 NEW-2)")
+                        .tag("tier", tier.name())
+                        .tag("outcome", outcome)
+                        .tag("route", routeId)
+                        .register(meterRegistry));
     }
 
     @Override
@@ -126,6 +169,15 @@ public class TierBasedRateLimitFilter implements GlobalFilter, Ordered {
         // /pools to have its own quota separate from /swap.
         String routeId = "global";
 
+        // NEW-2 (Sprint 14 Batch #3) — resolve route id for per-route
+        // observability tagging. The GATEWAY_ROUTE_ATTR is set by
+        // Spring Cloud Gateway's RoutePredicateHandlerMapping which
+        // runs before global filters; we read it for the tag value.
+        // Fallback to "unknown" so a route-less request (shouldn't
+        // happen at this filter order) still gets recorded.
+        Route gwRoute = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
+        String observableRouteId = gwRoute != null ? gwRoute.getId() : "unknown";
+
         return tierKeyResolver.resolve(exchange)
                 .flatMap(key -> limiter.isAllowed(routeId, key)
                         .flatMap(response -> {
@@ -137,12 +189,15 @@ public class TierBasedRateLimitFilter implements GlobalFilter, Ordered {
                             response.getHeaders().forEach((name, value) ->
                                     exchange.getResponse().getHeaders().add(name, value));
                             if (response.isAllowed()) {
-                                // Sprint 9-DS-r4 (P1-14) — observability.
+                                // Sprint 9-DS-r4 (P1-14) — original tier×outcome counter.
                                 allowedCounters.get(tier).increment();
+                                // NEW-2 (Sprint 14) — per-route breakdown counter.
+                                routeCounter(tier, "allowed", observableRouteId).increment();
                                 return chain.filter(exchange);
                             }
                             throttledCounters.get(tier).increment();
-                            log.debug("Rate-limit exceeded: tier={} key={}", tier, key);
+                            routeCounter(tier, "throttled", observableRouteId).increment();
+                            log.debug("Rate-limit exceeded: tier={} key={} route={}", tier, key, observableRouteId);
                             ServerHttpResponse resp = exchange.getResponse();
                             resp.setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
                             return resp.setComplete();
