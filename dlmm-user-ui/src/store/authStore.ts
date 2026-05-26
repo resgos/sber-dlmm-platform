@@ -38,6 +38,23 @@ export const authStore = {
     try { localStorage.setItem(REFRESH_KEY, token) } catch { /* ignore */ }
   },
 
+  removeRefreshToken: (): void => {
+    try { localStorage.removeItem(REFRESH_KEY) } catch { /* ignore */ }
+  },
+
+  /**
+   * R-04 — atomic helper for storing both tokens after login/register or
+   * a successful /auth/refresh rotation. Either side empty is treated as
+   * a no-op for that side; callers can use this for partial updates if
+   * the backend ever moves to access-only rotation.
+   */
+  setTokens: (accessToken: string, refreshToken: string): void => {
+    try {
+      if (accessToken) localStorage.setItem(TOKEN_KEY, accessToken)
+      if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken)
+    } catch { /* ignore quota / private mode */ }
+  },
+
   getUser: (): StoredUser | null => safeRead(USER_KEY, (s) => JSON.parse(s) as StoredUser),
 
   setUser: (user: StoredUser): void => {

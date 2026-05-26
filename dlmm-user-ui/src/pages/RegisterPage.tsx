@@ -43,7 +43,10 @@ export default function RegisterPage() {
         email: values.email,
         password: values.password,
       })
-      authStore.setToken(response.accessToken)
+      // R-04 — persist BOTH tokens so the apiClient interceptor can
+      // transparently refresh on 401 without forcing the user back to
+      // /login mid-session. Previously only accessToken was saved.
+      authStore.setTokens(response.accessToken, response.refreshToken)
       authStore.setUser({
         userId: response.user.id,
         email: response.user.email,
