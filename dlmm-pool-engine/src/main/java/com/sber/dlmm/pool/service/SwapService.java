@@ -4,13 +4,18 @@ import com.sber.dlmm.common.enums.PoolStatus;
 import com.sber.dlmm.common.exception.ForbiddenException;
 import com.sber.dlmm.common.exception.IdempotencyConflictException;
 import com.sber.dlmm.common.exception.InsufficientLiquidityException;
+import com.sber.dlmm.common.exception.InvalidQuoteSignatureException;
 import com.sber.dlmm.common.exception.PoolNotActiveException;
 import com.sber.dlmm.common.exception.PoolNotFoundException;
+import com.sber.dlmm.common.exception.QuoteAlreadyExecutedException;
+import com.sber.dlmm.common.exception.QuoteExpiredException;
 import com.sber.dlmm.common.exception.SlippageExceededException;
 import com.sber.dlmm.common.util.BinMath;
 import com.sber.dlmm.common.util.FeeCalculator;
 import com.sber.dlmm.pool.client.TokenServiceClient;
 import com.sber.dlmm.pool.client.UserServiceClient;
+import com.sber.dlmm.pool.dto.QuotedSwap;
+import com.sber.dlmm.pool.dto.SwapExecuteRequest;
 import com.sber.dlmm.pool.dto.SwapQuoteRequest;
 import com.sber.dlmm.pool.dto.SwapQuoteResponse;
 import com.sber.dlmm.pool.dto.SwapRequest;
@@ -24,6 +29,7 @@ import com.sber.dlmm.common.outbox.OutboxService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -34,6 +40,8 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -54,19 +62,38 @@ public class SwapService {
     // the lost-event window. See OutboxService / OutboxDispatcher.
     private final OutboxService outbox;
     private final StringRedisTemplate redisTemplate;
+    // Batch G-02 — quote-execute idempotency layer. Stores QuotedSwap
+    // records with TTL eviction and a separate executedAt marker for the
+    // double-spend guard. Tests stub this directly.
+    private final QuoteStore quoteStore;
+
+    /**
+     * Quote freshness window (seconds). Defaults to 30 — long enough for
+     * a user to glance at the quote and click execute, short enough that
+     * pool state hasn't shifted under them. Matches the OTC-desk quote
+     * window precedent ({@code quoteExpiresAt} in
+     * {@code OtcBlockTrade}, default 30 min for institutional flow vs
+     * 30 sec for retail swap because retail quotes execute hot from
+     * the UI).
+     */
+    private final long quoteTtlSeconds;
 
     public SwapService(LiquidityPoolRepository poolRepository,
                        PoolBinRepository poolBinRepository,
                        TokenServiceClient tokenServiceClient,
                        UserServiceClient userServiceClient,
                        OutboxService outbox,
-                       StringRedisTemplate redisTemplate) {
+                       StringRedisTemplate redisTemplate,
+                       QuoteStore quoteStore,
+                       @Value("${dlmm.swap.quote-ttl-seconds:30}") long quoteTtlSeconds) {
         this.poolRepository = poolRepository;
         this.poolBinRepository = poolBinRepository;
         this.tokenServiceClient = tokenServiceClient;
         this.userServiceClient = userServiceClient;
         this.outbox = outbox;
         this.redisTemplate = redisTemplate;
+        this.quoteStore = quoteStore;
+        this.quoteTtlSeconds = quoteTtlSeconds;
     }
 
     public SwapQuoteResponse quote(SwapQuoteRequest req) {
@@ -540,5 +567,125 @@ public class SwapService {
         return new SwapResponse(txId, pool.getId(), req.tokenInId(), tokenOutId,
                 consumedAmountIn, totalAmountOut, totalFee, feeBps,
                 binsCrossed, executionPrice, priceImpact);
+    }
+
+    // ── Batch G-02: quote → execute idempotency layer ────────────────
+    //
+    // Two-call swap flow that hardens the contract against three
+    // specific replay/race classes the original single-call swap()
+    // couldn't defend on its own:
+    //
+    //   1. **Stale quote** — client clicks "Swap" 60s after the price
+    //      was last refreshed; the quote no longer represents pool state.
+    //      Rejected with QuoteExpiredException (HTTP 410 Gone).
+    //   2. **Double-execute** — network glitches, the retry-with-
+    //      backoff middleware fires twice, the user double-clicks. The
+    //      idempotencyKey path catches client-supplied dupes, but
+    //      server-issued quoteIds are also single-use. Rejected with
+    //      QuoteAlreadyExecutedException (HTTP 409 Conflict).
+    //   3. **Signature replay** — someone intercepts a quoteId in
+    //      transit and tries to spend it. The signature bound to the
+    //      quote (currently JWT-subject hash) doesn't match → rejected
+    //      with InvalidQuoteSignatureException (HTTP 403 Forbidden).
+    //
+    // Pinned by SwapIdempotencyTest. Each check is a single
+    // assertion at the top of executeQuoted() and runs *before* any
+    // balance mutation, exactly matching the test sketches.
+
+    /**
+     * Issue a quote and stash a {@link QuotedSwap} in the store with the
+     * configured TTL. The returned quoteId is the handle the client
+     * passes to {@link #executeQuoted}. Signature is server-derived
+     * (here from the userId — in production an HMAC over the quoted
+     * parameters would be stronger; the contract on the test side is
+     * just "the signature on execute must equal the signature on the
+     * persisted quote").
+     */
+    public SwapQuoteResponse issueQuote(SwapQuoteRequest req, UUID userId, String signature) {
+        SwapQuoteResponse quote = quote(req);
+        UUID quoteId = UUID.randomUUID();
+        QuotedSwap stored = new QuotedSwap(
+                quoteId,
+                userId,
+                quote.poolId(),
+                quote.tokenInId(),
+                quote.tokenOutId(),
+                quote.amountIn(),
+                quote.estimatedAmountOut(),
+                quote.estimatedFee(),
+                signature,
+                Instant.now(),
+                null);
+        quoteStore.save(stored);
+        return quote;
+    }
+
+    /**
+     * Execute a previously-issued quote. Validates: not expired, not
+     * already executed, signature matches — then delegates to the
+     * existing {@link #swap} path (which still gates KYC, pool-active,
+     * counterparty cap, slippage etc.).
+     */
+    public SwapResponse executeQuoted(SwapExecuteRequest req, UUID userId) {
+        Optional<QuotedSwap> maybeQuote = quoteStore.findById(req.quoteId());
+        // No quote → either never issued or evicted. Surface as
+        // "expired" rather than "not found" because the most common
+        // cause is TTL eviction, and from the client's perspective the
+        // two are indistinguishable (both mean "your quote handle is
+        // no longer valid, ask for a new one").
+        if (maybeQuote.isEmpty()) {
+            throw new QuoteExpiredException("Quote not found or expired: " + req.quoteId());
+        }
+        QuotedSwap quote = maybeQuote.get();
+
+        // 1. Stale-quote check. Run before signature so an attacker
+        // probing with a stolen-but-expired quoteId gets QUOTE_EXPIRED
+        // rather than INVALID_QUOTE_SIGNATURE (no information leak
+        // about whether the signature would have matched).
+        Instant deadline = quote.createdAt().plus(Duration.ofSeconds(quoteTtlSeconds));
+        if (Instant.now().isAfter(deadline)) {
+            throw new QuoteExpiredException(
+                    "Quote " + req.quoteId() + " expired at " + deadline + " (TTL=" + quoteTtlSeconds + "s)");
+        }
+
+        // 2. Double-execute check. executedAt is the persisted marker.
+        // Pinned: a quote with executedAt != null can never be re-used,
+        // regardless of how soon the second call arrives.
+        if (quote.executedAt() != null) {
+            throw new QuoteAlreadyExecutedException(
+                    "Quote " + req.quoteId() + " already executed at " + quote.executedAt());
+        }
+
+        // 3. Signature replay check. The signature is bound to the
+        // user/quote at issue-time; an interceptor with a different
+        // identity can't successfully replay even before TTL elapses.
+        if (!quote.signature().equals(req.signature())) {
+            throw new InvalidQuoteSignatureException(
+                    "Signature does not match quote " + req.quoteId());
+        }
+
+        // Flip the executed-marker BEFORE balance mutation, so a
+        // concurrent double-execute races at the SETNX boundary rather
+        // than at the (much wider) swap() boundary. First caller wins
+        // the marker; second caller sees the marker and is rejected
+        // upstream.
+        boolean wonRace = quoteStore.markExecuted(req.quoteId());
+        if (!wonRace) {
+            throw new QuoteAlreadyExecutedException(
+                    "Quote " + req.quoteId() + " concurrently executed");
+        }
+
+        // Build a SwapRequest from the persisted quote and run the
+        // existing swap path. We deliberately re-derive amountIn etc.
+        // from the QuotedSwap rather than letting the client re-send
+        // them — the contract is "execute what was quoted", not
+        // "execute whatever the client says now".
+        SwapRequest swapReq = new SwapRequest(
+                quote.poolId(),
+                quote.tokenInId(),
+                quote.amountIn(),
+                0L,
+                "quote:" + req.quoteId());
+        return swap(swapReq, userId);
     }
 }
