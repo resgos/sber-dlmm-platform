@@ -63,6 +63,24 @@ interface ChartDataPoint {
   side: 'left' | 'active' | 'right'
 }
 
+/**
+ * F-02 (UX-FINDINGS 2026-05-26) — compact number formatter для tooltip.
+ *
+ * Without this, raw `Number.toLocaleString('ru-RU')` renders 14-digit
+ * values like "14 072 727 272 727" inside a hover tooltip, which combined
+ * with ~50 simultaneously-rendered SVG bars frozes the browser. Compact
+ * form ("14 трлн") fits in one line, no measurement explosion, no freeze.
+ */
+function formatCompact(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 1e12) return `${(value / 1e12).toFixed(2)} трлн`
+  if (abs >= 1e9) return `${(value / 1e9).toFixed(2)} млрд`
+  if (abs >= 1e6) return `${(value / 1e6).toFixed(2)} млн`
+  if (abs >= 1e3) return `${(value / 1e3).toFixed(1)} тыс`
+  if (abs >= 1) return value.toLocaleString('ru-RU', { maximumFractionDigits: 4 })
+  return value.toLocaleString('ru-RU', { maximumFractionDigits: 6 })
+}
+
 function getBinColor(
   side: 'left' | 'active' | 'right',
   distance: number,
@@ -134,13 +152,13 @@ const makeTooltip = (
         Цена: {d?.price}
       </div>
       <div style={{ color: '#3B82F6' }}>
-        Резерв {ySym}: {Number(d?.reserveY ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
+        Резерв {ySym}: {formatCompact(d?.reserveY ?? 0)}
       </div>
       <div style={{ color: '#21A038' }}>
-        Резерв {xSym}: {Number(d?.reserveX ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 4 })}
+        Резерв {xSym}: {formatCompact(d?.reserveX ?? 0)}
       </div>
       <div style={{ color: '#9CA3AF', marginTop: 4 }}>
-        Ликвидность: {Number(d?.liquidity ?? 0).toLocaleString('ru-RU')}
+        Ликвидность: {formatCompact(d?.liquidity ?? 0)}
       </div>
       {userSharePct != null && userSharePct > 0 && (
         <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #F3F4F6',
@@ -350,11 +368,14 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
               // (leading "1" clipped). Fix: extend to B (billions)
               // and T (trillions) prefixes, drop the decimal for
               // values >= 100 in any band, and widen the axis to 60px.
+              // F-03 (UX-FINDINGS 2026-05-26) — RU suffixes так что "16.0T"
+              // не вызывает вопрос «Tons? Trillion? Tokens?». Match the
+              // tooltip's formatCompact for consistency.
               const abs = Math.abs(v)
-              if (abs >= 1e12) return `${(v / 1e12).toFixed(abs >= 1e14 ? 0 : 1)}T`
-              if (abs >= 1e9) return `${(v / 1e9).toFixed(abs >= 1e11 ? 0 : 1)}B`
-              if (abs >= 1e6) return `${(v / 1e6).toFixed(abs >= 1e8 ? 0 : 1)}M`
-              if (abs >= 1e3) return `${(v / 1e3).toFixed(0)}K`
+              if (abs >= 1e12) return `${(v / 1e12).toFixed(abs >= 1e14 ? 0 : 1)} трлн`
+              if (abs >= 1e9) return `${(v / 1e9).toFixed(abs >= 1e11 ? 0 : 1)} млрд`
+              if (abs >= 1e6) return `${(v / 1e6).toFixed(abs >= 1e8 ? 0 : 1)} млн`
+              if (abs >= 1e3) return `${(v / 1e3).toFixed(0)} тыс`
               return String(v)
             }} />
           <Tooltip content={Tooltip2} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
