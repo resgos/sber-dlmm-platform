@@ -418,9 +418,20 @@ export default function SwapPage() {
                 </Text>
               </div>
               <div className="sber-swap-quote__row">
-                <Text type="secondary">Влияние на цену</Text>
+                <Text type="secondary">
+                  Влияние на цену{' '}
+                  <Tooltip title="Разница между текущей рыночной ценой пула и фактической ценой исполнения вашего обмена. Большие свопы съедают bin-ликвидность → impact растёт. Норма: < 1%; > 5% = пересмотрите размер.">
+                    <InfoCircleOutlined style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 4 }} />
+                  </Tooltip>
+                </Text>
                 <Text strong style={{ color: priceImpactColor }}>
-                  {quote.priceImpact != null ? `${quote.priceImpact.toFixed(2)}%` : '—'}
+                  {/* F-07 (UX-FINDINGS 2026-05-26) — show "<0.01%" для tiny
+                      swaps, не "0.00%" что выглядит как «не работает». */}
+                  {quote.priceImpact == null
+                    ? '—'
+                    : quote.priceImpact < 0.01 && quote.priceImpact > 0
+                      ? '< 0,01%'
+                      : `${quote.priceImpact.toFixed(2)}%`}
                 </Text>
               </div>
               {selectedPool && (
