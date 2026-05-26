@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Table, Tag, Typography, Space, Select, DatePicker, Button } from 'antd'
-import { FilterOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/icons'
+import { DownloadOutlined, FilterOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { transactions, tokens as tokensApi, pools as poolsApi } from '@/api/services'
 import type { Transaction, TxType, TxStatus, TransactionFilters, Token, Pool } from '@/api/types'
 import dayjs from 'dayjs'
 import { TokenPairChip } from '@/components/sber'
 import { formatTokenAmount } from '@/lib/format'
+import { exportToCsv } from '@/lib/csvExport'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -114,6 +115,37 @@ export default function TransactionsPage() {
         />
         <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Обновить</Button>
         <Button onClick={handleReset}>Сбросить</Button>
+        {/* QW-1 (Batch #4) — CSV export of the currently-filtered page.
+            Exports the page the user is looking at, not all data — keeps
+            the helper sync, and matches user expectation ("download what
+            I see"). For bulk exports we'd add a server-side endpoint. */}
+        <Button
+          icon={<DownloadOutlined />}
+          onClick={() => {
+            const rows = data?.content || []
+            if (rows.length === 0) return
+            exportToCsv(
+              `dlmm-transactions-${dayjs().format('YYYY-MM-DD')}.csv`,
+              rows,
+              [
+                { header: 'Дата', accessor: (r: Transaction) => dayjs(r.createdAt).format('YYYY-MM-DD HH:mm:ss') },
+                { header: 'Тип', accessor: (r) => txTypeLabels[r.txType]?.text ?? r.txType },
+                { header: 'Статус', accessor: (r) => statusLabels[r.status]?.text ?? r.status },
+                { header: 'Пул ID', accessor: (r) => r.poolId ?? '' },
+                { header: 'Token In ID', accessor: (r) => r.tokenInId ?? '' },
+                { header: 'Token Out ID', accessor: (r) => r.tokenOutId ?? '' },
+                { header: 'Amount In', accessor: (r) => r.amountIn ?? '' },
+                { header: 'Amount Out', accessor: (r) => r.amountOut ?? '' },
+                { header: 'Fee', accessor: (r) => r.feeAmount ?? '' },
+                { header: 'Bins Crossed', accessor: (r) => r.binsCrossed ?? '' },
+                { header: 'Error', accessor: (r) => r.errorMessage ?? '' },
+              ],
+            )
+          }}
+          disabled={!data?.content || data.content.length === 0}
+        >
+          CSV
+        </Button>
       </Space>
 
       <Table

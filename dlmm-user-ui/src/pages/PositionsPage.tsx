@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip } from 'antd'
-import { DollarOutlined, DeleteOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined } from '@ant-design/icons'
+import { DollarOutlined, DeleteOutlined, DownloadOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { pools, fees } from '@/api/services'
@@ -13,6 +13,7 @@ import HealthScoreExplainer from '@/components/HealthScoreExplainer'
 import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
 import { useAutoClaimWatcher } from '@/lib/useAutoClaimWatcher'
 import { calculateHealth, type HealthScore } from '@/lib/positionHealth'
+import { exportToCsv } from '@/lib/csvExport'
 import { positionAlertsStore } from '@/store/positionAlertsStore'
 import { useSyncExternalStore } from 'react'
 import { Segmented } from 'antd'
@@ -321,6 +322,39 @@ export default function PositionsPage() {
               aria-label="Открыть оповещения по позициям"
             >
               Алерты{alertCount > 0 ? ` (${alertCount})` : ''}
+            </Button>
+            {/* QW-1 (Batch #4) — CSV export of active positions. Useful
+                for finance team weekly reporting + audit. */}
+            <Button
+              size="small"
+              icon={<DownloadOutlined />}
+              onClick={() => {
+                if (activePositions.length === 0) return
+                exportToCsv(
+                  `dlmm-positions-${dayjs().format('YYYY-MM-DD')}.csv`,
+                  activePositions,
+                  [
+                    { header: 'Position ID', accessor: (p: Position) => p.id },
+                    { header: 'Pool ID', accessor: (p) => p.poolId },
+                    { header: 'Pair', accessor: (p) => `${p.tokenXSymbol}/${p.tokenYSymbol}` },
+                    { header: 'Strategy', accessor: (p) => p.strategy },
+                    { header: 'Bin Min', accessor: (p) => p.binRangeMin },
+                    { header: 'Bin Max', accessor: (p) => p.binRangeMax },
+                    { header: 'Liquidity Shares', accessor: (p) => p.totalLiquidityShares },
+                    { header: 'Initial Deposit X', accessor: (p) => p.initialDepositX },
+                    { header: 'Initial Deposit Y', accessor: (p) => p.initialDepositY },
+                    { header: 'Current Value X', accessor: (p) => p.currentValueX },
+                    { header: 'Current Value Y', accessor: (p) => p.currentValueY },
+                    { header: 'Unclaimed Fee X', accessor: (p) => p.unclaimedFeeX },
+                    { header: 'Unclaimed Fee Y', accessor: (p) => p.unclaimedFeeY },
+                    { header: 'Active', accessor: (p) => p.isActive },
+                    { header: 'Created At', accessor: (p) => p.createdAt },
+                  ],
+                )
+              }}
+              disabled={activePositions.length === 0}
+            >
+              CSV
             </Button>
             {activePositions.length > 0 && (
               <>

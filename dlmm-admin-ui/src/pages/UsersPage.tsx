@@ -19,10 +19,12 @@ import {
   SafetyCertificateOutlined,
   StopOutlined,
   ClockCircleOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { users as userService } from '@/api/services'
+import { exportToCsv } from '@/lib/csvExport'
 import type { User, KycStatus, UserRole } from '@/api/types'
 import dayjs from 'dayjs'
 import { KpiRow, PageHeader } from '@/components/sber'
@@ -261,6 +263,37 @@ export default function UsersPage() {
             <Text type="secondary" style={{ fontSize: 12 }}>
               {filteredUsers.length}{data?.totalElements ? ` из ${data.totalElements}` : ''}
             </Text>
+            {/* QW-1 (Batch #4) — CSV export of current filtered page.
+                Compliance use case: regulator asks "show all PENDING KYC
+                users at date X" — filter + download in 5 seconds. */}
+            <Button
+              size="small"
+              icon={<DownloadOutlined />}
+              onClick={() => {
+                if (filteredUsers.length === 0) return
+                const stamp = new Date().toISOString().slice(0, 10)
+                exportToCsv(
+                  `dlmm-users-${stamp}.csv`,
+                  filteredUsers,
+                  [
+                    { header: 'ID', accessor: (u: any) => u.id },
+                    { header: 'Email', accessor: (u: any) => u.email },
+                    { header: 'Имя', accessor: (u: any) => u.firstName ?? '' },
+                    { header: 'Фамилия', accessor: (u: any) => u.lastName ?? '' },
+                    { header: 'Sber ID', accessor: (u: any) => u.sberId ?? '' },
+                    { header: 'Роль', accessor: (u: any) => u.role },
+                    { header: 'KYC статус', accessor: (u: any) => u.kycStatus },
+                    { header: 'Заблокирован', accessor: (u: any) => u.isBlocked ?? false },
+                    { header: 'Создан', accessor: (u: any) => u.createdAt },
+                    { header: 'Последний вход', accessor: (u: any) => u.lastLoginAt ?? '' },
+                  ],
+                )
+              }}
+              disabled={filteredUsers.length === 0}
+              style={{ marginLeft: 'auto' }}
+            >
+              CSV
+            </Button>
           </Space>
         }
       >

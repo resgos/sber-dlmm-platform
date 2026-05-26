@@ -16,12 +16,15 @@ import PositionsPage from '@/pages/PositionsPage'
 import TransactionsPage from '@/pages/TransactionsPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ReviewsPage from '@/pages/ReviewsPage'
+import PricingPage from '@/pages/PricingPage'
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      {/* QW-2 (Batch #4 Sprint 14) — public pricing page, no auth */}
+      <Route path="/pricing" element={<PricingPage />} />
       {/* S14-01: SAML 2.0 SSO callback — shown after IdP redirects back */}
       <Route path="/saml/callback" element={<SamlCallbackPage />} />
       <Route path="/" element={<UserLayout />}>

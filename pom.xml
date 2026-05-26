@@ -40,6 +40,7 @@
         <testcontainers.version>1.19.7</testcontainers.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <resilience4j.version>2.2.0</resilience4j.version>
+        <jacoco.version>0.8.12</jacoco.version>
     </properties>
 
     <dependencyManagement>
@@ -151,6 +152,40 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+            </plugin>
+            <!--
+              TI-2 (Batch #4, Sprint 13) — JaCoCo coverage report per module.
+
+              Runs `prepare-agent` before tests so Surefire JVM forks have the
+              instrumentation hook; runs `report` after tests so each module
+              gets target/site/jacoco/index.html (HTML + XML for Sonar/Codecov).
+
+              Aggregated module-tree report за `mvn jacoco:report-aggregate`
+              в отдельной задаче — добавим когда CI workflow готов читать его.
+
+              No coverage threshold yet (default 0) — это первая инстанция
+              визибилити, не enforcement. Threshold ratchet добавим в Sprint 14
+              когда baseline numbers известны.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

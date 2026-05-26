@@ -21,6 +21,7 @@ import { auth } from '@/api/services'
 import { uiPrefStore } from '@/store/uiPrefStore'
 import NotificationBell from './NotificationBell'
 import LanguageSwitcher from './LanguageSwitcher'
+import DemoBranding from './DemoBranding'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -247,6 +248,9 @@ export default function UserLayout() {
           </Space>
 
           <Space size={20}>
+            {/* QW-3 (Batch #4 Sprint 14) — personalized demo URL banner.
+                Renders nothing for non-demo sessions. */}
+            <DemoBranding />
             {/* Sprint 9-DS-r4 P2-14 — language picker; compact RU/EN toggle. */}
             <LanguageSwitcher />
             <NotificationBell />
