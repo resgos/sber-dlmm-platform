@@ -22,7 +22,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationContext;
@@ -66,6 +65,10 @@ class SwapServiceTest {
     private StringRedisTemplate redisTemplate;
     @Mock
     private ValueOperations<String, String> valueOperations;
+    // Batch G-02 — quote-execute idempotency store. Not exercised by the
+    // legacy SwapService tests but required by the constructor signature.
+    @Mock
+    private QuoteStore quoteStore;
     /**
      * Sprint 4 #4.7 — SwapService self-injects via {@code appCtx.getBean(SwapService.class)}
      * so the @Transactional proxy boundary fires on each retry of the bounded
@@ -75,8 +78,13 @@ class SwapServiceTest {
     @Mock
     private ApplicationContext appCtx;
 
-    @InjectMocks
+    // Batch G-02 — constructor switched from 6-arg to 8-arg (added QuoteStore
+    // and long quoteTtlSeconds). Mockito's @InjectMocks can't satisfy the
+    // primitive long parameter, so we construct manually now. The
+    // appCtx self-injection ReflectionTestUtils call below still applies.
     private SwapService swapService;
+
+    private static final long TEST_QUOTE_TTL_SECONDS = 30L;
 
     private static final UUID POOL_ID = UUID.randomUUID();
     private static final UUID TOKEN_X_ID = UUID.randomUUID();
@@ -87,10 +95,18 @@ class SwapServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Mockito's constructor injection (6-arg ctor matches our @Mock fields) wins
-        // over field injection, so the @Autowired ApplicationContext appCtx in
-        // production code stays null. Patch it in explicitly so the @Transactional
-        // self-invocation path resolves to our test bean instead of NPE'ing.
+        // Build SwapService directly so the long quoteTtlSeconds
+        // parameter is satisfied (Mockito @InjectMocks would inject 0,
+        // which makes every quote look instantly stale even though the
+        // legacy tests don't exercise the quote-execute path).
+        swapService = new SwapService(
+                poolRepository, poolBinRepository,
+                tokenServiceClient, userServiceClient,
+                outbox, redisTemplate,
+                quoteStore, TEST_QUOTE_TTL_SECONDS);
+        // Sprint 4 #4.7 — appCtx.getBean(SwapService.class) self-injection.
+        // The retry loop in swap() uses it to fire the @Transactional proxy
+        // boundary; stub it back at our instance so the path executes.
         ReflectionTestUtils.setField(swapService, "appCtx", appCtx);
 
         pool = LiquidityPool.builder()
