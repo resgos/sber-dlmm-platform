@@ -10,20 +10,34 @@
 
 ---
 
-## 0. Immediate residuals (week 1, ≤ 5 days)
+## ⭐ Batch #2 ship status (2026-05-26)
 
-Закрыть остатки от текущего batch'а.
+**Merged:** 10 PRs (#12–#21). Branch `claude/elated-elgamal-dba521` HEAD = `79710b2`.
 
-| ID | Item | Effort | Owner | Source |
-|----|------|--------|-------|--------|
-| **#17** | Kafka bootstrap race — add `restart: unless-stopped` в docker-compose для всех Spring services | S | SRE | Sweep |
-| **#19** | 2FA setup modal stuck on PENDING placeholder — make `TwoFactorSettings.tsx` await `beginSetup()` или subscribe via `useSyncExternalStore` | S | FE | Sweep |
-| **HOT-4** | /hedge pair-selector cards still white in dark mode — identify class (likely custom inline bg), add CSS-var override | S | FE | UI test |
-| **HOT-5** | JWT refresh-token flow — сейчас expires через 30 мин → user re-login. Add automatic refresh interceptor (POST /auth/refresh on 401, retry original request) | M | FE+BE | Sweep |
-| **HOT-6** | apiClient 403 handling — fixed in 916acbd. Verify no false-positives на других endpoints. | S | FE | Sweep |
-| **HOT-7** | ConfigProvider tokens reactive to themeStore — long-form fix to AntD CSS-in-JS specificity battle. Currently we beat it with !important sweep. Better: subscribe ConfigProvider to themeStore + flip entire token set on dark mode | M | FE | Task #13 root-cause |
+| Status | Items shipped |
+|--------|---------------|
+| ✅ Week-1 residuals | #17 Kafka boot race (R-01), #19 2FA modal (R-02), HOT-4 /hedge cards (R-03), HOT-5 JWT refresh (R-04), HOT-7 ConfigProvider reactive (R-05) |
+| ✅ Sprint 13 partial | NEW-1 Resilience4j coverage (S13-01), G-28 user-actions audit log (S13-02) |
+| ✅ Sprint 14 partial | G-29 SAML SSO scaffold (S14-01), G-01 Cohort analytics (S14-02), G-19 Reviews + G-17 Simple-mode (S14-03) |
+| ⏸️ Excluded by user | F-01 Telegram bot ("не нужен") |
+| 📋 Still parked | TD-1/2/6, G-25 Helm, G-13 video, F-13 SLA, F-25 SberID, Sprint 16+ regulatory |
 
-**Total: ~8 days, 1 FE + 0.5 SRE + 0.5 BE.**
+See `docs/ULTRAREVIEW-2026-05-25.md` for sweep results + `docs/DEMO-SCRIPT-2026-05-25.md` for live demo flow.
+
+---
+
+## 0. Immediate residuals (week 1, ≤ 5 days) — ✅ SHIPPED in Batch #2
+
+Закрыто 2026-05-26.
+
+| ID | Item | Status |
+|----|------|--------|
+| **#17** | Kafka bootstrap race — `restart: unless-stopped` в docker-compose | ✅ PR #12 (R-01) |
+| **#19** | 2FA setup modal stuck on PENDING | ✅ PR #13 (R-02) |
+| **HOT-4** | /hedge pair-selector cards dark mode | ✅ PR #14 (R-03) |
+| **HOT-5** | JWT refresh-token flow | ✅ PR #16 (R-04) |
+| **HOT-6** | apiClient 403 handling | ✅ fixed 916acbd (pre-batch) |
+| **HOT-7** | ConfigProvider tokens reactive to themeStore | ✅ PR #18 (R-05) |
 
 ---
 
@@ -38,9 +52,9 @@
 | TD-2 | **Spring Cloud Vault production integration** — skeleton merged (PR #11). Need: AppRole onboarding + Sber Vault namespace + key rotation runbook | M (3d) | SRE | Blocker for "production ready" |
 | TD-6 | **WAL-G → real S3 bucket.** Script merged (PR #7). Need: Sber Cloud Object Storage bucket + IAM + cron rotation policy + monthly restore drill | M (3d) | SRE | Compliance |
 | TD-1 | **Liquibase preConditions cleanup** — drop `CREATE TABLE` from `init-db.sql`, fully migrate to changesets. Removes the MARK_RAN hack. | L (5d) | BE | Tech debt sprint 12+ |
-| **NEW-1** | **Resilience4j coverage gap** — fee-service + admin-bff don't have circuit-breaker on downstream calls. Add same pattern as pool-engine | S (1d) | BE | Discovered during merge |
+| ~~**NEW-1**~~ | ~~**Resilience4j coverage gap**~~ | ✅ DONE PR #17 (S13-01) |
 
-**Total: ~21 days, 2 SRE + 1 BE. Output: cluster-ready platform.**
+**Total: ~21 days, 2 SRE + 1 BE. Output: cluster-ready platform. (NEW-1 already shipped in Batch #2)**
 
 ---
 
@@ -50,15 +64,15 @@
 
 | ID | Item | Effort | Owner | Revenue impact |
 |----|------|--------|-------|----------------|
-| G-29 | **SAML SSO** для corporate auth — Azure AD / Sber Federation IdP | M (3d) | BE | Corp tier blocker |
-| G-01 | **Cohort analytics dashboard** (DAU/MAU/D7/D30 retention) — admin-bff endpoint + admin-ui chart page | M (3d) | BE+FE | Investor-ask |
+| ~~G-29~~ | ~~**SAML SSO** для corporate auth~~ | ✅ DONE PR #21 (S14-01) — scaffold + integration guide |
+| ~~G-01~~ | ~~**Cohort analytics dashboard**~~ | ✅ DONE PR #19 (S14-02) |
 | G-02 | **Quote-execute idempotency** — automated test covering: stale quote (TTL exceeded), double-execute, signature replay | S (1d) | BE | Risk register |
-| **F-01** | **Telegram bot notifications** — margin call, swap fill, KYC update via @SberDlmmBot. Kafka consumer + Telegram Bot API client | M (3d) | BE | RU treasurer expectation |
-| G-19 | Customer reviews surface — публичная страница "что говорят пилот-клиенты" | S (1d) | FE | Trust signal |
-| G-17 | Simple-mode toggle — hide advanced features (rebalance/auto-claim/team) для retail. localStorage flag + conditional render | S (1d) | FE | Anna persona |
+| ❌ F-01 | ~~Telegram bot notifications~~ | EXCLUDED by user direction ("не нужен") |
+| ~~G-19~~ | ~~Customer reviews surface~~ | ✅ DONE PR #20 (S14-03) |
+| ~~G-17~~ | ~~Simple-mode toggle~~ | ✅ DONE PR #20 (S14-03) |
 | **NEW-2** | **API rate-limit observability** — per-tier dashboard expansion: per-userId throttle counts, top-throttled endpoints chart | S (1d) | BE+FE | Discovered during F-15 review |
 
-**Total: ~13 days, 1.5 BE + 1 FE.**
+**Original total: ~13 days. After Batch #2: ~1 day remaining (G-02 + NEW-2 only).**
 
 ---
 
@@ -71,7 +85,7 @@
 | G-13 | **Video onboarding** (3 видео × 2-3 мин) + FE embed | M (5d) | Marketing + FE |
 | G-24 | **1С коннекторы** — pre-built mappings для УПП 1.3 / ЗУП 8.3 / Бух 3.0 (CSV/XML export endpoints) | M (5d) | BE |
 | G-23 | **Pool comparator pro metrics** — 30d volatility / max drawdown / Sharpe ratio (новые ClickHouse rollups) | S (1.5d) | BE+FE |
-| G-28 | **User-actions audit log** — extend Sprint 8 `@AdminAudit` aspect to capture user-side trades + claims for compliance | M (2d) | BE |
+| ~~G-28~~ | ~~**User-actions audit log**~~ | ✅ DONE PR #15 (S13-02) — @UserAudit annotation + actor_type column |
 | **NEW-3** | **EN i18n full sweep** — Sprint 8 wired react-i18next on Swap only. ~80% strings still hardcoded RU. Mechanical sweep + EN bundle | M (3d) | FE |
 | **NEW-4** | **Health Score calibration tune** — current 20% target APY hardcoded. Replace with per-pool rolling 30d median (data-driven) | S (1d) | BE |
 
