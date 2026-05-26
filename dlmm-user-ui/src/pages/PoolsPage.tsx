@@ -108,9 +108,16 @@ export default function PoolsPage() {
   const [search, setSearch] = useState('')
   const pageSize = 12
 
+  // Sprint 15 perf — staleTime=30s eliminates the refetch storm when user
+  // navigates Pools → Detail → back. Pool listings are slow-changing
+  // (status + TVL update every 10s server-side); 30s client cache is well
+  // within product tolerance. Combined with PoolDetailPage's
+  // initialData-from-cache hop, the user sees the pool grid + detail page
+  // instantly on revisit, no spinner.
   const { data, isLoading } = useQuery({
     queryKey: ['pools', page],
     queryFn: () => pools.getPools(page, pageSize * 4), // grab a wider page; we filter client-side
+    staleTime: 30_000,
   })
 
   const allPools: Pool[] = data?.content || []
