@@ -16,6 +16,7 @@ import OtcDeskPage from '@/pages/OtcDeskPage'
 import ApiAnalyticsPage from '@/pages/ApiAnalyticsPage'
 import SettingsPage from '@/pages/SettingsPage'
 import CohortsPage from '@/pages/CohortsPage'
+import PilotsHealthPage from '@/pages/PilotsHealthPage'
 
 function App() {
   return (
@@ -37,6 +38,8 @@ function App() {
         <Route path="otc" element={<OtcDeskPage />} />
         <Route path="api-analytics" element={<ApiAnalyticsPage />} />
         <Route path="cohorts" element={<CohortsPage />} />
+        {/* B-06 (Batch #5) — pilot health dashboard */}
+        <Route path="pilots" element={<PilotsHealthPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>

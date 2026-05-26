@@ -13,6 +13,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   BarChartOutlined,
+  HeartOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 
@@ -54,6 +55,12 @@ const menuItems = [
     key: '/cohorts',
     icon: <BarChartOutlined />,
     label: 'Когорты',
+  },
+  {
+    // B-06 (Batch #5) — pilot health dashboard
+    key: '/pilots',
+    icon: <HeartOutlined />,
+    label: 'Здоровье пилотов',
   },
   {
     key: '/settings',
