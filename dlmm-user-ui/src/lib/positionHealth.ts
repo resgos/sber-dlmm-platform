@@ -12,8 +12,8 @@
 //      Out-of-range positions can't earn fees, so this dominates.
 //
 //   2. FEE EARNING (35%) — annualised fee yield vs initial deposit.
-//      Calibration: 20% APY → 1.0; 0% → 0; clamped. Below 0% (which
-//      can't happen with fee yield, only IL) → 0.
+//      Calibration: target APY → 1.0; 0% → 0; clamped. Below 0%
+//      (which can't happen with fee yield, only IL) → 0.
 //
 //   3. POSITION AGE (20%) — positions younger than 7 days get a
 //      penalty because the fee-rate sample is noisy. >= 30 days → 1.0;
@@ -26,8 +26,17 @@
 // signal — drives "should I claim or rebalance?". Age is a confidence
 // modifier, not a primary factor.
 //
-// Calibration is deliberately conservative — APY targets and age
-// thresholds are guesses we'll refine with real user data in Sprint 11.
+// NEW-4 (Batch #3, 2026-05-26) — the target APY used by factor #2
+// is no longer a hard-coded 20%. PositionsPage now fetches a
+// per-pool median realised APY from the new GET /pools/{id}/target-apy
+// endpoint (backend: PoolApyCalibrationService) and passes it in via
+// the `targetApy` option. Pools where the real APY is 8% will now
+// rate an 8%-earning position as "healthy" instead of penalising it
+// against an arbitrary 20% anchor. When the backend has no opinion
+// (sparse pool, sample < 5, fetch failed) the caller is expected to
+// pass `undefined` and the calculator falls back to the historical
+// 20% default — so behaviour pre-NEW-4 is preserved on the
+// pessimistic path.
 
 import type { Position, Pool } from '@/api/types'
 
@@ -53,13 +62,45 @@ export interface HealthScore {
 
 const WEIGHTS = { rangeFit: 0.45, feeEarning: 0.35, age: 0.20 } as const
 
-// Fee-earning calibration constants — these are first-cut guesses.
-// 20% annualised gross yield is "great" for the demo seed; real
-// pools will land somewhere between 5–30%.
-const TARGET_APY = 20
+// Fallback target APY (percentage points, e.g. 20 = 20%) when the caller
+// doesn't pass a per-pool override. Mirrors the backend
+// PoolApyCalibrationService.DEFAULT_TARGET_APY * 100. Kept here so the
+// pure-function calculator stays usable without any backend dependency
+// (unit tests, mock-API mode, fallback when the target-apy fetch fails).
+export const DEFAULT_TARGET_APY = 20
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000
 
-export function calculateHealth(position: Position, pool: Pool | undefined): HealthScore {
+/**
+ * Extra knobs for the calculator. New options should default to "old
+ * behaviour" so existing call-sites don't have to change unless they
+ * care about the new feature.
+ */
+export interface HealthOptions {
+  /**
+   * NEW-4 — per-pool target APY override (percentage points, e.g.
+   * {@code 8} for 8% APY). When omitted the calculator falls back to
+   * {@link DEFAULT_TARGET_APY} (20%) for backwards compatibility with
+   * the original Sprint 10 calibration. Pass the value returned by
+   * GET /pools/{id}/target-apy converted from decimal to percent
+   * (multiply by 100).
+   */
+  targetApy?: number
+}
+
+export function calculateHealth(
+  position: Position,
+  pool: Pool | undefined,
+  options: HealthOptions = {},
+): HealthScore {
+  // NEW-4 — accept Number-finite, positive values only. Anything else
+  // (NaN, 0, negative) falls back to the default so a misbehaving
+  // backend response can't poison the score.
+  const targetApy =
+    typeof options.targetApy === 'number' &&
+    Number.isFinite(options.targetApy) &&
+    options.targetApy > 0
+      ? options.targetApy
+      : DEFAULT_TARGET_APY
   // --- Factor 1: range fit ---
   let rangeFitRaw = 0
   let rangeReason = 'Нет данных о пуле — диапазон оценить невозможно'
@@ -105,9 +146,13 @@ export function calculateHealth(position: Position, pool: Pool | undefined): Hea
   const ageMs = Date.now() - new Date(position.createdAt).getTime()
   if (initial > 0 && ageMs > 0 && realisedFees > 0) {
     const annualisedYieldPct = (realisedFees / initial) * (MS_PER_YEAR / ageMs) * 100
-    feeEarningRaw = Math.min(1, annualisedYieldPct / TARGET_APY)
+    feeEarningRaw = Math.min(1, annualisedYieldPct / targetApy)
+    // Format the target without trailing zeros for whole values
+    // (20 stays "20", 8.5 stays "8.5"). Plain toFixed(1) would render
+    // "20.0", which looks unintentionally precise.
+    const targetLabel = Number.isInteger(targetApy) ? targetApy.toString() : targetApy.toFixed(1)
     feeReason = `Доходность по комиссиям ≈ ${annualisedYieldPct.toFixed(1)}% годовых ` +
-                `(цель ${TARGET_APY}%)`
+                `(цель ${targetLabel}%)`
   }
 
   // --- Factor 3: age ---

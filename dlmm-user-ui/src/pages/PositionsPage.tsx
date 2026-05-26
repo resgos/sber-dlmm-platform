@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip } from 'antd'
 import { DollarOutlined, DeleteOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined } from '@ant-design/icons'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { pools, fees } from '@/api/services'
 import type { Position, Pool, FeeHistoryEntry } from '@/api/types'
@@ -128,16 +128,57 @@ export default function PositionsPage() {
     [myPositions],
   )
 
+  // NEW-4 (Batch #3, 2026-05-26) — per-pool target APY for the
+  // Health Score calibration. One fetch per unique poolId we have a
+  // position in (typically 1-5 calls). The endpoint is cached server-
+  // side for 1h and client-side via react-query staleTime=5min, so this
+  // is essentially a free read after the first render. Backend
+  // failures fall back to 20% in the API layer — the calculator also
+  // guards against undefined / non-positive values, so the worst case
+  // is "score behaves like pre-NEW-4". No spinner / loading state in
+  // the UI: the score renders fine without it.
+  const uniquePoolIds = useMemo(
+    () => Array.from(new Set(allActive.map((p) => p.poolId))),
+    [allActive],
+  )
+  const targetApyQueries = useQueries({
+    queries: uniquePoolIds.map((poolId) => ({
+      queryKey: ['poolTargetApy', poolId],
+      queryFn: () => pools.getPoolTargetApy(poolId),
+      staleTime: 5 * 60 * 1000,
+      // Don't retry — the endpoint is best-effort, and the API client
+      // returns the 20% default on failure rather than throwing.
+      retry: false,
+    })),
+  })
+  const targetApyPctByPoolId = useMemo(() => {
+    const map = new Map<string, number>()
+    uniquePoolIds.forEach((poolId, i) => {
+      const v = targetApyQueries[i]?.data
+      // Backend returns decimal (0.08 = 8%); positionHealth expects
+      // percent points (8). Multiply by 100.
+      if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+        map.set(poolId, v * 100)
+      }
+    })
+    return map
+  }, [uniquePoolIds, targetApyQueries])
+
   // Sprint 10 wave 3 — health filter. Pre-compute each position's
   // health once and reuse for both the table column and the
   // filter; otherwise we'd be calling calculateHealth twice per row.
   const healthByPositionId = useMemo(() => {
     const map = new Map<string, HealthScore>()
     for (const p of allActive) {
-      map.set(p.id, calculateHealth(p, poolById.get(p.poolId)))
+      map.set(
+        p.id,
+        calculateHealth(p, poolById.get(p.poolId), {
+          targetApy: targetApyPctByPoolId.get(p.poolId),
+        }),
+      )
     }
     return map
-  }, [allActive, poolById])
+  }, [allActive, poolById, targetApyPctByPoolId])
 
   const [healthFilter, setHealthFilter] = useState<'all' | 'excellent' | 'good' | 'fair' | 'poor'>('all')
   const activePositions = useMemo(() => {
@@ -408,7 +449,13 @@ export default function PositionsPage() {
                 const bh = healthByPositionId.get(b.id)?.total ?? 0
                 return ah - bh
               },
-              render: (_: unknown, r: Position) => <HealthScoreBadge position={r} pool={poolById.get(r.poolId)} />,
+              render: (_: unknown, r: Position) => (
+                <HealthScoreBadge
+                  position={r}
+                  pool={poolById.get(r.poolId)}
+                  targetApy={targetApyPctByPoolId.get(r.poolId)}
+                />
+              ),
             },
             { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="blue">{s}</Tag> },
             {

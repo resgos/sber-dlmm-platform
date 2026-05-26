@@ -194,3 +194,55 @@ describe('bandColor', () => {
     expect(bandColor('poor')).toMatch(/plasma-critical/)
   })
 })
+
+// NEW-4 (Batch #3, 2026-05-26) — per-pool target APY override.
+describe('calculateHealth — NEW-4 targetApy override', () => {
+  /** Position that earns ~10% APY annualised: 100k initial, 30 days, fees that
+   *  annualise to 10k (= 10% of initial). */
+  function tenPctApyPosition() {
+    const initial = 100_000
+    const ageMs = 30 * 24 * 60 * 60 * 1000
+    const targetAnnualisedFees = initial * 0.10 // 10% APY
+    const periodFees = targetAnnualisedFees * (ageMs / (365.25 * 24 * 60 * 60 * 1000))
+    return mkPosition({
+      initialDepositX: initial,
+      initialDepositY: 0,
+      unclaimedFeeX: Math.floor(periodFees),
+      unclaimedFeeY: 0,
+      createdAt: new Date(Date.now() - ageMs).toISOString(),
+    })
+  }
+
+  it('against the default 20% target a 10% APY scores ~half of the fee weight', () => {
+    const h = calculateHealth(tenPctApyPosition(), mkPool())
+    // 10/20 = 0.5; weighted = 0.35 * 0.5 * 100 = 17.5 → rounded 17 or 18
+    expect(h.factors.feeEarning.contribution).toBeGreaterThanOrEqual(17)
+    expect(h.factors.feeEarning.contribution).toBeLessThanOrEqual(18)
+  })
+
+  it('against a per-pool target of 10% the same position scores full fee weight', () => {
+    const h = calculateHealth(tenPctApyPosition(), mkPool(), { targetApy: 10 })
+    // 10/10 clamped to 1.0 → weighted 35
+    expect(h.factors.feeEarning.contribution).toBeGreaterThanOrEqual(34)
+    expect(h.factors.feeEarning.contribution).toBeLessThanOrEqual(35)
+  })
+
+  it('reports the per-pool target APY in the tooltip reason', () => {
+    const h = calculateHealth(tenPctApyPosition(), mkPool(), { targetApy: 12.5 })
+    expect(h.factors.feeEarning.reason).toMatch(/цель 12\.5%/)
+  })
+
+  it('ignores non-positive, NaN, and infinite targetApy values (falls back to 20%)', () => {
+    const baseline = calculateHealth(tenPctApyPosition(), mkPool())
+    for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const h = calculateHealth(tenPctApyPosition(), mkPool(), { targetApy: bad })
+      expect(h.factors.feeEarning.contribution).toBe(baseline.factors.feeEarning.contribution)
+    }
+  })
+
+  it('formats whole-number targets without a trailing .0', () => {
+    const h = calculateHealth(tenPctApyPosition(), mkPool(), { targetApy: 8 })
+    expect(h.factors.feeEarning.reason).toMatch(/цель 8%/)
+    expect(h.factors.feeEarning.reason).not.toMatch(/цель 8\.0%/)
+  })
+})

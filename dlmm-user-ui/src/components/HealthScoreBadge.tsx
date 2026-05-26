@@ -11,6 +11,13 @@ interface Props {
   pool: Pool | undefined
   /** Small (table cell) or medium (detail card). */
   size?: 'small' | 'medium'
+  /**
+   * NEW-4 (Batch #3, 2026-05-26) — per-pool target APY override in
+   * percent (e.g. {@code 8} for 8% APY). When omitted the calculator
+   * falls back to its hard-coded 20% default. PositionsPage fetches
+   * this from {@code pools.getPoolTargetApy} and forwards it here.
+   */
+  targetApy?: number
 }
 
 /**
@@ -28,9 +35,9 @@ interface Props {
  * Visual: number + heart icon + horizontal progress bar; colour ramp
  * via CSS vars (sber-green/amber/critical) so theme-switching works.
  */
-export default function HealthScoreBadge({ position, pool, size = 'small' }: Props) {
+export default function HealthScoreBadge({ position, pool, size = 'small', targetApy }: Props) {
   const navigate = useNavigate()
-  const health = calculateHealth(position, pool)
+  const health = calculateHealth(position, pool, { targetApy })
   const color = bandColor(health.band)
   // Sprint 12 G-03 — actionable CTA. Если оценка плохая или so-so —
   // показываем кнопку «Ребалансировать» прямо в тултипе. До этого

@@ -105,4 +105,22 @@ export const pools = {
     const { data } = await apiClient.get<Position[]>('/pools/positions/me')
     return data
   },
+
+  /**
+   * NEW-4 (Batch #3, 2026-05-26) — per-pool target APY anchor for the
+   * Position Health Score calibration. Backend
+   * (PoolApyCalibrationService) returns the median realised fee APY
+   * across active positions in the pool (sample ≥ 5, age ≥ 7d) or
+   * the historical 0.20 default when the sample is too small. Returned
+   * as a decimal fraction; the Health Score caller multiplies by 100
+   * to feed positionHealth's percent-based `targetApy` option.
+   */
+  getPoolTargetApy: async (poolId: string): Promise<number> => {
+    const { data } = await apiClient.get<{ targetApy: number | string }>(`/pools/${poolId}/target-apy`)
+    // BigDecimal serialises as a JSON number for small values but as
+    // a string when Jackson is configured that way. Coerce defensively.
+    const raw = data?.targetApy
+    const n = typeof raw === 'string' ? Number(raw) : raw
+    return Number.isFinite(n) ? Number(n) : 0.20
+  },
 }
