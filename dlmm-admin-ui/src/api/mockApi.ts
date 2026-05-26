@@ -204,6 +204,26 @@ export function setupMockApi() {
     size: 20,
   })
 
+  // ─── Cohort Analytics ─────────────────────────────────────────────────────────
+  mock.onGet('/admin/cohorts').reply((config) => {
+    const metric = (config.params?.metric as string | undefined) ?? 'DAU'
+    const days   = Number(config.params?.days ?? 30)
+
+    // Base values per metric
+    const bases: Record<string, number> = { DAU: 420, MAU: 3200, D7: 42, D30: 28 }
+    const base = bases[metric] ?? 420
+    const variance = metric === 'D7' || metric === 'D30' ? 0.08 : 0.2
+
+    const data = Array.from({ length: days }, (_, i) => {
+      const d = new Date(2026, 4, 26 - (days - 1 - i)) // 2026-05-26 minus offset
+      const date = d.toISOString().split('T')[0]
+      const value = Math.max(0, Math.round(base * (1 + (Math.random() - 0.5) * variance)))
+      return { date, value }
+    })
+
+    return [200, data]
+  })
+
   // ─── Auth ─────────────────────────────────────────────────────────────────────
   mock.onPost('/auth/login').reply(200, {
     token: 'demo-admin-token',

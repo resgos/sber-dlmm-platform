@@ -12,6 +12,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 
@@ -48,6 +49,11 @@ const menuItems = [
     key: '/transactions/suspicious',
     icon: <WarningOutlined />,
     label: 'Подозрительные',
+  },
+  {
+    key: '/cohorts',
+    icon: <BarChartOutlined />,
+    label: 'Когорты',
   },
   {
     key: '/settings',
