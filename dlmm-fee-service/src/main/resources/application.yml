@@ -54,12 +54,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        # Sprint 13 S13-01 — circuitbreakers,retries exposed so operators
+        # can curl /actuator/circuitbreakers to see token-service breaker
+        # state (CLOSED / OPEN / HALF_OPEN) without needing Prometheus.
+        include: health,info,metrics,prometheus,circuitbreakers,retries
   endpoint:
     health:
       show-details: always
       probes:
         enabled: true
+    circuitbreakers:
+      enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
 
 # Sprint 8 C-10 (R#33) — circuit breaker + retry for outbound credit calls
 # to token-service from TokenServiceClient. Mirrors pool-engine reference
