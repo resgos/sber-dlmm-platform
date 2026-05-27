@@ -160,7 +160,11 @@ export default function NotificationBell() {
       onOpenChange={setOpen}
       placement="bottomRight"
     >
-      <Badge count={unreadCount} size="small" offset={[-2, 2]}>
+      {/* F-06 (UX-FINDINGS 2026-05-26) — overflowCount=9 caps display to
+          "9+" вместо "47" так that bell-badge doesn't dominate header и
+          create anxiety на свежем login. Real count still passed для
+          aria-label / dropdown body — only visual is capped. */}
+      <Badge count={unreadCount} overflowCount={9} size="small" offset={[-2, 2]}>
         {/* Sprint 8 UX-A11Y-1 — icon-only trigger needs an accessible name */}
         {/* and a button role so screen readers + keyboard navigation work. */}
         <BellOutlined
