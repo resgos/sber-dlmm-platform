@@ -153,13 +153,33 @@ export default function UsersPage() {
       title: 'Дата создания',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 180,
+      width: 160,
       render: (date: string) => (
         <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>
           {dayjs(date).format('DD.MM.YYYY HH:mm')}
         </span>
       ),
       sorter: (a, b) => dayjs(a.createdAt).unix() - dayjs(b.createdAt).unix(),
+    },
+    {
+      // Batch #6 unit 3 — last_login_at column, populated by login flow
+      // (Batch #6 unit 1) + initial seed backfill (07-seed-fix-backend-bugs).
+      title: 'Последний вход',
+      dataIndex: 'lastLoginAt',
+      key: 'lastLoginAt',
+      width: 160,
+      render: (date: string | null) => date ? (
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>
+          {dayjs(date).format('DD.MM.YYYY HH:mm')}
+        </span>
+      ) : (
+        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+      ),
+      sorter: (a: any, b: any) => {
+        const ax = a.lastLoginAt ? dayjs(a.lastLoginAt).unix() : 0
+        const bx = b.lastLoginAt ? dayjs(b.lastLoginAt).unix() : 0
+        return ax - bx
+      },
     },
   ]
 

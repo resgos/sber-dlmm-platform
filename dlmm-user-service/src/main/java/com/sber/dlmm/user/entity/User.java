@@ -68,6 +68,15 @@ public class User {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    /**
+     * Batch #6 — populated by UserService.login() on every successful
+     * authentication. NULL для users который never logged in (seed has
+     * это backfilled by docker/07-seed-fix-backend-bugs.sql).
+     * Source-of-truth для /admin/pilots/health engagement score (B-06).
+     */
+    @Column
+    private LocalDateTime lastLoginAt;
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

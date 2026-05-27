@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Row, Col, Tag, Typography, Space, Button, Input, Pagination, Skeleton } from 'antd'
+import { Card, Row, Col, Tag, Typography, Space, Button, Input, Pagination, Skeleton, Segmented } from 'antd'
 import EmptyState from '@/components/EmptyState'
 import { SearchOutlined, ArrowRightOutlined, ThunderboltFilled, BarChartOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
@@ -120,6 +120,12 @@ export default function PoolsPage() {
     staleTime: 30_000,
   })
 
+  // Batch #6 unit 5 — sort options. Default sort by Volume24h DESC
+  // (most active first) — institutional users пришли смотреть «где
+  // деньги торгуются», не алфавитный список. TVL и APY tabs для
+  // других use cases.
+  const [sortBy, setSortBy] = useState<'volume24h' | 'tvl' | 'apy' | 'name'>('volume24h')
+
   const allPools: Pool[] = data?.content || []
   const filtered = search.trim()
     ? allPools.filter((p) => {
@@ -127,8 +133,17 @@ export default function PoolsPage() {
         return (p.tokenXSymbol || '').includes(q) || (p.tokenYSymbol || '').includes(q)
       })
     : allPools
+  const sorted = [...filtered].sort((a, b) => {
+    switch (sortBy) {
+      case 'volume24h': return (b.volume24h ?? 0) - (a.volume24h ?? 0)
+      case 'tvl': return ((b.totalTvlX ?? 0) + (b.totalTvlY ?? 0)) - ((a.totalTvlX ?? 0) + (a.totalTvlY ?? 0))
+      case 'apy': return (b.estimatedApy ?? 0) - (a.estimatedApy ?? 0)
+      case 'name': return (a.tokenXSymbol || '').localeCompare(b.tokenXSymbol || '')
+      default: return 0
+    }
+  })
   const pageStart = page * pageSize
-  const pagePools = filtered.slice(pageStart, pageStart + pageSize)
+  const pagePools = sorted.slice(pageStart, pageStart + pageSize)
 
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
@@ -149,6 +164,17 @@ export default function PoolsPage() {
             // query in sber-theme.css.
             className="sber-pools-search"
             style={{ height: 40, borderRadius: 'var(--radius-sm)' }}
+          />
+          {/* Batch #6 unit 5 — sort selector. */}
+          <Segmented
+            value={sortBy}
+            onChange={(v) => setSortBy(v as typeof sortBy)}
+            options={[
+              { label: 'Volume', value: 'volume24h' },
+              { label: 'TVL', value: 'tvl' },
+              { label: 'APY', value: 'apy' },
+              { label: 'A-Z', value: 'name' },
+            ]}
           />
           {/* Sprint 10 (new feature) — pool comparator entry point. */}
           <Button

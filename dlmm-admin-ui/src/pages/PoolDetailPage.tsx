@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
+import ActivityLogPanel from '@/components/ActivityLogPanel'
 import {
   Card,
   Tag,
@@ -536,6 +537,9 @@ export default function PoolDetailPage() {
             ]}
           />
         </Card>
+        {/* Batch #6 unit 2 — activity log: pause/resume/parameter changes
+            на этом пуле, кто и когда. */}
+        {id && <ActivityLogPanel targetType="POOL" targetId={id} title="Журнал действий по пулу" />}
       </Space>
     </>
   )

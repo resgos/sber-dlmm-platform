@@ -36,6 +36,7 @@ import type { Token, TokenType, MintBurnRequest, Transaction } from '@/api/types
 import { KpiRow } from '@/components/sber'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
 import dayjs from 'dayjs'
+import ActivityLogPanel from '@/components/ActivityLogPanel'
 
 const { Text, Title } = Typography
 
@@ -531,6 +532,9 @@ export default function TokenDetailPage() {
             ]}
           />
         </Card>
+        {/* Batch #6 unit 2 — activity log: mint / burn / parameter
+            changes на этом token, кто и когда. */}
+        {id && <ActivityLogPanel targetType="TOKEN" targetId={id} title="Журнал действий по токену" />}
       </Space>
 
       <Modal

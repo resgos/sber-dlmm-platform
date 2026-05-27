@@ -98,7 +98,7 @@ public class UserService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse login(LoginRequest req) {
         User user = userRepository.findByEmail(req.email())
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
@@ -106,6 +106,12 @@ public class UserService {
         if (!passwordEncoder.matches(req.password(), user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid email or password");
         }
+
+        // Batch #6 — populate last_login_at для engagement-score query
+        // (PilotHealthService B-06). Real auth flow now stays in sync с
+        // seed backfill вместо завися от docker/07-seed-fix-backend-bugs.sql.
+        user.setLastLoginAt(LocalDateTime.now());
+        userRepository.save(user);
 
         String accessToken = issueAccessToken(user);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId());

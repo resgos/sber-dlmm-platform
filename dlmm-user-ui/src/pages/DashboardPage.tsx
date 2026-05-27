@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Row, Col, Card, Table, Tag, Space, Typography, Spin, Alert, Button } from 'antd'
+import { Row, Col, Card, Table, Tag, Space, Typography, Spin, Alert, Button, Tooltip } from 'antd'
 import {
   WalletOutlined,
   PieChartOutlined,
@@ -159,6 +159,15 @@ export default function DashboardPage() {
   // the duplicate "Общий баланс" tile that just repeats the hero
   // number, and saves ~120px of vertical space for the live feeds
   // below.
+  // Batch #6 unit 4 — KPI tile tooltips. Each label gets a Tooltip
+  // explaining the metric — new users (Анна persona) часто не понимают
+  // что значит "TVL" / "fee accrual" / "позиции в работе".
+  const heroTooltips: Record<string, string> = {
+    'Ваш портфель': 'Стоимость всех ваших токенов (свободные + заблокированные) + ликвидность в открытых LP-позициях, по последним рыночным ценам.',
+    'Активные позиции': 'Количество ваших открытых LP-позиций. Каждая — это диапазон бинов где вы предоставляете ликвидность и зарабатываете комиссии.',
+    'Незабр. комиссии': 'Накопленные fees от свопов внутри ваших активных позиций. Можно забрать в любой момент через кнопку «Забрать всё» на странице Позиции.',
+    'Доход за всё время': 'Сумма всех забранных комиссий + текущая нереализованная прибыль/убыток по позициям относительно initial deposit.',
+  }
   const heroSubMetric = (label: string, value: React.ReactNode, sub: React.ReactNode) => (
     <Col
       flex="1 1 0"
@@ -181,7 +190,13 @@ export default function DashboardPage() {
           fontWeight: 500,
         }}
       >
-        {label}
+        {heroTooltips[label] ? (
+          <Tooltip title={heroTooltips[label]}>
+            <span style={{ cursor: 'help', borderBottom: '1px dotted rgba(255,255,255,0.4)' }}>
+              {label}
+            </span>
+          </Tooltip>
+        ) : label}
       </div>
       <div
         style={{

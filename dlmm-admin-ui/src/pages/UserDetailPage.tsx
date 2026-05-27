@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import ActivityLogPanel from '@/components/ActivityLogPanel'
 import {
   Card,
   Tag,
@@ -587,6 +588,10 @@ export default function UserDetailPage() {
             ]}
           />
         </Card>
+        {/* Batch #6 unit 2 — QW-5 ActivityLogPanel wired сюда. Shows
+            audit_log entries targeting this user — compliance use case:
+            "every action that touched user X". */}
+        {id && <ActivityLogPanel targetType="USER" targetId={id} title="Журнал действий по пользователю" />}
       </Space>
     </>
   )
