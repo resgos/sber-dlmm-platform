@@ -5,6 +5,7 @@ import RegisterPage from '@/pages/RegisterPage'
 import SamlCallbackPage from '@/pages/SamlCallbackPage'
 import DashboardPage from '@/pages/DashboardPage'
 import SwapPage from '@/pages/SwapPage'
+import SimpleTradePage from '@/pages/SimpleTradePage'
 import HedgePage from '@/pages/HedgePage'
 import PoolsPage from '@/pages/PoolsPage'
 import RebalancePage from '@/pages/RebalancePage'
@@ -29,6 +30,9 @@ function App() {
       <Route path="/saml/callback" element={<SamlCallbackPage />} />
       <Route path="/" element={<UserLayout />}>
         <Route index element={<DashboardPage />} />
+        {/* SM-01 — simple trading surface (buy/sell + basic add-liquidity).
+            Reachable from the header mode toggle and the Dashboard CTA. */}
+        <Route path="simple" element={<SimpleTradePage />} />
         <Route path="swap" element={<SwapPage />} />
         <Route path="hedge" element={<HedgePage />} />
         <Route path="pools" element={<PoolsPage />} />

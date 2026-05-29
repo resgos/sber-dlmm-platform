@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import { Row, Col, Card, Table, Tag, Space, Typography, Spin, Alert, Button, Tooltip } from 'antd'
 import {
   WalletOutlined,
@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { balances, pools, fees, transactions, oracle, tokens as tokensApi } from '@/api/services'
 import StatCard, { formatRub } from '@/components/StatCard'
 import SpasiboWidget from '@/components/SpasiboWidget'
+import { uiPrefStore } from '@/store/uiPrefStore'
 import { DASHBOARD_TILE_PALETTE } from '@/styles/palette'
 import type { TokenBalance, Position, Transaction, TokenPrice, Pool, Token } from '@/api/types'
 import dayjs from 'dayjs'
@@ -46,6 +47,10 @@ const statusLabels: Record<string, { text: string; color: string }> = {
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+  // SM-01 — in Simple mode the primary "trade" CTAs point at the simple
+  // buy/sell+LP surface instead of the Pro Swap page.
+  const prefs = useSyncExternalStore(uiPrefStore.subscribe, uiPrefStore.getSnapshot)
+  const tradeRoute = prefs.simpleMode ? '/simple' : '/swap'
 
   const { data: myBalances, isLoading: loadingBalances } = useQuery({
     queryKey: ['myBalances'],
@@ -264,9 +269,9 @@ export default function DashboardPage() {
               {formatRub(totalBalanceRub)}
             </div>
             <Space size={10}>
-              <Button size="middle" onClick={() => navigate('/swap')}
+              <Button size="middle" onClick={() => navigate(tradeRoute)}
                 style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)', color: 'var(--text-on-brand)' }}>
-                Обменять
+                {prefs.simpleMode ? 'Купить / Продать' : 'Обменять'}
               </Button>
               <Button size="middle" onClick={() => navigate('/pools')}
                 // HOT-1-followup — white button on green hero must
@@ -347,10 +352,10 @@ export default function DashboardPage() {
                 size="large"
                 block
                 icon={<SwapOutlined />}
-                onClick={() => navigate('/swap')}
+                onClick={() => navigate(tradeRoute)}
                 style={{ justifyContent: 'flex-start', textAlign: 'left', fontWeight: 600 }}
               >
-                Свопнуть SUSDT → SRUB
+                {prefs.simpleMode ? 'Купить / Продать токены' : 'Свопнуть SUSDT → SRUB'}
               </Button>
               <Button
                 size="large"
