@@ -60,6 +60,8 @@ public class FeeService {
         List<PoolFeeSummary> poolSummaries = new ArrayList<>();
         long totalUnclaimedX = 0;
         long totalUnclaimedY = 0;
+        long totalEarnedX = 0;
+        long totalEarnedY = 0;
 
         for (Map.Entry<UUID, List<FeeAccrual>> entry : byPool.entrySet()) {
             UUID poolId = entry.getKey();
@@ -85,6 +87,8 @@ public class FeeService {
 
             totalUnclaimedX += unclaimedFeeX;
             totalUnclaimedY += unclaimedFeeY;
+            totalEarnedX += totalEarnedFeeX;
+            totalEarnedY += totalEarnedFeeY;
 
             poolSummaries.add(new PoolFeeSummary(
                     poolId,
@@ -97,7 +101,11 @@ public class FeeService {
             ));
         }
 
-        return new FeesSummaryResponse(userId, poolSummaries, totalUnclaimedX, totalUnclaimedY);
+        long totalUnclaimed = totalUnclaimedX + totalUnclaimedY;
+        long totalClaimed = (totalEarnedX + totalEarnedY) - totalUnclaimed;
+
+        return new FeesSummaryResponse(userId, poolSummaries, totalUnclaimedX, totalUnclaimedY,
+                totalEarnedX, totalEarnedY, totalClaimed, totalUnclaimed);
     }
 
     @Transactional

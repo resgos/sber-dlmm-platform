@@ -14,6 +14,7 @@ import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
 import { useAutoClaimWatcher } from '@/lib/useAutoClaimWatcher'
 import { calculateHealth, type HealthScore } from '@/lib/positionHealth'
 import { exportToCsv } from '@/lib/csvExport'
+import { strategyLabel } from '@/lib/strategy'
 import { positionAlertsStore } from '@/store/positionAlertsStore'
 import { useSyncExternalStore } from 'react'
 import { Segmented } from 'antd'
@@ -444,7 +445,7 @@ export default function PositionsPage() {
               },
               render: (_: unknown, r: Position) => <HealthScoreBadge position={r} pool={poolById.get(r.poolId)} />,
             },
-            { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="blue">{s}</Tag> },
+            { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="green">{strategyLabel(s)}</Tag> },
             {
               title: 'Диапазон цен',
               key: 'range',

@@ -71,6 +71,18 @@ export default function PoolsPage() {
     queryFn: () => poolService.getPools(page, pageSize),
   })
 
+  // F-11 (UI-test 2026-05-29) — the KPI stat cards below must reflect ALL
+  // pools, not just the current page. With pageSize=20 over 22 pools the
+  // old code summed 20 rows and silently dropped the SBTC flagship (~1.59
+  // трлн / 99.9% of volume), so the Pools-page totals (182 млрд) contradicted
+  // the admin Dashboard (2.31 трлн, which aggregates all pools). This second
+  // fetch (cheap, React-Query-cached, shared across renders) drives the
+  // aggregates; the paginated `data` above still drives the table itself.
+  const { data: aggregateData } = useQuery({
+    queryKey: ['pools', 'aggregate'],
+    queryFn: () => poolService.getPools(0, 200),
+  })
+
   // Client-side filter+sort. Backend pagination still fetches a full page;
   // when the catalog grows past a few thousand pools, swap this for
   // server-side ?status=&sort= params. Today (22 pools) client filter is
@@ -103,10 +115,11 @@ export default function PoolsPage() {
     setPage(0)
   }
 
-  // Sprint 9 (post-DS) — aggregates over the currently-loaded page.
-  // Backend doesn't yet expose a /pools/aggregate endpoint; client-side
-  // aggregation matches what the operator sees in the table below.
-  const allPools = data?.content ?? []
+  // Aggregates over the FULL pool set (see aggregateData query above, F-11).
+  // Backend doesn't yet expose a /pools/aggregate endpoint; fetching all
+  // pools client-side and summing here keeps the KPI tiles consistent with
+  // the admin Dashboard's platform-wide totals.
+  const allPools = aggregateData?.content ?? []
   const totalTvl = allPools.reduce(
     (acc, p) => acc + (p.totalTvlX ?? 0) + (p.totalTvlY ?? 0),
     0,

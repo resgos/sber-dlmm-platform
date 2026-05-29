@@ -43,8 +43,8 @@ export default function StatCard({ title, value, icon, iconBg, iconColor, format
           {icon}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 'var(--text-sm)', color: '#6B7280', fontWeight: 500, marginBottom: 4 }}>{title}</div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: '#1F2937', lineHeight: 1.2 }}>{displayValue}</div>
+          <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 500, marginBottom: 'var(--space-1)' }}>{title}</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>{displayValue}</div>
         </div>
       </div>
     </Card>

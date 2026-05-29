@@ -46,7 +46,7 @@ export default function StrategySelector({ value, onChange }: StrategySelectorPr
             onClick={() => onChange(s.key)}
             styles={{ body: { padding: 16, textAlign: 'center' } }}
           >
-            <div style={{ color: value === s.key ? '#21A038' : '#6B7280', marginBottom: 8 }}>
+            <div style={{ color: value === s.key ? 'var(--brand-primary)' : 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
               {s.icon}
             </div>
             <Text strong style={{ display: 'block', marginBottom: 4 }}>{s.name}</Text>

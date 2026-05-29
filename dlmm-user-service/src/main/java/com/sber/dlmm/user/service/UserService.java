@@ -343,7 +343,8 @@ public class UserService {
                 user.getLastName(),
                 user.getKycStatus(),
                 user.getRole(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                user.getLastLoginAt()
         );
     }
 }

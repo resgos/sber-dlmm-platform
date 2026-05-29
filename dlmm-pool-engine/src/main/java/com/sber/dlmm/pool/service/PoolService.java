@@ -307,7 +307,8 @@ public class PoolService {
         return new PoolResponse(pool.getId(), pool.getTokenXId(), pool.getTokenYId(),
                 tokenXSymbol, tokenYSymbol, pool.getBinStep(), pool.getBaseFeeBps(),
                 pool.getActiveBinId(), currentPrice, pool.getTotalTvlX(), pool.getTotalTvlY(),
-                pool.getVolume24h(), apy, pool.getStatus(), pool.getCreatedAt());
+                pool.getVolume24h(), apy, pool.getStatus(), pool.getCreatedAt(),
+                pool.getTotalFeesCollectedX(), pool.getTotalFeesCollectedY());
     }
 
     private PoolResponse toPoolResponseWithApy(LiquidityPool pool, String tokenXSymbol,
@@ -318,6 +319,7 @@ public class PoolService {
         return new PoolResponse(pool.getId(), pool.getTokenXId(), pool.getTokenYId(),
                 tokenXSymbol, tokenYSymbol, pool.getBinStep(), pool.getBaseFeeBps(),
                 pool.getActiveBinId(), currentPrice, pool.getTotalTvlX(), pool.getTotalTvlY(),
-                pool.getVolume24h(), apy, pool.getStatus(), pool.getCreatedAt());
+                pool.getVolume24h(), apy, pool.getStatus(), pool.getCreatedAt(),
+                pool.getTotalFeesCollectedX(), pool.getTotalFeesCollectedY());
     }
 }

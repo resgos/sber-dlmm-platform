@@ -156,6 +156,36 @@
   --leading-snug: 1.35;
   --leading-base: 1.5;
   --leading-loose: 1.7;
+
+  /* ============================================================
+     T-01 (2026-05-29, design-direction) — spacing scale.
+     Was: inline 4/8/12/16/24/32 px scattered across the codebase.
+     Now: one 8pt- based ladder. New code uses var(--space-*) for
+     margin/padding/gap. Page section rhythm = --space-5 (24).
+     ============================================================ */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* ============================================================
+     T-01 — data-viz palette. Shared by the price chart (PC-02)
+     and order book (OB-01) so candles/bid-ask never invent ad-hoc
+     colours. Always pair colour with ▲/▼ + sign (colour-blind safe).
+     `-soft` fills are for depth bars / volume sub-pane. Dark variants
+     lift saturation so they read on the near-black surface.
+     ============================================================ */
+  --viz-up: #0D8523;
+  --viz-up-soft: rgba(13, 133, 35, 0.12);
+  --viz-down: #E31227;
+  --viz-down-soft: rgba(227, 18, 39, 0.12);
+  --viz-grid: var(--border-light);
+  --viz-axis: var(--text-muted);
+  --viz-external: var(--sber-violet);
 }
 
 /* Sprint 9-DS-r4 P2-15 — dark mode.
@@ -184,6 +214,18 @@
   --text-secondary: rgba(255, 255, 255, 0.60);
   --text-paragraph: rgba(255, 255, 255, 0.80);
   --text-muted: rgba(255, 255, 255, 0.32);
+
+  /* T-01 — brand-soft as a bg tint was #E8F5E9 (near-white) in both
+     themes, so any "active/selected" surface using it went white-on-dark
+     and swallowed the light text (the SPOT/CURVE/BID bug). Translucent
+     green over the dark card surface keeps text readable. */
+  --brand-primary-soft: rgba(33, 160, 56, 0.16);
+
+  /* T-01 — data-viz dark variants (lift saturation on near-black bg). */
+  --viz-up: #2FBF50;
+  --viz-up-soft: rgba(47, 191, 80, 0.16);
+  --viz-down: #FF5468;
+  --viz-down-soft: rgba(255, 84, 104, 0.16);
 
   /* Shadows on dark surfaces should darken rather than lighten —
      otherwise cards look "lifted off a fog" instead of "set into
@@ -1147,11 +1189,94 @@ body {
   border: 2px solid transparent !important;
 }
 .strategy-card:hover {
-  border-color: #21A038 !important;
+  border-color: var(--brand-primary) !important;
 }
+/* T-01: active tint was hardcoded #F0FFF4 (near-white) — stayed white on
+   dark theme and hid the (theme-reactive light) text. Now a translucent
+   brand tint that reads on both light card (#FFF) and dark card (#131820). */
 .strategy-card.active {
-  border-color: #21A038 !important;
-  background: #F0FFF4 !important;
+  border-color: var(--brand-primary) !important;
+  background: var(--brand-primary-soft) !important;
+}
+
+/* ======================================================================
+   SK-01 — Сберкот assistant: floating dock + speech bubble.
+   Tier-3 overlay (design-direction). Mascot stays brand-green in both
+   themes; bubble adapts via tokens. Wobble respects reduced-motion.
+   ====================================================================== */
+.sberkot-dock {
+  position: fixed;
+  right: var(--space-5);
+  bottom: var(--space-5);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-3);
+  pointer-events: none;
+}
+.sberkot-dock > * { pointer-events: auto; }
+
+.sberkot-fab {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  filter: drop-shadow(var(--shadow-md));
+  transition: transform 0.18s ease;
+  border-radius: var(--radius-pill);
+}
+.sberkot-fab:hover { transform: translateY(-2px) scale(1.04); }
+.sberkot-fab:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 3px; }
+
+.sberkot-bubble {
+  position: relative;
+  max-width: 300px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--brand-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  animation: sberkot-pop 0.22s ease;
+}
+.sberkot-bubble__close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1;
+  padding: var(--space-1);
+}
+.sberkot-bubble__close:hover { color: var(--text-secondary); }
+
+@keyframes sberkot-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.sberkot--animated .sberkot__wave {
+  transform-origin: 90px 60px;
+  animation: sberkot-wave 2.4s ease-in-out infinite;
+}
+@keyframes sberkot-wave {
+  0%, 88%, 100% { transform: rotate(0deg); }
+  92% { transform: rotate(-14deg); }
+  96% { transform: rotate(8deg); }
+}
+
+/* Mobile (MB-01): clear the bottom tab-bar + narrower bubble. */
+@media (max-width: 768px) {
+  .sberkot-dock { right: var(--space-3); bottom: calc(var(--space-8) + var(--space-3)); }
+  .sberkot-bubble { max-width: 78vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sberkot-bubble { animation: none; }
+  .sberkot--animated .sberkot__wave { animation: none; }
+  .sberkot-fab { transition: none; }
 }
 
 /* ======================================================================

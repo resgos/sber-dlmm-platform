@@ -22,6 +22,7 @@ import { uiPrefStore } from '@/store/uiPrefStore'
 import NotificationBell from './NotificationBell'
 import LanguageSwitcher from './LanguageSwitcher'
 import DemoBranding from './DemoBranding'
+import SberkotAssistant from './sberkot/SberkotAssistant'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -288,6 +289,9 @@ export default function UserLayout() {
         >
           <Outlet />
         </Content>
+        {/* SK-01 — floating Сберкот assistant (position:fixed; mounts once
+            inside the authenticated layout so it's gone on /login). */}
+        <SberkotAssistant />
       </Layout>
     </Layout>
   )

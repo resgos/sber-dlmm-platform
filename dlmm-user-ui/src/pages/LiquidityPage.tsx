@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, balances, fees } from '@/api/services'
 import type { Position, LiquidityStrategy } from '@/api/types'
 import StrategySelector from '@/components/StrategySelector'
+import { strategyLabel } from '@/lib/strategy'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
 import RiskDisclosure from '@/components/RiskDisclosure'
 import ModalHeader from '@/components/ModalHeader'
@@ -277,7 +278,7 @@ export default function LiquidityPage() {
           pagination={false}
           size="middle"
           columns={[
-            { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="blue">{s}</Tag> },
+            { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="green">{strategyLabel(s)}</Tag> },
             { title: 'Диапазон', key: 'range', render: (_: unknown, r: Position) => `${r.binRangeMin} — ${r.binRangeMax}` },
             {
               title: `Незабранные ${pool.tokenXSymbol}`,

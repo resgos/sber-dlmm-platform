@@ -15,6 +15,10 @@ public record UserProfileResponse(
         String lastName,
         KycStatus kycStatus,
         UserRole role,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        // Batch #6 added the column + login-flow population, but the admin
+        // users-list DTO never surfaced it, so the «Последний вход» column
+        // always rendered "—" even for users who just logged in (UI-test F-10).
+        LocalDateTime lastLoginAt
 ) {
 }

@@ -21,6 +21,12 @@ public record PoolResponse(
         long volume24h,
         BigDecimal estimatedApy,
         PoolStatus status,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        // Gross lifetime fees (LP + protocol) accrued on each side. Exposed on
+        // the list DTO so the admin-bff dashboard can aggregate platform-wide
+        // "комиссия собрана" — previously only PoolDetailResponse carried these,
+        // so the dashboard's sum read null → showed 0 ₽ (UI-test F-09).
+        long totalFeesCollectedX,
+        long totalFeesCollectedY
 ) {
 }
