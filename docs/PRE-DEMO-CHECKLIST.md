@@ -32,16 +32,37 @@ Then in browser: admin sidebar shows «Когорты» + «Здоровье п�
 
 ---
 
-## STEP 0b — apply demo seed fixes (if DB was reset with `down -v`)
+## STEP 0b — demo seed fixes
 
+**If DB was reset (`down -v`)** — run ALL FOUR once, in order:
 ```bash
 cd docker
 for f in 05-seed-volume-refresh 06-seed-tvl-rescale 07-seed-fix-backend-bugs 08-seed-balance-rescale; do
   docker exec -i dlmm-postgres psql -U dlmm -d dlmm < $f.sql
 done
 ```
-These make pools show real volume/APY, rescale TVL/balances to believable
-₽ ranges, backfill fee_accruals (so claim works), and populate last_login_at.
+
+**⚠️ ALWAYS re-run 05 within a few hours of the demo (even without a DB reset):**
+```bash
+docker exec -i dlmm-postgres psql -U dlmm -d dlmm < docker/05-seed-volume-refresh.sql
+```
+WHY: pool-engine's `PoolScheduledTasks` recomputes `volume_24h` from the live
+24-hour transaction window every few minutes. The seed swaps age out of that
+window, so volume/APY drift back to 0 over time. Re-running 05 bumps the swap
+timestamps into the last 24h → pools show real volume + APY (LKOH ~2.4%, SUSDT
+~1.6%) and stay alive for ~24h.
+
+**❗ Do NOT re-run 06 or 08** (TVL / balance rescale) — they divide by a
+constant and are NOT idempotent; re-running shrinks values 10000× again.
+07 is insert-if-missing (safe to re-run). 05 is safe to re-run.
+
+Quick verify after 05:
+```bash
+T=$(curl -sX POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"ivanov@example.com","password":"Demo1234"}'|grep -oE '"accessToken":"[^"]+"'|cut -d'"' -f4)
+curl -s 'localhost:8080/api/v1/pools?page=0&size=3' -H "Authorization: Bearer $T" \
+  | grep -oE '"estimatedApy":[0-9.]+'   # expect non-zero
+```
 
 ---
 
