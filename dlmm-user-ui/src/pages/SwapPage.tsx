@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next'
 import { tokens, pools, balances } from '@/api/services'
 import type { Token, Pool, TokenBalance } from '@/api/types'
 import TokenChip from '@/components/TokenChip'
+import PoolPriceChart from '@/components/PoolPriceChart'
 import { bpsToPercent } from '@/utils/format'
 import { TokenPairChip } from '@/components/sber'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
@@ -653,6 +654,13 @@ function SwapInfoPanel({
             )}
           </Space>
         </Card>
+      )}
+
+      {/* PC-02 (2026-05-29) — compact REAL price chart for the selected
+          pair. Same internal /ohlcv data as PoolDetailPage, slim variant.
+          Only when a direct pool exists (no pool ⇒ no candles to show). */}
+      {pool && (
+        <PoolPriceChart poolId={pool.id} quoteSymbol={pool.tokenYSymbol} compact />
       )}
 
       {/* Pool stats */}
