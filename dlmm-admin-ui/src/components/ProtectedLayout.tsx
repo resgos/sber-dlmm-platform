@@ -14,6 +14,8 @@ import {
   MenuUnfoldOutlined,
   ShopOutlined,
   ApiOutlined,
+  BarChartOutlined,
+  HeartOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 
@@ -61,6 +63,20 @@ const menuItems = [
     key: '/api-analytics',
     icon: <ApiOutlined />,
     label: 'API-аналитика',
+  },
+  {
+    // S14-02 — cohort analytics (was added to dead AdminLayout.tsx by
+    // mistake; ProtectedLayout is the real sidebar — fixed 2026-05-27 review).
+    key: '/cohorts',
+    icon: <BarChartOutlined />,
+    label: 'Когорты',
+  },
+  {
+    // B-06 (Batch #5) — pilot health dashboard. Same dead-file mistake;
+    // now in the real sidebar.
+    key: '/pilots',
+    icon: <HeartOutlined />,
+    label: 'Здоровье пилотов',
   },
   {
     key: '/settings',
