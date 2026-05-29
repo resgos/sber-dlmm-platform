@@ -2149,3 +2149,205 @@ a:focus-visible {
 [data-theme="dark"] .ant-alert-warning .ant-alert-message .ant-typography strong {
   color: var(--text-primary) !important;
 }
+
+/* ======================================================================
+   OB-01 — Order book / «стакан» (components/OrderBook.tsx).
+
+   The order book IS the bin liquidity distribution: asks = bins above
+   the active bin (X side, `--viz-down`), bids = bins below (Y side,
+   `--viz-up`). Depth bar = cumulative size, the `-soft` viz fill. All
+   numbers tabular-nums. Token-only colours, both themes via the
+   data-viz token overrides. Mobile collapses to one section via the
+   in-component Segmented (no media query needed for the layout itself,
+   but we tighten paddings on phones below).
+   ====================================================================== */
+.sber-orderbook .ant-card-head { min-height: 44px; }
+
+.sber-orderbook__book {
+  padding: var(--space-2) 0 var(--space-3);
+}
+
+/* Shared 3-column ladder grid: price | size | cumulative. */
+.sber-orderbook__row,
+.sber-orderbook__row--head {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px var(--space-4);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  isolation: isolate;
+}
+.sber-orderbook__row--head {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-2);
+}
+
+.sber-orderbook__col {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sber-orderbook__col--price {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 600;
+}
+.sber-orderbook__col--size { text-align: right; color: var(--text-primary); }
+.sber-orderbook__col--cum { text-align: right; color: var(--text-secondary); }
+
+.sber-orderbook__caret { font-size: 9px; }
+
+/* Depth bar — absolutely positioned behind the row text. Asks fill
+   from the RIGHT (toward the spread above), bids from the LEFT. */
+.sber-orderbook__depth {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  z-index: 0;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+.sber-orderbook__row--ask .sber-orderbook__depth {
+  right: 0;
+  background: var(--viz-down-soft);
+}
+.sber-orderbook__row--bid .sber-orderbook__depth {
+  left: 0;
+  background: var(--viz-up-soft);
+}
+.sber-orderbook__row--ask .sber-orderbook__col--price { color: var(--viz-down); }
+.sber-orderbook__row--bid .sber-orderbook__col--price { color: var(--viz-up); }
+
+.sber-orderbook__row--clickable { cursor: pointer; }
+.sber-orderbook__row--clickable:hover { background: var(--surface-1); }
+.sber-orderbook__row--clickable:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+.sber-orderbook__empty-side {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Mid-price + spread band — separates asks from bids. */
+.sber-orderbook__mid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  margin: var(--space-1) 0;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+}
+.sber-orderbook__mid-price {
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+}
+.sber-orderbook__spread {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-pill);
+  padding: 1px var(--space-2);
+}
+
+.sber-orderbook__divider {
+  height: 1px;
+  background: var(--border-light);
+}
+
+/* Depth totals strip — bid (Y) vs ask (X) sums, reconciled against
+   pool reserves. */
+.sber-orderbook__totals {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) 0;
+  margin-top: var(--space-2);
+  border-top: 1px dashed var(--border-light);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+.sber-orderbook__totals .sber-orderbook__trade-buy,
+.sber-orderbook__totals .sber-orderbook__trade-sell {
+  font-size: 8px;
+  vertical-align: middle;
+  margin-right: var(--space-1);
+}
+
+/* Recent trades feed. */
+.sber-orderbook__trades { padding: var(--space-3) 0 var(--space-2); }
+.sber-orderbook__trades-head { padding: 0 var(--space-4) var(--space-2); }
+.sber-orderbook__trades-list { max-height: 280px; overflow-y: auto; }
+
+.sber-orderbook__trade-row,
+.sber-orderbook__trade-row--head {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.1fr;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px var(--space-4);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.sber-orderbook__trade-row--head {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: var(--space-2);
+}
+.sber-orderbook__trade-row:not(.sber-orderbook__trade-row--head):hover {
+  background: var(--surface-1);
+}
+.sber-orderbook__trade-col { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sber-orderbook__trade-col--time { color: var(--text-muted); }
+.sber-orderbook__trade-col--side {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 600;
+}
+.sber-orderbook__trade-col--vol {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  justify-content: flex-end;
+  text-align: right;
+  font-weight: 600;
+}
+.sber-orderbook__trade-arrow { font-size: 9px; color: var(--text-muted); }
+.sber-orderbook__trade-buy { color: var(--viz-up); }
+.sber-orderbook__trade-sell { color: var(--viz-down); }
+
+@media (max-width: 414px) {
+  .sber-orderbook__row,
+  .sber-orderbook__row--head,
+  .sber-orderbook__trade-row,
+  .sber-orderbook__trade-row--head {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+}
