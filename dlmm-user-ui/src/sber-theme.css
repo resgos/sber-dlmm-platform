@@ -2351,3 +2351,229 @@ a:focus-visible {
     padding-right: var(--space-3);
   }
 }
+/* ======================================================================
+   SM-01 (2026-05-29) — Simple ⇄ Pro mode toggle + SimpleTradePage.
+
+   Per docs/DESIGN-DIRECTION-2026-05-29 "Simple ⇄ Pro" spec:
+     - mode toggle = pill Segmented in the header (--radius-pill)
+     - a state chip («Simple» grey / «Pro» brand-tint) so users always
+       know where they are
+     - the Simple surface is airy (--space-5/6 padding); the primary
+       buy/sell CTA card sits at Tier-2 elevation (--shadow-md +
+       --radius-lg + brand/accent border)
+     - Buy uses --viz-up, Sell uses --viz-down (paired with ▲/▼ icons in
+       the component for colour-blind safety)
+   0 hardcoded colours — tokens only. Works in both themes + mobile.
+   ====================================================================== */
+
+/* — Header mode toggle (pill) — */
+.sber-mode-toggle.ant-segmented {
+  border-radius: var(--radius-pill) !important;
+  background: var(--surface-1) !important;
+  padding: 3px !important;
+}
+.sber-mode-toggle.ant-segmented .ant-segmented-item {
+  border-radius: var(--radius-pill) !important;
+  color: var(--text-secondary) !important;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.sber-mode-toggle.ant-segmented .ant-segmented-item-selected {
+  background: var(--bg-card) !important;
+  color: var(--brand-primary) !important;
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+}
+.sber-mode-toggle.ant-segmented .ant-segmented-thumb {
+  border-radius: var(--radius-pill) !important;
+  background: var(--bg-card) !important;
+}
+.sber-mode-toggle__opt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+/* — Mode state chip — */
+.sber-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.sber-mode-chip--simple {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+.sber-mode-chip--pro {
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary-strong);
+}
+[data-theme="dark"] .sber-mode-chip--pro {
+  /* brand-primary-strong (#0E6B1E) is too dark on a near-black surface —
+     lift to the readable brand-primary in dark mode. */
+  color: var(--brand-primary);
+}
+
+/* Hide the chip on narrow screens to keep the header from wrapping; the
+   pill toggle already carries the label. */
+@media (max-width: 768px) {
+  .sber-mode-chip { display: none; }
+  .sber-mode-toggle__opt { font-size: var(--text-xs); }
+}
+
+/* — Simple page shell: airy, two-card grid that stacks on narrow — */
+.sber-simple-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 1040px;
+  margin: 0 auto;
+  width: 100%;
+}
+.sber-simple-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.sber-simple-grid {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+@media (max-width: 920px) {
+  .sber-simple-grid { grid-template-columns: 1fr; }
+}
+
+/* Card base — Tier-1 by default; the primary buy/sell card overrides to
+   Tier-2 below. */
+.sber-simple-card.ant-card {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--border-light) !important;
+  background: var(--bg-card) !important;
+}
+
+/* Primary (buy/sell) card — Tier-2 elevation + accent border that tracks
+   the active side (buy = up-green, sell = down-red). */
+.sber-simple-card--primary.ant-card {
+  box-shadow: var(--shadow-md) !important;
+}
+.sber-simple-card--primary.sber-simple-card--buy.ant-card {
+  border-color: var(--viz-up) !important;
+}
+.sber-simple-card--primary.sber-simple-card--sell.ant-card {
+  border-color: var(--viz-down) !important;
+}
+
+/* Buy/Sell segmented — the option labels carry their own --viz colour
+   (set inline in the component) so buy reads green / sell reads red in
+   any state; here we just size + round the control. */
+.sber-simple-side__opt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+.sber-simple-side.ant-segmented {
+  background: var(--surface-1) !important;
+  padding: var(--space-1) !important;
+  border-radius: var(--radius-md) !important;
+}
+.sber-simple-side.ant-segmented .ant-segmented-thumb,
+.sber-simple-side.ant-segmented .ant-segmented-item-selected {
+  background: var(--bg-card) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: var(--shadow-xs);
+}
+
+/* Primary CTA — solid up/down fill (NOT brand-green: here green means
+   "buy"). White label in both themes (the fills are dark enough). */
+.sber-simple-cta.ant-btn {
+  height: 52px !important;
+  font-size: var(--text-md) !important;
+  font-weight: 700 !important;
+  border-radius: var(--radius-md) !important;
+  border: none !important;
+  color: var(--text-on-brand) !important;
+}
+.sber-simple-cta.ant-btn:not(:disabled) {
+  /* override the global .ant-btn-default white styling */
+}
+.sber-simple-cta--buy.ant-btn:not(:disabled) {
+  background: var(--viz-up) !important;
+}
+.sber-simple-cta--buy.ant-btn:not(:disabled):hover {
+  filter: brightness(0.94);
+  color: var(--text-on-brand) !important;
+  transform: translateY(-1px);
+}
+.sber-simple-cta--sell.ant-btn:not(:disabled) {
+  background: var(--viz-down) !important;
+}
+.sber-simple-cta--sell.ant-btn:not(:disabled):hover {
+  filter: brightness(0.94);
+  color: var(--text-on-brand) !important;
+  transform: translateY(-1px);
+}
+.sber-simple-cta.ant-btn:disabled,
+.sber-simple-cta.ant-btn[disabled] {
+  background: var(--surface-2) !important;
+  color: var(--text-muted) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* One-line estimate panel under the amount field. */
+.sber-simple-est {
+  background: var(--surface-1);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.sber-simple-est--loading {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+.sber-simple-est__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* "по базовым настройкам" note line. */
+.sber-simple-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--brand-primary-soft);
+  border-radius: var(--radius-md);
+}
+
+/* Popular-pool quick rows on the LP card empty state. */
+.sber-simple-poolrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+.sber-simple-poolrow:hover { opacity: 0.78; }
+
+/* Mobile — full-bleed-ish padding, slightly tighter card insets. */
+@media (max-width: 414px) {
+  .sber-simple-card .ant-card-body { padding: var(--space-5) !important; }
+  .sber-simple-cta.ant-btn { height: 48px !important; }
+}

@@ -1,6 +1,6 @@
 import { useSyncExternalStore, useState } from 'react'
 import { Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Button, Avatar, Space, Typography, Dropdown } from 'antd'
+import { Layout, Menu, Button, Avatar, Space, Typography, Dropdown, Segmented, Tooltip } from 'antd'
 import {
   HomeOutlined,
   SwapOutlined,
@@ -15,6 +15,8 @@ import {
   RetweetOutlined,
   TeamOutlined,
   StarOutlined,
+  ThunderboltOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 import { auth } from '@/api/services'
@@ -48,8 +50,14 @@ function buildMenuItems(simpleMode: boolean) {
       label: 'Торговля',
       children: [
         { key: '/', icon: <HomeOutlined />, label: 'Главная' },
-        { key: '/swap', icon: <SwapOutlined />, label: 'Обмен' },
-        { key: '/hedge', icon: <SafetyCertificateOutlined />, label: 'Хедж FX' },
+        // SM-01 — Simple mode surfaces a single airy buy/sell+LP page as the
+        // primary trading entry and hides the advanced Swap / Хедж FX.
+        ...(simpleMode
+          ? [{ key: '/simple', icon: <ThunderboltOutlined />, label: 'Купить / Продать' }]
+          : [
+              { key: '/swap', icon: <SwapOutlined />, label: 'Обмен' },
+              { key: '/hedge', icon: <SafetyCertificateOutlined />, label: 'Хедж FX' },
+            ]),
         { key: '/pools', icon: <FundOutlined />, label: 'Пулы' },
       ],
     },
@@ -76,8 +84,9 @@ function buildMenuItems(simpleMode: boolean) {
   ]
 }
 
-/** All possible leaf items (simpleMode=false) — used by selectedKey lookup. */
-const ALL_LEAF_KEYS = buildMenuItems(false)
+/** All possible leaf items across BOTH modes — used by selectedKey lookup
+ *  so /simple, /swap, /hedge etc. all resolve regardless of current mode. */
+const ALL_LEAF_KEYS = [...buildMenuItems(false), ...buildMenuItems(true)]
 
 interface LeafMenuItem {
   key: string
@@ -85,10 +94,15 @@ interface LeafMenuItem {
   label: string
 }
 
-/** Flat list of all leaf items — used by selectedKey lookup. */
-const flatMenuItems: LeafMenuItem[] = ALL_LEAF_KEYS
-  .flatMap((m) => ('children' in m ? m.children : []))
-  .filter((m): m is LeafMenuItem => m != null && 'key' in m)
+/** Flat list of all leaf items (deduped by key) — selectedKey lookup. */
+const flatMenuItems: LeafMenuItem[] = Array.from(
+  new Map(
+    ALL_LEAF_KEYS
+      .flatMap((m) => ('children' in m ? m.children : []))
+      .filter((m): m is LeafMenuItem => m != null && 'key' in m)
+      .map((m) => [m.key, m]),
+  ).values(),
+)
 
 function SberLogo({ size = 28 }: { size?: number }) {
   return (
@@ -119,6 +133,15 @@ export default function UserLayout() {
 
   const handleMenuClick = ({ key }: { key: string }) => {
     navigate(key)
+  }
+
+  // SM-01 — switching to Simple drops the user on the new simple trading
+  // surface; switching to Pro returns to the dashboard. Both are coherent
+  // landing spots so the mode flip is never a dead-end.
+  const handleModeChange = (value: string | number) => {
+    const next = value === 'simple' ? 'simple' : 'pro'
+    uiPrefStore.setMode(next)
+    navigate(next === 'simple' ? '/simple' : '/')
   }
 
   const handleLogout = async () => {
@@ -236,7 +259,7 @@ export default function UserLayout() {
             boxShadow: 'none',
           }}
         >
-          <Space>
+          <Space size={16}>
             <Button
               type="text"
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
@@ -246,6 +269,29 @@ export default function UserLayout() {
               aria-expanded={!collapsed}
               aria-controls="sider-navigation"
             />
+            {/* SM-01 — prominent Simple ⇄ Pro mode pill + a state chip so
+                the user always knows which surface they're on. */}
+            <Tooltip
+              title={
+                prefs.simpleMode
+                  ? 'Простой режим: покупка/продажа и ликвидность по базовым настройкам'
+                  : 'Pro-режим: бины, стратегии, расширенные инструменты'
+              }
+            >
+              <Segmented
+                value={prefs.mode}
+                onChange={handleModeChange}
+                className="sber-mode-toggle"
+                aria-label="Режим интерфейса"
+                options={[
+                  { value: 'simple', label: <span className="sber-mode-toggle__opt"><ThunderboltOutlined /> Simple</span> },
+                  { value: 'pro', label: <span className="sber-mode-toggle__opt"><AppstoreOutlined /> Pro</span> },
+                ]}
+              />
+            </Tooltip>
+            <span className={`sber-mode-chip sber-mode-chip--${prefs.mode}`}>
+              {prefs.simpleMode ? 'Simple' : 'Pro'}
+            </span>
           </Space>
 
           <Space size={20}>
