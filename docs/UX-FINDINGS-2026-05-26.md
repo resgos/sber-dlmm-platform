@@ -34,8 +34,15 @@ scroll/resize, animation frames pile up and block the main thread. The
 cliff (bars are static data, no animation needed); (b) compact tooltip
 format (T→трлн, млн etc). Initial render was always fine; the freeze was
 re-render-on-scroll.
-**Status:** ✅ FIXED — isAnimationActive guard + compact format. Re-verified
-no freeze on scroll.
+**Status:** ✅ RESOLVED + RE-DIAGNOSED (2026-05-27). The page is NOT actually
+frozen for users: `navigate` + `get_page_text` return instantly with full
+content, ZERO console errors, no render loop. What times out is the
+**CDP `captureScreenshot`** protocol — recharts' ResizeObserver keeps the
+compositor in continuous repaint so the headless screenshot never gets a
+"stable frame". A human presenter sees a fully responsive page (form,
+chart, rescaled balances all render). `isAnimationActive={false}` + compact
+tooltip format applied as perf hygiene regardless. **NOT a demo blocker** —
+it's an automation-tooling artifact, not a user-facing defect.
 
 ### F-03 🟠 P1 — Bin chart axis label "16.0T" non-readable
 **Page:** LiquidityPage

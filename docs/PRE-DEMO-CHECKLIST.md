@@ -1,8 +1,47 @@
-# Pre-Demo Checklist (2026-05-26)
+# Pre-Demo Checklist (updated 2026-05-27)
 
-**Build:** `claude/elated-elgamal-dba521` HEAD = `79710b2`
+**Build:** `claude/elated-elgamal-dba521` (latest HEAD)
 
 Run этот чеклист за 10–15 минут до live demo. Если хоть один пункт falls — задержать демо и починить.
+
+---
+
+## ⚠️ STEP 0 — FRESH FRONTEND DEPLOY (critical, learned 2026-05-27)
+
+`docker-compose build dlmm-{user,admin}-ui` intermittently does NOT update the
+served bundle in this environment (flaky daemon — exits 0 but image unchanged).
+Symptom: admin sidebar missing **Когорты / Здоровье пилотов**, /pilots redirects
+to /dashboard, KPI tooltips absent, portfolio shows old numbers. ALWAYS run after
+`docker-compose up`:
+
+```bash
+bash scripts/redeploy-frontends.sh   # builds dist on host, docker cp into nginx
+```
+
+Verify both bundles are fresh:
+```bash
+# admin-ui MUST contain pilots:
+JS=$(curl -s localhost:3000 | grep -oE 'index-[A-Za-z0-9_]+\.js'|head -1)
+curl -s localhost:3000/assets/$JS | grep -oc 'pilots/health'   # expect 1
+# user-ui MUST contain KPI tooltips:
+JS=$(curl -s localhost:3001 | grep -oE 'index-[A-Za-z0-9_]+\.js'|head -1)
+curl -s localhost:3001/assets/$JS | grep -oc 'Стоимость всех ваших'  # expect 1
+```
+Then in browser: admin sidebar shows «Когорты» + «Здоровье пилотов»; open /pilots
+→ Test Org Score 100. If not → re-run the script + Ctrl+Shift+R.
+
+---
+
+## STEP 0b — apply demo seed fixes (if DB was reset with `down -v`)
+
+```bash
+cd docker
+for f in 05-seed-volume-refresh 06-seed-tvl-rescale 07-seed-fix-backend-bugs 08-seed-balance-rescale; do
+  docker exec -i dlmm-postgres psql -U dlmm -d dlmm < $f.sql
+done
+```
+These make pools show real volume/APY, rescale TVL/balances to believable
+₽ ranges, backfill fee_accruals (so claim works), and populate last_login_at.
 
 ---
 
