@@ -96,6 +96,44 @@ public class SwapService {
         this.quoteTtlSeconds = quoteTtlSeconds;
     }
 
+    /**
+     * Price impact = pure SLIPPAGE, fee-excluded. (Fixed 2026-05-27 — the
+     * previous formula measured the GROSS rate vs spot, which (a) baked the
+     * fee into "impact" so every within-bin swap read ~fee% instead of 0,
+     * and (b) on tiny amounts integer-truncation of amountOut blew the
+     * impact up — a 1000-unit swap read 5% while a 1B swap read 0.15%.)
+     *
+     * <p>In an LB-DLMM the price is CONSTANT within a bin, so a swap that
+     * does not cross a bin boundary has zero slippage by construction — the
+     * trader fills entirely at the bin price. We therefore:
+     * <ol>
+     *   <li>return 0 when {@code binsCrossed == 0} (within the active bin —
+     *       no price movement; any residual is fee/rounding, not slippage);</li>
+     *   <li>otherwise measure the execution price on the NET input
+     *       (fee removed) so the fee is reported separately, not as impact.</li>
+     * </ol>
+     * Result: impact is ~0 for normal trades and grows monotonically only as
+     * the swap consumes liquidity across additional bins — which is the
+     * behaviour treasurers expect from "влияние на цену".
+     */
+    static BigDecimal computePriceImpact(boolean swapXtoY, long consumedAmountIn,
+                                         long totalAmountOut, long totalFee,
+                                         int binsCrossed, BigDecimal spotPrice) {
+        if (binsCrossed <= 0) return BigDecimal.ZERO;
+        long netConsumed = consumedAmountIn - totalFee;
+        if (netConsumed <= 0 || totalAmountOut <= 0 || spotPrice.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        // Normalise to spot's frame (Y per X), fee excluded.
+        BigDecimal execPrice = swapXtoY
+                ? BigDecimal.valueOf(totalAmountOut).divide(BigDecimal.valueOf(netConsumed), 18, RoundingMode.HALF_UP)
+                : BigDecimal.valueOf(netConsumed).divide(BigDecimal.valueOf(totalAmountOut), 18, RoundingMode.HALF_UP);
+        return execPrice.subtract(spotPrice).abs()
+                .divide(spotPrice, 18, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(4, RoundingMode.HALF_UP);
+    }
+
     public SwapQuoteResponse quote(SwapQuoteRequest req) {
         LiquidityPool pool = poolRepository.findById(req.poolId())
                 .orElseThrow(() -> new PoolNotFoundException("Pool not found: " + req.poolId()));
@@ -236,14 +274,9 @@ public class SwapService {
                     .divide(BigDecimal.valueOf(totalAmountOut), 18, RoundingMode.HALF_UP);
         }
 
-        // Price impact = |executionPrice - spotPrice| / spotPrice * 100
-        BigDecimal priceImpact = BigDecimal.ZERO;
-        if (spotPrice.compareTo(BigDecimal.ZERO) > 0 && executionPrice.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal diff = executionPrice.subtract(spotPrice).abs();
-            priceImpact = diff.divide(spotPrice, 18, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal.valueOf(100))
-                    .setScale(4, RoundingMode.HALF_UP);
-        }
+        // Price impact = pure SLIPPAGE (fee-excluded). See computePriceImpact.
+        BigDecimal priceImpact = computePriceImpact(
+                swapXtoY, consumedAmountIn, totalAmountOut, totalFee, binsCrossed, spotPrice);
 
         int estimatedFeeBps = consumedAmountIn > 0
                 ? (int) (totalFee * 10_000 / consumedAmountIn)
@@ -531,13 +564,8 @@ public class SwapService {
                     .divide(BigDecimal.valueOf(totalAmountOut), 18, RoundingMode.HALF_UP);
         }
 
-        BigDecimal priceImpact = BigDecimal.ZERO;
-        if (spotPrice.compareTo(BigDecimal.ZERO) > 0 && executionPrice.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal diff = executionPrice.subtract(spotPrice).abs();
-            priceImpact = diff.divide(spotPrice, 18, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal.valueOf(100))
-                    .setScale(4, RoundingMode.HALF_UP);
-        }
+        BigDecimal priceImpact = computePriceImpact(
+                swapXtoY, consumedAmountIn, totalAmountOut, totalFee, binsCrossed, spotPrice);
 
         int feeBps = consumedAmountIn > 0
                 ? (int) (totalFee * 10_000 / consumedAmountIn)
