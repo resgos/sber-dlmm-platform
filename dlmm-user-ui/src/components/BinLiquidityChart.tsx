@@ -380,7 +380,15 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
             }} />
           <Tooltip content={Tooltip2} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
           <ReferenceLine x={pool.activeBinId} stroke="#F59E0B" strokeWidth={2} strokeDasharray="5 3" />
-          <Bar dataKey="liquidity" radius={[3, 3, 0, 0]} maxBarSize={18}>
+          {/* F-02 root-cause fix (2026-05-27 review) — isAnimationActive={false}.
+              Recharts Bar enter-animation runs on EVERY re-render; with ~50
+              bars × Cells × 2 series, plus ResponsiveContainer re-measuring
+              on scroll/resize, the animation frames pile up and block the
+              main thread (browser froze on scroll during demo review). The
+              tooltip compact-format fix earlier addressed one symptom; this
+              kills the actual perf cliff. Bars are static distribution data —
+              no animation needed. */}
+          <Bar dataKey="liquidity" radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false}>
             {chartData.map((entry: any, index: number) => (
               <Cell key={`cell-${index}`}
                 fill={getBinColor(entry.side, entry._distance, entry._maxDist, entry.isMine)}
@@ -395,7 +403,7 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
               SPOT/CURVE/BID_ASK shapes are immediately visible against
               the existing pool distribution. */}
           {pendingPreview && (
-            <Bar dataKey="preview" radius={[3, 3, 0, 0]} maxBarSize={18} fill="rgba(245,158,11,0.55)" stroke="#D97706" strokeWidth={1} strokeDasharray="3 2" />
+            <Bar dataKey="preview" radius={[3, 3, 0, 0]} maxBarSize={18} isAnimationActive={false} fill="rgba(245,158,11,0.55)" stroke="#D97706" strokeWidth={1} strokeDasharray="3 2" />
           )}
         </BarChart>
       </ResponsiveContainer>

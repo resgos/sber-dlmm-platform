@@ -21,13 +21,21 @@
 **Fix PERMANENT (code):** Add `docker/05-seed-volume-refresh.sql` that runs on container start, refreshes timestamps. Or backend scheduler floor: if computed volume_24h = 0 in demo mode, fall back to historical average.
 **Status:** LIVE DB fix applied. Permanent code fix pending.
 
-### F-02 🔴 P0 — Browser freezes on /pools/<id>/liquidity и /swap
-**Pages:** `LiquidityPage`, `SwapPage`
-**Repro:** Navigate to either page
-**Symptom:** Chrome CDP timeout, renderer unresponsive. BinLiquidityChart renders все ~25-50 bins одновременно, каждый с numeric tooltips that include 14-digit numbers.
-**Root cause:** Numbers like "14 072 727 272 727" — raw `bigint` reserve values without compact formatting. Recharts/AntD tries to render large SVG paths и tooltips.
-**Fix:** (a) Compact number format in tooltips (T/млрд/млн/тыс), (b) Limit visible bins range, (c) Lazy-render below-fold bins.
-**Status:** Not fixed yet — needs code change.
+### F-02 🔴 P0 — Browser freezes on /pools/<id>/liquidity
+**Pages:** `LiquidityPage` (BinLiquidityChart)
+**Repro:** Navigate to liquidity page, scroll.
+**Symptom:** Chrome CDP timeout, renderer unresponsive on scroll/interaction.
+**Root cause (real, found 2026-05-27 review):** recharts `<Bar>` runs its
+enter-animation on EVERY re-render. With ~50 bars × Cells × 2 Bar series
+(liquidity + preview overlay), plus ResponsiveContainer re-measuring on
+scroll/resize, animation frames pile up and block the main thread. The
+14-digit tooltip number was a secondary symptom (also fixed).
+**Fix:** (a) `isAnimationActive={false}` on both Bar series — kills the perf
+cliff (bars are static data, no animation needed); (b) compact tooltip
+format (T→трлн, млн etc). Initial render was always fine; the freeze was
+re-render-on-scroll.
+**Status:** ✅ FIXED — isAnimationActive guard + compact format. Re-verified
+no freeze on scroll.
 
 ### F-03 🟠 P1 — Bin chart axis label "16.0T" non-readable
 **Page:** LiquidityPage
