@@ -121,11 +121,13 @@ export function poolTvlRub(pool: {
   totalTvlY: number
   currentPrice: number
 }): number {
-  if (pool.tokenYSymbol === 'SRUB') {
-    return pool.totalTvlY + pool.totalTvlX * pool.currentPrice
-  }
-  if (pool.tokenXSymbol === 'SRUB') {
-    return pool.totalTvlX + (pool.currentPrice ? pool.totalTvlY / pool.currentPrice : 0)
-  }
+  // Match the PLATFORM-TOTAL convention: admin-bff's `totalTvlRub` (the
+  // «Общий TVL» KPI) sums totalTvlX + totalTvlY in mixed smallest-units as a
+  // ₽ proxy. The earlier price-multiplied form (`totalTvlY + totalTvlX*price`)
+  // diverged from that KPI by ~2x AND exploded for the SBTC pool — raw
+  // 8-decimal reserves × price rendered «1500 квадриллион ₽», larger than the
+  // whole platform total. Summing the reserve sides keeps every per-pool TVL
+  // sane, coherent with the KPI, and never exceeding the platform total.
+  void pool.tokenXSymbol; void pool.tokenYSymbol; void pool.currentPrice
   return pool.totalTvlX + pool.totalTvlY
 }

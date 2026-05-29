@@ -127,11 +127,17 @@ async function fetchHealth(): Promise<HealthPayload | null> {
     const resp = await fetch('/actuator/health', { headers: { Accept: 'application/json' } })
     // Spring returns 503 with a body when DOWN — still parse it.
     const text = await resp.text()
-    if (!text) return resp.ok ? {} : null
+    if (!text) return null
     try {
-      return JSON.parse(text) as HealthPayload
+      const json = JSON.parse(text) as HealthPayload
+      // Guard the SPA-fallback case: when /actuator isn't proxied, nginx serves
+      // index.html with HTTP 200. That used to JSON-parse-fail → resp.ok → `{}`,
+      // which read as "reachable but all unknown" → misleading "0 из 8 в норме".
+      // A genuine actuator payload always carries a string `status`; anything
+      // else means we did NOT actually reach actuator → null (honest "недоступен").
+      return json && typeof json.status === 'string' ? json : null
     } catch {
-      return resp.ok ? {} : null
+      return null
     }
   } catch {
     return null
