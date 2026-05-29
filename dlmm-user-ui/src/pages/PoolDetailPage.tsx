@@ -18,6 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, fees } from '@/api/services'
 import type { LiquidityStrategy, Pool, PoolDetail, Position } from '@/api/types'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
+import OrderBook from '@/components/OrderBook'
 import PoolActionTabs from '@/components/PoolActionTabs'
 import PoolRecentSwapsPanel from '@/components/PoolRecentSwapsPanel'
 import PoolPriceChart from '@/components/PoolPriceChart'
@@ -58,6 +59,13 @@ export default function PoolDetailPage() {
     binMax: number
     strategy: LiquidityStrategy
   } | null>(null)
+
+  // OB-01 — order-book → action-panel handoff. Clicking a price level
+  // in the «стакан» jumps the right-rail tabs to «Обмен» and surfaces
+  // the picked level there as a reference. Controlled tab so the jump
+  // is deterministic; defaults to the add-liquidity tab otherwise.
+  const [actionTab, setActionTab] = useState<'add' | 'swap'>('add')
+  const [pickedPrice, setPickedPrice] = useState<number | null>(null)
 
   // Sprint 15 perf — list→detail handoff. If the user navigated from
   // PoolsPage, the pool is already in the ['pools', page] cache; we
@@ -480,6 +488,21 @@ export default function PoolDetailPage() {
             />
           </Card>
 
+          {/* OB-01 — order book / «стакан» synthesised from the pool's
+              own bin liquidity (asks above active = X side, bids below
+              = Y side). Click a level → jump to the Обмен tab with the
+              level surfaced as a reference. Sits below the depth chart
+              so the LP reads price action → depth chart → order book. */}
+          <div style={{ marginTop: 16 }}>
+            <OrderBook
+              poolId={pool.id}
+              onPickPrice={(price) => {
+                setPickedPrice(price)
+                setActionTab('swap')
+              }}
+            />
+          </div>
+
           {poolPositions.length > 0 && (
             <Card
               className="sber-card"
@@ -589,8 +612,14 @@ export default function PoolDetailPage() {
               right-rail of Meteora's Dynamic Terminal. */}
           <PoolActionTabs
             pool={pool}
-            defaultTab="add"
+            activeTab={actionTab}
+            onTabChange={(tab) => {
+              setActionTab(tab)
+              // Leaving the swap tab drops the order-book reference.
+              if (tab !== 'swap') setPickedPrice(null)
+            }}
             onPreviewChange={setPendingPreview}
+            pickedPrice={pickedPrice}
           />
         </Col>
       </Row>

@@ -28,11 +28,19 @@ interface PoolSwapPanelProps {
    * dropped because the parent tab label already says "Обменять".
    */
   embedded?: boolean
+  /**
+   * OB-01 — a price level the user picked from the order book. The
+   * swap is market (amount-based, no price input), so we surface this
+   * as a reference chip rather than a hard limit — it tells the user
+   * which level they tapped and the implied X they'd get for the
+   * quote-side at that price. Clears when they edit the amount.
+   */
+  pickedPrice?: number | null
 }
 
 const SLIPPAGE = 0.5 // %
 
-export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelProps) {
+export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: PoolSwapPanelProps) {
   const queryClient = useQueryClient()
   const [direction, setDirection] = useState<'XtoY' | 'YtoX'>(
     pool.tokenYSymbol === 'SRUB' ? 'YtoX' : 'XtoY',
@@ -101,6 +109,32 @@ export default function PoolSwapPanel({ pool, embedded = false }: PoolSwapPanelP
 
   const body = (
     <>
+      {/* OB-01 — order-book pick reference. The swap is market, so this
+          is a hint ("вы выбрали этот уровень в стакане"), not a limit. */}
+      {pickedPrice != null && pickedPrice > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            padding: '6px 12px',
+            marginBottom: 12,
+            background: 'var(--surface-1)',
+            border: '1px solid var(--border-light)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 'var(--text-xs)',
+          }}
+        >
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
+            Уровень из стакана
+          </Text>
+          <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {pickedPrice.toLocaleString('ru-RU', { maximumFractionDigits: 6 })} {pool.tokenYSymbol}/{pool.tokenXSymbol}
+          </Text>
+        </div>
+      )}
+
       {success && (
         <Alert
           message={success}

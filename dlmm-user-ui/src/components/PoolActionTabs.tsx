@@ -21,6 +21,14 @@ interface PoolActionTabsProps {
    */
   defaultTab?: 'add' | 'swap'
   /**
+   * OB-01 — optional controlled mode. When provided, the active tab is
+   * driven by the parent (PoolDetailPage uses this so a click on an
+   * order-book row jumps to the Swap tab). `onTabChange` is fired on
+   * every user-driven switch so the parent state stays in sync.
+   */
+  activeTab?: 'add' | 'swap'
+  onTabChange?: (tab: 'add' | 'swap') => void
+  /**
    * Sprint 9-DS-r4 (P1-2) — forwarded to {@link PoolAddLiquidityPanel}
    * so the parent page (PoolDetailPage) can mirror the user's
    * pending strategy + range onto the bin chart as a live preview.
@@ -31,13 +39,22 @@ interface PoolActionTabsProps {
     binMax: number
     strategy: import('@/api/types').LiquidityStrategy
   } | null) => void
+  /**
+   * OB-01 — a price level the user picked from the order book. Passed
+   * through to {@link PoolSwapPanel} which surfaces it as a reference.
+   */
+  pickedPrice?: number | null
 }
 
 export default function PoolActionTabs({
   pool,
   defaultTab = 'add',
+  activeTab,
+  onTabChange,
   onPreviewChange,
+  pickedPrice,
 }: PoolActionTabsProps) {
+  const controlled = activeTab != null
   return (
     <Card
       className="sber-card"
@@ -45,12 +62,15 @@ export default function PoolActionTabs({
       styles={{ body: { padding: '8px 16px 16px' } }}
     >
       <Tabs
-        defaultActiveKey={defaultTab}
+        // Controlled when the parent supplies activeTab (OB-01 row-click
+        // → Swap); otherwise uncontrolled with the defaultTab.
+        {...(controlled ? { activeKey: activeTab } : { defaultActiveKey: defaultTab })}
         // Sprint 9-DS-r4 (P1-2) — when the user switches OFF the
         // Add tab, clear the preview so the chart returns to its
         // resting "your existing positions only" overlay.
         onChange={(key) => {
           if (key !== 'add') onPreviewChange?.(null)
+          onTabChange?.(key as 'add' | 'swap')
         }}
         items={[
           {
@@ -73,7 +93,7 @@ export default function PoolActionTabs({
                 Обменять
               </span>
             ),
-            children: <PoolSwapPanel pool={pool} embedded />,
+            children: <PoolSwapPanel pool={pool} embedded pickedPrice={pickedPrice} />,
           },
         ]}
       />
