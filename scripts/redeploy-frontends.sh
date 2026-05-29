@@ -22,11 +22,20 @@ deploy() {
   local dir="$1" container="$2"
   echo "── $dir → $container ──"
   ( cd "$ROOT/$dir" && rm -rf dist && npm run build >/dev/null 2>&1 )
-  local hash
-  hash="$(ls "$ROOT/$dir"/dist/assets/index-*.js | head -1 | xargs basename)"
-  docker exec "$container" sh -c 'rm -rf /usr/share/nginx/html/assets /usr/share/nginx/html/index.html'
-  docker cp "$ROOT/$dir/dist/." "$container:/usr/share/nginx/html/"
-  echo "   served: $hash"
+  # NB: `docker cp dist/.  c:/path/` is unreliable — in some docker versions
+  # it creates a `dist/` SUBdir instead of copying contents (broke the demo
+  # once: nginx 403, index.html missing). Robust pattern: cp the dir to /tmp,
+  # then `cp -a .../.` the CONTENTS into the html root inside the container.
+  docker cp "$ROOT/$dir/dist" "$container:/tmp/freshdist"
+  docker exec "$container" sh -c \
+    'rm -rf /usr/share/nginx/html/* && cp -a /tmp/freshdist/. /usr/share/nginx/html/ && rm -rf /tmp/freshdist'
+  # Verify from INSIDE the container (ground truth, not local ls).
+  local served
+  served="$(docker exec "$container" sh -c 'ls /usr/share/nginx/html/assets/index-*.js 2>/dev/null | head -1 | xargs basename')"
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$([ "$container" = dlmm-admin-ui ] && echo 3000 || echo 3001)/")"
+  echo "   served: ${served:-MISSING}  (HTTP $code)"
+  [ "$code" = "200" ] || echo "   ⚠️ NON-200 — check container!"
 }
 
 deploy dlmm-user-ui  dlmm-user-ui
