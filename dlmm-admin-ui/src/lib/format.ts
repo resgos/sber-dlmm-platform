@@ -45,6 +45,20 @@ export function formatRub(value: number | null | undefined): string {
 }
 
 /**
+ * Split a compact-rouble value into a {number, unit} pair so KPI tiles can
+ * render the magnitude big and the "млрд ₽" suffix small (DS-02 mockup).
+ * e.g. 2_420_000_000 → { value: "2,42", unit: "млрд ₽" }.
+ */
+export function formatRubParts(value: number | null | undefined): { value: string; unit: string } {
+  const full = formatRub(value) // "2,42 млрд ₽" | "8 540 ₽" | "— ₽"
+  const firstSpace = full.indexOf(' ')
+  if (firstSpace === -1) return { value: full, unit: '' }
+  // Everything up to the first space is the number; the remainder is the unit
+  // (either "млрд ₽"/"млн ₽"/… or just "₽").
+  return { value: full.slice(0, firstSpace), unit: full.slice(firstSpace + 1) }
+}
+
+/**
  * Token amount formatter — joins a raw amount with its decimal-aware
  * representation. Backend stores amounts as base units (raw integers)
  * but a couple of API endpoints have already pre-divided. Caller passes
@@ -87,4 +101,31 @@ export function formatPercent(value: number | null | undefined, digits = 2): str
 export function shortId(id: string | null | undefined): string {
   if (!id) return '—'
   return `…${id.slice(-6)}`
+}
+
+/**
+ * Best-effort per-pool TVL in roubles from the pool reserves.
+ *
+ * Lifted from the SRUB-leg-aware logic in PoolDetailPage so the admin
+ * dashboard's pool-health table and volume-by-pool list agree with the
+ * detail page. When SRUB is a leg we convert the other leg at `currentPrice`;
+ * otherwise we fall back to the raw X+Y sum (units are mixed, but it's the
+ * same approximation PoolsPage uses for its aggregate). This is REAL data
+ * (pool reserves), just denominated approximately — there is no per-pool
+ * `tvlRub` field on the API.
+ */
+export function poolTvlRub(pool: {
+  tokenXSymbol: string
+  tokenYSymbol: string
+  totalTvlX: number
+  totalTvlY: number
+  currentPrice: number
+}): number {
+  if (pool.tokenYSymbol === 'SRUB') {
+    return pool.totalTvlY + pool.totalTvlX * pool.currentPrice
+  }
+  if (pool.tokenXSymbol === 'SRUB') {
+    return pool.totalTvlX + (pool.currentPrice ? pool.totalTvlY / pool.currentPrice : 0)
+  }
+  return pool.totalTvlX + pool.totalTvlY
 }

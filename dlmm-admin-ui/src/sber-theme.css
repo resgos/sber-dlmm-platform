@@ -1,4 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+/* DS-02 (admin-dashboard Claude Design) — Onest is the mockup's primary
+   face and JetBrains Mono its numeric/mono face. Both load here so the
+   ops dashboard renders as designed; SB Sans Text (Sber CDN, in body
+   font-family) still wins when available, with Onest as the next fallback. */
+@import url('https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   /* UI-CRITIQUE 2026-05-22 #4 — see user-ui sber-theme.css for full
@@ -73,6 +78,56 @@
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-xl: 28px;
+
+  /* ── DS-02 admin-dashboard tokens (docs/design/admin-dashboard-claude-design)
+     The mockup's warm ops-console palette. Defined as vars (not hardcoded in
+     the page) so a future dark theme can override them in one place. Where a
+     mockup value duplicates an existing token it aliases it instead of
+     re-stating the literal. */
+  --ds-accent: var(--sber-green);            /* #21A038 — charts, brand, deltas, active */
+  --ds-accent-ink: #0F7A26;                  /* darker green for text on accent-soft */
+  --ds-accent-soft: #E6F3E8;                 /* green pill / active-nav fill */
+  --ds-danger: #D14343;                      /* negative deltas, failed status */
+  --ds-danger-soft: #F8E3E3;
+  --ds-warn: #B47200;                        /* warn dots, pending status */
+  --ds-warn-soft: #F6EBCF;
+  --ds-info: #2E6FD6;
+  /* Hairline borders — brief mandates #ECEAE3 (warmer than the rgba grey the
+     rest of admin uses). Scoped to dashboard surfaces via the .ds-* classes. */
+  --ds-line: #ECEAE3;
+  --ds-line-2: #E3E1DA;
+  --ds-radius-card: 14px;                     /* brief: 14px card radius */
+  /* Warm ink ramp from the mockup (slightly warmer than the Plasma greys). */
+  --ds-ink-1: #14171A;
+  --ds-ink-2: #4B5560;
+  --ds-ink-3: #8A93A0;
+  --ds-ink-4: #B7BEC8;
+  --ds-row-hover: #FAF8F1;                    /* warm row hover */
+  --ds-surface-soft: #F4F2EB;                 /* chips, segmented track */
+  --ds-thead-bg: #FBF9F2;                     /* warm table head */
+  --ds-shadow-soft: 0 1px 2px rgba(20,23,26,0.03);
+}
+
+[data-theme="dark"] {
+  /* DS-02 — if/when admin-ui gains a dark theme, these keep the dashboard
+     legible. Not active today (admin-ui ships light only) but here so the
+     dashboard is not the thing that breaks when dark lands. */
+  --ds-accent-ink: #4FBF63;
+  --ds-accent-soft: rgba(33,160,56,0.18);
+  --ds-danger: #FF5468;
+  --ds-danger-soft: rgba(255,84,104,0.16);
+  --ds-warn: #E0A33A;
+  --ds-warn-soft: rgba(224,163,58,0.16);
+  --ds-line: rgba(255,255,255,0.10);
+  --ds-line-2: rgba(255,255,255,0.14);
+  --ds-ink-1: rgba(255,255,255,0.92);
+  --ds-ink-2: rgba(255,255,255,0.70);
+  --ds-ink-3: rgba(255,255,255,0.50);
+  --ds-ink-4: rgba(255,255,255,0.34);
+  --ds-row-hover: rgba(255,255,255,0.04);
+  --ds-surface-soft: rgba(255,255,255,0.06);
+  --ds-thead-bg: rgba(255,255,255,0.03);
+  --ds-shadow-soft: 0 1px 2px rgba(0,0,0,0.30);
 }
 
 body {
@@ -833,4 +888,271 @@ a:focus-visible {
   font-size: 12px !important;
   color: #DC2626 !important;
   padding-top: 4px !important;
+}
+
+/* ======================================================================
+   DS-02 — Admin dashboard ("Обзор") — faithful port of
+   docs/design/admin-dashboard-claude-design/project/Dashboard.html.
+
+   "Bloomberg-on-a-good-day": information-rich, hairline borders, warm
+   off-white, ONE green accent. All colours are tokens (see :root .ds-*),
+   so a future dark theme overrides in one place. Scoped under .ds-dash so
+   the global .sber-card polish block above doesn't bleed in.
+   ====================================================================== */
+.ds-dash {
+  font-feature-settings: 'ss01', 'cv11';
+}
+.ds-dash .num,
+.ds-dash .ds-num { font-variant-numeric: tabular-nums; letter-spacing: -0.005em; }
+.ds-dash .ds-mono {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cards — flatter + warmer than the global .sber-card. We override the
+   global polish locally (the global one adds a green hover gradient + 22px
+   padding that's too loud for a dense ops grid). */
+.ds-dash .ds-card {
+  background: var(--bg-card);
+  border: 1px solid var(--ds-line) !important;
+  border-radius: var(--ds-radius-card) !important;
+  box-shadow: var(--ds-shadow-soft) !important;
+}
+.ds-dash .ds-card:hover { box-shadow: var(--ds-shadow-soft) !important; }
+.ds-dash .ds-card-h {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px 10px;
+}
+.ds-dash .ds-card-h h3 {
+  margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.005em;
+  color: var(--ds-ink-1);
+}
+.ds-dash .ds-card-h .ds-sub { font-size: 12px; color: var(--ds-ink-3); }
+.ds-dash .ds-card-h .ds-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+
+/* Breadcrumb + topbar */
+.ds-crumb { font-size: 12px; color: var(--ds-ink-3); margin-bottom: 2px; }
+.ds-h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.015em; color: var(--ds-ink-1); }
+
+/* Services health strip (header pill) */
+.ds-svc-strip {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  padding: 4px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--ds-line);
+  border-radius: 999px;
+  font-size: 11.5px;
+}
+.ds-svc-strip .ds-lbl { color: var(--ds-ink-3); margin-right: 4px; font-size: 11px; }
+.ds-svc {
+  display: flex; align-items: center; gap: 5px;
+  padding: 2px 7px; border-radius: 999px;
+  color: var(--ds-ink-2); font-size: 11.5px;
+  cursor: default;
+}
+.ds-svc:hover { background: var(--ds-surface-soft); color: var(--ds-ink-1); }
+.ds-dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 6px; }
+.ds-dot.ok   { background: var(--ds-accent); box-shadow: 0 0 0 2px rgba(33,160,56,0.15); }
+.ds-dot.warn { background: var(--ds-warn);   box-shadow: 0 0 0 2px rgba(180,114,0,0.15); }
+.ds-dot.err  { background: var(--ds-danger); box-shadow: 0 0 0 2px rgba(209,67,67,0.15); }
+.ds-dot.unknown { background: var(--ds-ink-4); box-shadow: 0 0 0 2px rgba(140,147,160,0.15); }
+
+/* Ghost buttons in the topbar (match mockup .btn, quieter than global AntD) */
+.ds-dash .ds-btn.ant-btn {
+  height: 32px !important; padding: 0 12px !important;
+  border: 1px solid var(--ds-line-2) !important;
+  border-radius: 8px !important;
+  background: var(--bg-card) !important; color: var(--ds-ink-1) !important;
+  font-size: 13px !important; font-weight: 500 !important;
+  box-shadow: none !important;
+}
+.ds-dash .ds-btn.ant-btn:hover { border-color: #C9C5BA !important; transform: none !important; background: var(--bg-card) !important; }
+
+/* KPI tiles */
+.ds-kpi { padding: 16px 18px 14px !important; }
+.ds-kpi .ds-kpi-label {
+  font-size: 12px; color: var(--ds-ink-3); font-weight: 500;
+  display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+}
+.ds-kpi .ds-kpi-value {
+  font-size: 26px; font-weight: 600; letter-spacing: -0.02em;
+  line-height: 1.1; color: var(--ds-ink-1);
+}
+.ds-kpi .ds-kpi-value .ds-unit {
+  font-size: 14px; font-weight: 500; color: var(--ds-ink-2);
+  margin-left: 4px; letter-spacing: 0;
+}
+.ds-kpi .ds-kpi-foot {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+  justify-content: space-between;
+}
+.ds-kpi .ds-kpi-foot-note { font-size: 11px; color: var(--ds-ink-3); margin-top: 6px; }
+
+/* Delta pills (▲/▼ + sign + colour — colour-blind safe per design doc) */
+.ds-delta {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11.5px; font-weight: 500;
+  padding: 2px 7px 2px 6px; border-radius: 999px;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ds-delta.up   { background: var(--ds-accent-soft); color: var(--ds-accent-ink); }
+.ds-delta.down { background: var(--ds-danger-soft); color: var(--ds-danger); }
+.ds-delta.flat { background: var(--ds-surface-soft); color: var(--ds-ink-2); }
+.ds-delta svg { width: 9px; height: 9px; }
+
+/* Segmented period switcher (visual; AntD Segmented styled to match) */
+.ds-dash .ds-seg.ant-segmented {
+  background: var(--ds-surface-soft) !important;
+  padding: 2px !important; border-radius: 8px !important;
+}
+.ds-dash .ds-seg .ant-segmented-item {
+  border-radius: 6px !important; font-size: 12px !important;
+  color: var(--ds-ink-2) !important; min-height: 24px !important; line-height: 24px !important;
+}
+.ds-dash .ds-seg .ant-segmented-item-selected {
+  background: var(--bg-card) !important; color: var(--ds-ink-1) !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
+}
+.ds-dash .ds-seg .ant-segmented-item-label { padding: 0 9px !important; }
+
+/* Volume-by-pool rows */
+.ds-vp-row {
+  display: grid; grid-template-columns: 104px 1fr 96px;
+  align-items: center; gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--ds-line);
+}
+.ds-vp-row:first-child { border-top: 0; }
+.ds-pair-chip {
+  font-size: 11px; padding: 2px 6px; border-radius: 5px;
+  background: var(--ds-surface-soft); color: var(--ds-ink-2);
+  font-family: 'JetBrains Mono', monospace; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.ds-vp-track { height: 8px; background: var(--ds-surface-soft); border-radius: 4px; overflow: hidden; }
+.ds-vp-bar { height: 100%; background: var(--ds-accent); border-radius: 4px; transition: width 0.3s; }
+.ds-vp-val { text-align: right; font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--ds-ink-1); }
+.ds-vp-val .ds-vp-sub { display: block; font-size: 10.5px; color: var(--ds-ink-3); font-weight: 400; }
+
+/* Recent transactions feed */
+.ds-tx {
+  display: grid;
+  grid-template-columns: 64px 1fr auto 132px 96px;
+  align-items: center; gap: 12px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--ds-line);
+  font-size: 13px; cursor: pointer;
+}
+.ds-tx:first-child { border-top: 0; }
+.ds-tx:hover { background: var(--ds-row-hover); }
+.ds-tx-time { font-size: 12px; color: var(--ds-ink-3); font-variant-numeric: tabular-nums; }
+.ds-tx-pair {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500;
+  color: var(--ds-ink-1);
+}
+.ds-tx-arrow { color: var(--ds-ink-3); font-size: 11px; }
+.ds-tx-amount { font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; color: var(--ds-ink-1); }
+.ds-tx-user { color: var(--ds-ink-2); font-size: 12.5px; display: flex; align-items: center; gap: 7px; min-width: 0; }
+.ds-tx-user .ds-uava {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ds-surface-soft); display: grid; place-items: center;
+  font-size: 9.5px; font-weight: 600; color: var(--ds-ink-2); flex: 0 0 18px;
+}
+.ds-tx-user .ds-uname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Status badges (transactions) */
+.ds-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; padding: 2px 8px 2px 7px; border-radius: 999px;
+  font-weight: 500; width: fit-content;
+}
+.ds-badge.ok      { background: var(--ds-accent-soft); color: var(--ds-accent-ink); }
+.ds-badge.pending { background: var(--ds-warn-soft);   color: var(--ds-warn); }
+.ds-badge.fail    { background: var(--ds-danger-soft); color: var(--ds-danger); }
+.ds-badge .ds-dot { box-shadow: none; width: 5px; height: 5px; flex-basis: 5px; }
+
+/* Service health detail rows */
+.ds-svc-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  gap: 10px; align-items: center;
+  padding: 9px 18px;
+  border-top: 1px solid var(--ds-line);
+  font-size: 13px;
+}
+.ds-svc-row:first-child { border-top: 0; }
+.ds-svc-name { font-weight: 500; color: var(--ds-ink-1); }
+.ds-svc-meta { font-size: 11.5px; color: var(--ds-ink-3); font-variant-numeric: tabular-nums; }
+.ds-svc-latency { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--ds-ink-2); }
+
+/* Pool health table */
+.ds-dash table.ds-pools { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ds-dash table.ds-pools thead th {
+  text-align: left; font-weight: 500; font-size: 11px;
+  color: var(--ds-ink-3); text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 8px 18px; border-bottom: 1px solid var(--ds-line);
+  background: var(--ds-thead-bg);
+}
+.ds-dash table.ds-pools tbody td {
+  padding: 11px 18px; border-bottom: 1px solid var(--ds-line); vertical-align: middle;
+  color: var(--ds-ink-1);
+}
+.ds-dash table.ds-pools tbody tr:last-child td { border-bottom: 0; }
+.ds-dash table.ds-pools tbody tr:hover { background: var(--ds-row-hover); cursor: pointer; }
+.ds-dash td.ds-num, .ds-dash th.ds-num { text-align: right; font-variant-numeric: tabular-nums; }
+.ds-pool-name { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+.ds-pool-id { font-size: 11px; color: var(--ds-ink-3); font-family: 'JetBrains Mono', monospace; }
+.ds-pool-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ds-ink-2); }
+.ds-table-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px; font-size: 12px; color: var(--ds-ink-3);
+}
+.ds-link { color: var(--ds-accent-ink); font-weight: 500; text-decoration: none; cursor: pointer; background: none; border: 0; font: inherit; padding: 0; }
+.ds-link:hover { text-decoration: underline; }
+
+/* TVL chart legend + tooltip */
+.ds-legend {
+  display: flex; gap: 14px; padding: 0 18px 6px;
+  font-size: 11.5px; color: var(--ds-ink-2);
+}
+.ds-legend-swatch {
+  display: inline-block; width: 10px; height: 3px; border-radius: 2px;
+  margin-right: 6px; vertical-align: middle;
+}
+.ds-tvl-tip {
+  background: var(--ds-ink-1); color: #fff;
+  padding: 7px 10px; border-radius: 8px;
+  font-size: 11.5px; font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+}
+.ds-tvl-tip .ds-tvl-tip-date { color: var(--ds-ink-4); font-size: 10.5px; }
+.ds-chart-body { padding: 4px 8px 14px; }
+
+/* Empty-state + small muted helper text (keeps font-size out of inline
+   styles → satisfies the HOT-3 inline-style ratchet). */
+.ds-empty { color: var(--ds-ink-3); font-size: 13px; padding: 12px 0; }
+.ds-empty.ds-empty-row { padding: 14px 18px; }
+.ds-last-swap { color: var(--ds-ink-3); font-size: 12px; }
+.ds-info-ic { color: var(--ds-ink-4); font-size: 13px; }
+
+/* Dashboard section grids — base layout lives here (not inline) so the
+   responsive overrides below don't need !important. */
+.ds-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+.ds-charts-row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 18px; }
+.ds-mid-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px; margin-bottom: 18px; }
+
+/* Responsive — collapse the multi-column grids on narrow viewports so the
+   dashboard degrades gracefully below the ~1440px desktop target. */
+@media (max-width: 1100px) {
+  .ds-charts-row, .ds-mid-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .ds-kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .ds-tx { grid-template-columns: 56px 1fr auto; }
+  .ds-tx-user, .ds-tx-amount { display: none; }
+  .ds-dash table.ds-pools { display: block; overflow-x: auto; white-space: nowrap; }
+}
+@media (max-width: 420px) {
+  .ds-kpi-row { grid-template-columns: 1fr; }
 }

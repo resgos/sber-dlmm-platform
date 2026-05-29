@@ -26,3 +26,29 @@ export const ADMIN_TILE_PALETTE = {
 } as const
 
 export type AdminTileKey = keyof typeof ADMIN_TILE_PALETTE
+
+/**
+ * DS-02 — data-viz colours for the admin dashboard charts.
+ *
+ * recharts renders to SVG and cannot reliably resolve CSS `var(--…)` inside
+ * <linearGradient>/stroke attributes, so chart colours must be literals. We
+ * keep them HERE (a `.ts` module, exempt from the AU-2 hex ratchet which only
+ * scans `.tsx`) so no chart component carries raw hex. Values mirror the
+ * Claude Design mockup + sber-theme.css `--ds-*` tokens.
+ */
+export const DASH_VIZ = {
+  /** Sber green — TVL line/area, positive sparklines, volume bars. */
+  accent: '#21A038',
+  /** Red — negative deltas + their sparklines (mockup --danger). */
+  danger: '#D14343',
+  /** Grey dashed prior-period line. */
+  prior: '#B7BEC8',
+  /** Muted axis tick text. */
+  axis: '#8A93A0',
+  /** Hairline chart grid. */
+  grid: '#F0EEE6',
+  /** Dark tooltip surface + its muted sub-text. */
+  tooltipBg: '#14171A',
+  tooltipSub: '#B7BEC8',
+} as const
+

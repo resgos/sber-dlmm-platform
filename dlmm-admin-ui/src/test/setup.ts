@@ -23,3 +23,15 @@ window.getComputedStyle = (elt: Element, pseudoElt?: string | null) => {
   const style = originalGetComputedStyle(elt, pseudoElt)
   return style
 }
+
+// DS-02 — recharts' ResponsiveContainer subscribes to ResizeObserver on mount
+// (Sparkline + TvlAreaChart on the admin dashboard). jsdom has no
+// ResizeObserver, so stub a no-op to keep recharts from throwing.
+if (!('ResizeObserver' in globalThis)) {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = ResizeObserverStub
+}
