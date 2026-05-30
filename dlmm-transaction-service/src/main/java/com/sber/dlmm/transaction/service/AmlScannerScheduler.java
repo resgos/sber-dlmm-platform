@@ -77,8 +77,27 @@ public class AmlScannerScheduler {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime windowStart = now.minus(Duration.ofHours(windowHours));
 
-        List<Transaction> recent = txRepository.findConfirmedInWindow(
-                windowStart, now, PageRequest.of(0, pageSize));
+        // Page through the FULL window. The previous single page-0 fetch
+        // silently dropped every transaction beyond `pageSize` — and because
+        // the rows are ordered by userId, it was the highest-UUID users that
+        // went unscanned during volume spikes (a 115-ФЗ coverage gap). Bounded
+        // by MAX_SCAN_PAGES so a pathological window can't OOM the pod; if the
+        // cap is hit we WARN loudly instead of silently truncating.
+        final int MAX_SCAN_PAGES = 20;
+        List<Transaction> recent = new ArrayList<>();
+        int page = 0;
+        for (; page < MAX_SCAN_PAGES; page++) {
+            List<Transaction> batch = txRepository.findConfirmedInWindow(
+                    windowStart, now, PageRequest.of(page, pageSize));
+            if (batch.isEmpty()) break;
+            recent.addAll(batch);
+            if (batch.size() < pageSize) break; // last (partial) page reached
+        }
+        if (page >= MAX_SCAN_PAGES) {
+            log.warn("AML scan hit the {}-page cap ({} txs) for the {}h window — transactions "
+                    + "beyond the cap were NOT scanned this run; raise dlmm.aml.page-size if this recurs",
+                    MAX_SCAN_PAGES, recent.size(), windowHours);
+        }
 
         if (recent.isEmpty()) {
             log.debug("AML scan: no transactions in last {}h, skipping", windowHours);

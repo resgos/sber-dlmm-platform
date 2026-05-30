@@ -470,7 +470,9 @@ class SwapServiceTest {
 
             // After crossing bins, VA should have been updated
             assertTrue(pool.getVolatilityAccumulator() >= 0);
-            verify(poolRepository).save(pool);
+            // Sprint 10 #1 fix: pool is persisted via saveAndFlush (forces the
+            // optimistic-lock check before the cross-service balance settlement).
+            verify(poolRepository).saveAndFlush(pool);
         }
 
         /**

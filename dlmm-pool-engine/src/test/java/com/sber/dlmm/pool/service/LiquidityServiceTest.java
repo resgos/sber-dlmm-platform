@@ -532,12 +532,15 @@ class LiquidityServiceTest {
             // OutboxService.append returns void — no future stub needed.
             doNothing().when(outbox).append(anyString(), anyString(), anyString(), anyString(), any());
 
-            // Bin has accumulated fee growth since position was opened (lastFeeGrowth=0)
+            // Bin accumulated fee growth since the position opened (lastFeeGrowth=0).
+            // Sprint 10 #2 fix: feeGrowth is now FEE_GROWTH_SCALE(1e9)-scaled per
+            // unit of liquidity. Over 500_000 liquidity the full-owner position
+            // reclaims feeGrowth*500_000/1e9 — so 200_000 ⇒ 100 X-fee, 100_000 ⇒ 50 Y-fee.
             PoolBin bin5 = PoolBin.builder()
                     .poolId(POOL_ID).binId(5).price(BigDecimal.ONE)
                     .liquidity(500_000).reserveX(250_000).reserveY(250_000)
                     .compositionFactor(new BigDecimal("0.5"))
-                    .totalFeeX(1000).totalFeeY(1000).feeGrowthX(100).feeGrowthY(50)
+                    .totalFeeX(1000).totalFeeY(1000).feeGrowthX(200_000).feeGrowthY(100_000)
                     .build();
 
             PositionBin posBin = PositionBin.builder()

@@ -11,6 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { balances, pools, fees, transactions, oracle, tokens as tokensApi } from '@/api/services'
+import TokenIcon from '@/components/TokenIcon'
 import StatCard, { formatRub } from '@/components/StatCard'
 import SpasiboWidget from '@/components/SpasiboWidget'
 import { uiPrefStore } from '@/store/uiPrefStore'
@@ -445,7 +446,11 @@ export default function DashboardPage() {
         extra={<Button type="link" onClick={() => navigate('/swap')}>Обменять <ArrowRightOutlined /></Button>}>
         <Table
           className="sber-table"
-          dataSource={myBalances || []}
+          dataSource={[...(myBalances || [])].sort(
+            (a: TokenBalance, b: TokenBalance) =>
+              (b.available + b.locked) * (rubPriceBySymbol.get(b.symbol) ?? 0) -
+              (a.available + a.locked) * (rubPriceBySymbol.get(a.symbol) ?? 0),
+          )}
           rowKey="tokenId"
           pagination={false}
           size="middle"
@@ -455,13 +460,7 @@ export default function DashboardPage() {
               dataIndex: 'symbol',
               render: (sym: string) => (
                 <Space>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 'var(--radius-md)',
-                    background: 'var(--sber-green-light)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontWeight: 700, fontSize: 'var(--text-xs)', color: 'var(--sber-green)',
-                  }}>
-                    {sym?.slice(0, 2)}
-                  </div>
+                  <TokenIcon symbol={sym} size={32} />
                   <Text strong>{sym}</Text>
                 </Space>
               ),

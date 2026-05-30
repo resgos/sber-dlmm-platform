@@ -132,8 +132,12 @@ public class TokenServiceClient {
         return Collections.emptyMap();
     }
 
+    // NO @Retry — non-idempotent balance write. A retry after a lost-response
+    // timeout (token-service committed, response dropped) double-deducts the
+    // user. One attempt; failure → fallback throws → swap @Transactional rolls
+    // back. The idempotent read methods above keep @Retry. Full fix:
+    // idempotency key on /tokens/internal/deduct (followup).
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "deductBalanceFallback")
-    @Retry(name = CB_NAME)
     public void deductBalance(UUID userId, UUID tokenId, long amount) {
         DeductRequest request = new DeductRequest(userId, tokenId, amount);
         webClient.post()
@@ -156,8 +160,9 @@ public class TokenServiceClient {
         throw new IllegalStateException("Token service unavailable for deduct: " + ex.getMessage(), ex);
     }
 
+    // NO @Retry — non-idempotent balance write (see deductBalance); a lost-
+    // response retry would double-credit. Full fix: idempotency key (followup).
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "creditBalanceFallback")
-    @Retry(name = CB_NAME)
     public void creditBalance(UUID userId, UUID tokenId, long amount) {
         CreditRequest request = new CreditRequest(userId, tokenId, amount);
         webClient.post()

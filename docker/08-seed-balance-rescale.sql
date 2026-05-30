@@ -22,16 +22,34 @@
 -- swap + add-liquidity + claim all still atomic post-rescale.
 --
 -- Runs on container start after 06/07.
+--
+-- IDEMPOTENCY (Sprint 10 fix): non-reversible /1e6 rescale. The `>= 1e6`
+-- filter does NOT protect large balances on re-run (admin USDT 1e12 → 1e6 →
+-- still ≥ 1M → next run → 1). Guarded by a one-shot `seed_markers` row (the
+-- same table 06 uses); a second `psql -f` is a no-op. `down -v` wipes the
+-- marker so the normal post-reset re-seed still applies it.
 
-UPDATE user_balances
-SET available = available / 1000000,
-    locked    = locked / 1000000
-WHERE available >= 1000000 OR locked >= 1000000;
+CREATE TABLE IF NOT EXISTS seed_markers (
+    name       TEXT PRIMARY KEY,
+    applied_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
 
 DO $$
 DECLARE
   max_bal bigint;
 BEGIN
+  IF EXISTS (SELECT 1 FROM seed_markers WHERE name = '08-seed-balance-rescale') THEN
+    RAISE NOTICE '08-seed-balance-rescale already applied — skipping (non-idempotent rescale)';
+    RETURN;
+  END IF;
+
+  UPDATE user_balances
+  SET available = available / 1000000,
+      locked    = locked / 1000000
+  WHERE available >= 1000000 OR locked >= 1000000;
+
+  INSERT INTO seed_markers(name) VALUES ('08-seed-balance-rescale');
+
   SELECT MAX(available) INTO max_bal FROM user_balances;
   RAISE NOTICE 'Balance rescale done. Max balance now: %', max_bal;
 END $$;

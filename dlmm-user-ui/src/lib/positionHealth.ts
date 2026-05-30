@@ -160,7 +160,10 @@ export function calculateHealth(position: Position, pool: Pool | undefined): Hea
 export function bandColor(band: HealthScore['band']): string {
   switch (band) {
     case 'excellent': return 'var(--sber-green)'
-    case 'good':      return 'var(--sber-green-light)'
+    // --viz-up (not --sber-green-light): the latter is --brand-primary-soft, a
+    // pale BG-tint that's near-invisible as TEXT on the white light-theme cell.
+    // --viz-up is the theme-aware readable green (#0D8523 light / #2FBF50 dark).
+    case 'good':      return 'var(--viz-up)'
     case 'fair':      return 'var(--sber-amber)'
     case 'poor':      return 'var(--plasma-critical)'
   }

@@ -19,6 +19,7 @@ import { pools, fees } from '@/api/services'
 import type { LiquidityStrategy, Pool, PoolDetail, Position } from '@/api/types'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
 import OrderBook from '@/components/OrderBook'
+import ExternalPriceRef from '@/components/ExternalPriceRef'
 import PoolActionTabs from '@/components/PoolActionTabs'
 import PoolRecentSwapsPanel from '@/components/PoolRecentSwapsPanel'
 import PoolPriceChart from '@/components/PoolPriceChart'
@@ -157,7 +158,11 @@ export default function PoolDetailPage() {
         if (!total || total <= 0) continue
         const userLiq = pos.totalLiquidityShares * weights[i]
         const pct = (userLiq / total) * 100
-        map.set(binId, (map.get(binId) ?? 0) + pct)
+        // Clamp to ≤100%: one LP can't own more than 100% of a bin. The raw
+        // ratio blows up to millions of % when bin.liquidity is stale/corrupted
+        // (F-12 seed pools) or scaled differently than the position's shares —
+        // cap it so the "Ваша доля" tooltip stays sane (was showing >1 000 000%).
+        map.set(binId, Math.min(100, (map.get(binId) ?? 0) + pct))
       }
     }
     return map
@@ -172,6 +177,14 @@ export default function PoolDetailPage() {
     : pool.tokenXSymbol === 'SRUB'
     ? pool.totalTvlX + pool.totalTvlY / pool.currentPrice
     : pool.totalTvlX + pool.totalTvlY
+
+  // External-reference base = the non-SRUB asset, priced in SRUB. currentPrice
+  // is tokenY-per-tokenX, so when Y=SRUB it's already SRUB-per-asset; when
+  // X=SRUB we invert. Used by <ExternalPriceRef> for the real-market «ориентир».
+  const refBaseSymbol = pool.tokenYSymbol === 'SRUB' ? pool.tokenXSymbol
+    : pool.tokenXSymbol === 'SRUB' ? pool.tokenYSymbol : undefined
+  const refBasePriceRub = pool.tokenYSymbol === 'SRUB' ? pool.currentPrice
+    : pool.tokenXSymbol === 'SRUB' ? (pool.currentPrice > 0 ? 1 / pool.currentPrice : 0) : 0
 
   // Sprint 9-DS-r3 — Meteora "Out-of-range" detection. A position is
   // out-of-range when the active bin lies outside its [binRangeMin,
@@ -463,6 +476,7 @@ export default function PoolDetailPage() {
               chart powered by lightweight-charts. Sits above the
               liquidity distribution so the LP sees price action
               first, then where the depth is. */}
+          <ExternalPriceRef baseSymbol={refBaseSymbol} internalPriceRub={refBasePriceRub} />
           <div style={{ marginBottom: 16 }}>
             <PoolPriceChart poolId={pool.id} quoteSymbol={pool.tokenYSymbol} />
           </div>

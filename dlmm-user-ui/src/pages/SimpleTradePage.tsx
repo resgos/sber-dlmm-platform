@@ -1,16 +1,18 @@
 import { useMemo, useState } from 'react'
 import {
-  Card, Select, InputNumber, Button, Typography, Space, Alert, Segmented, Spin, Divider, Tag,
+  Card, Select, InputNumber, Button, Typography, Space, Alert, Segmented, Spin, Divider, Tag, Empty,
 } from 'antd'
 import {
-  ArrowUpOutlined, ArrowDownOutlined, PlusOutlined, ThunderboltFilled, InfoCircleOutlined,
+  ArrowUpOutlined, ArrowDownOutlined, PlusOutlined, ThunderboltFilled, InfoCircleOutlined, ExportOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { tokens, pools, balances } from '@/api/services'
-import type { Token, Pool, TokenBalance } from '@/api/types'
+import type { Token, Pool, TokenBalance, Position } from '@/api/types'
 import TokenChip from '@/components/TokenChip'
+import TokenSelect from '@/components/TokenSelect'
 import { TokenPairChip } from '@/components/sber'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { celebrateSberkot } from '@/components/sberkot/events'
 
 const { Title, Text } = Typography
 
@@ -18,7 +20,7 @@ const { Title, Text } = Typography
  * SM-01 — Simple trading surface.
  *
  * A deliberately bare alternative to the Pro Swap/Liquidity pages for users
- * who just want to buy/sell or park liquidity without thinking about bins,
+ * who just want to buy/sell or manage liquidity without thinking about bins,
  * strategies, or ranges. Two cards:
  *
  *   1. Купить / Продать  — MARKET swap against the token's SRUB pool.
@@ -27,9 +29,12 @@ const { Title, Text } = Typography
  *      tokenIn. One confirm, no slippage/bins UI (a sane default slippage
  *      is applied internally).
  *
- *   2. Добавить ликвидность (базовые настройки) — calls pools.addLiquidity
- *      with hard-coded sensible defaults: SPOT strategy, bin range
- *      [activeBinId-10, activeBinId+10]. No bin/strategy UI.
+ *   2. Ликвидность — a Добавить / Забрать toggle:
+ *      • Добавить: pools.addLiquidity with sensible defaults (SPOT, bin
+ *        range [activeBinId-10, activeBinId+10]). No bin/strategy UI.
+ *      • Забрать: pick one of your open positions + a 25/50/75/100 %
+ *        and pools.removeLiquidity does the rest. No percentage slider,
+ *        no per-bin maths — the headline "упрощённый забор ликвидности".
  *
  * Design per docs/DESIGN-DIRECTION-2026-05-29 "Simple ⇄ Pro" spec: airy
  * layout (--space-5/6), the primary buy/sell CTA card at Tier-2 elevation,
@@ -52,6 +57,7 @@ const SIMPLE_SLIPPAGE_PCT = 0.5
 const SIMPLE_BIN_HALF_RANGE = 10
 
 type Side = 'buy' | 'sell'
+type LpMode = 'add' | 'remove'
 
 export default function SimpleTradePage() {
   const queryClient = useQueryClient()
@@ -63,12 +69,21 @@ export default function SimpleTradePage() {
   const [tradeError, setTradeError] = useState<string | null>(null)
   const [tradeSuccess, setTradeSuccess] = useState<string | null>(null)
 
-  // ── Add-liquidity card state ───────────────────────────────────────
+  // ── Liquidity card: Добавить / Забрать ─────────────────────────────
+  const [lpMode, setLpMode] = useState<LpMode>('add')
+
+  // Add-liquidity state
   const [lpPoolId, setLpPoolId] = useState<string>('')
   const [lpAmountX, setLpAmountX] = useState<number | null>(null)
   const [lpAmountY, setLpAmountY] = useState<number | null>(null)
   const [lpError, setLpError] = useState<string | null>(null)
   const [lpSuccess, setLpSuccess] = useState<string | null>(null)
+
+  // Withdraw (забор) state — SM-01 v2
+  const [removePositionId, setRemovePositionId] = useState<string>('')
+  const [removePercent, setRemovePercent] = useState<number>(100)
+  const [removeError, setRemoveError] = useState<string | null>(null)
+  const [removeSuccess, setRemoveSuccess] = useState<string | null>(null)
 
   const { data: tokenList } = useQuery({
     queryKey: ['tokens'],
@@ -79,14 +94,28 @@ export default function SimpleTradePage() {
     queryFn: balances.getMyBalances,
   })
   const { data: poolList } = useQuery({
-    queryKey: ['pools'],
+    queryKey: ['pools', 0, 100],
     queryFn: () => pools.getPools(0, 100),
+  })
+  // Positions power the «Забрать» tab. Same query key as PositionsPage so
+  // the cache is shared and a withdraw here refreshes that page too.
+  const { data: myPositions } = useQuery({
+    queryKey: ['myPositions'],
+    queryFn: pools.getMyPositions,
   })
 
   const activePools = useMemo(
     () => (poolList?.content ?? []).filter((p: Pool) => p.status === 'ACTIVE'),
     [poolList],
   )
+
+  // poolId → Pool, for resolving token symbols on positions (the backend
+  // Position DTO historically omits tokenXSymbol/tokenYSymbol).
+  const poolById = useMemo(() => {
+    const m = new Map<string, Pool>()
+    for (const p of poolList?.content ?? []) m.set(p.id, p)
+    return m
+  }, [poolList])
 
   const balanceMap = useMemo(
     () => new Map((myBalances ?? []).map((b: TokenBalance) => [b.symbol, b])),
@@ -147,7 +176,12 @@ export default function SimpleTradePage() {
     retry: false,
   })
 
-  const minAmountOut = quote ? Math.floor(quote.amountOut * (1 - SIMPLE_SLIPPAGE_PCT / 100)) : 0
+  // Floor the min-received at the quoted slippage, but never let it collapse to
+  // 0 for a positive quote: with whole-token amounts a tiny output rounds to 0,
+  // which would mean "accept ANY output" (no protection). At least 1 unit back.
+  const minAmountOut = quote && quote.amountOut > 0
+    ? Math.max(1, Math.floor(quote.amountOut * (1 - SIMPLE_SLIPPAGE_PCT / 100)))
+    : 0
 
   const tradeMutation = useMutation({
     mutationFn: () => pools.executeSwap({
@@ -158,6 +192,11 @@ export default function SimpleTradePage() {
       idempotencyKey: crypto.randomUUID(),
     }),
     onSuccess: () => {
+      celebrateSberkot(
+        side === 'buy'
+          ? `Куплено: ${selectedAsset?.symbol} 🎉`
+          : `Продано: ${selectedAsset?.symbol} 🎉`,
+      )
       setTradeSuccess(
         side === 'buy'
           ? `Куплено: ${selectedAsset?.symbol}`
@@ -198,6 +237,7 @@ export default function SimpleTradePage() {
       })
     },
     onSuccess: () => {
+      celebrateSberkot('Ликвидность добавлена 🌱')
       setLpSuccess('Ликвидность добавлена по базовым настройкам')
       setLpError(null)
       setLpAmountX(null)
@@ -213,10 +253,53 @@ export default function SimpleTradePage() {
     },
   })
 
+  // ── Withdraw (забор): user's active positions ───────────────────────
+  const activePositions = useMemo(
+    () => (myPositions ?? []).filter((p: Position) => p.isActive),
+    [myPositions],
+  )
+  const selectedRemovePosition = useMemo(
+    () => activePositions.find((p: Position) => p.id === removePositionId) ?? null,
+    [activePositions, removePositionId],
+  )
+
+  const removeMutation = useMutation({
+    mutationFn: () => pools.removeLiquidity({
+      positionId: removePositionId,
+      percentage: removePercent,
+      idempotencyKey: crypto.randomUUID(),
+    }),
+    onSuccess: () => {
+      const poolId = selectedRemovePosition?.poolId
+      celebrateSberkot(`Забрано ${removePercent}% — средства на балансе 💰`)
+      setRemoveSuccess(`Забрано ${removePercent}% ликвидности`)
+      setRemoveError(null)
+      setRemovePositionId('')
+      setRemovePercent(100)
+      queryClient.invalidateQueries({ queryKey: ['myBalances'] })
+      queryClient.invalidateQueries({ queryKey: ['myPositions'] })
+      // Withdrawing reduces pool TVL — refresh the catalog + this pool's detail
+      // so «Популярные пулы» / любой открытый PoolDetail не показывают старый TVL.
+      queryClient.invalidateQueries({ queryKey: ['pools', 0, 100] })
+      if (poolId) queryClient.invalidateQueries({ queryKey: ['poolDetail', poolId] })
+      setTimeout(() => setRemoveSuccess(null), 5000)
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { message?: string } } }
+      setRemoveError(e?.response?.data?.message || 'Не удалось забрать ликвидность')
+    },
+  })
+
   const assetOptions = assetTokens.map((t: Token) => ({
     label: `${t.symbol} — ${t.name}`,
     value: t.id,
     symbol: t.symbol,
+  }))
+  const assetSelItems = assetTokens.map((t: Token) => ({
+    id: t.id,
+    symbol: t.symbol,
+    name: t.name,
+    available: balanceMap.get(t.symbol)?.available,
   }))
   const lpPoolOptions = activePools.map((p: Pool) => ({
     label: `${p.tokenXSymbol} / ${p.tokenYSymbol}`,
@@ -224,11 +307,23 @@ export default function SimpleTradePage() {
     x: p.tokenXSymbol,
     y: p.tokenYSymbol,
   }))
+  const positionOptions = activePositions.map((p: Position) => {
+    const pool = poolById.get(p.poolId)
+    const x = pool?.tokenXSymbol
+    const y = pool?.tokenYSymbol
+    return {
+      label: x && y ? `${x} / ${y}` : `позиция ${p.id.slice(0, 6)}…`,
+      value: p.id,
+      x,
+      y,
+    }
+  })
 
   const canTrade = !!assetPool && !!amount && amount > 0 && !!quote && !tradeMutation.isPending
   const canAddLiquidity =
     !!selectedLpPool && !!lpAmountX && lpAmountX > 0 && !!lpAmountY && lpAmountY > 0 &&
     !addLiquidityMutation.isPending
+  const canRemove = !!removePositionId && !removeMutation.isPending
 
   const tradeCtaLabel = (() => {
     if (!selectedAsset) return 'Выберите актив'
@@ -245,7 +340,7 @@ export default function SimpleTradePage() {
           Простой режим
         </Title>
         <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
-          Купить, продать или вложить — без бинов и стратегий. Всё по базовым настройкам.
+          Купить, продать или управлять ликвидностью — без бинов и стратегий. Всё по базовым настройкам.
         </Text>
       </div>
 
@@ -291,24 +386,11 @@ export default function SimpleTradePage() {
               <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-2)' }}>
                 Актив
               </Text>
-              <Select
-                size="large"
-                style={{ width: '100%' }}
-                placeholder="Выберите токен"
-                value={assetId || undefined}
+              <TokenSelect
+                value={assetId}
                 onChange={(v) => { setAssetId(v); setAmount(null); setTradeError(null) }}
-                options={assetOptions}
-                showSearch
-                optionFilterProp="label"
-                labelRender={({ value }) => {
-                  const o = assetOptions.find((x) => x.value === value)
-                  return (
-                    <Space size={8} style={{ alignItems: 'center' }}>
-                      <TokenChip symbol={o?.symbol} size={22} />
-                      <Text strong>{o?.symbol}</Text>
-                    </Space>
-                  )
-                }}
+                tokens={assetSelItems}
+                placeholder="Выберите токен"
               />
             </div>
 
@@ -405,139 +487,260 @@ export default function SimpleTradePage() {
           </Space>
         </Card>
 
-        {/* ── Card 2 — Add liquidity (basic settings) ───────────────── */}
+        {/* ── Card 2 — Liquidity: Добавить / Забрать (SM-01 v2) ──────── */}
         <Card
           className="sber-card sber-simple-card"
           styles={{ body: { padding: 'var(--space-6)' } }}
         >
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
             <div>
-              <Text strong style={{ fontSize: 'var(--text-md)', display: 'block', marginBottom: 'var(--space-1)' }}>
-                Добавить ликвидность
+              <Text strong style={{ fontSize: 'var(--text-md)', display: 'block', marginBottom: 'var(--space-3)' }}>
+                Ликвидность
               </Text>
-              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                Базовые настройки — зарабатывайте на комиссиях без выбора диапазона.
-              </Text>
-            </div>
-
-            <div>
-              <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-2)' }}>
-                Пул
-              </Text>
-              <Select
+              <Segmented<LpMode>
+                block
                 size="large"
-                style={{ width: '100%' }}
-                placeholder="Выберите пул"
-                value={lpPoolId || undefined}
-                onChange={(v) => { setLpPoolId(v); setLpAmountX(null); setLpAmountY(null); setLpError(null) }}
-                options={lpPoolOptions}
-                showSearch
-                optionFilterProp="label"
-                labelRender={({ value }) => {
-                  const o = lpPoolOptions.find((x) => x.value === value)
-                  return o ? <TokenPairChip x={o.x} y={o.y} size="sm" /> : null
-                }}
+                value={lpMode}
+                onChange={(v) => { setLpMode(v); setLpError(null); setRemoveError(null) }}
+                options={[
+                  { value: 'add', label: <span className="sber-simple-side__opt"><PlusOutlined /> Добавить</span> },
+                  { value: 'remove', label: <span className="sber-simple-side__opt"><ExportOutlined /> Забрать</span> },
+                ]}
               />
             </div>
 
-            {selectedLpPool && (
+            {/* ── ДОБАВИТЬ ─────────────────────────────────────────── */}
+            {lpMode === 'add' && (
               <>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{selectedLpPool.tokenXSymbol}</Text>
-                    {lpBalanceX && (
-                      <Space size={6}>
-                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                          Доступно: {formatCompact(lpBalanceX.available)}
-                        </Text>
-                        <Button type="link" size="small" style={{ padding: '0 var(--space-1)', fontSize: 'var(--text-xs)', height: 'auto' }}
-                          onClick={() => setLpAmountX(lpBalanceX.available)}>MAX</Button>
-                      </Space>
-                    )}
-                  </div>
-                  <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00"
-                    value={lpAmountX} onChange={(v) => setLpAmountX(v)} min={0} controls={false} />
-                </div>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
+                  Базовые настройки — зарабатывайте на комиссиях без выбора диапазона.
+                </Text>
 
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{selectedLpPool.tokenYSymbol}</Text>
-                    {lpBalanceY && (
-                      <Space size={6}>
-                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                          Доступно: {formatCompact(lpBalanceY.available)}
-                        </Text>
-                        <Button type="link" size="small" style={{ padding: '0 var(--space-1)', fontSize: 'var(--text-xs)', height: 'auto' }}
-                          onClick={() => setLpAmountY(lpBalanceY.available)}>MAX</Button>
-                      </Space>
-                    )}
-                  </div>
-                  <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00"
-                    value={lpAmountY} onChange={(v) => setLpAmountY(v)} min={0} controls={false} />
-                </div>
-
-                <div className="sber-simple-note">
-                  <InfoCircleOutlined style={{ color: 'var(--brand-primary)' }} />
-                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                    по базовым настройкам (диапазон ±{SIMPLE_BIN_HALF_RANGE} бинов вокруг цены)
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-2)' }}>
+                    Пул
                   </Text>
+                  <Select
+                    size="large"
+                    style={{ width: '100%' }}
+                    placeholder="Выберите пул"
+                    value={lpPoolId || undefined}
+                    onChange={(v) => { setLpPoolId(v); setLpAmountX(null); setLpAmountY(null); setLpError(null) }}
+                    options={lpPoolOptions}
+                    showSearch
+                    optionFilterProp="label"
+                    labelRender={({ value }) => {
+                      const o = lpPoolOptions.find((x) => x.value === value)
+                      return o ? <TokenPairChip x={o.x} y={o.y} size="sm" /> : null
+                    }}
+                  />
                 </div>
+
+                {selectedLpPool && (
+                  <>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{selectedLpPool.tokenXSymbol}</Text>
+                        {lpBalanceX && (
+                          <Space size={6}>
+                            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
+                              Доступно: {formatCompact(lpBalanceX.available)}
+                            </Text>
+                            <Button type="link" size="small" style={{ padding: '0 var(--space-1)', fontSize: 'var(--text-xs)', height: 'auto' }}
+                              onClick={() => setLpAmountX(lpBalanceX.available)}>MAX</Button>
+                          </Space>
+                        )}
+                      </div>
+                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00"
+                        value={lpAmountX} onChange={(v) => setLpAmountX(v)} min={0} controls={false} />
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{selectedLpPool.tokenYSymbol}</Text>
+                        {lpBalanceY && (
+                          <Space size={6}>
+                            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
+                              Доступно: {formatCompact(lpBalanceY.available)}
+                            </Text>
+                            <Button type="link" size="small" style={{ padding: '0 var(--space-1)', fontSize: 'var(--text-xs)', height: 'auto' }}
+                              onClick={() => setLpAmountY(lpBalanceY.available)}>MAX</Button>
+                          </Space>
+                        )}
+                      </div>
+                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00"
+                        value={lpAmountY} onChange={(v) => setLpAmountY(v)} min={0} controls={false} />
+                    </div>
+
+                    <div className="sber-simple-note">
+                      <InfoCircleOutlined style={{ color: 'var(--brand-primary)' }} />
+                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
+                        по базовым настройкам (диапазон ±{SIMPLE_BIN_HALF_RANGE} бинов вокруг цены)
+                      </Text>
+                    </div>
+                  </>
+                )}
+
+                {lpSuccess && (
+                  <Alert type="success" showIcon message={lpSuccess} closable
+                    onClose={() => setLpSuccess(null)} style={{ borderRadius: 'var(--radius-md)' }} />
+                )}
+                {lpError && (
+                  <Alert type="error" showIcon message={lpError} closable
+                    onClose={() => setLpError(null)} style={{ borderRadius: 'var(--radius-md)' }} />
+                )}
+
+                <Button
+                  type="primary"
+                  block
+                  size="large"
+                  icon={<PlusOutlined />}
+                  disabled={!canAddLiquidity}
+                  loading={addLiquidityMutation.isPending}
+                  onClick={() => addLiquidityMutation.mutate()}
+                  style={{ borderRadius: 'var(--radius-md)' }}
+                >
+                  Добавить
+                </Button>
+
+                {/* Light context so the empty card isn't barren before a pick. */}
+                {!selectedLpPool && activePools.length > 0 && (
+                  <>
+                    <Divider style={{ margin: 'var(--space-2) 0' }} />
+                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>
+                      Популярные пулы
+                    </Text>
+                    <div>
+                      {[...activePools]
+                        .sort((a: Pool, b: Pool) => (b.totalTvlX + b.totalTvlY) - (a.totalTvlX + a.totalTvlY))
+                        .slice(0, 4)
+                        .map((p: Pool, i, arr) => (
+                          <div
+                            key={p.id}
+                            onClick={() => setLpPoolId(p.id)}
+                            className="sber-simple-poolrow"
+                            style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--border-light)' : 'none' }}
+                          >
+                            <TokenPairChip x={p.tokenXSymbol} y={p.tokenYSymbol} size="sm" />
+                            <Space size={6}>
+                              <Tag color="green" style={{ marginInlineEnd: 0 }}>
+                                <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
+                                {p.estimatedApy > 0 ? `${p.estimatedApy.toFixed(1)}% APY` : 'активен'}
+                              </Tag>
+                              <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
+                                {formatCompact(p.totalTvlX + p.totalTvlY)}
+                              </Text>
+                            </Space>
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                )}
               </>
             )}
 
-            {lpSuccess && (
-              <Alert type="success" showIcon message={lpSuccess} closable
-                onClose={() => setLpSuccess(null)} style={{ borderRadius: 'var(--radius-md)' }} />
-            )}
-            {lpError && (
-              <Alert type="error" showIcon message={lpError} closable
-                onClose={() => setLpError(null)} style={{ borderRadius: 'var(--radius-md)' }} />
-            )}
-
-            <Button
-              type="primary"
-              block
-              size="large"
-              icon={<PlusOutlined />}
-              disabled={!canAddLiquidity}
-              loading={addLiquidityMutation.isPending}
-              onClick={() => addLiquidityMutation.mutate()}
-              style={{ borderRadius: 'var(--radius-md)' }}
-            >
-              Добавить
-            </Button>
-
-            {/* Light context so the empty card isn't barren before a pick. */}
-            {!selectedLpPool && activePools.length > 0 && (
+            {/* ── ЗАБРАТЬ ──────────────────────────────────────────── */}
+            {lpMode === 'remove' && (
               <>
-                <Divider style={{ margin: 'var(--space-2) 0' }} />
-                <Text type="secondary" style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>
-                  Популярные пулы
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
+                  Верните ликвидность на баланс. Выберите позицию и сколько забрать — без диапазонов.
                 </Text>
-                <div>
-                  {[...activePools]
-                    .sort((a: Pool, b: Pool) => (b.totalTvlX + b.totalTvlY) - (a.totalTvlX + a.totalTvlY))
-                    .slice(0, 4)
-                    .map((p: Pool, i, arr) => (
-                      <div
-                        key={p.id}
-                        onClick={() => setLpPoolId(p.id)}
-                        className="sber-simple-poolrow"
-                        style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--border-light)' : 'none' }}
-                      >
-                        <TokenPairChip x={p.tokenXSymbol} y={p.tokenYSymbol} size="sm" />
-                        <Space size={6}>
-                          <Tag color="green" style={{ marginInlineEnd: 0 }}>
-                            <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
-                            {p.estimatedApy > 0 ? `${p.estimatedApy.toFixed(1)}% APY` : 'активен'}
-                          </Tag>
-                          <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
-                            {formatCompact(p.totalTvlX + p.totalTvlY)}
+
+                {activePositions.length === 0 ? (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={<Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>У вас пока нет открытых позиций</Text>}
+                    style={{ margin: 'var(--space-5) 0' }}
+                  />
+                ) : (
+                  <>
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-2)' }}>
+                        Позиция
+                      </Text>
+                      <Select
+                        size="large"
+                        style={{ width: '100%' }}
+                        placeholder="Выберите позицию"
+                        value={removePositionId || undefined}
+                        onChange={(v) => { setRemovePositionId(v); setRemoveError(null) }}
+                        options={positionOptions}
+                        showSearch
+                        optionFilterProp="label"
+                        labelRender={({ value }) => {
+                          const o = positionOptions.find((x) => x.value === value)
+                          return o && o.x && o.y ? <TokenPairChip x={o.x} y={o.y} size="sm" /> : (o?.label ?? null)
+                        }}
+                      />
+                    </div>
+
+                    {selectedRemovePosition && (
+                      <>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-2)' }}>
+                            Сколько забрать
                           </Text>
-                        </Space>
-                      </div>
-                    ))}
-                </div>
+                          <Segmented<number>
+                            block
+                            value={removePercent}
+                            onChange={(v) => setRemovePercent(Number(v))}
+                            options={[
+                              { value: 25, label: '25%' },
+                              { value: 50, label: '50%' },
+                              { value: 75, label: '75%' },
+                              { value: 100, label: '100%' },
+                            ]}
+                          />
+                        </div>
+
+                        {(() => {
+                          const pool = poolById.get(selectedRemovePosition.poolId)
+                          const xSym = pool?.tokenXSymbol ?? ''
+                          const ySym = pool?.tokenYSymbol ?? ''
+                          const f = removePercent / 100
+                          const gx = (selectedRemovePosition.currentValueX ?? 0) * f
+                          const gy = (selectedRemovePosition.currentValueY ?? 0) * f
+                          return (
+                            <div className="sber-simple-est" aria-live="polite">
+                              <div className="sber-simple-est__row">
+                                <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>Вернётся на баланс ≈</Text>
+                                <Text strong style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+                                  {formatTokenAmount(gx, xSym, { compact: true, maxFractionDigits: 4 })}
+                                  {ySym ? ` + ${formatTokenAmount(gy, ySym, { compact: true, maxFractionDigits: 4 })}` : ''}
+                                </Text>
+                              </div>
+                              <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginTop: 'var(--space-1)' }}>
+                                Примерная оценка по телу позиции — без учёта накопленных комиссий и сборов.
+                              </Text>
+                            </div>
+                          )
+                        })()}
+                      </>
+                    )}
+
+                    {removeSuccess && (
+                      <Alert type="success" showIcon message={removeSuccess} closable
+                        onClose={() => setRemoveSuccess(null)} style={{ borderRadius: 'var(--radius-md)' }} />
+                    )}
+                    {removeError && (
+                      <Alert type="error" showIcon message={removeError} closable
+                        onClose={() => setRemoveError(null)} style={{ borderRadius: 'var(--radius-md)' }} />
+                    )}
+
+                    <Button
+                      type="primary"
+                      block
+                      size="large"
+                      icon={<ExportOutlined />}
+                      disabled={!canRemove}
+                      loading={removeMutation.isPending}
+                      onClick={() => removeMutation.mutate()}
+                      style={{ borderRadius: 'var(--radius-md)' }}
+                    >
+                      {selectedRemovePosition ? `Забрать ${removePercent}%` : 'Выберите позицию'}
+                    </Button>
+                  </>
+                )}
               </>
             )}
           </Space>

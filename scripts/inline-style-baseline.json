@@ -1,5 +1,47 @@
 [
   {
+    "file": "dlmm-admin-ui/src/components/ActivityLogPanel.tsx",
+    "line": 62,
+    "match": "fontSize: 13",
+    "snippet": "style={{ fontSize: 13 }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/components/ActivityLogPanel.tsx",
+    "line": 71,
+    "match": "fontSize: 12",
+    "snippet": "style={{ fontSize: 12 }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/components/ActivityLogPanel.tsx",
+    "line": 93,
+    "match": "fontSize: 12",
+    "snippet": "style={{ fontSize: 12 }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/components/ActivityLogPanel.tsx",
+    "line": 98,
+    "match": "fontSize: 10",
+    "snippet": "style={{ margin: 0, fontSize: 10, lineHeight: '16px', padding: '0 6px' }}"
+  },
+  {
+    "file": "dlmm-admin-ui/src/components/ActivityLogPanel.tsx",
+    "line": 103,
+    "match": "fontSize: 11",
+    "snippet": "style={{ fontSize: 11, display: 'block' }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/components/ActivityLogPanel.tsx",
+    "line": 109,
+    "match": "fontSize: 10",
+    "snippet": "style={{ fontSize: 10 }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/components/ActivityLogPanel.tsx",
+    "line": 115,
+    "match": "fontSize: 11",
+    "snippet": "style={{ fontSize: 11 }}>"
+  },
+  {
     "file": "dlmm-admin-ui/src/components/BinLiquidityChart.tsx",
     "line": 71,
     "match": "borderRadius: 8",
@@ -49,31 +91,31 @@
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 174,
+    "line": 190,
     "match": "fontSize: 15",
     "snippet": "fontSize: 15,"
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 184,
+    "line": 200,
     "match": "fontSize: 11",
     "snippet": "fontSize: 11,"
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 233,
+    "line": 249,
     "match": "fontSize: 16",
     "snippet": "style={{ fontSize: 16, color: 'var(--text-secondary)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 254,
+    "line": 270,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13, color: 'var(--text-primary)' }}>"
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 258,
+    "line": 274,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11, color: 'var(--text-muted)' }}>"
   },
@@ -151,277 +193,151 @@
   },
   {
     "file": "dlmm-admin-ui/src/layouts/AdminLayout.tsx",
-    "line": 120,
+    "line": 127,
     "match": "fontSize: 24",
     "snippet": "style={{ color: '#1890ff', fontSize: 24, minWidth: 24 }} />"
   },
   {
     "file": "dlmm-admin-ui/src/layouts/AdminLayout.tsx",
-    "line": 126,
+    "line": 133,
     "match": "fontSize: 16",
     "snippet": "fontSize: 16,"
   },
   {
     "file": "dlmm-admin-ui/src/layouts/AdminLayout.tsx",
-    "line": 163,
+    "line": 170,
     "match": "fontSize: 18",
     "snippet": "style={{ fontSize: 18 }}"
   },
   {
     "file": "dlmm-admin-ui/src/layouts/AdminLayout.tsx",
-    "line": 171,
+    "line": 178,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 121,
+    "line": 150,
     "match": "borderRadius: 999",
     "snippet": "style={{ borderRadius: 999 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 152,
+    "line": 181,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 201,
+    "line": 230,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 218,
+    "line": 247,
     "match": "borderRadius: 999",
     "snippet": "style={{ borderRadius: 999, fontWeight: 700, fontSize: 12, padding: '0 10px' }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 218,
+    "line": 247,
     "match": "fontSize: 12",
     "snippet": "style={{ borderRadius: 999, fontWeight: 700, fontSize: 12, padding: '0 10px' }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 221,
+    "line": 250,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 226,
+    "line": 255,
     "match": "fontSize: 13",
     "snippet": "style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 229,
+    "line": 258,
     "match": "fontSize: 13",
     "snippet": "style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 233,
+    "line": 262,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', color: tone, fontWeig"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 235,
+    "line": 264,
     "match": "fontSize: 11",
     "snippet": "style={{ marginInlineStart: 4, fontSize: 11 }} />"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 259,
+    "line": 288,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>· <Text strong>&lt; 1%</Text> — здоровый уровень, лимит"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 260,
+    "line": 289,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>· <Text strong>1–10%</Text> — клиенты периодически упир"
   },
   {
     "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
-    "line": 261,
+    "line": 290,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>· <Text strong>&gt; 10%</Text> — массовая блокировка, п"
   },
   {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 106,
-    "match": "borderRadius: 8",
-    "snippet": "style={{ borderRadius: 8 }}"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 233,
-    "match": "borderRadius: 12",
-    "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 240,
-    "match": "borderRadius: 12",
-    "snippet": "width: 56, height: 56, borderRadius: 12,"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 243,
-    "match": "fontSize: 26",
-    "snippet": "fontSize: 26, flexShrink: 0,"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 249,
-    "match": "fontSize: 12",
-    "snippet": "style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 252,
-    "match": "fontSize: 28",
-    "snippet": "style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 255,
-    "match": "fontSize: 12",
-    "snippet": "style={{ fontSize: 12 }}>"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 265,
-    "match": "borderRadius: 12",
-    "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 277,
-    "match": "borderRadius: 12",
-    "snippet": "width: 56, height: 56, borderRadius: 12,"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 280,
-    "match": "fontSize: 26",
-    "snippet": "fontSize: 26, flexShrink: 0,"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 286,
-    "match": "fontSize: 12",
-    "snippet": "style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 289,
-    "match": "fontSize: 28",
-    "snippet": "style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 290,
-    "match": "fontSize: 18",
-    "snippet": "style={{ fontSize: 18, fontWeight: 500, marginLeft: 2 }}>%</span>"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 292,
-    "match": "fontSize: 12",
-    "snippet": "style={{ fontSize: 12 }}>"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 296,
-    "match": "borderRadius: 2",
-    "snippet": "marginTop: 8, height: 4, borderRadius: 2,"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 321,
-    "match": "borderRadius: 12",
-    "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 327,
-    "match": "fontSize: 12",
-    "snippet": "style={{ fontSize: 12, fontWeight: 400 }}>"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 333,
-    "match": "fontSize: 13",
-    "snippet": "style={{ color: 'var(--sber-green)', fontSize: 13, fontWeight: 500, cursor: 'poi"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 335,
+    "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
+    "line": 311,
     "match": "fontSize: 11",
-    "snippet": "style={{ fontSize: 11 }} />"
+    "snippet": "style={{ fontSize: 11 }}>"
   },
   {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 356,
-    "match": "fontSize: 12",
-    "snippet": "style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}>"
+    "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
+    "line": 313,
+    "match": "fontSize: 11",
+    "snippet": "style={{ marginInlineStart: 4, fontSize: 11 }} />"
   },
   {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 365,
-    "match": "fontSize: 13",
-    "snippet": "style={{ fontSize: 13, fontWeight: 500 }}>{TX_TYPE_LABEL[r.txType] || r.txType}<"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 384,
+    "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
+    "line": 338,
     "match": "borderRadius: 999",
-    "snippet": "style={{ borderRadius: 999, padding: '0 10px' }}>"
+    "snippet": "borderRadius: 999,"
   },
   {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 398,
-    "match": "borderRadius: 12",
-    "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 403,
+    "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
+    "line": 340,
     "match": "fontSize: 12",
-    "snippet": "style={{ fontSize: 12, fontWeight: 400 }}>"
+    "snippet": "fontSize: 12,"
   },
   {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 409,
+    "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
+    "line": 347,
     "match": "fontSize: 13",
-    "snippet": "style={{ color: 'var(--sber-green)', fontSize: 13, fontWeight: 500, cursor: 'poi"
+    "snippet": "style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>"
   },
   {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 411,
-    "match": "fontSize: 11",
-    "snippet": "style={{ fontSize: 11 }} />"
-  },
-  {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 429,
+    "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
+    "line": 350,
     "match": "fontSize: 13",
-    "snippet": "style={{ fontWeight: 500, fontSize: 13 }}>"
+    "snippet": "style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>"
   },
   {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 432,
-    "match": "fontSize: 13",
-    "snippet": "style={{ fontWeight: 500, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>"
+    "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
+    "line": 354,
+    "match": "fontSize: 12",
+    "snippet": "fontSize: 12,"
   },
   {
-    "file": "dlmm-admin-ui/src/pages/DashboardPage.tsx",
-    "line": 443,
+    "file": "dlmm-admin-ui/src/pages/ApiAnalyticsPage.tsx",
+    "line": 377,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11 }}>"
   },
@@ -762,6 +678,42 @@
     "snippet": "style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>"
   },
   {
+    "file": "dlmm-admin-ui/src/pages/PilotsHealthPage.tsx",
+    "line": 114,
+    "match": "fontSize: 11",
+    "snippet": "style={{ fontSize: 11 }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/pages/PilotsHealthPage.tsx",
+    "line": 135,
+    "match": "fontSize: 12",
+    "snippet": "style={{ fontSize: 12 }}>{p}</Text>}"
+  },
+  {
+    "file": "dlmm-admin-ui/src/pages/PilotsHealthPage.tsx",
+    "line": 150,
+    "match": "borderRadius: 999",
+    "snippet": "style={{ borderRadius: 999, fontWeight: 600 }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/pages/PilotsHealthPage.tsx",
+    "line": 161,
+    "match": "fontSize: 12",
+    "snippet": "style={{ fontSize: 12 }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/pages/PilotsHealthPage.tsx",
+    "line": 165,
+    "match": "fontSize: 11",
+    "snippet": "style={{ fontSize: 11 }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/pages/PilotsHealthPage.tsx",
+    "line": 178,
+    "match": "fontSize: 12",
+    "snippet": "style={{ fontSize: 12 }}>{a}</Text>"
+  },
+  {
     "file": "dlmm-admin-ui/src/pages/PoolCreatePage.tsx",
     "line": 192,
     "match": "borderRadius: 12",
@@ -859,151 +811,151 @@
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 146,
+    "line": 147,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 181,
+    "line": 182,
     "match": "borderRadius: 16",
     "snippet": "style={{ borderRadius: 16, border: '1px solid var(--border-light)', overflow: 'h"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 209,
+    "line": 210,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 212,
+    "line": 213,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 215,
+    "line": 216,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 219,
+    "line": 220,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 248,
+    "line": 249,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 267,
+    "line": 268,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 287,
+    "line": 288,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 294,
+    "line": 295,
     "match": "borderRadius: 8",
     "snippet": "style={{ padding: '6px 12px', borderRadius: 8 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 340,
+    "line": 341,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 404,
+    "line": 405,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 437,
+    "line": 438,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 486,
+    "line": 487,
     "match": "borderRadius: 12",
     "snippet": "borderRadius: 12,"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 494,
+    "line": 495,
     "match": "fontSize: 11",
     "snippet": "fontSize: 11, color: 'var(--text-secondary)',"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 528,
+    "line": 529,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolDetailPage.tsx",
-    "line": 566,
+    "line": 570,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>{label}</Text>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolsPage.tsx",
-    "line": 162,
+    "line": 175,
     "match": "fontSize: 11",
     "snippet": "style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolsPage.tsx",
-    "line": 176,
+    "line": 189,
     "match": "fontSize: 11",
     "snippet": "style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolsPage.tsx",
-    "line": 227,
+    "line": 240,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolsPage.tsx",
-    "line": 270,
+    "line": 283,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolsPage.tsx",
-    "line": 276,
+    "line": 289,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13 }}>Статус:</Text>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolsPage.tsx",
-    "line": 293,
+    "line": 306,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13 }}>Сортировка:</Text>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolsPage.tsx",
-    "line": 315,
+    "line": 328,
     "match": "fontSize: 12",
     "snippet": "style={{ marginLeft: 'auto', fontSize: 12 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/PoolsPage.tsx",
-    "line": 321,
+    "line": 334,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}>"
   },
@@ -1255,145 +1207,145 @@
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 206,
+    "line": 207,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 242,
+    "line": 243,
     "match": "borderRadius: 16",
     "snippet": "style={{ borderRadius: 16, border: '1px solid var(--border-light)', overflow: 'h"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 257,
+    "line": 258,
     "match": "borderRadius: 16",
     "snippet": "width: 72, height: 72, borderRadius: 16,"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 260,
+    "line": 261,
     "match": "fontSize: 28",
     "snippet": "fontSize: 28, fontWeight: 700,"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 272,
+    "line": 273,
     "match": "fontSize: 14",
     "snippet": "style={{ fontSize: 14 }}>{token.name}</Text>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 285,
+    "line": 286,
     "match": "fontSize: 12",
     "snippet": "fontSize: 12,"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 310,
+    "line": 311,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 318,
+    "line": 319,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 360,
+    "line": 361,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 423,
+    "line": 424,
     "match": "borderRadius: 999",
     "snippet": "style={{ borderRadius: 999, padding: '2px 10px', margin: 0 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 450,
+    "line": 451,
     "match": "fontSize: 12",
     "snippet": "style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12,"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 473,
+    "line": 474,
     "match": "fontSize: 12",
     "snippet": "style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 508,
+    "line": 509,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 510,
+    "line": 511,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 514,
+    "line": 515,
     "match": "fontSize: 22",
     "snippet": "fontSize: 22, fontWeight: 700, color: 'var(--text-primary)',"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 521,
+    "line": 522,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 577,
+    "line": 581,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 581,
+    "line": 585,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}>Отмена</Button>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 612,
+    "line": 616,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>{label}</Text>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 650,
+    "line": 654,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{label}<"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 651,
+    "line": 655,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11 }}>{sub}</Text>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 655,
+    "line": 659,
     "match": "fontSize: 16",
     "snippet": "fontSize: 16, fontWeight: 700, color: colour,"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 663,
+    "line": 667,
     "match": "borderRadius: 4",
     "snippet": "height: 6, borderRadius: 4, background: 'var(--surface-1, #F3F4F6)', overflow: '"
   },
   {
     "file": "dlmm-admin-ui/src/pages/TokenDetailPage.tsx",
-    "line": 669,
+    "line": 673,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11 }}>"
   },
@@ -1465,175 +1417,187 @@
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 213,
+    "line": 214,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 294,
+    "line": 295,
     "match": "fontSize: 12",
     "snippet": "style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 320,
+    "line": 321,
     "match": "borderRadius: 16",
     "snippet": "style={{ borderRadius: 16, border: '1px solid var(--border-light)', overflow: 'h"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 337,
+    "line": 338,
     "match": "borderRadius: 16",
     "snippet": "borderRadius: 16,"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 343,
+    "line": 344,
     "match": "fontSize: 26",
     "snippet": "fontSize: 26,"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 371,
+    "line": 372,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13 }}>{user.email}</Text>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 378,
+    "line": 379,
     "match": "fontSize: 12",
     "snippet": "fontSize: 12,"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 416,
+    "line": 417,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 458,
+    "line": 459,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 503,
+    "line": 504,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 520,
+    "line": 521,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 524,
+    "line": 525,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 534,
+    "line": 535,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 550,
+    "line": 551,
     "match": "borderRadius: 8",
     "snippet": "style={{ borderRadius: 8 }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 554,
+    "line": 555,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UserDetailPage.tsx",
-    "line": 617,
+    "line": 622,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UsersPage.tsx",
-    "line": 156,
+    "line": 158,
     "match": "fontSize: 12",
     "snippet": "style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UsersPage.tsx",
-    "line": 229,
+    "line": 172,
+    "match": "fontSize: 12",
+    "snippet": "style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/pages/UsersPage.tsx",
+    "line": 176,
+    "match": "fontSize: 12",
+    "snippet": "style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>"
+  },
+  {
+    "file": "dlmm-admin-ui/src/pages/UsersPage.tsx",
+    "line": 251,
     "match": "borderRadius: 12",
     "snippet": "style={{ borderRadius: 12, border: '1px solid #E5E7EB' }}"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UsersPage.tsx",
-    "line": 233,
+    "line": 255,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13 }}>KYC:</Text>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UsersPage.tsx",
-    "line": 247,
+    "line": 269,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13, marginLeft: 8 }}>Роль:</Text>"
   },
   {
     "file": "dlmm-admin-ui/src/pages/UsersPage.tsx",
-    "line": 261,
+    "line": 283,
     "match": "fontSize: 12",
     "snippet": "style={{ fontSize: 12 }}>"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 117,
+    "line": 135,
     "match": "fontSize: 10",
     "snippet": "style={{ background: '#FEF3C7', color: '#D97706', fontSize: 10,"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 123,
+    "line": 141,
     "match": "fontSize: 10",
     "snippet": "style={{ background: 'rgba(147,51,234,0.12)', color: '#7C3AED', fontSize: 10,"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 128,
+    "line": 146,
     "match": "fontSize: 10",
     "snippet": "style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10,"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 283,
+    "line": 301,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 284,
+    "line": 302,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 287,
+    "line": 305,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 290,
+    "line": 308,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 296,
+    "line": 314,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
@@ -1663,7 +1627,7 @@
   },
   {
     "file": "dlmm-user-ui/src/components/PoolRecentSwapsPanel.tsx",
-    "line": 125,
+    "line": 128,
     "match": "fontSize: 10",
     "snippet": "style={{ borderRadius: 'var(--radius-pill)', padding: '1px 8px', margin: 0, font"
   },
@@ -1671,7 +1635,7 @@
     "file": "dlmm-user-ui/src/components/StatCard.tsx",
     "line": 47,
     "match": "fontSize: 24",
-    "snippet": "style={{ fontSize: 24, fontWeight: 700, color: '#1F2937', lineHeight: 1.2 }}>{di"
+    "snippet": "style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', lineHeight"
   },
   {
     "file": "dlmm-user-ui/src/components/TwoFactorSettings.tsx",
@@ -1681,7 +1645,7 @@
   },
   {
     "file": "dlmm-user-ui/src/components/UserLayout.tsx",
-    "line": 191,
+    "line": 217,
     "match": "fontSize: 15",
     "snippet": "fontSize: 15,"
   },
@@ -1699,13 +1663,13 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/LiquidityPage.tsx",
-    "line": 248,
+    "line": 249,
     "match": "fontSize: 15",
     "snippet": "style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-"
   },
   {
     "file": "dlmm-user-ui/src/pages/LiquidityPage.tsx",
-    "line": 362,
+    "line": 363,
     "match": "fontSize: 24",
     "snippet": "style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--colo"
   },
@@ -1729,13 +1693,13 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/PoolDetailPage.tsx",
-    "line": 543,
+    "line": 582,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, color: 'var(--text-muted)' }}>незабранные</div>"
   },
   {
     "file": "dlmm-user-ui/src/pages/PositionsPage.tsx",
-    "line": 609,
+    "line": 657,
     "match": "fontSize: 24",
     "snippet": "style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--colo"
   },
@@ -1770,20 +1734,32 @@
     "snippet": "style={{ fontSize: 11, marginTop: 8, display: 'block' }}>"
   },
   {
-    "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 429,
+    "file": "dlmm-user-ui/src/pages/SimpleTradePage.tsx",
+    "line": 628,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 600,
+    "line": 425,
+    "match": "fontSize: 11",
+    "snippet": "style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 4 }} />"
+  },
+  {
+    "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
+    "line": 441,
+    "match": "fontSize: 10",
+    "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
+  },
+  {
+    "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
+    "line": 612,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10 }}>"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 631,
+    "line": 643,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },

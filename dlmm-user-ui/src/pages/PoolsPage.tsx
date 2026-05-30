@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { pools } from '@/api/services'
 import type { Pool } from '@/api/types'
 import { formatRub } from '@/components/StatCard'
-import { pairAccent } from '@/components/TokenChip'
+import TokenIcon from '@/components/TokenIcon'
 import { bpsToPercent } from '@/utils/format'
 
 const { Title, Text } = Typography
@@ -34,21 +34,22 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
   const { t } = useTranslation()
   const x = pool.tokenXSymbol || '???'
   const y = pool.tokenYSymbol || '???'
-  const accentX = pairAccent(x)
-  const accentY = pairAccent(y)
   const tvl = (pool.totalTvlX ?? 0) + (pool.totalTvlY ?? 0)
   const apy = pool.estimatedApy ?? 0
+  // Meteora-style — 24h fees earned ≈ volume × base fee rate. A quick yield
+  // signal next to TVL/volume/APY without any new backend call.
+  const fees24h = Math.round(((pool.volume24h ?? 0) * (pool.baseFeeBps ?? 0)) / 10_000)
 
   return (
     <Card className="sber-pool-card" hoverable onClick={onOpen}>
       <div className="sber-pool-card__head">
         <div className="sber-pool-pair">
-          <div className="sber-token-chip" style={{ background: `linear-gradient(135deg, ${accentX.from}, ${accentX.to})` }}>
-            {x.slice(0, 4)}
-          </div>
-          <div className="sber-token-chip sber-token-chip--overlap" style={{ background: `linear-gradient(135deg, ${accentY.from}, ${accentY.to})` }}>
-            {y.slice(0, 4)}
-          </div>
+          <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <TokenIcon symbol={x} size={44} decorative />
+            <span style={{ display: 'inline-flex', marginLeft: -16, borderRadius: '50%', boxShadow: '0 0 0 3px var(--bg-card)' }}>
+              <TokenIcon symbol={y} size={44} decorative />
+            </span>
+          </span>
           <div className="sber-pool-pair__label">
             <Text strong style={{ fontSize: 'var(--text-md)' }}>{x}/{y}</Text>
             <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
@@ -69,6 +70,10 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
         <div className="sber-pool-metric">
           <div className="sber-pool-metric__label">{t('pools.card.volume24h')}</div>
           <div className="sber-pool-metric__value">{formatRub(pool.volume24h ?? 0)}</div>
+        </div>
+        <div className="sber-pool-metric">
+          <div className="sber-pool-metric__label">Комиссии 24ч</div>
+          <div className="sber-pool-metric__value">{formatRub(fees24h)}</div>
         </div>
         <div className="sber-pool-metric">
           <div className="sber-pool-metric__label">{t('pools.card.apy')}</div>

@@ -15,7 +15,13 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(20) NOT NULL DEFAULT 'USER',
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Sprint 10 fix: the User entity maps last_login_at under ddl-auto: validate.
+    -- It was previously added only by the un-mounted manual seed
+    -- 07-seed-fix-backend-bugs.sql, so a clean `docker compose up` failed schema
+    -- validation and user-service crash-looped. Bootstrapped here so the base
+    -- schema is self-sufficient (mirrored by Liquibase changeset 007).
+    last_login_at TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_sber_id ON users (sber_id);

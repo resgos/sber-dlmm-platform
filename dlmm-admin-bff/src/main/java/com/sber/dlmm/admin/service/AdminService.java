@@ -249,7 +249,11 @@ public class AdminService {
                 ? pools.stream().collect(
                         java.util.stream.Collectors.toMap(
                                 p -> toString(p.get("id")),
-                                p -> toLong(p.get("tvl")),
+                                // PoolResponse has no "tvl" field — it exposes
+                                // totalTvlX/totalTvlY. Reading "tvl" returned 0
+                                // for every pool, silently disabling the
+                                // "swap > 5% of TVL" suspicious-transaction check.
+                                p -> toLong(p.get("totalTvlX")) + toLong(p.get("totalTvlY")),
                                 (a, b) -> a
                         ))
                 : Collections.emptyMap();

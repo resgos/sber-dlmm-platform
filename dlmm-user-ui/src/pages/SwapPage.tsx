@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next'
 import { tokens, pools, balances } from '@/api/services'
 import type { Token, Pool, TokenBalance } from '@/api/types'
 import TokenChip from '@/components/TokenChip'
+import TokenSelect from '@/components/TokenSelect'
 import PoolPriceChart from '@/components/PoolPriceChart'
 import { bpsToPercent } from '@/utils/format'
 import { TokenPairChip } from '@/components/sber'
@@ -111,6 +112,12 @@ export default function SwapPage() {
 
   const balanceMap = new Map((myBalances || []).map((b: TokenBalance) => [b.tokenId, b]))
   const inBalance = balanceMap.get(tokenInId)
+  const tokenSelItems = (tokenList?.content || []).map((t: Token) => ({
+    id: t.id,
+    symbol: t.symbol,
+    name: t.name,
+    available: balanceMap.get(t.id)?.available,
+  }))
 
   const tokenIn = tokenList?.content?.find((t: Token) => t.id === tokenInId)
   const tokenOut = tokenList?.content?.find((t: Token) => t.id === tokenOutId)
@@ -224,25 +231,12 @@ export default function SwapPage() {
         )}
       </div>
       <div className="sber-swap-box__row">
-        <Select
-          className="sber-swap-tokenpick"
-          placeholder="Токен"
-          value={opts.selectedTokenId || undefined}
+        <TokenSelect
+          value={opts.selectedTokenId}
           onChange={opts.onSelectToken}
-          options={tokenOptions.filter((o) => o.value !== opts.excludeId)}
-          showSearch
-          optionFilterProp="label"
-          variant="borderless"
-          suffixIcon={null}
-          labelRender={({ value }) => {
-            const t = tokenOptions.find((o) => o.value === value)
-            return (
-              <Space size={8} style={{ alignItems: 'center' }}>
-                <TokenChip symbol={t?.symbol} />
-                <Text strong>{t?.symbol}</Text>
-              </Space>
-            )
-          }}
+          tokens={tokenSelItems}
+          excludeId={opts.excludeId}
+          placeholder="Токен"
         />
         <InputNumber
           className="sber-swap-amount"

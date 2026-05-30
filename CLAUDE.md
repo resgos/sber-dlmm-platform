@@ -4,248 +4,112 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Sber DLMM (Dynamic Liquidity Market Maker) — Spring Boot 3.2.5 / Java 21 microservices backend (Maven multi-module) plus two React 18 + Vite + Ant Design frontends (admin + user). All inter-service traffic flows through `dlmm-gateway` (Spring Cloud Gateway). Persistence is PostgreSQL 16 + Liquibase, eventing is Kafka, cache and rate-limiting state live in Redis, analytics in ClickHouse.
+Sber DLMM (Dynamic Liquidity Market Maker) — a concentrated-liquidity exchange (price "bins" + volatility-driven variable fee). Backend is a **Maven multi-module Spring Boot 3.2.5 / Java 21** build: 10 modules = 9 services (gateway + 8 domain/BFF services) plus the `dlmm-common` library. Two **React 18 + Vite 5 + Ant Design 5** SPAs (admin + user). All client traffic enters through `dlmm-gateway` (Spring Cloud Gateway). Persistence is PostgreSQL 16 + Liquibase, eventing is Kafka, Redis holds cache / rate-limit / JWT-revocation state, ClickHouse holds analytics. The base quote currency is **SRUB** (with **YSRUB**, a yield-bearing variant).
 
 ## Common commands
 
-Run from repo root unless noted.
+Run from the repo root (your active worktree) unless noted.
 
-**Backend (Maven multi-module, parent `pom.xml`):**
+**Backend (Maven multi-module):**
 ```bash
-mvn -DskipTests package                       # build everything
-mvn -pl dlmm-pool-engine -am package          # build one module + its deps
-mvn -pl dlmm-pool-engine spring-boot:run      # run one service locally (needs Postgres/Redis/Kafka up)
-mvn -pl dlmm-pool-engine test                 # run module tests
-mvn -pl dlmm-pool-engine test -Dtest=SwapServiceTest                       # single test class
-mvn -pl dlmm-pool-engine test -Dtest=SwapServiceTest#shouldExecuteSwap     # single test method
+mvn -DskipTests package                    # build all modules
+mvn -pl dlmm-pool-engine -am package       # build one module + its deps
+mvn -pl dlmm-pool-engine spring-boot:run   # run one service (needs Postgres/Redis/Kafka up)
+mvn -pl dlmm-pool-engine test                                          # module tests
+mvn -pl dlmm-pool-engine test -Dtest=SwapServiceTest                  # one class
+mvn -pl dlmm-pool-engine test -Dtest=SwapServiceTest#shouldExecuteSwap  # one method
 ```
-Note: there is **no surefire/JaCoCo plugin configured** — `mvn test` only picks up tests via Spring Boot's default. Test coverage is currently very thin (only `dlmm-common` and `dlmm-pool-engine` ship tests).
+Running a service locally needs the secrets in the env, e.g.
+`DB_PASSWORD=... JWT_SECRET=<≥32 bytes> mvn -pl dlmm-pool-engine spring-boot:run`
+(`SecretValidationOnStartup` refuses to boot on a missing/short secret). JaCoCo is configured in the root `pom.xml` (prepare-agent + report bound to the `test` phase) → `target/site/jacoco/index.html` per module; no coverage threshold is enforced yet. Tests concentrate in `dlmm-common` (security/outbox/math) and `dlmm-pool-engine` (swap/liquidity, `FullSwapFlowIT` via Testcontainers).
 
-**Full stack (Docker Compose):**
+**Frontends (`dlmm-admin-ui`, `dlmm-user-ui`):**
 ```bash
-cd docker && docker-compose up -d             # brings up infra + all 10 services + 2 UIs
-docker-compose logs -f dlmm-pool-engine       # tail one service
-docker-compose down -v                        # full reset (drops volumes / Postgres data)
+npm install
+npm run dev          # admin :3000, user :3001 — both proxy /api → gateway :8080
+npm run build        # tsc && vite build — TS errors fail the build
+npm run test         # vitest run
+npm run test:e2e     # Playwright (user-ui only)
+npm run lint:all     # custom ratchets — see below
 ```
-Compose builds each Java service via the root `Dockerfile` with `--build-arg MODULE=dlmm-xxx` (multi-stage Maven → JRE). Frontends use `Dockerfile.frontend` / `Dockerfile.user-frontend`.
+There is **no ESLint**. Style discipline is enforced by `scripts/check-no-hex-in-tsx.mjs` (no hardcoded hex in `.tsx`) and `scripts/check-inline-styles.mjs`, both diffed against `scripts/*-baseline.json`; re-baseline with `node scripts/check-no-hex-in-tsx.mjs --update`. `scripts/check-ui-shared-drift.mjs` guards code shared between the two UIs. Admin UI runs backend-less with `VITE_USE_MOCKS=true npm run dev` (axios-mock-adapter, `src/api/mockApi.ts`).
 
-**Frontends (standalone dev):**
+**Full stack (Docker Compose, ~19 containers):**
 ```bash
-cd dlmm-admin-ui && npm install && npm run dev   # http://localhost:3000
-cd dlmm-user-ui  && npm install && npm run dev   # http://localhost:3001
-npm run build                                    # tsc + vite build (TS errors fail the build)
+cp docker/.env.example docker/.env         # secrets (gitignored): DB_PASSWORD, JWT_SECRET, ...
+cd docker && docker compose up -d
+docker compose logs -f dlmm-gateway        # wait for "Started DlmmGatewayApplication"
+docker compose down -v                     # full reset (drops the Postgres volume)
 ```
-Both Vite dev servers proxy `/api` → `http://localhost:8080` (the gateway). The admin UI also has `src/api/mockApi.ts` (axios-mock-adapter) which can run the UI without a backend — see `setupMockApi()`.
+Compose builds each Java service from the root `Dockerfile` with `--build-arg MODULE=dlmm-xxx`; UIs use `Dockerfile.frontend` / `Dockerfile.user-frontend`. It brings up infra + 9 services + 2 UIs + an nginx status-page + Prometheus/Grafana. Demo creds: user `ivanov@example.com` / `Demo1234`, admin `admin@sber-dlmm.ru` / `Demo1234`.
 
-## Architecture (the parts that aren't obvious from a single file)
+**Deploy frontend changes to a running stack** (this is *not* a rebuild):
+```bash
+bash scripts/redeploy-frontends.sh   # host `npm run build` + docker cp dist into the nginx containers
+```
+Re-run this after **every** `docker compose up` — the copied `dist` is lost when a container is recreated — then hard-refresh the browser. `nginx.conf` changes are NOT covered by the script; `docker cp` them in and `nginx -s reload` manually.
+
+## Architecture (the parts you can't infer from one file)
+
+This repo is normally worked from a git **worktree** under `.claude/worktrees/` (there are many). Run commands from your active worktree, not the main clone.
 
 ### Service map and ports
-| Service | Port | Role |
+Every service exposes `/actuator/**` and Swagger UI at `/swagger-ui.html`.
+
+| Module | Port | Role |
 |---|---|---|
-| `dlmm-gateway` | 8080 | Spring Cloud Gateway. Single public entry point. JWT validation, rate limiting (Redis), route table in `dlmm-gateway/src/main/resources/application.yml` |
-| `dlmm-user-service` | 8081 | Auth (login/register/refresh), users, KYC |
-| `dlmm-token-service` | 8082 | Tokens + user balances |
-| `dlmm-pool-engine` | 8083 | Core DLMM math: bins, liquidity, swaps. Has scheduling for liquidity ops |
-| `dlmm-fee-service` | 8084 | Fee calc and distribution |
-| `dlmm-transaction-service` | 8085 | Transaction recording, settlement |
-| `dlmm-price-oracle` | 8086 | Price feed aggregation |
-| `dlmm-notification-service` | 8087 | Kafka-driven notifications |
-| `dlmm-admin-bff` | 8088 | BFF aggregating admin endpoints |
-| `dlmm-common` | (lib) | Shared DTOs, enums, exceptions, `BinMath`, `FeeCalculator`, `GlobalExceptionHandler` |
-| `dlmm-admin-ui` | 3000 | React/AntD admin |
-| `dlmm-user-ui` | 3001 | React/AntD user-facing |
+| `dlmm-gateway` | 8080 | Spring Cloud Gateway (reactive). Sole public entry; JWT validation, Redis rate-limit, route table + auth-skip list in `application.yml`; injects `X-User-Id`/`X-User-Role`/`X-Kyc-Status` upstream |
+| `dlmm-user-service` | 8081 | Auth (login/register/refresh/logout), users, KYC. **Issues** the JWTs |
+| `dlmm-token-service` | 8082 | Token catalog + balances; internal deduct/credit; YSRUB money-market; custody fees |
+| `dlmm-pool-engine` | 8083 | Core DLMM: bins, liquidity, swaps, variable fee; scheduled liquidity ops; margin watch |
+| `dlmm-fee-service` | 8084 | Fee calc + distribution |
+| `dlmm-transaction-service` | 8085 | Transaction ledger, settlement, AML scan scheduler |
+| `dlmm-price-oracle` | 8086 | Price feeds + OHLCV (`/api/v1/oracle/ohlcv/{poolId}`) |
+| `dlmm-notification-service` | 8087 | Kafka consumer → notifications; Kafka consumer-lag healthcheck |
+| `dlmm-admin-bff` | 8088 | Backend-for-frontend aggregating admin endpoints |
+| `dlmm-common` | (lib) | Shared cross-cutting infra (below) + DTOs/enums/`BinMath`/`FeeCalculator`/`GlobalExceptionHandler` |
+| `dlmm-admin-ui` / `dlmm-user-ui` | 3000 / 3001 | React + AntD SPAs |
 
-### Auth flow — important
-1. Client posts to `/api/v1/auth/login` (gateway skips auth for `/auth/{login,register,refresh}` and `/actuator/**`).
-2. `dlmm-user-service` issues a JWT (HS256, secret in `dlmm.jwt.secret`).
-3. Gateway's `JwtValidationFilter` validates every other request, decodes claims, and **injects `X-User-Id`, `X-User-Role`, `X-Kyc-Status` headers** into the upstream request.
-4. Each downstream service has its own `JwtAuthenticationFilter` + `JwtTokenProvider` that re-validates the token and builds `Authentication`. **Yes, this is duplicated** across 7 services (~939 lines total) — see "Known debt" below.
+### `dlmm-common` holds the shared infra — auto-configured, don't re-implement per service
+Each concern is a Spring `@AutoConfiguration` registered in `META-INF/spring/...AutoConfiguration.imports`, so every module that depends on `dlmm-common` gets it automatically:
+- **JWT** — `JwtTokenProvider` + `JwtAuthenticationFilter` in `com.sber.dlmm.common.security`, wired by `DlmmJwtAutoConfiguration`. This replaced ~7 per-service copies; the only other JWT code is the *issuer* `JwtTokenProvider` in user-service and the reactive `JwtValidationFilter` in the gateway. The filter **rejects refresh tokens on business endpoints**. Claims carry `role`, `kycStatus`, `tier` (FREE/PRO/ENTERPRISE → API-tier rate limits) and `jti` (Redis revocation denylist).
+- **Transactional outbox** — `com.sber.dlmm.common.outbox` (`OutboxService`, `OutboxDispatcher`, `DlmmOutboxAutoConfiguration`). Domain code calls `outbox.append(...)` *inside* the business transaction (propagation MANDATORY) instead of `kafkaTemplate.send` directly; a scheduled dispatcher drains rows to Kafka. `outbox_events` has a `service` column so each service drains only its own rows. Used by token-service and pool-engine (Swap/Liquidity/Pool).
+- **Bearer forwarding** — `BearerTokenForwardingFilter` + `DlmmWebClientAutoConfiguration` copy the inbound `Authorization` header onto outbound `WebClient` calls (without it, inter-service calls 403).
+- **Errors** — throw `DlmmException` (with an error code); `GlobalExceptionHandler` renders the HTTP body. Don't hand-build error `ResponseEntity`s.
+- **Startup secret validation** — `SecretValidationOnStartup` aborts boot if `dlmm.jwt.secret` is missing or < 32 bytes.
 
-### Kafka topics
-Defined in `docker/init-kafka-topics.sh`: `user-events`, `token-events`, `pool-events`, `fee-events`. Each is 3 partitions, RF=1. `dlmm-notification-service` consumes; producers live in the corresponding domain services.
+### Auth flow
+1. Client → `POST /api/v1/auth/login` (gateway skips auth for `/auth/{login,register,refresh}` and `/actuator/**`).
+2. user-service returns an access token (HS384, ~30 min) + refresh token (7 days).
+3. Gateway validates every other request, decodes the claims, and injects the `X-User-*` headers upstream.
+4. Each downstream re-validates via the shared `JwtAuthenticationFilter` and builds the Spring `Authentication`.
 
-### Database
-Single Postgres database `dlmm`, user `dlmm`, password `dlmm_secret` (dev default). Schema is bootstrapped by `docker/init-db.sql` (~470 lines) — Liquibase is wired with `validate-on-migrate`, **not auto-update**, so schema changes require a Liquibase changeset, not just an entity edit. JPA `ddl-auto: validate` enforces this.
+### Inter-service resilience
+Inter-service clients use **Resilience4j** (`@CircuitBreaker`/`@Retry`/`@TimeLimiter`) — present in pool-engine, fee-service, transaction-service and admin-bff clients. pool-engine's KYC lookup (`UserServiceClient`) is **fail-closed**: on a user-service outage the user is treated as *not* verified.
 
-### Frontend conventions
-- API client: `src/api/client.ts` in both UIs — single Axios instance, `baseURL: '/api/v1'`, request interceptor adds `Bearer` from `authStore` (Zustand), response interceptor force-redirects to `/login` on 401.
-- State: only auth is in Zustand. Server state is React Query (`@tanstack/react-query`). Don't add Redux.
-- Routing: React Router 6 with `ProtectedRoute` / `ProtectedLayout` wrappers (see `src/routes` or `src/components`).
-- UI kit: Ant Design 5 + Pro Components. No design system layer — pages call AntD directly.
-- TS strictness: `noUnusedLocals`/`noUnusedParams` are intentionally disabled in `tsconfig.json` (commit `700a185`).
+### Data + migrations
+Single Postgres DB `dlmm`. Schema is bootstrapped by `docker/init-db.sql`; Liquibase runs `validate-on-migrate` and JPA `ddl-auto: validate`, so **a schema change needs a Liquibase changeset, not just an entity edit**. Per-service changesets wrap `createTable` in `<preConditions onFail="MARK_RAN">` so they coexist with `init-db.sql` (a known tactical hack — see `docs/DB-MIGRATION-CONVENTION.md`). Demo data is layered numbered seed scripts `docker/02..09-*.sql`, applied by the Postgres entrypoint.
 
-## Conventions worth knowing
+### Kafka
+Topics in `docker/init-kafka-topics.sh`: `user-events`, `token-events`, `pool-events`, `fee-events` (3 partitions, RF=1). Producers publish via the outbox; notification-service consumes.
 
-- **Java 21** with Lombok and MapStruct annotation processors (configured in root `pom.xml`). `mvn idea:idea` / IDE annotation-processing must be enabled.
-- **All HTTP exceptions** go through `dlmm-common`'s `GlobalExceptionHandler` — throw `DlmmException` (with error code) rather than building `ResponseEntity` manually.
-- **No service-to-service circuit breaker** is configured (no Resilience4j). Inter-service calls are bare `RestTemplate`/`WebClient`.
-- **Default JWT secret** in committed `application.yml` files is `change-me-in-production-...` — always overridden via `JWT_SECRET` env in Compose. Don't commit a real secret.
-- **Actuator** is enabled per service: `/actuator/health,info,metrics,prometheus`.
-- **Swagger** is per service: `http://localhost:<port>/swagger-ui.html`, OpenAPI JSON at `/v3/api-docs`.
+### DLMM core + the bin invariant
+Liquidity lives in price **bins**; each bin must hold `reserveX·price + reserveY = liquidity`. `SwapService` conserves this correctly. ✅ **F-12 (was an open correctness bug; fixed Sprint 10):** some *seeded* pools violated the invariant — the 210 history swaps were SQL inserts that set bin reserves without maintaining `liquidity` — so an isolated add→remove (no swaps between) over-returns the quote token (~49%, SBTC worst). Pool conservation still holds (not money-from-nothing) but it's an unfair split at other LPs' expense. **Fixed:** `docker/10-seed-reconcile-bin-invariant.sql` (run LAST in PRE-DEMO STEP 0b) restores `liquidity = reserve_x·price + reserve_y` for every bin and proportionally scales `position_bins.shares` so no bin is over-owned — idempotent via `seed_markers`, self-checks both post-conditions. Canonical formula + unit test: `BinMath.binLiquidity` + `BinMathFeeGrowthTest`. On a DB seeded BEFORE this script ran, still avoid live add+remove until it's applied. Full write-up: `docs/SESSION-HANDOFF-2026-05-29.md §5`.
 
-## Recent fixes (post-feaecfa baseline)
+## Frontend conventions
+- **API:** one Axios instance per UI in `src/api/client.ts`, `baseURL: '/api/v1'`; a request interceptor adds `Bearer` from the Zustand `authStore`; 401 → redirect to `/login`.
+- **State:** only auth is in Zustand; all server state is TanStack Query. No Redux.
+- **Routing:** React Router 6 with `ProtectedRoute` / `ProtectedLayout`.
+- **UI:** Ant Design 5 + Pro Components used directly (no design-system layer). Theming is via CSS variables in `src/sber-theme.css` (spacing `--space-*`, data-viz palette, dark variants) — **no hardcoded hex in `.tsx`** (lint ratchet). user-ui adds i18n (i18next) and a canvas price chart via `lightweight-charts`; other charts use Recharts.
+- TS `noUnusedLocals` / `noUnusedParams` are intentionally disabled.
 
-The session under `claude/elated-elgamal-dba521` closed several blockers and
-the major shared-infra refactors below. Read this before assuming the codebase
-matches the original feaecfa state:
+## Operational gotchas (these have cost real hours — also see the latest SESSION-HANDOFF + `docs/PRE-DEMO-CHECKLIST.md`)
+- **Backend `docker compose build` is flaky** — it can exit 0 without actually updating the image (BuildKit tag race). Verify with `docker images <svc> --format '{{.CreatedAt}}'`; use `--no-cache` when in doubt.
+- **Seed-script idempotency:** `05-seed-volume-refresh.sql` is safe and **must** re-run within ~24h of a demo (the pool-engine scheduler ages swaps out of the 24h window, drifting volume/APY to 0). `06-seed-tvl-rescale.sql` and `08-seed-balance-rescale.sql` are **NON-idempotent — never re-run** (they divide by a constant). `07` and `09` are safe/idempotent. Order after `down -v`: 05, 06, 07, 08, 09.
+- **Recharts pages time out CDP `captureScreenshot`** (continuous ResizeObserver repaint) — not a real freeze; verify with page text. lightweight-charts (canvas) screenshots fine.
 
-- **JWT consolidated in `dlmm-common`** — `JwtTokenProvider` + `JwtAuthenticationFilter`
-  are now in `com.sber.dlmm.common.security` and auto-registered via
-  `DlmmJwtAutoConfiguration`. Per-service copies (7 of each) were deleted.
-  Note: the shared filter **rejects refresh tokens on business endpoints**
-  (only valid against `/auth/refresh`) — this is stricter than some old
-  per-service filters were.
-- **Bearer-token forwarding on outbound WebClient calls** — `BearerTokenForwardingFilter`
-  + `DlmmWebClientAutoConfiguration` install a `WebClientCustomizer` that copies
-  the inbound `Authorization` header onto outgoing `WebClient` requests. Without
-  it, `pool-engine -> token-service` and `admin-bff -> downstream` calls returned
-  403. Lives in a dedicated auto-config so user-service (no spring-webflux) doesn't
-  trip on `WebClient$Builder` introspection.
-- **`UserServiceClient` split out of `TokenServiceClient`** — `isUserKycVerified`
-  now points at `dlmm-user-service` (it always was supposed to). Requires
-  `USER_SERVICE_URL` env (set in compose).
-- **Swap pipeline now functional end-to-end.** Two missing pieces were added:
-  `GET /api/v1/users/internal/{id}/kyc` in user-service and
-  `POST /api/v1/tokens/internal/{deduct,credit}` in token-service. Verified
-  against the live stack (real swap, balance mutations match).
-- **Resilience4j** on pool-engine `TokenServiceClient` and `UserServiceClient`
-  with circuit-breaker + retry + timeout. KYC fallback is **fail-closed**
-  (treats user as not verified on user-service outage).
-- **Liquibase preConditions** — every per-service changeset wraps `createTable`
-  in `<preConditions onFail="MARK_RAN"><not><tableExists/></not></preConditions>`
-  so changesets coexist with `init-db.sql`. Tactical — see backlog for the
-  proper split.
-- **TokenType enum extended** with `FIAT_BACKED`, `COMMODITY_BACKED`, `UTILITY`,
-  `INDEX_TOKEN` to match seed data. Pinned by `TokenTypeTest` so future edits
-  are deliberate.
-- **Test coverage grew** — 11 new cases for `JwtTokenProvider`, 5 for
-  `JwtAuthenticationFilter`, 4 for `BearerTokenForwardingFilter`, 3 for
-  `TokenType` (96 unit tests across `dlmm-common` + `dlmm-pool-engine` now
-  green; `FullSwapFlowIT` Testcontainers swap E2E updated to mock `UserServiceClient`).
-- **Secrets out of YAML** — `${DB_PASSWORD:?required}` / `${JWT_SECRET:?required}`,
-  values come from `docker/.env` (gitignored), template in `docker/.env.example`.
-- **Extended catalog seed** — `docker/02-extended-assets.sql` adds 18 tokens
-  (Russian blue-chips, MOEX index tokens, FX-pegged, additional commodities)
-  and 18 pools paired against SRUB. Loaded by postgres entrypoint after
-  `init-db.sql`.
+## Where the planning + ops knowledge lives
+`docs/` is large and authoritative. Start with the newest **`SESSION-HANDOFF-*.md`** (current operational truth + hard-won gotchas), then `PRE-DEMO-CHECKLIST.md`, `SPRINT-PLAN.md`, the per-sprint `SPRINT-N-*.md`, `RISK-REGISTER.md`, the runbooks in `docs/runbooks/`, and `IMPROVEMENTS-REPORT.md`. A Helm chart is in `helm/dlmm-platform/`; CI is in `.github/workflows/` (backend, frontend, container-scan, schema-drift, runbook-drift, deploy).
 
-## Sprint 1 deliverables (2026-05-16, committed in this branch)
-
-- **Pool-engine N+1 fix** — `GET /api/v1/tokens/batch?ids=csv` batch endpoint
-  on token-service, Caffeine LRU cache on `TokenServiceClient`
-  (60s TTL, 500 entries). `/admin/dashboard` cold 2.9s → warm 150–330ms,
-  `/pools` cold 2.4s → warm 35–106ms. See commit `f4fca78`.
-- **Deep healthchecks** across all services — `EndpointRequest.toAnyEndpoint()`
-  in every SecurityConfig (fixes Spring 6.2 MvcRequestMatcher silent-skip),
-  `spring-boot-starter-actuator` added to the 4 services that lacked it,
-  `show-details: always` + `probes.enabled` enabled per service.
-  `DownstreamHealthIndicator` in pool-engine (pings token-service +
-  user-service) and admin-bff (pings 5 downstreams). Kill-and-restore
-  drill verified — downstream DOWN reflects within 1s, recovery within 3s.
-  See commit `c3fb54c`.
-- **Seed enrichment** — `docker/03-seed-trading-history.sql` adds 210 swap
-  transactions across 30 days, 22 pools, 3 users, with realistic status
-  mix + 8 extra LP positions + matching position_bins + fee_accruals.
-  Updates pool rollups (`volume_24h`, `total_fees_collected_x/y`) to match.
-  Fixed two dashboard bugs along the way: `transactionsToday` was the page
-  size (now date-filtered), `activePositions` was hardcoded 0 (now hits
-  new `GET /api/v1/pools/positions/count`). See commit `2f800e7`.
-- **Transactional outbox in token-service** — `outbox_events` table
-  (Liquibase changeset 003 + init-db.sql), `OutboxEvent` + `OutboxService`
-  (propagation=MANDATORY so dual-writes fail loudly) + `OutboxDispatcher`
-  (@Scheduled 500ms, batch=100, retry on failure). All 4 `kafkaTemplate.send`
-  sites rewired to `outbox.append`. Critically, the two internal endpoints
-  (`deductInternal` / `creditInternal`) now publish `BalanceMutated` events —
-  previously they were Kafka-silent so every swap was invisible to
-  notification-service. Kill-Kafka drill verified — swaps stay sub-second,
-  events buffer in outbox, dispatcher drains automatically on recovery.
-  See commit `d03742a`.
-- **Docs** — `docs/GLOSSARY.md` (1-pager domain vocab),
-  `docs/RISK-REGISTER.md` (18 risks scored S×L), `docs/DEMO-SCRIPT.md`
-  (20-min demo flow + Q&A bank for PO/IT-lead/sysAnalyst/demo-day
-  questions). See commit `8e00036`.
-
-## Sprint 2 deliverables (2026-05-16, committed in this branch)
-
-- **Pool-engine outbox** — all four `kafkaTemplate.send` sites in
-  `SwapService`, `LiquidityService`, `PoolService` rewired to
-  `outbox.append`. New `service` column on shared `outbox_events`
-  table so token-service's and pool-engine's dispatchers don't fight
-  over each other's rows. Cross-service kill-Kafka drill verified:
-  both services buffer events independently, drain on recovery.
-  Also fixed a serialiser footgun: `KafkaTemplate` was JsonSerializer
-  but the outbox already JSON-encodes payloads — would double-encode.
-  Both services now use `StringSerializer`. See commit `eed99a3`.
-- **CI/CD pipeline** — `.github/workflows/backend.yml` (Maven + JDK 21,
-  compile + test with `-fae`), `frontend.yml` (Node 20, npm ci +
-  Vitest + vite build matrixed across both UIs), `container-scan.yml`
-  (Trivy scan of pool-engine image, weekly + on Dockerfile/pom change,
-  SARIF to Security tab, advisory not blocking). See commit `3429ab2`.
-- **k6 load test baseline** — `loadtest/baseline.js` ramping-arrival
-  scenario (60% pools / 20% dashboard / 20% swap) with per-endpoint
-  Trend metrics + SLO thresholds. First-cut numbers in `loadtest/README.md`:
-  /pools p99 23.22s, dashboard 16.87s, swap 42.29s under 300 VUs —
-  honest "this is where we break" data, not aspirational. Diagnosis
-  (Hikari saturation, test-design pile-up on single balance, same-pool
-  row lock) documented. See commit `c230ef2`.
-- **Kafka consumer lag healthcheck** — `KafkaConsumerLagHealthIndicator`
-  in notification-service. Uses `AdminClient` to compute end-offset
-  minus committed-offset per partition, marks DOWN at total lag >
-  1000. Verified by injecting 2000 messages while consumer was
-  stopped — DOWN with `totalLag=2000`, then UP after catchup.
-  See commit `2b8a92a`.
-- **Prometheus + Grafana stack** — `micrometer-registry-prometheus`
-  at dlmm-common as runtime dep (cascades to all services).
-  `docker/prometheus/prometheus.yml` scrapes 8 services every 5s.
-  `docker/grafana/provisioning/` auto-provisions Prometheus datasource
-  + DLMM Overview dashboard (request rate, p99 latency, Hikari pool,
-  JVM heap, 5xx error rate). Anonymous viewer enabled for demo
-  walkthroughs. Gateway target is currently DOWN (404 — reactive
-  actuator needs separate webflux config, Sprint 3). See commit `618bf9f`.
-- **Startup warmers + CORS prod split** — `StartupWarmer` beans in
-  pool-engine and admin-bff fire on `ApplicationReadyEvent` and call
-  the hot paths once (logged: "Startup warm complete in ~800ms").
-  Dashboard cold-start dropped from ~2.9s to first-user ~150ms.
-  Gateway CORS now reads `dlmm.cors.allowed-origins` (comma-split via
-  SpEL) — `application.yml` carries dev localhost, `application-prod.yml`
-  locks to `*.sber-online.ru`. Verified: localhost:3000 → 200 +
-  ACA-Origin, evil.com → 403. See commit `6003805`.
-
-## What's next (planning artefacts)
-
-The forward roadmap lives in three docs in `docs/`:
-
-- **`SPRINT-PLAN.md`** — detailed Sprint 3-7 backlogs with task source-tags
-  (R# risk, M# monetization idea, D# discovery commitment, TD tech-debt).
-  Parking lot catalogues 14 ideas we explicitly aren't building (with
-  re-evaluation triggers).
-- **`MONETIZATION-STRATEGY.md`** — 60+ revenue ideas across 10 categories,
-  filtered through Sber's moats, scored, recommended in 3 horizons
-  (NOW Sprint 3-4, NEXT Q3-Q4, LATER 2027 H1+). Top picks:
-  enable `protocol_fee_pct=5%`, pitch Sber Treasury as LP venue,
-  SberSpasibo integration, B2B settlement rail.
-- **`PRODUCT-DISCOVERY-2026-05-16.md`** — BA-led mini-demo + 3 revenue
-  directions: FX hedges, DLMM-as-Service, MM rebate.
-
-Cumulative target: 30M ₽/yr today → 300-500M (Q3) → 800M-1.2B (Q4) →
-1.5-2B (Q1 2027) → 3-4B (Q3 2027) by stacking 7-8 streams.
-
-## Known debt (still open)
-- **Pool-engine outbox** not yet wired — pool state mutations
-  (active_bin updates, fee accruals on swap) follow the same pattern
-  but are Sprint 2 work.
-- **Liquibase preConditions are a tactical hack.** Future schema changes won't
-  apply on existing DBs (the changeset will be MARK_RAN'd because the table
-  already exists). The proper fix is to remove `CREATE TABLE` from `init-db.sql`
-  and move seed inserts into a Spring `@PostConstruct` runner or a Liquibase
-  `<sqlFile>` step.
-- **Resilience4j** not yet wired in `dlmm-fee-service` and `dlmm-admin-bff`
-  (deps added, annotations not). pool-engine is fully covered.
-- **TokenType extended values** (`FIAT_BACKED` etc.) are not handled in any
-  business logic `switch`. They behave as opaque labels for the catalog UX.
-- `docker/.env` ships dev-default secrets. Production should override via
-  `Vault`/`AWS Secrets Manager`, not this file.
-- `dlmm-pool-engine` returns mojibake-encoded cyrillic in JSON (double UTF-8
-  encoding); affects all backend responses.
-- No CI/CD pipeline, no Helm chart, no DB backup story. See IMPROVEMENTS-REPORT.md
-  for the full systems-analyst review.
+## Team norms
+The user communicates in **Russian** — mirror it in replies. Prefers **Opus**. High autonomy: proceed and do the work rather than asking for confirmation on routine steps.

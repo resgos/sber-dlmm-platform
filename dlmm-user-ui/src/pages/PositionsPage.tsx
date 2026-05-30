@@ -337,7 +337,7 @@ export default function PositionsPage() {
                   [
                     { header: 'Position ID', accessor: (p: Position) => p.id },
                     { header: 'Pool ID', accessor: (p) => p.poolId },
-                    { header: 'Pair', accessor: (p) => `${p.tokenXSymbol}/${p.tokenYSymbol}` },
+                    { header: 'Pair', accessor: (p) => { const pl = poolById.get(p.poolId); return pl ? `${pl.tokenXSymbol}/${pl.tokenYSymbol}` : p.poolId } },
                     { header: 'Strategy', accessor: (p) => p.strategy },
                     { header: 'Bin Min', accessor: (p) => p.binRangeMin },
                     { header: 'Bin Max', accessor: (p) => p.binRangeMax },
@@ -692,10 +692,20 @@ function PositionAlertsWatcherSlot({
   // Sprint 10 (new feature) — auto-claim watcher in the same helper
   // so we only mount one render-less child. Silent unless the user
   // has opted in via Profile → AutoClaimSettings.
-  useAutoClaimWatcher(positions, ({ position, amount }) => {
-    // Surface a transient toast so the user knows a claim fired.
+  useAutoClaimWatcher(positions, ({ position }) => {
+    // Surface a transient toast so the user knows a claim fired. The
+    // Position DTO carries no token symbols — resolve the pair via the
+    // pool catalog (same join the table uses) instead of rendering
+    // "undefined/undefined". Show the claimed fee PER TOKEN: summing
+    // unclaimedFeeX + unclaimedFeeY across two different tokens (as the
+    // watcher's `amount` heuristic does) is a meaningless figure.
+    const pl = pools?.find((p) => p.id === position.poolId)
+    const pair = pl ? `${pl.tokenXSymbol}/${pl.tokenYSymbol}` : 'позиция'
+    const parts: string[] = []
+    if (pl && position.unclaimedFeeX > 0) parts.push(`${position.unclaimedFeeX.toLocaleString('ru-RU')} ${pl.tokenXSymbol}`)
+    if (pl && position.unclaimedFeeY > 0) parts.push(`${position.unclaimedFeeY.toLocaleString('ru-RU')} ${pl.tokenYSymbol}`)
     message.success(
-      `Авто-сбор: ${position.tokenXSymbol}/${position.tokenYSymbol} — забрано ${amount.toLocaleString('ru-RU')}`,
+      `Авто-сбор: ${pair} — забрано ${parts.length ? parts.join(' + ') : 'комиссии'}`,
       4,
     )
   })

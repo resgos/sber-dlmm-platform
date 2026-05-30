@@ -10,6 +10,8 @@
  * per-token branding assets.
  */
 
+import TokenIcon from './TokenIcon'
+
 /**
  * Hash → 8-colour palette pair. Pure function, exported for unit testing.
  */
@@ -33,35 +35,12 @@ export interface TokenChipProps {
   symbol?: string
   /** Pixel size (square). Default 32 — matches SwapPage usage. */
   size?: number
-  /** Font size override. Default 10 — fits 4-letter ticker at 32px. */
-  fontSize?: number
 }
 
-export default function TokenChip({ symbol, size = 32, fontSize = 10 }: TokenChipProps) {
-  if (!symbol) {
-    return (
-      <div
-        className="sber-token-chip"
-        style={{ background: '#E5E7EB', width: size, height: size, fontSize }}
-        aria-label="Токен не выбран"
-      >
-        —
-      </div>
-    )
-  }
-  const c = pairAccent(symbol)
-  return (
-    <div
-      className="sber-token-chip"
-      style={{
-        background: `linear-gradient(135deg, ${c.from}, ${c.to})`,
-        width: size,
-        height: size,
-        fontSize,
-      }}
-      aria-label={`Токен ${symbol}`}
-    >
-      {symbol.slice(0, 4)}
-    </div>
-  )
+export default function TokenChip({ symbol, size = 32 }: TokenChipProps) {
+  // Sprint 10 — all token glyphs now route through the shared <TokenIcon>
+  // (currency symbol for headline assets, monogram-on-gradient otherwise) so
+  // every surface shows the same beautiful icon. `pairAccent` stays exported
+  // for any caller that still wants the raw gradient pair.
+  return <TokenIcon symbol={symbol} size={size} />
 }

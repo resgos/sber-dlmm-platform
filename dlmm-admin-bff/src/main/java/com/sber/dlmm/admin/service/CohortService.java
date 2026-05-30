@@ -125,12 +125,14 @@ public class CohortService {
     private List<CohortDataPoint> queryRetention(int days, int periodDays) {
         String sql = """
                 WITH cohort_start AS (
-                    -- For each transaction day in the window, find the user's
-                    -- very first transaction ever.
+                    -- The user's VERY FIRST transaction ever — full history,
+                    -- NOT bounded by the trailing window. Bounding it counted
+                    -- long-time users as fresh cohort members on their first
+                    -- in-window day, inflating cohort_size and skewing the
+                    -- reported retention downward.
                     SELECT user_id,
                            DATE(MIN(created_at)) AS first_day
                     FROM   transactions
-                    WHERE  created_at >= NOW() - (?::int * INTERVAL '1 day')
                     GROUP  BY user_id
                 ),
                 period_series AS (
@@ -164,6 +166,6 @@ public class CohortService {
                 """;
         return jdbc.query(sql, (rs, rowNum) ->
                 new CohortDataPoint(rs.getString("day"), rs.getLong("value")),
-                days, days, periodDays, periodDays);
+                days, periodDays, periodDays);
     }
 }

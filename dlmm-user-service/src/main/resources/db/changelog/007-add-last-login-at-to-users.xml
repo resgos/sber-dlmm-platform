@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Sprint 10 fix — the User entity maps last_login_at, but the column was
+        only ever added by the un-mounted manual seed
+        07-seed-fix-backend-bugs.sql. Under spring.jpa.hibernate.ddl-auto:
+        validate a clean bootstrap (no manual seed) failed schema validation
+        and user-service crash-looped, taking auth down platform-wide.
+
+        init-db.sql now creates the column for the Docker path; this changeset
+        adds it for Liquibase-managed (non-Docker / k8s) environments. Wrapped
+        in the dlmm-common preCondition convention so a DB already carrying the
+        column (bootstrapped by init-db.sql) is a no-op MARK_RAN rather than a
+        failing ALTER.
+    -->
+    <changeSet id="007-add-last-login-at-to-users" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="users" columnName="last_login_at"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="users">
+            <column name="last_login_at" type="TIMESTAMP"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

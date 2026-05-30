@@ -199,6 +199,17 @@ public class B2BSettlementService {
                             + ex.getMessage(), false);
         }
 
+        // NOTE (prototype limitation): only the principal (`amount`) is moved.
+        // The grossFee/vat/net stored on the row are an INFORMATIONAL quote for
+        // the 1С/ФНС export schema — there is no treasury settlement rail yet
+        // (DLMM-TREASURY is only an export label), so NO fee is actually
+        // collected. Log it explicitly so reporting/1С treats these columns as
+        // quoted-not-collected rather than realised revenue / ФНС liability.
+        if (row.getGrossFeeAmount() > 0) {
+            log.info("B2B settlement {} — fee {}/НДС {} is COMPUTED but NOT settled "
+                    + "(no treasury rail); principal {} moved only",
+                    row.getId(), row.getGrossFeeAmount(), row.getVatAmount(), row.getAmount());
+        }
         return markCompleted(row.getId());
     }
 

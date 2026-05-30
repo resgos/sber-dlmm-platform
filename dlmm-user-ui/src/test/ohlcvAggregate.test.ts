@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   aggregateCandles,
+  connectCandles,
   candleTimeSec,
   timeframeByKey,
   TIMEFRAMES,
@@ -119,5 +120,49 @@ describe('timeframe table', () => {
     for (const tf of TIMEFRAMES) {
       expect(tf.rawLimit).toBeLessThanOrEqual(500)
     }
+  })
+})
+
+describe('connectCandles', () => {
+  it('returns < 2 candles untouched', () => {
+    expect(connectCandles([])).toEqual([])
+    const one = [candle(0, 5, 5, 5, 5, 1)]
+    expect(connectCandles(one)).toBe(one)
+  })
+
+  it('turns flat one-price candles into connected green/red bodies', () => {
+    const flat = [
+      candle(0 * MIN, 100, 100, 100, 100, 1),
+      candle(1 * MIN, 110, 110, 110, 110, 1),
+      candle(2 * MIN, 105, 105, 105, 105, 1),
+    ]
+    const out = connectCandles(flat)
+    expect(out).toHaveLength(3)
+    expect(out[0]).toBe(flat[0]) // first candle unchanged (no prior close)
+    // 2nd: open = prev close (100), close 110 → green body spanning [100,110]
+    expect(out[1].open).toBe(100)
+    expect(out[1].close).toBe(110)
+    expect(out[1].high).toBe(110)
+    expect(out[1].low).toBe(100)
+    // 3rd: open = prev close (110), close 105 → red body spanning [105,110]
+    expect(out[2].open).toBe(110)
+    expect(out[2].close).toBe(105)
+    expect(out[2].high).toBe(110)
+    expect(out[2].low).toBe(105)
+  })
+
+  it('preserves closes/volumes/timestamps and keeps real intra-candle wicks', () => {
+    const input = [
+      candle(0 * MIN, 10, 10, 10, 10, 7, 2),
+      candle(1 * MIN, 20, 22, 18, 21, 9, 3),
+    ]
+    const out = connectCandles(input)
+    expect(out.map((c) => c.close)).toEqual([10, 21])
+    expect(out.map((c) => c.volume)).toEqual([7, 9])
+    expect(out.map((c) => c.swapCount)).toEqual([2, 3])
+    expect(out.map((c) => candleTimeSec(c))).toEqual([0, MIN])
+    expect(out[1].open).toBe(10)  // = prev close
+    expect(out[1].high).toBe(22)  // real high kept as upper wick
+    expect(out[1].low).toBe(10)   // body extends down to prev close
   })
 })

@@ -1,7 +1,6 @@
 package com.sber.dlmm.fee.client;
 
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -37,14 +36,17 @@ public class TokenServiceClient {
     private final WebClient tokenServiceWebClient;
 
     /**
-     * POST /api/v1/internal/credit. Wrapped in CB + Retry. On exhaustion
-     * the fallback throws IllegalStateException to bubble up to FeeService —
-     * which is wrapped in a @Transactional, so the fee-claim row rollback
-     * is automatic. Loud log entry highlights the row that needs manual
-     * follow-up.
+     * POST /api/v1/tokens/internal/credit. Wrapped in a circuit breaker.
+     *
+     * <p>NO {@code @Retry} — this is a NON-idempotent money write. Resilience4j
+     * {@code @Retry} re-invokes on failure, so a timeout where token-service
+     * already committed but the response was lost would re-send and credit the
+     * user TWICE (money from nothing). One attempt only; on failure the
+     * fallback throws and the {@code @Transactional} fee-claim rolls back, so
+     * the user can retry deliberately. Full fix: an idempotency key on the
+     * internal credit endpoint so retries dedup — tracked as a followup.
      */
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "creditFallback")
-    @Retry(name = CB_NAME)
     public void credit(UUID userId, UUID tokenId, long amount) {
         if (tokenId == null || amount <= 0) {
             return;

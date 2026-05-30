@@ -197,10 +197,15 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
   // active bin's Y. (The active bin holds the mixed remainder, so the
   // ladder totals are the pool reserves net of the mid bin — exactly
   // what an order book should show.)
-  const askDepthX = pool.bins
+  // Guard `pool.bins`: PoolDetailPage seeds this same ['poolDetail', id]
+  // cache with `initialData` taken from the pools-list (a Pool WITHOUT
+  // `bins`) to avoid a load flash. Until the real detail fetch resolves
+  // `pool.bins` is undefined — without this guard `.filter` threw and,
+  // with no error boundary, blanked the whole app on every pool open.
+  const askDepthX = (pool.bins ?? [])
     .filter((b) => b.binId > pool.activeBinId)
     .reduce((s, b) => s + b.reserveX, 0)
-  const bidDepthY = pool.bins
+  const bidDepthY = (pool.bins ?? [])
     .filter((b) => b.binId < pool.activeBinId)
     .reduce((s, b) => s + b.reserveY, 0)
 

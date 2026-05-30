@@ -2,6 +2,8 @@ package com.sber.dlmm.token.repository;
 
 import com.sber.dlmm.token.entity.UserBalance;
 import com.sber.dlmm.token.entity.UserBalanceId;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -20,6 +22,10 @@ public interface UserBalanceRepository extends JpaRepository<UserBalance, UserBa
     Optional<UserBalance> findByUserIdAndTokenId(UUID userId, UUID tokenId);
 
     List<UserBalance> findByTokenId(UUID tokenId);
+
+    /** Paginated variant for the daily YSRUB yield sweep — avoids loading every
+     *  holder into one heap-busting list at 100k-holder scale. */
+    Page<UserBalance> findByTokenId(UUID tokenId, Pageable pageable);
 
     @Modifying
     @Query("UPDATE UserBalance b SET b.available = b.available - :amount, " +

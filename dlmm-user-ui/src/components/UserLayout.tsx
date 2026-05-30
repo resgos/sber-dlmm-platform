@@ -25,6 +25,7 @@ import NotificationBell from './NotificationBell'
 import LanguageSwitcher from './LanguageSwitcher'
 import DemoBranding from './DemoBranding'
 import SberkotAssistant from './sberkot/SberkotAssistant'
+import ErrorBoundary from './ErrorBoundary'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -333,7 +334,9 @@ export default function UserLayout() {
           tabIndex={-1}
           style={{ margin: '24px', minHeight: 280 }}
         >
-          <Outlet />
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </Content>
         {/* SK-01 — floating Сберкот assistant (position:fixed; mounts once
             inside the authenticated layout so it's gone on /login). */}

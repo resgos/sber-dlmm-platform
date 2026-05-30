@@ -10,6 +10,11 @@ describe('Сберкот hint resolution', () => {
     expect(resolveHint('/positions').key).toBe('positions')
     expect(resolveHint('/hedge').key).toBe('hedge')
     expect(resolveHint('/profile').key).toBe('profile')
+    expect(resolveHint('/rebalance').key).toBe('rebalance')
+    expect(resolveHint('/transactions').key).toBe('transactions')
+    expect(resolveHint('/team').key).toBe('team')
+    expect(resolveHint('/reviews').key).toBe('reviews')
+    expect(resolveHint('/pools/compare').key).toBe('poolCompare')
   })
 
   it('matches by prefix for nested non-pool routes', () => {
@@ -27,7 +32,7 @@ describe('Сберкот hint resolution', () => {
 
   it('falls back to the default hint for unknown routes', () => {
     expect(resolveHint('/totally-unknown').key).toBe(DEFAULT_HINT.key)
-    expect(resolveHint('/reviews').key).toBe(DEFAULT_HINT.key) // no dedicated hint → default
+    expect(resolveHint('/saml/callback').key).toBe(DEFAULT_HINT.key) // route without a dedicated hint → default
   })
 
   it('every hint has a non-empty title, text and a valid pose', () => {

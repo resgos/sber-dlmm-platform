@@ -120,11 +120,14 @@ function SwapRow({
       }}
     >
       <div style={{ minWidth: 0, flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Semantic side (Покупка/Продажа of the base token X) instead of the
+            opaque "X→Y" placeholder — the traded pair + amounts are shown in
+            the amounts column to the right. xToY = gave X, got Y = sold X. */}
         <Tag
-          color={xToY ? 'blue' : 'green'}
+          color={xToY ? 'red' : 'green'}
           style={{ borderRadius: 'var(--radius-pill)', padding: '1px 8px', margin: 0, fontSize: 10, fontWeight: 600 }}
         >
-          {xToY ? 'X→Y' : 'Y→X'}
+          {xToY ? 'Продажа' : 'Покупка'}
         </Tag>
         <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
           {tx.id.substring(0, 8)}

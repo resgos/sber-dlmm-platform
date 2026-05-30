@@ -22,6 +22,7 @@ import {
   TIMEFRAMES,
   timeframeByKey,
   aggregateCandles,
+  connectCandles,
   candleTimeSec,
   type TimeframeKey,
 } from '@/lib/ohlcv'
@@ -75,7 +76,10 @@ export default function PoolPriceChart({
   const priceSeriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
 
-  const [timeframe, setTimeframe] = useState<TimeframeKey>('1m')
+  // Default to a daily roll-up: the seed/oracle swaps are sparse and spread
+  // over weeks, so 1m shows isolated flat dashes with huge gaps; 1д buckets
+  // them into readable candles. Users can drill down to 1м/5м/1ч.
+  const [timeframe, setTimeframe] = useState<TimeframeKey>('1d')
   const [chartKind, setChartKind] = useState<ChartKind>('candles')
   // Volume sub-pane: on for the full chart, suppressed in compact mode.
   const [showVolume, setShowVolume] = useState(!compact)
@@ -102,8 +106,12 @@ export default function PoolPriceChart({
     staleTime: 15_000,
   })
 
+  // aggregate to the chosen timeframe, then connect bodies (open = prev close)
+  // so degenerate one-price-per-bar candles render as real green/red candles
+  // instead of flat dashes. connectCandles preserves closes/volumes/times, so
+  // line mode + the change chip stay correct.
   const candles = useMemo(
-    () => aggregateCandles(raw ?? [], tf.bucketSec),
+    () => connectCandles(aggregateCandles(raw ?? [], tf.bucketSec)),
     [raw, tf.bucketSec],
   )
 

@@ -33,9 +33,14 @@ describe('pairAccent', () => {
 })
 
 describe('TokenChip', () => {
-  it('renders symbol slice (first 4 chars) for given symbol', () => {
-    render(<TokenChip symbol="SBERBANK" />)
-    expect(screen.getByText('SBER')).toBeInTheDocument()
+  it('renders the real currency glyph for a headline token', () => {
+    render(<TokenChip symbol="SRUB" />)
+    expect(screen.getByText('₽')).toBeInTheDocument()
+  })
+
+  it('renders a 2-letter monogram for tokens without a dedicated glyph', () => {
+    render(<TokenChip symbol="SBER" />)
+    expect(screen.getByText('SB')).toBeInTheDocument()
   })
 
   it('renders em-dash for missing symbol', () => {
@@ -48,15 +53,15 @@ describe('TokenChip', () => {
     expect(screen.getByLabelText('Токен SUSD')).toBeInTheDocument()
   })
 
-  it('missing symbol has aria-label "Токен не выбран"', () => {
+  it('missing symbol still exposes an aria-label', () => {
     render(<TokenChip />)
-    expect(screen.getByLabelText('Токен не выбран')).toBeInTheDocument()
+    expect(screen.getByLabelText('Токен')).toBeInTheDocument()
   })
 
-  it('size prop overrides default 32px', () => {
-    const { container } = render(<TokenChip symbol="X" size={48} />)
-    const chip = container.firstChild as HTMLElement
-    expect(chip.style.width).toBe('48px')
-    expect(chip.style.height).toBe('48px')
+  it('size prop sets the SVG box', () => {
+    const { container } = render(<TokenChip symbol="SBER" size={48} />)
+    const chip = container.firstChild as SVGElement
+    expect(chip.getAttribute('width')).toBe('48')
+    expect(chip.getAttribute('height')).toBe('48')
   })
 })

@@ -9,6 +9,10 @@ import com.sber.dlmm.token.repository.UserBalanceRepository;
 import com.sber.dlmm.token.repository.YsrubYieldAccrualRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -106,28 +110,37 @@ public class YieldDistributionScheduler {
         long totalYieldCredited = 0;
         long holdersSkipped = 0;
 
-        // Page through YSRUB holders. With batching, even a 100k-holder
-        // portfolio finishes in ~10 seconds at ~10k/s service throughput.
-        List<UserBalance> holders = userBalanceRepository.findByTokenId(YSRUB_TOKEN_ID);
-        for (UserBalance holder : holders) {
-            if (holder.getAvailable() <= 0) {
-                holdersSkipped++;
-                continue;
-            }
-            try {
-                long yield = writer.accrueForHolder(
-                        holder.getUserId(), holder.getAvailable(), today,
-                        overnightRateBps, spreadBps);
-                if (yield > 0) {
-                    holdersProcessed++;
-                    totalYieldCredited += yield;
+        // Page through YSRUB holders so a 100k-holder portfolio never
+        // materialises in one heap-busting list (the sweep previously loaded
+        // the entire balance table at once, despite the "with batching" claim).
+        // Order by userId so offset paging stays stable across the per-holder
+        // credits (which mutate `available` but never add/remove rows).
+        final int HOLDER_PAGE_SIZE = 500;
+        Pageable pageable = PageRequest.of(0, HOLDER_PAGE_SIZE, Sort.by("userId"));
+        Page<UserBalance> batch;
+        do {
+            batch = userBalanceRepository.findByTokenId(YSRUB_TOKEN_ID, pageable);
+            for (UserBalance holder : batch.getContent()) {
+                if (holder.getAvailable() <= 0) {
+                    holdersSkipped++;
+                    continue;
                 }
-            } catch (Exception ex) {
-                log.warn("Yield accrual failed for user {} on {}: {}",
-                        holder.getUserId(), today, ex.getMessage());
-                // Continue with next holder — REQUIRES_NEW isolates failure.
+                try {
+                    long yield = writer.accrueForHolder(
+                            holder.getUserId(), holder.getAvailable(), today,
+                            overnightRateBps, spreadBps);
+                    if (yield > 0) {
+                        holdersProcessed++;
+                        totalYieldCredited += yield;
+                    }
+                } catch (Exception ex) {
+                    log.warn("Yield accrual failed for user {} on {}: {}",
+                            holder.getUserId(), today, ex.getMessage());
+                    // Continue with next holder — REQUIRES_NEW isolates failure.
+                }
             }
-        }
+            pageable = pageable.next();
+        } while (batch.hasNext());
 
         log.info("YSRUB yield distribution complete: day={} processed={} skipped={} totalYield={} (smallest YSRUB unit)",
                 today, holdersProcessed, holdersSkipped, totalYieldCredited);

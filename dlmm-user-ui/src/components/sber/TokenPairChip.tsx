@@ -1,5 +1,6 @@
 import { Space, Typography } from 'antd'
 import { SwapOutlined } from '@ant-design/icons'
+import TokenIcon from '@/components/TokenIcon'
 
 const { Text } = Typography
 
@@ -19,45 +20,9 @@ export interface TokenPairChipProps {
   size?: 'sm' | 'md' | 'lg'
 }
 
-function colourForSymbol(sym: string): string {
-  // Deterministic colour per token: hash the symbol to one of 6 hues.
-  // Keeps the same token consistent across pages without a token-meta lookup.
-  const palette = [
-    'linear-gradient(135deg, #21A038, #14702A)',  // sber green
-    'linear-gradient(135deg, #F2994A, #D14D00)',  // amber
-    'linear-gradient(135deg, #2E6BFF, #1D4FCC)',  // blue
-    'linear-gradient(135deg, #9B59B6, #6C3483)',  // purple
-    'linear-gradient(135deg, #16A085, #0E6E5A)',  // teal
-    'linear-gradient(135deg, #E74C3C, #B83328)',  // red
-  ]
-  let h = 0
-  for (let i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) | 0
-  return palette[Math.abs(h) % palette.length]
-}
-
-function Avatar({ sym, size }: { sym: string; size: number }) {
-  return (
-    <span
-      aria-hidden
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: colourForSymbol(sym),
-        color: '#fff',
-        fontSize: size <= 18 ? 9 : 11,
-        fontWeight: 700,
-        letterSpacing: 0,
-        flexShrink: 0,
-      }}
-    >
-      {sym.slice(0, 2)}
-    </span>
-  )
-}
+// Token avatars are rendered by the shared <TokenIcon> (currency glyph or
+// monogram on a per-symbol gradient) — see components/TokenIcon.tsx. They are
+// `decorative` here because the symbol text is shown right next to each one.
 
 export default function TokenPairChip({ x, y, size = 'md' }: TokenPairChipProps) {
   if (!x && !y) return <Text type="secondary">—</Text>
@@ -67,7 +32,7 @@ export default function TokenPairChip({ x, y, size = 'md' }: TokenPairChipProps)
     <Space size={6}>
       {x && (
         <Space size={4}>
-          <Avatar sym={x} size={avatarSize} />
+          <TokenIcon symbol={x} size={avatarSize} decorative />
           <Text strong style={{ fontSize }}>{x}</Text>
         </Space>
       )}
@@ -79,7 +44,7 @@ export default function TokenPairChip({ x, y, size = 'md' }: TokenPairChipProps)
       )}
       {y && (
         <Space size={4}>
-          <Avatar sym={y} size={avatarSize} />
+          <TokenIcon symbol={y} size={avatarSize} decorative />
           <Text strong style={{ fontSize }}>{y}</Text>
         </Space>
       )}

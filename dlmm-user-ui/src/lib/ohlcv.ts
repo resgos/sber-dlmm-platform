@@ -112,3 +112,33 @@ export function aggregateCandles(
     (a, b) => candleTimeSec(a) - candleTimeSec(b),
   )
 }
+
+/**
+ * Make a candle series gap-free for display: set each candle's `open` to the
+ * PREVIOUS candle's `close`, so consecutive bars connect and render a real
+ * body (green when close ≥ open, red otherwise) instead of a flat dash.
+ *
+ * Why: the price-oracle/seed backfill emits ONE price per candle
+ * (open === high === low === close), which lightweight-charts draws as a row
+ * of disconnected horizontal dashes — "свечи выглядят не очень". This is the
+ * standard close-series → candlestick reconciliation: closes, volumes and
+ * timestamps are left untouched (so the data stays honest); only open/high/low
+ * are adjusted so the body spans [prevClose, close] and any real intra-candle
+ * range still shows as a wick. The very first candle is left as-is (no prior
+ * close to anchor to).
+ */
+export function connectCandles(candles: OhlcvCandle[]): OhlcvCandle[] {
+  if (candles.length < 2) return candles
+  const out: OhlcvCandle[] = [candles[0]]
+  for (let i = 1; i < candles.length; i++) {
+    const prevClose = candles[i - 1].close
+    const c = candles[i]
+    out.push({
+      ...c,
+      open: prevClose,
+      high: Math.max(c.high, prevClose, c.close),
+      low: Math.min(c.low, prevClose, c.close),
+    })
+  }
+  return out
+}

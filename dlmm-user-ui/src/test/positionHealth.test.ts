@@ -189,7 +189,7 @@ describe('calculateHealth (new feature)', () => {
 describe('bandColor', () => {
   it('maps each band to a CSS variable', () => {
     expect(bandColor('excellent')).toMatch(/sber-green/)
-    expect(bandColor('good')).toMatch(/sber-green-light/)
+    expect(bandColor('good')).toMatch(/viz-up/) // readable green; was sber-green-light (pale BG tint, invisible as text on white)
     expect(bandColor('fair')).toMatch(/sber-amber/)
     expect(bandColor('poor')).toMatch(/plasma-critical/)
   })

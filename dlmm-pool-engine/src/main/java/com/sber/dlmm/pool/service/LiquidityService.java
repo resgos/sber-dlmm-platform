@@ -540,10 +540,11 @@ public class LiquidityService {
             long amountY = poolBin.getReserveY() * binShareToRemove / poolBin.getLiquidity();
 
             // 4. Calculate accrued fees (proportional to removed share)
-            long feeX = (poolBin.getFeeGrowthX() - position.getLastFeeGrowthX()) * binShareToRemove;
-            long feeY = (poolBin.getFeeGrowthY() - position.getLastFeeGrowthY()) * binShareToRemove;
-            // feeGrowth is per-unit-of-liquidity, so feeX already accounts for shares
-            // Clamp negative fees to 0
+            // feeGrowth is per-unit-of-liquidity, scaled by FEE_GROWTH_SCALE;
+            // feeFromGrowth multiplies by the removed share and divides the
+            // scale back out (clamping a negative delta to 0).
+            long feeX = BinMath.feeFromGrowth(poolBin.getFeeGrowthX() - position.getLastFeeGrowthX(), binShareToRemove);
+            long feeY = BinMath.feeFromGrowth(poolBin.getFeeGrowthY() - position.getLastFeeGrowthY(), binShareToRemove);
             feeX = Math.max(feeX, 0);
             feeY = Math.max(feeY, 0);
 
@@ -680,8 +681,8 @@ public class LiquidityService {
                 currentValueY += valueY;
 
                 // Calculate unclaimed fees
-                long feeX = (poolBin.getFeeGrowthX() - pos.getLastFeeGrowthX()) * pb.getLiquidityShares();
-                long feeY = (poolBin.getFeeGrowthY() - pos.getLastFeeGrowthY()) * pb.getLiquidityShares();
+                long feeX = BinMath.feeFromGrowth(poolBin.getFeeGrowthX() - pos.getLastFeeGrowthX(), pb.getLiquidityShares());
+                long feeY = BinMath.feeFromGrowth(poolBin.getFeeGrowthY() - pos.getLastFeeGrowthY(), pb.getLiquidityShares());
                 unclaimedFeeX += Math.max(feeX, 0);
                 unclaimedFeeY += Math.max(feeY, 0);
 

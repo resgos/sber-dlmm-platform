@@ -82,37 +82,37 @@ async function renderSwap(opts?: { pools?: typeof POOL[] }) {
 }
 
 /**
- * AntD Select doesn't render options to the React tree until the dropdown
- * opens, and the popup portals to document.body — so we can't use the
- * standard render(...).getByRole. Strategy:
- *   1. find the underlying combobox (one per swap box; getAllByRole returns
- *      both in DOM order),
- *   2. click it to open the dropdown,
- *   3. wait for the option text to appear anywhere in the document (portal),
- *   4. click it.
+ * Sprint 10: the token picker is the TokenSelect modal, not an AntD Select.
+ * Each swap box has one `.sber-tokensel-trigger` button; clicking it opens a
+ * modal (portaled to document.body, `destroyOnClose`) whose `.sber-tokensel-list`
+ * holds one `.sber-tokensel-row` per token. Strategy:
+ *   1. find the trigger inside the in/out `.sber-swap-box`,
+ *   2. click it to open the modal,
+ *   3. wait for the row whose symbol span matches, scoped to the *visible*
+ *      modal wrap (a just-closed picker may still be animating out),
+ *   4. click the row.
  *
- * The option label format is "${symbol} — ${name}" per the tokenOptions
- * mapping in SwapPage; we match on full text rather than `role="option"`
- * because AntD's option role/name behaviour shifts between minor releases.
+ * Call-sites still pass the old "${symbol} — ${name}" label, so we match on the
+ * symbol (text before " — ") against `.sber-tokensel-row__sym`.
  */
 async function selectToken(side: 'in' | 'out', symbolLabelText: string) {
-  const combos = screen.getAllByRole('combobox')
-  const target = combos[side === 'in' ? 0 : 1]
-  await userEvent.click(target)
-  // AntD keeps both dropdowns in the DOM after one is closed (hidden via
-  // display:none on .ant-select-dropdown-hidden). Without scoping, the
-  // second selectToken() call finds the option text in both popups and
-  // throws "multiple elements". Scope to the currently-visible dropdown.
-  const option = await waitFor(() => {
-    const visiblePopup = Array.from(document.querySelectorAll('.ant-select-dropdown'))
-      .find((el) => !el.classList.contains('ant-select-dropdown-hidden'))
-    if (!visiblePopup) throw new Error('No visible AntD Select dropdown after click')
-    const opts = Array.from(visiblePopup.querySelectorAll('.ant-select-item-option'))
-    const match = opts.find((o) => (o.textContent ?? '').includes(symbolLabelText))
-    if (!match) throw new Error(`Option "${symbolLabelText}" not found in visible dropdown`)
+  const symbol = symbolLabelText.split(' — ')[0].trim()
+  const box = document.querySelectorAll('.sber-swap-box')[side === 'in' ? 0 : 1]
+  const trigger = box.querySelector('.sber-tokensel-trigger') as HTMLElement
+  await userEvent.click(trigger)
+  const row = await waitFor(() => {
+    const wrap = Array.from(document.querySelectorAll('.ant-modal-wrap')).find(
+      (el) => (el as HTMLElement).style.display !== 'none',
+    )
+    const scope: ParentNode = wrap ?? document
+    const rows = Array.from(scope.querySelectorAll('.sber-tokensel-row'))
+    const match = rows.find(
+      (r) => (r.querySelector('.sber-tokensel-row__sym')?.textContent ?? '') === symbol,
+    )
+    if (!match) throw new Error(`Token "${symbol}" not found in open picker`)
     return match as HTMLElement
   })
-  await userEvent.click(option)
+  await userEvent.click(row)
 }
 
 const selectTokenIn = (label: string) => selectToken('in', label)

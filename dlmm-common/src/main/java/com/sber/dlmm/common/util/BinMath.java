@@ -1,6 +1,7 @@
 package com.sber.dlmm.common.util;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.MathContext;
 import java.math.RoundingMode;
 
@@ -82,5 +83,73 @@ public final class BinMath {
             return BigDecimal.ZERO;
         }
         return new BigDecimal(reserveY).divide(new BigDecimal(liquidity), MC);
+    }
+
+    // ─── LP fee-growth fixed-point (Sprint 10 / P0 fix) ────────────────────
+    /**
+     * Fixed-point scale for per-unit-of-liquidity fee growth.
+     *
+     * <p>The LP fee-growth accumulator is {@code lpFee / liquidity}, which in
+     * plain {@code long} arithmetic floors to 0 whenever a swap's LP fee is
+     * smaller than the bin's liquidity — i.e. essentially always — so LPs
+     * accrued nothing. We scale the increment up by this factor before the
+     * integer division (and divide it back out when paying a position) so the
+     * sub-unit ratio survives. 1e9 keeps ~9 significant digits without
+     * overflowing the accumulated {@code long} over any realistic swap count.
+     */
+    public static final long FEE_GROWTH_SCALE = 1_000_000_000L;
+
+    /**
+     * Scaled fee-growth increment for one swap on a bin:
+     * {@code (lpFee * FEE_GROWTH_SCALE) / liquidity}. BigInteger intermediate
+     * so the {@code lpFee * SCALE} product cannot overflow {@code long}.
+     * Non-positive inputs → 0.
+     */
+    public static long feeGrowthIncrement(long lpFee, long liquidity) {
+        if (lpFee <= 0 || liquidity <= 0) {
+            return 0L;
+        }
+        return BigInteger.valueOf(lpFee)
+                .multiply(BigInteger.valueOf(FEE_GROWTH_SCALE))
+                .divide(BigInteger.valueOf(liquidity))
+                .longValue();
+    }
+
+    /**
+     * Fee owed to a position for a fee-growth delta:
+     * {@code (feeGrowthDelta * shares) / FEE_GROWTH_SCALE}. BigInteger
+     * intermediate so the {@code delta * shares} product cannot overflow.
+     * Non-positive delta or shares → 0 (clamps the "snapshot newer than bin"
+     * edge to no-fee instead of a negative).
+     */
+    public static long feeFromGrowth(long feeGrowthDelta, long shares) {
+        if (feeGrowthDelta <= 0 || shares <= 0) {
+            return 0L;
+        }
+        return BigInteger.valueOf(feeGrowthDelta)
+                .multiply(BigInteger.valueOf(shares))
+                .divide(BigInteger.valueOf(FEE_GROWTH_SCALE))
+                .longValue();
+    }
+
+    /**
+     * DLMM bin invariant: a bin's liquidity (in token_y units) is the value it
+     * holds — {@code reserveX·price} (token_x valued in token_y) plus
+     * {@code reserveY}. The seed reconciliation
+     * (docker/10-seed-reconcile-bin-invariant.sql) and any code that
+     * (re)derives liquidity from reserves must agree on THIS formula, or an
+     * isolated add→remove over-/under-returns (the F-12 family).
+     */
+    public static long binLiquidity(long reserveX, long reserveY, BigDecimal price) {
+        if (reserveX <= 0 && reserveY <= 0) {
+            return 0L;
+        }
+        BigDecimal x = (reserveX > 0 && price != null)
+                ? new BigDecimal(reserveX).multiply(price)
+                : BigDecimal.ZERO;
+        long l = x.add(new BigDecimal(Math.max(0L, reserveY)))
+                .setScale(0, RoundingMode.HALF_UP)
+                .longValue();
+        return Math.max(0L, l);
     }
 }

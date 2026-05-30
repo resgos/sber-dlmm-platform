@@ -22,6 +22,14 @@ public record SwapExecutedEvent(
         long amountOut,
         long fee,
         int binsCrossed,
-        String idempotencyKey
+        String idempotencyKey,
+        // Sprint 10 (OHLCV fix) — normalized Y-per-X execution price
+        // (BigDecimal.toPlainString) and execution time (epoch millis).
+        // Without these the price-oracle OHLCV consumer dropped every swap
+        // (its bare-payload gate requires executionPrice) and, on replay,
+        // stamped candles with its own wall clock. Appended at the end so
+        // positional construction elsewhere stays stable.
+        String executionPrice,
+        long timestamp
 ) {
 }

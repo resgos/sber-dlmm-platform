@@ -307,8 +307,9 @@ public class SwapService {
         // Idempotency must run ONCE per request, not per retry —
         // otherwise the second attempt sees its own "processing"
         // marker and throws IdempotencyConflictException.
+        String redisKey = null;
         if (req.idempotencyKey() != null && !req.idempotencyKey().isBlank()) {
-            String redisKey = IDEMPOTENCY_PREFIX + req.idempotencyKey();
+            redisKey = IDEMPOTENCY_PREFIX + req.idempotencyKey();
             Boolean wasAbsent = redisTemplate.opsForValue()
                     .setIfAbsent(redisKey, "processing", Duration.ofHours(24));
             if (Boolean.FALSE.equals(wasAbsent)) {
@@ -318,29 +319,41 @@ public class SwapService {
 
         SwapService self = appCtx.getBean(SwapService.class);
         int attempt = 0;
-        while (true) {
-            attempt++;
-            try {
-                return self.swapTransactional(req, userId);
-            } catch (ObjectOptimisticLockingFailureException ex) {
-                if (attempt >= MAX_SWAP_ATTEMPTS) {
-                    log.warn("Swap failed after {} retries on pool {} due to optimistic lock contention",
-                            attempt, req.poolId());
-                    throw ex;
-                }
-                // Tiny jittered backoff: 5–25 ms × attempt. Prevents
-                // synchronised retry storms on the same hot pool.
-                long backoff = RETRY_BASE_BACKOFF_MS * attempt
-                        + (long) (Math.random() * RETRY_BASE_BACKOFF_MS * attempt);
+        try {
+            while (true) {
+                attempt++;
                 try {
-                    Thread.sleep(backoff);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw ex;
+                    return self.swapTransactional(req, userId);
+                } catch (ObjectOptimisticLockingFailureException ex) {
+                    if (attempt >= MAX_SWAP_ATTEMPTS) {
+                        log.warn("Swap failed after {} retries on pool {} due to optimistic lock contention",
+                                attempt, req.poolId());
+                        throw ex;
+                    }
+                    // Tiny jittered backoff: 5–25 ms × attempt. Prevents
+                    // synchronised retry storms on the same hot pool.
+                    long backoff = RETRY_BASE_BACKOFF_MS * attempt
+                            + (long) (Math.random() * RETRY_BASE_BACKOFF_MS * attempt);
+                    try {
+                        Thread.sleep(backoff);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw ex;
+                    }
+                    log.debug("Swap retry {}/{} on pool {} after {}ms backoff",
+                            attempt, MAX_SWAP_ATTEMPTS, req.poolId(), backoff);
                 }
-                log.debug("Swap retry {}/{} on pool {} after {}ms backoff",
-                        attempt, MAX_SWAP_ATTEMPTS, req.poolId(), backoff);
             }
+        } catch (RuntimeException ex) {
+            // The swap genuinely failed (validation / KYC / slippage / liquidity,
+            // or optimistic-lock retries exhausted). Release the idempotency key
+            // so the user can retry with the SAME key instead of being locked
+            // out for 24h. On success we returned above and the key is kept (so
+            // an accidental replay of a succeeded swap is still rejected).
+            if (redisKey != null) {
+                try { redisTemplate.delete(redisKey); } catch (RuntimeException ignore) { /* best-effort */ }
+            }
+            throw ex;
         }
     }
 
@@ -472,10 +485,10 @@ public class SwapService {
             // Update feeGrowth for LP fee distribution
             if (bin.getLiquidity() > 0) {
                 if (swapXtoY) {
-                    bin.setFeeGrowthX(bin.getFeeGrowthX() + lpFee / bin.getLiquidity());
+                    bin.setFeeGrowthX(bin.getFeeGrowthX() + BinMath.feeGrowthIncrement(lpFee, bin.getLiquidity()));
                     bin.setTotalFeeX(bin.getTotalFeeX() + fee);
                 } else {
-                    bin.setFeeGrowthY(bin.getFeeGrowthY() + lpFee / bin.getLiquidity());
+                    bin.setFeeGrowthY(bin.getFeeGrowthY() + BinMath.feeGrowthIncrement(lpFee, bin.getLiquidity()));
                     bin.setTotalFeeY(bin.getTotalFeeY() + fee);
                 }
             }
@@ -532,16 +545,28 @@ public class SwapService {
         pool.setVolatilityAccumulator(
                 FeeCalculator.updateVolatilityAccumulator(pool.getVolatilityAccumulator(), binsCrossed, maxVolatility));
 
-        // Update pool TVL
+        // Update pool TVL. Add the NET input that actually entered bin reserves
+        // (gross consumedAmountIn minus the skimmed fee) so totalTvl tracks
+        // sum(bin reserves) — the invariant TvlReconciliationService checks.
+        // Adding gross inflated TVL by the accumulated fee on every swap (the
+        // fee is held in totalFeesCollected*, not in any bin reserve).
+        long netInToBins = Math.max(0, consumedAmountIn - totalFee);
         if (swapXtoY) {
-            pool.setTotalTvlX(pool.getTotalTvlX() + consumedAmountIn);
+            pool.setTotalTvlX(pool.getTotalTvlX() + netInToBins);
             pool.setTotalTvlY(Math.max(0, pool.getTotalTvlY() - totalAmountOut));
         } else {
-            pool.setTotalTvlY(pool.getTotalTvlY() + consumedAmountIn);
+            pool.setTotalTvlY(pool.getTotalTvlY() + netInToBins);
             pool.setTotalTvlX(Math.max(0, pool.getTotalTvlX() - totalAmountOut));
         }
 
-        poolRepository.save(pool);
+        // Flush NOW so the pool's @Version optimistic-lock check runs HERE,
+        // BEFORE the (non-transactional, cross-service) balance settlement
+        // below. Otherwise the version conflict only surfaces at commit —
+        // after deduct/credit already executed in token-service — and the
+        // swap() retry loop re-runs them, double-spending the user under
+        // concurrent same-pool swaps. The flush also write-locks the pool
+        // row, so our later commit cannot conflict again.
+        poolRepository.saveAndFlush(pool);
 
         // 5. Deduct input token from user
         tokenServiceClient.deductBalance(userId, req.tokenInId(), consumedAmountIn);
@@ -585,7 +610,9 @@ public class SwapService {
                 new SwapExecutedEvent(txId, pool.getId(), userId,
                         req.tokenInId(), tokenOutId,
                         consumedAmountIn, totalAmountOut, totalFee, binsCrossed,
-                        req.idempotencyKey()));
+                        req.idempotencyKey(),
+                        executionPrice.toPlainString(),
+                        System.currentTimeMillis()));
 
         log.info("Swap executed: pool={}, user={}, tx={}, in={} {}, out={}, fee={}, bins={}",
                 pool.getId(), userId, txId, consumedAmountIn,

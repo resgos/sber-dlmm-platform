@@ -119,7 +119,7 @@ export default function AddLiquidityPreview({
               </Tag>
             )}
             <Tag color="blue">
-              Доля TVL: {data.tvlSharePct.toFixed(2)}%
+              Доля TVL: {Math.min(100, Math.max(0, Number.isFinite(data.tvlSharePct) ? data.tvlSharePct : 0)).toFixed(2)}%
             </Tag>
             {data.priceImpactBps > 0 && (
               <Tag color={data.priceImpactBps > 500 ? 'red' : 'orange'}>

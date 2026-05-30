@@ -67,11 +67,14 @@ export default function SpasiboWidget() {
 
   return (
     <Card
-      className="sber-card"
+      // NB: NO `.sber-card` here — its themed background overrides this promo
+      // gradient, which on the light theme left white text on a white card.
       style={{
         background: 'linear-gradient(135deg, #21A038 0%, #00C853 100%)',
         border: 'none',
         color: 'white',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-sm)',
       }}
       styles={{ body: { padding: 20 } }}
     >

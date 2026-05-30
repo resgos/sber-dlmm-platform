@@ -67,11 +67,28 @@ public class JwtValidationFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        ServerHttpRequest request = exchange.getRequest();
-        String path = request.getURI().getPath();
+        ServerHttpRequest original = exchange.getRequest();
+        String path = original.getURI().getPath();
+
+        // Strip any CLIENT-supplied identity headers up front — these must ONLY
+        // ever be set by this gateway from a verified JWT. Without this a client
+        // could inject X-User-Id / X-User-Role / X-Kyc-Status / X-Api-Tier /
+        // X-Org-* on a skip-list path (or any path) and a downstream that reads
+        // them from the header (rate-limit keying, public controllers) would
+        // trust the spoof. Applied to EVERY request — authenticated or skip.
+        ServerHttpRequest request = original.mutate()
+                .headers(h -> {
+                    h.remove(HEADER_USER_ID);
+                    h.remove(HEADER_USER_ROLE);
+                    h.remove(HEADER_KYC_STATUS);
+                    h.remove(HEADER_API_TIER);
+                    h.remove(HEADER_ORG_ID);
+                    h.remove(HEADER_ORG_ROLE);
+                })
+                .build();
 
         if (shouldSkipValidation(path)) {
-            return chain.filter(exchange);
+            return chain.filter(exchange.mutate().request(request).build());
         }
 
         String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);

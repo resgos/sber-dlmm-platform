@@ -39,6 +39,12 @@ const ALLOWLIST = new Set([
   'dlmm-user-ui/src/components/TokenChip.tsx',
   'dlmm-user-ui/src/main.tsx',
   'dlmm-admin-ui/src/main.tsx',
+  // Сберкот mascot is a hand-authored brand-asset SVG (logo-like): its
+  // green/blush hex are the source of truth and must stay fixed across themes.
+  'dlmm-user-ui/src/components/sberkot/SberkotMascot.tsx',
+  // TokenIcon: per-token brand glyphs (₿ orange, Ξ indigo, …) — fixed identity
+  // colours, not theme tokens; same rationale as the mascot.
+  'dlmm-user-ui/src/components/TokenIcon.tsx',
 ])
 
 const SKIP_PATTERNS = [
