@@ -40,15 +40,15 @@ class FeeCalculatorTest {
 
             long fee = FeeCalculator.calculateSwapFee(amountIn, baseFeeBps, volatilityAccumulator, binStep);
 
-            // baseFee = 10_000_000 * 30 / 10_000 = 30_000
-            // variableFee intermediate = 100 * 100 * 20 / 10_000_000_000 = 200_000 / 10_000_000_000 = 0 (long division)
-            // So variableFee = 10_000_000 * 0 / 10_000 = 0
-            // Total = 30_000
-            // (small VA => variable fee rounds to 0)
-            long baseFee = amountIn * baseFeeBps / 10_000;
-            long varIntermediate = (long) volatilityAccumulator * volatilityAccumulator * binStep / 10_000_000_000L;
-            long variableFee = amountIn * varIntermediate / 10_000;
-            assertEquals(baseFee + variableFee, fee);
+            // Stage 1 (Meteora shape) hand-derivation:
+            //   variableFeeBps = floor( 50_000 * (VA*binStep)^2 / 1e11 )
+            //                  = floor( 50_000 * (100*20)^2 / 1e11 )
+            //                  = floor( 50_000 * 2000^2 / 1e11 )
+            //                  = floor( 50_000 * 4_000_000 / 1e11 )
+            //                  = floor( 2e11 / 1e11 ) = 2
+            //   totalFeeBps    = min(30 + 2, 1000) = 32
+            //   fee            = floor( 10_000_000 * 32 / 10_000 ) = 32_000
+            assertEquals(32_000, fee);
         }
 
         @Test
@@ -61,11 +61,14 @@ class FeeCalculatorTest {
 
             long fee = FeeCalculator.calculateSwapFee(amountIn, baseFeeBps, volatilityAccumulator, binStep);
 
-            // baseFee = 100_000_000 * 10 / 10_000 = 100_000
-            // varIntermediate = 10_000 * 10_000 * 100 / 10_000_000_000 = 10_000_000_000 / 10_000_000_000 = 1
-            // variableFee = 100_000_000 * 1 / 10_000 = 10_000
-            // total = 110_000
-            assertEquals(110_000, fee);
+            // Stage 1 (Meteora shape) hand-derivation — high VA saturates the cap:
+            //   variableFeeBps = floor( 50_000 * (10_000*100)^2 / 1e11 )
+            //                  = floor( 50_000 * (1e6)^2 / 1e11 )
+            //                  = floor( 50_000 * 1e12 / 1e11 )
+            //                  = floor( 5e16 / 1e11 ) = 500_000  -> capped to MAX_FEE_BPS = 1000
+            //   totalFeeBps    = min(10 + 1000, 1000) = 1000
+            //   fee            = floor( 100_000_000 * 1000 / 10_000 ) = 10_000_000
+            assertEquals(10_000_000, fee);
         }
 
         /**
@@ -86,12 +89,12 @@ class FeeCalculatorTest {
             // variableFee = 0 (VA is 0)
             assertEquals(3_000, fee, "Swap fee should be 3000 for baseFee=30bps on 1M with VA=0");
 
-            // Also test with non-zero VA for variable fee component
+            // Also test with non-zero VA for variable fee component (Stage 1 Meteora shape).
             long feeWithVA = FeeCalculator.calculateSwapFee(100_000_000, 10, 10_000, 100);
-            // baseFee = 100_000_000 * 10 / 10_000 = 100_000
-            // varIntermediate = 10_000 * 10_000 * 100 / 10_000_000_000 = 1
-            // variableFee = 100_000_000 * 1 / 10_000 = 10_000
-            assertEquals(110_000, feeWithVA, "Swap fee should include variable fee with non-zero VA");
+            // variableFeeBps = floor( 50_000 * (10_000*100)^2 / 1e11 ) = 500_000 -> capped 1000
+            // totalFeeBps    = min(10 + 1000, 1000) = 1000
+            // fee            = floor( 100_000_000 * 1000 / 10_000 ) = 10_000_000
+            assertEquals(10_000_000, feeWithVA, "Swap fee should include the capped variable surcharge with high VA");
         }
 
         @Test

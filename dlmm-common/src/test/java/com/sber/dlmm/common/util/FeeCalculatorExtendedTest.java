@@ -199,12 +199,6 @@ class FeeCalculatorExtendedTest {
         }
 
         @Test
-        @org.junit.jupiter.api.Disabled("""
-                Surfaces an existing FeeCalculator bug: with volatilityAccumulator=5000
-                and maxVariableFeeBps=100, the variable surcharge is 0 — total fee
-                equals base fee. The formula clamps the surcharge unintentionally
-                (or test inputs no longer match the algorithm). Re-enable once
-                FeeCalculator economics are reviewed (separate backlog item).""")
         @DisplayName("volatile market: high VA → variable fee adds surcharge above base fee")
         void volatileMarket() {
             long amountIn = 50_000_000_000L;
@@ -214,6 +208,16 @@ class FeeCalculatorExtendedTest {
             long totalFee = FeeCalculator.calculateSwapFee(amountIn, baseFeeBps, va, 100);
             long baseFee = amountIn * baseFeeBps / 10_000;
 
+            // Re-enabled against the Stage 1 Meteora-shaped surcharge (was @Disabled
+            // because the legacy VA²·binStep/1e10 term truncated to 0 here). Hand-derivation:
+            //   variableFeeBps = floor( 50_000 * (5000*100)^2 / 1e11 )
+            //                  = floor( 50_000 * (5e5)^2 / 1e11 )
+            //                  = floor( 50_000 * 2.5e11 / 1e11 )
+            //                  = floor( 1.25e16 / 1e11 ) = 125_000 -> capped to 1000
+            //   totalFeeBps    = min(25 + 1000, 1000) = 1000
+            //   totalFee       = floor( 5e10 * 1000 / 10_000 ) = 5_000_000_000
+            //   baseFee        = floor( 5e10 *   25 / 10_000 ) =   125_000_000
+            assertEquals(5_000_000_000L, totalFee, "volatile-market total fee is the capped 10% rate");
             assertTrue(totalFee > baseFee,
                     "In volatile market, total fee (" + totalFee + ") should be > base fee (" + baseFee + ")");
         }
@@ -277,6 +281,80 @@ class FeeCalculatorExtendedTest {
         @DisplayName("negative decay rate is clamped to 0 (VA unchanged)")
         void decayRateClampedLow() {
             assertEquals(500, FeeCalculator.decayVolatilityAccumulator(500, -100));
+        }
+    }
+
+    // ── Stage 1 (#14): Meteora-shaped variable fee, exact goldens ──────────────
+
+    @Nested
+    @DisplayName("Stage 1: Meteora variable-fee shape control·(VA·binStep)²/1e11")
+    class VariableFeeShapeTests {
+
+        /**
+         * Exact, hand-derived goldens for the NEW shape:
+         *   variableFeeBps = floor( 50_000 * (VA*binStep)^2 / 1e11 )   (capped at 1000)
+         *
+         * Worked examples (control=50_000, denom=1e11):
+         *   VA=0   , step=anything : numerator 0                                   -> 0   (THE invariant)
+         *   VA=10  , step=100 : 50_000*(1_000)^2     =5.0e10 /1e11 = 0.5  -> floor 0
+         *   VA=100 , step=20  : 50_000*(2_000)^2     =2.0e11 /1e11 = 2.0  ->       2
+         *   VA=100 , step=100 : 50_000*(10_000)^2    =5.0e12 /1e11 = 50.0 ->      50
+         *   VA=200 , step=100 : 50_000*(20_000)^2    =2.0e13 /1e11 = 200.0->     200
+         *   VA=400 , step=100 : 50_000*(40_000)^2    =8.0e13 /1e11 = 800.0->     800
+         *   VA=500 , step=50  : 50_000*(25_000)^2    =3.125e13/1e11 =312.5-> floor312
+         *   VA=1000, step=20  : 50_000*(20_000)^2    =2.0e13 /1e11 = 200.0->     200
+         *   VA=10000,step=100 : 50_000*(1_000_000)^2 =5.0e16 /1e11 =500_000-> cap1000
+         */
+        @ParameterizedTest(name = "VA={0}, binStep={1} -> variableFeeBps={2}")
+        @CsvSource({
+                "0, 1, 0",
+                "0, 100, 0",
+                "0, 500, 0",
+                "10, 100, 0",
+                "100, 20, 2",
+                "100, 100, 50",
+                "200, 100, 200",
+                "400, 100, 800",
+                "500, 50, 312",
+                "1000, 20, 200",
+                "10000, 100, 1000"
+        })
+        void variableFeeBpsExact(int va, int binStep, long expected) {
+            assertEquals(expected, FeeCalculator.variableFeeBps(va, binStep),
+                    "variableFeeBps mismatch for VA=" + va + ", binStep=" + binStep);
+        }
+
+        @Test
+        @DisplayName("variable surcharge is EXACTLY 0 at VA=0 (the byte-identical invariant)")
+        void zeroSurchargeAtVaZero() {
+            for (int binStep : new int[]{1, 5, 10, 20, 50, 100, 250, 500}) {
+                assertEquals(0L, FeeCalculator.variableFeeBps(0, binStep),
+                        "surcharge must be 0 at VA=0 for binStep=" + binStep);
+                // and the total collapses to base for a spread of base fees
+                for (int base : new int[]{0, 1, 25, 30, 100}) {
+                    assertEquals(base, FeeCalculator.totalFeeBps(base, 0, binStep),
+                            "totalFeeBps must equal base at VA=0");
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("totalFeeBps adds the surcharge then caps at MAX_FEE_BPS")
+        void totalAddsSurchargeThenCaps() {
+            // VA=100, step=100 -> surcharge 50; base 30 -> 80
+            assertEquals(80, FeeCalculator.totalFeeBps(30, 100, 100));
+            // VA=400, step=100 -> surcharge 800; base 100 -> 900
+            assertEquals(900, FeeCalculator.totalFeeBps(100, 400, 100));
+            // VA=400, step=100 -> surcharge 800; base 300 -> 1100 -> capped 1000
+            assertEquals(FeeCalculator.MAX_FEE_BPS, FeeCalculator.totalFeeBps(300, 400, 100));
+        }
+
+        @Test
+        @DisplayName("no long-overflow for extreme VA·binStep (BigInteger intermediate)")
+        void noOverflowExtreme() {
+            // (VA*binStep)^2 here is ~ (2.1e9)^2 ≈ 4.4e18·... well past long if not BigInteger.
+            long v = FeeCalculator.variableFeeBps(Integer.MAX_VALUE, 500);
+            assertEquals(FeeCalculator.MAX_FEE_BPS, v, "extreme inputs saturate the cap, never overflow");
         }
     }
 }

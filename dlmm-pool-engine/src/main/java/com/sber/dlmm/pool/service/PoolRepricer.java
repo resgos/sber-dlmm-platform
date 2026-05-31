@@ -42,6 +42,12 @@ public class PoolRepricer {
      * are recomputed from the new price so the F-12 bin invariant
      * ({@code liquidity = reserveX·price + reserveY}) keeps holding.
      *
+     * <p>NB: {@code activeBinId} is deliberately NOT moved here. The whole ladder is
+     * rescaled by the same {@code factor}, so the bin at {@code activeBinId} keeps
+     * {@code price == basePrice} automatically; advancing the anchor id too would
+     * double-count the move and misalign the add-liquidity X/Y split. (The math-#14
+     * Stage-3 createPool half-bin precision tweak is left for a dedicated pass.)
+     *
      * @return true if repriced; false if the pool vanished / went inactive / had
      *         a non-positive base or target price.
      */
