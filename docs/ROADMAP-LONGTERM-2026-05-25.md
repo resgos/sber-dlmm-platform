@@ -26,6 +26,28 @@ See `docs/ULTRAREVIEW-2026-05-25.md` for sweep results + `docs/DEMO-SCRIPT-2026-
 
 ---
 
+## ⭐ Batch #3 ship status (2026-05-31) — Meteora feature parity
+
+Branch `claude/elated-elgamal-dba521`. Full feature-gap analysis vs Meteora
+(`docs/METEORA-FEATURE-PARITY-2026-05-31.md`) + integration of the integrable gaps.
+
+| Status | Item |
+|--------|------|
+| ✅ | **DLMM limit orders** — escrow-settled (place→scheduled fill at limit price→cancel); pool «Лимит» tab + `/orders` page; Liquibase 012; fill notification. Reviewed: caught+fixed a CRITICAL scheduled-credit auth bug (orders would never fill) + a cancel/fill double-payout race. |
+| ✅ | **Single-sided liquidity** — `@Min(0)` + the existing X≥active / Y≤active distribution; pool add-panel BOTH/X/Y toggle. |
+| ✅ | **Zap in** — frontend-orchestrated (swap half → two-sided add); «Zap» tab. *(out of parking lot)* |
+| ✅ | **Drag-to-select range** — drag on the bin chart → Add-panel range (live ReferenceArea). |
+| ✅ | **Quote-only fees** — claim consolidated into the quote token (X→Y at pool price); split «Забрать / в SRUB» button. |
+| ⬜ | **LP-farming** — genuinely ~2 weeks + parked; design ready (SSPAS reward, `pool_rewards_config` + `pool_position_rewards` + scheduled accrual + claim). |
+
+**Pre-existing issues surfaced by review (open, NOT introduced by this batch):**
+- fee-claim `get(0)/get(1)` X/Y labelling — event/response sides can swap (balances correct, labels/analytics wrong).
+- fee-service idempotency key not released on rollback (analog of the closed pool-engine #23).
+
+**Deliberately N/A for a regulated Sber platform** (Solana-specific / launch / governance): DAMM v2 + position NFTs, DBC, Alpha Vault, anti-sniper suite, M3M3, Jupiter aggregation, wallet-connect, MET/DAO. See the parity doc §Итог.
+
+---
+
 ## 0. Immediate residuals (week 1, ≤ 5 days) — ✅ SHIPPED in Batch #2
 
 Закрыто 2026-05-26.
@@ -131,11 +153,11 @@ See `docs/ULTRAREVIEW-2026-05-25.md` for sweep results + `docs/DEMO-SCRIPT-2026-
 
 | Idea | Why parked | Re-evaluation trigger |
 |------|------------|------------------------|
-| Zap In/Out (deposit any token, auto-swap) | Needs router; >2 weeks | If pilot LPs ask |
+| ~~Zap In/Out~~ ✅ **SHIPPED** frontend-MVP (2026-05-31) | was: needs router | done |
 | Auto-rebalance bots / scheduled rebalance jobs | Defer until manual rebalance field-validated | Sprint 17 |
-| Farming rewards overlay | Not running rewards programme | If marketing budget freed |
+| Farming rewards overlay | Design ready (SSPAS reward); ~2 нед — deferred | If marketing budget freed |
 | Concentrated swap routing across N pools | Single-pool covers 95% volume | If >5% volume in multi-hop |
-| Limit Order partial fills | Limit orders not yet shipped | After F-02 (limit orders, Sprint 14+) |
+| ~~Limit Order partial fills~~ 🔓 **UNBLOCKED** — escrow limit orders shipped (2026-05-31) | — | now buildable |
 | Gas-less swaps via paymaster | Banking sponsorship covers it | Never (not on roadmap) |
 | WebSocket live price stream | Polling 10s is fine for retail UX | If institutional client asks |
 | NFT receipts for LP positions | Cosmetic, no PO demand | Never |
