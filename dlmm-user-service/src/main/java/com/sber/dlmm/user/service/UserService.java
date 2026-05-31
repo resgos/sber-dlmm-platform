@@ -101,10 +101,10 @@ public class UserService {
     @Transactional
     public AuthResponse login(LoginRequest req) {
         User user = userRepository.findByEmail(req.email())
-                .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
+                .orElseThrow(() -> new UnauthorizedException("Неверный email или пароль"));
 
         if (!passwordEncoder.matches(req.password(), user.getPasswordHash())) {
-            throw new UnauthorizedException("Invalid email or password");
+            throw new UnauthorizedException("Неверный email или пароль");
         }
 
         // Batch #6 — populate last_login_at для engagement-score query

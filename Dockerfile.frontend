@@ -16,7 +16,11 @@ FROM nginx:1.25-alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-COPY docker/admin-ui-nginx.conf /etc/nginx/conf.d/default.conf
+# Use the maintained admin nginx config (it carries the /actuator proxy, the
+# immutable asset caching, and the no-cache index.html) — the live container
+# already runs this one (hot-patched); docker/admin-ui-nginx.conf had diverged
+# (no /actuator, no /assets) and is retired to avoid a rebuild regression.
+COPY dlmm-admin-ui/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
