@@ -56,9 +56,11 @@
     "accountGroup": "Account",
     "home": "Home",
     "swap": "Swap",
+    "buySell": "Buy / Sell",
     "hedge": "FX Hedge",
     "pools": "Pools",
     "positions": "My Positions",
+    "orders": "Orders",
     "rebalance": "Rebalance",
     "transactions": "Transactions",
     "team": "Team",
@@ -72,7 +74,12 @@
     "mainNav": "Main navigation",
     "verified": "Verified",
     "notVerified": "Not verified",
-    "defaultUser": "User"
+    "defaultUser": "User",
+    "modeLabel": "Interface mode",
+    "modeSimple": "Simple",
+    "modePro": "Pro",
+    "modeTooltipSimple": "Simple mode: buy/sell and liquidity with default settings",
+    "modeTooltipPro": "Pro mode: bins, strategies, advanced tools"
   },
 
   "auth": {
@@ -146,19 +153,34 @@
       "positionsInWork_other": "positions working",
       "claimNow": "ready to claim now",
       "nothingAccrued": "nothing accrued yet",
+      "feeAccrualRefreshing": "fee accrual refreshes every ~5 min",
+      "openPositionToEarn": "open a position to start earning fees",
       "earnedDelta": "+{{value}}% of balance",
       "startEarning": "start earning in pools"
+    },
+    "hero": {
+      "buySell": "Buy / Sell",
+      "swap": "Swap",
+      "toPools": "To pools",
+      "tooltips": {
+        "portfolio": "Value of all your tokens (free + locked) plus liquidity in open LP positions, at the latest market prices.",
+        "activePositions": "The number of your open LP positions. Each is a range of bins where you provide liquidity and earn fees.",
+        "unclaimedFees": "Fees accrued from swaps inside your active positions. Claim them any time with the \"Claim all\" button on the Positions page.",
+        "totalEarned": "All claimed fees plus your current unrealized P&L on positions relative to the initial deposit."
+      }
     },
     "quickActions": {
       "title": "Quick actions",
       "swapUsdt": "Swap SUSDT → SRUB",
+      "buySellTokens": "Buy / Sell tokens",
       "openHedge": "Open FX hedge",
       "addLiquidity": "Add liquidity"
     },
     "recentOps": {
       "title": "Recent operations",
       "viewAll": "Full history",
-      "empty": "No transactions yet"
+      "empty": "No transactions yet",
+      "openAria": "Open transactions"
     },
     "myTokens": {
       "title": "My tokens",
@@ -323,10 +345,17 @@
     "card": {
       "tvl": "TVL",
       "volume24h": "Volume 24h",
+      "fees24h": "Fees 24h",
       "apy": "APY",
       "binStep": "step {{value}}",
       "fee": "fee {{value}}",
       "addLiquidity": "Add liquidity"
+    },
+    "sort": {
+      "volume": "Volume",
+      "tvl": "TVL",
+      "apy": "APY",
+      "name": "A-Z"
     },
     "status": {
       "ACTIVE": "Active",
@@ -418,8 +447,15 @@
       "title": "Positions",
       "alertsButton": "Alerts{{suffix}}",
       "alertsAriaLabel": "Open position alerts",
+      "csv": "CSV",
       "claimAll": "Claim all ({{count}})",
       "closeAll": "Close all ({{count}})"
+    },
+    "farming": {
+      "title": "Farming rewards:",
+      "toClaim": "to claim",
+      "claimed": "claimed {{amount}}",
+      "claimButton": "Claim rewards"
     },
     "healthFilter": {
       "label": "Filter by health:",
@@ -443,6 +479,8 @@
       "createdAt": "Created",
       "actions": "Actions",
       "claimButton": "Claim",
+      "claimInQuote": "Claim all in {{symbol}}",
+      "noClaimTooltip": "No fees accrued yet — the position is working, but fee accrual hasn't run yet",
       "removeButton": "Remove"
     },
     "feeHistory": {
@@ -480,6 +518,10 @@
       "removeFailure": "Failed to remove position {{id}}…: {{error}}. Closed {{done}} of {{total}}.",
       "claimFailure": "Failed to claim position {{id}}…: {{error}}. Claimed from {{done}} of {{total}}.",
       "autoClaim": "Auto-claim: {{pair}} — claimed {{amount}}",
+      "autoClaimPairFallback": "position",
+      "autoClaimFeesFallback": "fees",
+      "farmClaimed": "Rewards claimed: {{amount}}",
+      "farmClaimError": "Failed to claim rewards",
       "errorWord": "error"
     }
   },
@@ -521,6 +563,48 @@
       "CONFIRMED": "Confirmed",
       "FAILED": "Failed",
       "CANCELLED": "Cancelled"
+    }
+  },
+
+  "orders": {
+    "title": "Limit orders",
+    "subtitle": "Buy or sell at the price you want — the order fills automatically once the market reaches it. Place an order from a pool page on the \"Limit\" tab.",
+    "filters": {
+      "all": "All",
+      "open": "Open",
+      "filled": "Filled",
+      "cancelled": "Cancelled"
+    },
+    "table": {
+      "pool": "Pool",
+      "side": "Side",
+      "amountIn": "You pay",
+      "price": "Price",
+      "amountOut": "You receive",
+      "status": "Status",
+      "createdAt": "Created",
+      "cancel": "Cancel"
+    },
+    "side": {
+      "buy": "Buy",
+      "sell": "Sell"
+    },
+    "status": {
+      "OPEN": "Open",
+      "FILLED": "Filled",
+      "CANCELLED": "Cancelled"
+    },
+    "cancelConfirm": {
+      "title": "Cancel order?",
+      "description": "The reserved funds will be returned to your balance.",
+      "okText": "Cancel order",
+      "cancelText": "No"
+    },
+    "empty": "You don't have any limit orders yet",
+    "emptyCta": "Go to pools",
+    "messages": {
+      "cancelSuccess": "Order cancelled, funds returned",
+      "cancelError": "Failed to cancel the order"
     }
   },
 

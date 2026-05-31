@@ -1,5 +1,7 @@
 import { useSyncExternalStore, useState } from 'react'
 import { Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { Layout, Menu, Button, Avatar, Space, Typography, Dropdown, Segmented, Tooltip, Grid, Drawer } from 'antd'
 import {
   HomeOutlined,
@@ -45,51 +47,53 @@ const { Text } = Typography
  * S14-03 — Reviews page + simple-mode hides advanced items (Ребаланс, Команда).
  */
 
-function buildMenuItems(simpleMode: boolean) {
+function buildMenuItems(simpleMode: boolean, t: TFunction) {
   return [
     {
       type: 'group' as const,
-      label: 'Торговля',
+      label: t('nav.tradeGroup'),
       children: [
-        { key: '/', icon: <HomeOutlined />, label: 'Главная' },
+        { key: '/', icon: <HomeOutlined />, label: t('nav.home') },
         // SM-01 — Simple mode surfaces a single airy buy/sell+LP page as the
         // primary trading entry and hides the advanced Swap / Хедж FX.
         ...(simpleMode
-          ? [{ key: '/simple', icon: <ThunderboltOutlined />, label: 'Купить / Продать' }]
+          ? [{ key: '/simple', icon: <ThunderboltOutlined />, label: t('nav.buySell') }]
           : [
-              { key: '/swap', icon: <SwapOutlined />, label: 'Обмен' },
-              { key: '/hedge', icon: <SafetyCertificateOutlined />, label: 'Хедж FX' },
+              { key: '/swap', icon: <SwapOutlined />, label: t('nav.swap') },
+              { key: '/hedge', icon: <SafetyCertificateOutlined />, label: t('nav.hedge') },
             ]),
-        { key: '/pools', icon: <FundOutlined />, label: 'Пулы' },
+        { key: '/pools', icon: <FundOutlined />, label: t('nav.pools') },
       ],
     },
     { type: 'divider' as const },
     {
       type: 'group' as const,
-      label: 'Управление',
+      label: t('nav.manageGroup'),
       children: [
-        { key: '/positions', icon: <PieChartOutlined />, label: 'Мои позиции' },
-        { key: '/orders', icon: <AimOutlined />, label: 'Ордера' },
-        ...(!simpleMode ? [{ key: '/rebalance', icon: <RetweetOutlined />, label: 'Ребаланс' }] : []),
-        { key: '/transactions', icon: <TransactionOutlined />, label: 'Транзакции' },
+        { key: '/positions', icon: <PieChartOutlined />, label: t('nav.positions') },
+        { key: '/orders', icon: <AimOutlined />, label: t('nav.orders') },
+        ...(!simpleMode ? [{ key: '/rebalance', icon: <RetweetOutlined />, label: t('nav.rebalance') }] : []),
+        { key: '/transactions', icon: <TransactionOutlined />, label: t('nav.transactions') },
       ],
     },
     { type: 'divider' as const },
     {
       type: 'group' as const,
-      label: 'Аккаунт',
+      label: t('nav.accountGroup'),
       children: [
-        ...(!simpleMode ? [{ key: '/team', icon: <TeamOutlined />, label: 'Команда' }] : []),
-        { key: '/reviews', icon: <StarOutlined />, label: 'Отзывы' },
-        { key: '/profile', icon: <UserOutlined />, label: 'Профиль' },
+        ...(!simpleMode ? [{ key: '/team', icon: <TeamOutlined />, label: t('nav.team') }] : []),
+        { key: '/reviews', icon: <StarOutlined />, label: t('nav.reviews') },
+        { key: '/profile', icon: <UserOutlined />, label: t('nav.profile') },
       ],
     },
   ]
 }
 
 /** All possible leaf items across BOTH modes — used by selectedKey lookup
- *  so /simple, /swap, /hedge etc. all resolve regardless of current mode. */
-const ALL_LEAF_KEYS = [...buildMenuItems(false), ...buildMenuItems(true)]
+ *  so /simple, /swap, /hedge etc. all resolve regardless of current mode.
+ *  Only `.key` is read here, so an identity translator is fine for the labels. */
+const keyOnly = ((k: string) => k) as unknown as TFunction
+const ALL_LEAF_KEYS = [...buildMenuItems(false, keyOnly), ...buildMenuItems(true, keyOnly)]
 
 interface LeafMenuItem {
   key: string
@@ -123,6 +127,7 @@ function SberLogo({ size = 28 }: { size?: number }) {
 }
 
 export default function UserLayout() {
+  const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -133,7 +138,7 @@ export default function UserLayout() {
   const location = useLocation()
   const user = authStore.getUser()
   const prefs = useSyncExternalStore(uiPrefStore.subscribe, uiPrefStore.getSnapshot)
-  const menuItems = buildMenuItems(prefs.simpleMode)
+  const menuItems = buildMenuItems(prefs.simpleMode, t)
 
   if (!authStore.isAuthenticated()) {
     return <Navigate to="/login" replace />
@@ -164,8 +169,8 @@ export default function UserLayout() {
   }
 
   const userMenuItems = [
-    { key: 'profile', icon: <UserOutlined />, label: 'Профиль', onClick: () => navigate('/profile') },
-    { key: 'logout', icon: <LogoutOutlined />, label: 'Выйти', onClick: handleLogout },
+    { key: 'profile', icon: <UserOutlined />, label: t('nav.profile'), onClick: () => navigate('/profile') },
+    { key: 'logout', icon: <LogoutOutlined />, label: t('nav.logout'), onClick: handleLogout },
   ]
 
   const selectedKey = (() => {
@@ -207,12 +212,12 @@ export default function UserLayout() {
               СБЕР <span style={{ color: 'var(--sber-green)' }}>DLMM</span>
             </Text>
             <Text style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-              Платформа ликвидности
+              {t('brand.tagline')}
             </Text>
           </div>
         )}
       </div>
-      <nav id="sider-navigation" aria-label="Основная навигация">
+      <nav id="sider-navigation" aria-label={t('nav.mainNav')}>
         <Menu
           theme="light"
           mode="inline"
@@ -231,7 +236,7 @@ export default function UserLayout() {
           until focused; lets keyboard / screen-reader users bypass the
           Sider navigation tree. */}
       <a href="#main-content" className="sber-skip-link">
-        Перейти к содержимому
+        {t('nav.skipToContent')}
       </a>
       {isMobile ? (
         <Drawer
@@ -296,32 +301,28 @@ export default function UserLayout() {
               icon={!isMobile && !collapsed ? <MenuFoldOutlined /> : <MenuUnfoldOutlined />}
               onClick={() => (isMobile ? setMobileNavOpen(true) : setCollapsed(!collapsed))}
               style={{ fontSize: 'var(--text-md)', color: 'var(--text-secondary)' }}
-              aria-label={(isMobile ? mobileNavOpen : !collapsed) ? 'Свернуть меню' : 'Развернуть меню'}
+              aria-label={(isMobile ? mobileNavOpen : !collapsed) ? t('nav.collapseMenu') : t('nav.expandMenu')}
               aria-expanded={isMobile ? mobileNavOpen : !collapsed}
               aria-controls="sider-navigation"
             />
             {/* SM-01 — prominent Simple ⇄ Pro mode pill + a state chip so
                 the user always knows which surface they're on. */}
             <Tooltip
-              title={
-                prefs.simpleMode
-                  ? 'Простой режим: покупка/продажа и ликвидность по базовым настройкам'
-                  : 'Pro-режим: бины, стратегии, расширенные инструменты'
-              }
+              title={prefs.simpleMode ? t('nav.modeTooltipSimple') : t('nav.modeTooltipPro')}
             >
               <Segmented
                 value={prefs.mode}
                 onChange={handleModeChange}
                 className="sber-mode-toggle"
-                aria-label="Режим интерфейса"
+                aria-label={t('nav.modeLabel')}
                 options={[
-                  { value: 'simple', label: <span className="sber-mode-toggle__opt"><ThunderboltOutlined /> Simple</span> },
-                  { value: 'pro', label: <span className="sber-mode-toggle__opt"><AppstoreOutlined /> Pro</span> },
+                  { value: 'simple', label: <span className="sber-mode-toggle__opt"><ThunderboltOutlined /> {t('nav.modeSimple')}</span> },
+                  { value: 'pro', label: <span className="sber-mode-toggle__opt"><AppstoreOutlined /> {t('nav.modePro')}</span> },
                 ]}
               />
             </Tooltip>
             <span className={`sber-mode-chip sber-mode-chip--${prefs.mode}`}>
-              {prefs.simpleMode ? 'Simple' : 'Pro'}
+              {prefs.simpleMode ? t('nav.modeSimple') : t('nav.modePro')}
             </span>
           </Space>
 
@@ -341,7 +342,7 @@ export default function UserLayout() {
                 style={{ cursor: 'pointer' }}
                 role="button"
                 tabIndex={0}
-                aria-label={`Меню пользователя ${user?.email || 'Пользователь'}`}
+                aria-label={t('nav.userMenu', { name: user?.email || t('nav.defaultUser') })}
                 aria-haspopup="menu"
                 aria-expanded={userMenuOpen}
                 onKeyDown={(e) => {
@@ -362,10 +363,10 @@ export default function UserLayout() {
                 {!isMobile && (
                   <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
                     <Text strong style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
-                      {user?.email || 'Пользователь'}
+                      {user?.email || t('nav.defaultUser')}
                     </Text>
                     <Text style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                      {user?.kycStatus === 'VERIFIED' ? 'Верифицирован' : 'Не верифицирован'}
+                      {user?.kycStatus === 'VERIFIED' ? t('nav.verified') : t('nav.notVerified')}
                     </Text>
                   </div>
                 )}

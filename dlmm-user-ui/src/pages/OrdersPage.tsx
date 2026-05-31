@@ -4,6 +4,7 @@ import { Typography, Card, Table, Tag, Button, Popconfirm, Segmented, Empty, mes
 import { AimOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { limitOrders } from '@/api/services'
 import type { LimitOrder, LimitOrderStatus } from '@/api/types'
 import { formatTokenAmount } from '@/lib/format'
@@ -12,10 +13,11 @@ const { Title, Text } = Typography
 
 type Filter = 'ALL' | LimitOrderStatus
 
-const STATUS_META: Record<LimitOrderStatus, { color: string; label: string }> = {
-  OPEN: { color: 'processing', label: 'Открыт' },
-  FILLED: { color: 'success', label: 'Исполнен' },
-  CANCELLED: { color: 'default', label: 'Отменён' },
+// Status → tag colour. Labels are resolved at render via t('orders.status.<KEY>').
+const STATUS_COLOR: Record<LimitOrderStatus, string> = {
+  OPEN: 'processing',
+  FILLED: 'success',
+  CANCELLED: 'default',
 }
 
 /**
@@ -25,6 +27,7 @@ const STATUS_META: Record<LimitOrderStatus, { color: string; label: string }> = 
  * order happens in-context on the pool page (PoolActionTabs → «Лимит»).
  */
 export default function OrdersPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState<Filter>('ALL')
@@ -37,11 +40,11 @@ export default function OrdersPage() {
   const cancelMutation = useMutation({
     mutationFn: (id: string) => limitOrders.cancel(id),
     onSuccess: () => {
-      message.success('Ордер отменён, средства возвращены')
+      message.success(t('orders.messages.cancelSuccess'))
       queryClient.invalidateQueries({ queryKey: ['myLimitOrders'] })
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
     },
-    onError: () => message.error('Не удалось отменить ордер'),
+    onError: () => message.error(t('orders.messages.cancelError')),
   })
 
   const filtered = useMemo(() => {
@@ -51,7 +54,7 @@ export default function OrdersPage() {
 
   const columns: ColumnsType<LimitOrder> = [
     {
-      title: 'Пул',
+      title: t('orders.table.pool'),
       key: 'pool',
       render: (_, o) => {
         const base = o.side === 'BUY' ? o.tokenOutSymbol : o.tokenInSymbol
@@ -64,17 +67,17 @@ export default function OrdersPage() {
       },
     },
     {
-      title: 'Сторона',
+      title: t('orders.table.side'),
       dataIndex: 'side',
       key: 'side',
       render: (side: LimitOrder['side']) => (
         <Tag color={side === 'BUY' ? 'green' : 'volcano'} style={{ margin: 0, fontWeight: 600 }}>
-          {side === 'BUY' ? 'Покупка' : 'Продажа'}
+          {side === 'BUY' ? t('orders.side.buy') : t('orders.side.sell')}
         </Tag>
       ),
     },
     {
-      title: 'Отдаёте',
+      title: t('orders.table.amountIn'),
       key: 'in',
       render: (_, o) => (
         <Text style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -83,7 +86,7 @@ export default function OrdersPage() {
       ),
     },
     {
-      title: 'Цена',
+      title: t('orders.table.price'),
       key: 'price',
       render: (_, o) => (
         <Text type="secondary" style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -92,7 +95,7 @@ export default function OrdersPage() {
       ),
     },
     {
-      title: 'Получите',
+      title: t('orders.table.amountOut'),
       key: 'out',
       render: (_, o) => (
         <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -101,16 +104,17 @@ export default function OrdersPage() {
       ),
     },
     {
-      title: 'Статус',
+      title: t('orders.table.status'),
       dataIndex: 'status',
       key: 'status',
       render: (status: LimitOrderStatus) => {
-        const meta = STATUS_META[status] ?? { color: 'default', label: String(status) }
-        return <Tag color={meta.color} style={{ margin: 0 }}>{meta.label}</Tag>
+        const color = STATUS_COLOR[status] ?? 'default'
+        const label = t(`orders.status.${status}`, { defaultValue: String(status) })
+        return <Tag color={color} style={{ margin: 0 }}>{label}</Tag>
       },
     },
     {
-      title: 'Создан',
+      title: t('orders.table.createdAt'),
       dataIndex: 'createdAt',
       key: 'createdAt',
       responsive: ['md'],
@@ -127,16 +131,16 @@ export default function OrdersPage() {
       render: (_, o) =>
         o.status === 'OPEN' ? (
           <Popconfirm
-            title="Отменить ордер?"
-            description="Зарезервированные средства вернутся на баланс."
-            okText="Отменить" cancelText="Нет"
+            title={t('orders.cancelConfirm.title')}
+            description={t('orders.cancelConfirm.description')}
+            okText={t('orders.cancelConfirm.okText')} cancelText={t('orders.cancelConfirm.cancelText')}
             onConfirm={() => cancelMutation.mutate(o.id)}
           >
             <Button
               size="small" danger
               loading={cancelMutation.isPending && cancelMutation.variables === o.id}
             >
-              Отменить
+              {t('orders.table.cancel')}
             </Button>
           </Popconfirm>
         ) : null,
@@ -148,11 +152,10 @@ export default function OrdersPage() {
       <div style={{ marginBottom: 'var(--space-4)' }}>
         <Title level={3} style={{ marginBottom: 4 }}>
           <AimOutlined style={{ color: 'var(--sber-green)', marginRight: 8 }} />
-          Лимитные ордера
+          {t('orders.title')}
         </Title>
         <Text type="secondary">
-          Покупка или продажа по нужной цене — ордер исполнится автоматически, когда рынок до неё дойдёт.
-          Разместить ордер можно на странице пула во вкладке «Лимит».
+          {t('orders.subtitle')}
         </Text>
       </div>
 
@@ -164,20 +167,20 @@ export default function OrdersPage() {
           value={filter}
           onChange={(v) => setFilter(v as Filter)}
           options={[
-            { label: 'Все', value: 'ALL' },
-            { label: 'Открытые', value: 'OPEN' },
-            { label: 'Исполненные', value: 'FILLED' },
-            { label: 'Отменённые', value: 'CANCELLED' },
+            { label: t('orders.filters.all'), value: 'ALL' },
+            { label: t('orders.filters.open'), value: 'OPEN' },
+            { label: t('orders.filters.filled'), value: 'FILLED' },
+            { label: t('orders.filters.cancelled'), value: 'CANCELLED' },
           ]}
           style={{ marginBottom: 16 }}
         />
 
         {!isLoading && (orders ?? []).length === 0 ? (
           <Empty
-            description={<Text type="secondary">У вас пока нет лимитных ордеров</Text>}
+            description={<Text type="secondary">{t('orders.empty')}</Text>}
             style={{ padding: '32px 0' }}
           >
-            <Button type="primary" onClick={() => navigate('/pools')}>Перейти к пулам</Button>
+            <Button type="primary" onClick={() => navigate('/pools')}>{t('orders.emptyCta')}</Button>
           </Empty>
         ) : (
           <Table

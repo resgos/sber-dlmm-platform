@@ -72,7 +72,7 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
           <div className="sber-pool-metric__value">{formatRub(pool.volume24h ?? 0)}</div>
         </div>
         <div className="sber-pool-metric">
-          <div className="sber-pool-metric__label">Комиссии 24ч</div>
+          <div className="sber-pool-metric__label">{t('pools.card.fees24h')}</div>
           <div className="sber-pool-metric__value">{formatRub(fees24h)}</div>
         </div>
         <div className="sber-pool-metric">
@@ -175,10 +175,10 @@ export default function PoolsPage() {
             value={sortBy}
             onChange={(v) => setSortBy(v as typeof sortBy)}
             options={[
-              { label: 'Volume', value: 'volume24h' },
-              { label: 'TVL', value: 'tvl' },
-              { label: 'APY', value: 'apy' },
-              { label: 'A-Z', value: 'name' },
+              { label: t('pools.sort.volume'), value: 'volume24h' },
+              { label: t('pools.sort.tvl'), value: 'tvl' },
+              { label: t('pools.sort.apy'), value: 'apy' },
+              { label: t('pools.sort.name'), value: 'name' },
             ]}
           />
           {/* Sprint 10 (new feature) — pool comparator entry point. */}

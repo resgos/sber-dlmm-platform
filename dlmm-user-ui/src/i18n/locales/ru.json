@@ -56,9 +56,11 @@
     "accountGroup": "Аккаунт",
     "home": "Главная",
     "swap": "Обмен",
+    "buySell": "Купить / Продать",
     "hedge": "Хедж FX",
     "pools": "Пулы",
     "positions": "Мои позиции",
+    "orders": "Ордера",
     "rebalance": "Ребаланс",
     "transactions": "Транзакции",
     "team": "Команда",
@@ -72,7 +74,12 @@
     "mainNav": "Основная навигация",
     "verified": "Верифицирован",
     "notVerified": "Не верифицирован",
-    "defaultUser": "Пользователь"
+    "defaultUser": "Пользователь",
+    "modeLabel": "Режим интерфейса",
+    "modeSimple": "Simple",
+    "modePro": "Pro",
+    "modeTooltipSimple": "Простой режим: покупка/продажа и ликвидность по базовым настройкам",
+    "modeTooltipPro": "Pro-режим: бины, стратегии, расширенные инструменты"
   },
 
   "auth": {
@@ -148,19 +155,34 @@
       "positionsInWork_many": "позиций в работе",
       "claimNow": "можно забрать сейчас",
       "nothingAccrued": "пока ничего не начислено",
+      "feeAccrualRefreshing": "fee accrual обновляется каждые ~5 мин",
+      "openPositionToEarn": "откройте позицию чтобы получать комиссии",
       "earnedDelta": "+{{value}}% к балансу",
       "startEarning": "начните зарабатывать в пулах"
+    },
+    "hero": {
+      "buySell": "Купить / Продать",
+      "swap": "Обменять",
+      "toPools": "В пулы",
+      "tooltips": {
+        "portfolio": "Стоимость всех ваших токенов (свободные + заблокированные) + ликвидность в открытых LP-позициях, по последним рыночным ценам.",
+        "activePositions": "Количество ваших открытых LP-позиций. Каждая — это диапазон бинов где вы предоставляете ликвидность и зарабатываете комиссии.",
+        "unclaimedFees": "Накопленные fees от свопов внутри ваших активных позиций. Можно забрать в любой момент через кнопку «Забрать всё» на странице Позиции.",
+        "totalEarned": "Сумма всех забранных комиссий + текущая нереализованная прибыль/убыток по позициям относительно initial deposit."
+      }
     },
     "quickActions": {
       "title": "Быстрые действия",
       "swapUsdt": "Свопнуть SUSDT → SRUB",
+      "buySellTokens": "Купить / Продать токены",
       "openHedge": "Открыть FX-хедж",
       "addLiquidity": "Добавить ликвидность"
     },
     "recentOps": {
       "title": "Последние операции",
       "viewAll": "Вся история",
-      "empty": "Транзакций пока нет"
+      "empty": "Транзакций пока нет",
+      "openAria": "Открыть транзакции"
     },
     "myTokens": {
       "title": "Мои токены",
@@ -326,10 +348,17 @@
     "card": {
       "tvl": "TVL",
       "volume24h": "Объём 24ч",
+      "fees24h": "Комиссии 24ч",
       "apy": "APY",
       "binStep": "шаг {{value}}",
       "fee": "комиссия {{value}}",
       "addLiquidity": "Добавить ликвидность"
+    },
+    "sort": {
+      "volume": "Volume",
+      "tvl": "TVL",
+      "apy": "APY",
+      "name": "A-Z"
     },
     "status": {
       "ACTIVE": "Активен",
@@ -422,8 +451,15 @@
       "title": "Позиции",
       "alertsButton": "Алерты{{suffix}}",
       "alertsAriaLabel": "Открыть оповещения по позициям",
+      "csv": "CSV",
       "claimAll": "Забрать всё ({{count}})",
       "closeAll": "Закрыть всё ({{count}})"
+    },
+    "farming": {
+      "title": "Награды фарминга:",
+      "toClaim": "к получению",
+      "claimed": "забрано {{amount}}",
+      "claimButton": "Забрать награды"
     },
     "healthFilter": {
       "label": "Фильтр по здоровью:",
@@ -447,6 +483,8 @@
       "createdAt": "Создана",
       "actions": "Действия",
       "claimButton": "Забрать",
+      "claimInQuote": "Забрать всё в {{symbol}}",
+      "noClaimTooltip": "Пока нет накопленных комиссий — позиция работает, но fee accrual ещё не начислил",
       "removeButton": "Удалить"
     },
     "feeHistory": {
@@ -484,6 +522,10 @@
       "removeFailure": "Снятие позиции {{id}}… не удалось: {{error}}. Закрыто {{done}} из {{total}}.",
       "claimFailure": "Claim позиции {{id}}… не удалось: {{error}}. Забрано с {{done}} из {{total}}.",
       "autoClaim": "Авто-сбор: {{pair}} — забрано {{amount}}",
+      "autoClaimPairFallback": "позиция",
+      "autoClaimFeesFallback": "комиссии",
+      "farmClaimed": "Награды забраны: {{amount}}",
+      "farmClaimError": "Не удалось забрать награды",
       "errorWord": "ошибка"
     }
   },
@@ -526,6 +568,48 @@
       "CONFIRMED": "Подтверждена",
       "FAILED": "Ошибка",
       "CANCELLED": "Отменена"
+    }
+  },
+
+  "orders": {
+    "title": "Лимитные ордера",
+    "subtitle": "Покупка или продажа по нужной цене — ордер исполнится автоматически, когда рынок до неё дойдёт. Разместить ордер можно на странице пула во вкладке «Лимит».",
+    "filters": {
+      "all": "Все",
+      "open": "Открытые",
+      "filled": "Исполненные",
+      "cancelled": "Отменённые"
+    },
+    "table": {
+      "pool": "Пул",
+      "side": "Сторона",
+      "amountIn": "Отдаёте",
+      "price": "Цена",
+      "amountOut": "Получите",
+      "status": "Статус",
+      "createdAt": "Создан",
+      "cancel": "Отменить"
+    },
+    "side": {
+      "buy": "Покупка",
+      "sell": "Продажа"
+    },
+    "status": {
+      "OPEN": "Открыт",
+      "FILLED": "Исполнен",
+      "CANCELLED": "Отменён"
+    },
+    "cancelConfirm": {
+      "title": "Отменить ордер?",
+      "description": "Зарезервированные средства вернутся на баланс.",
+      "okText": "Отменить",
+      "cancelText": "Нет"
+    },
+    "empty": "У вас пока нет лимитных ордеров",
+    "emptyCta": "Перейти к пулам",
+    "messages": {
+      "cancelSuccess": "Ордер отменён, средства возвращены",
+      "cancelError": "Не удалось отменить ордер"
     }
   },
 

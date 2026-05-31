@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { balances, pools, fees, transactions, oracle, tokens as tokensApi } from '@/api/services'
 import { rowButtonProps } from '@/lib/a11y'
 import TokenIcon from '@/components/TokenIcon'
@@ -31,24 +32,27 @@ const { Title, Text } = Typography
 // trades against SRUB, which is the whole catalogue today.
 const BASE_SYMBOL = 'SRUB'
 
-const txTypeLabels: Record<string, { text: string; color: string }> = {
-  SWAP: { text: 'Обмен', color: 'blue' },
-  ADD_LIQUIDITY: { text: 'Добавление', color: 'green' },
-  REMOVE_LIQUIDITY: { text: 'Удаление', color: 'orange' },
-  CLAIM_FEE: { text: 'Комиссии', color: 'gold' },
-  TRANSFER: { text: 'Перевод', color: 'purple' },
-  MINT: { text: 'Выпуск', color: 'cyan' },
-  BURN: { text: 'Сжигание', color: 'red' },
+// Tag colours by code; the human label is resolved at render via
+// t('dashboard.txType.<CODE>') / t('dashboard.txStatus.<CODE>').
+const txTypeColors: Record<string, string> = {
+  SWAP: 'blue',
+  ADD_LIQUIDITY: 'green',
+  REMOVE_LIQUIDITY: 'orange',
+  CLAIM_FEE: 'gold',
+  TRANSFER: 'purple',
+  MINT: 'cyan',
+  BURN: 'red',
 }
 
-const statusLabels: Record<string, { text: string; color: string }> = {
-  PENDING: { text: 'Ожидание', color: 'processing' },
-  CONFIRMED: { text: 'Подтверждена', color: 'success' },
-  FAILED: { text: 'Ошибка', color: 'error' },
-  CANCELLED: { text: 'Отменена', color: 'default' },
+const statusColors: Record<string, string> = {
+  PENDING: 'processing',
+  CONFIRMED: 'success',
+  FAILED: 'error',
+  CANCELLED: 'default',
 }
 
 export default function DashboardPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   // SM-01 — in Simple mode the primary "trade" CTAs point at the simple
   // buy/sell+LP surface instead of the Pro Swap page.
@@ -169,14 +173,10 @@ export default function DashboardPage() {
   // below.
   // Batch #6 unit 4 — KPI tile tooltips. Each label gets a Tooltip
   // explaining the metric — new users (Анна persona) часто не понимают
-  // что значит "TVL" / "fee accrual" / "позиции в работе".
-  const heroTooltips: Record<string, string> = {
-    'Ваш портфель': 'Стоимость всех ваших токенов (свободные + заблокированные) + ликвидность в открытых LP-позициях, по последним рыночным ценам.',
-    'Активные позиции': 'Количество ваших открытых LP-позиций. Каждая — это диапазон бинов где вы предоставляете ликвидность и зарабатываете комиссии.',
-    'Незабр. комиссии': 'Накопленные fees от свопов внутри ваших активных позиций. Можно забрать в любой момент через кнопку «Забрать всё» на странице Позиции.',
-    'Доход за всё время': 'Сумма всех забранных комиссий + текущая нереализованная прибыль/убыток по позициям относительно initial deposit.',
-  }
-  const heroSubMetric = (label: string, value: React.ReactNode, sub: React.ReactNode) => (
+  // что значит "TVL" / "fee accrual" / "позиции в работе". The tooltip
+  // copy is passed explicitly per tile so it stays i18n-keyed instead
+  // of being looked up by the (now translated) label text.
+  const heroSubMetric = (label: string, value: React.ReactNode, sub: React.ReactNode, tooltip?: string) => (
     <Col
       flex="1 1 0"
       style={{
@@ -198,8 +198,8 @@ export default function DashboardPage() {
           fontWeight: 500,
         }}
       >
-        {heroTooltips[label] ? (
-          <Tooltip title={heroTooltips[label]}>
+        {tooltip ? (
+          <Tooltip title={tooltip}>
             <span style={{ cursor: 'help', borderBottom: '1px dotted rgba(255,255,255,0.4)' }}>
               {label}
             </span>
@@ -250,7 +250,7 @@ export default function DashboardPage() {
                 marginBottom: 6,
               }}
             >
-              Ваш портфель
+              {t('dashboard.portfolioLabel')}
             </div>
             <div
               style={{
@@ -274,20 +274,20 @@ export default function DashboardPage() {
             <Space size={10}>
               <Button size="middle" onClick={() => navigate(tradeRoute)}
                 style={{ background: 'rgba(255,255,255,0.18)', borderColor: 'rgba(255,255,255,0.35)', color: 'var(--text-on-brand)' }}>
-                {prefs.simpleMode ? 'Купить / Продать' : 'Обменять'}
+                {prefs.simpleMode ? t('dashboard.hero.buySell') : t('dashboard.hero.swap')}
               </Button>
               <Button size="middle" onClick={() => navigate('/pools')}
                 // HOT-1-followup — white button on green hero must
                 // stay white in dark mode (was var(--bg-card) which
                 // flipped to #131820 = invisible chip on green).
                 style={{ background: 'var(--text-on-brand)', borderColor: 'var(--text-on-brand)', color: 'var(--sber-green-dark)', fontWeight: 600 }}>
-                В пулы <ArrowRightOutlined />
+                {t('dashboard.hero.toPools')} <ArrowRightOutlined />
               </Button>
             </Space>
           </Col>
 
           {heroSubMetric(
-            'Активные позиции',
+            t('dashboard.tiles.activePositions'),
             // HOT-2 fix — show "—" while myPositions query is in
             // flight; otherwise the hero rendered "0 позиций в работе"
             // for a render-cycle before data arrived (observed during
@@ -297,35 +297,38 @@ export default function DashboardPage() {
             loadingPositions ? '—' : activePositions.length,
             <span style={{ color: 'rgba(255,255,255,0.65)' }}>
               {loadingPositions
-                ? 'загружается'
-                : `${activePositions.length === 1 ? 'позиция' : 'позиций'} в работе`}
+                ? t('dashboard.tiles_sub.positionsLoading')
+                : t('dashboard.tiles_sub.positionsInWork', { count: activePositions.length })}
             </span>,
+            t('dashboard.hero.tooltips.activePositions'),
           )}
           {heroSubMetric(
-            'Незабр. комиссии',
+            t('dashboard.tiles.unclaimedFees'),
             formatRub(feeSummary?.totalUnclaimed ?? 0),
             (feeSummary?.totalUnclaimed ?? 0) > 0 ? (
-              <span style={{ color: 'var(--text-on-brand)', fontWeight: 500 }}>можно забрать сейчас</span>
+              <span style={{ color: 'var(--text-on-brand)', fontWeight: 500 }}>{t('dashboard.tiles_sub.claimNow')}</span>
             ) : (
               // F-05 (UX-FINDINGS 2026-05-26) — "пока ничего не начислено"
               // звучит как "не работает". Differentiate: если активных
               // позиций нет — "откройте позицию"; если есть — "fee accrual
               // обновляется ~5 мин" (правда — backend job runs every 5min).
               activePositions.length > 0 ? (
-                <span>fee accrual обновляется каждые ~5 мин</span>
+                <span>{t('dashboard.tiles_sub.feeAccrualRefreshing')}</span>
               ) : (
-                <span>откройте позицию чтобы получать комиссии</span>
+                <span>{t('dashboard.tiles_sub.openPositionToEarn')}</span>
               )
             ),
+            t('dashboard.hero.tooltips.unclaimedFees'),
           )}
           {heroSubMetric(
-            'Доход за всё время',
+            t('dashboard.tiles.totalEarned'),
             formatRub(totalEarned),
             earnedDelta > 0 ? (
-              <span>+{earnedDelta.toFixed(2)}% к балансу</span>
+              <span>{t('dashboard.tiles_sub.earnedDelta', { value: earnedDelta.toFixed(2) })}</span>
             ) : (
-              <span>начните зарабатывать в пулах</span>
+              <span>{t('dashboard.tiles_sub.startEarning')}</span>
             ),
+            t('dashboard.hero.tooltips.totalEarned'),
           )}
         </Row>
       </div>
@@ -348,7 +351,7 @@ export default function DashboardPage() {
         <Col xs={24} md={12} lg={8}>
           <Card
             className="sber-card"
-            title={<Text strong>Быстрые действия</Text>}
+            title={<Text strong>{t('dashboard.quickActions.title')}</Text>}
             style={{ height: '100%' }}
           >
             <Space direction="vertical" size={10} style={{ width: '100%' }}>
@@ -360,7 +363,7 @@ export default function DashboardPage() {
                 onClick={() => navigate(tradeRoute)}
                 style={{ justifyContent: 'flex-start', textAlign: 'left', fontWeight: 600 }}
               >
-                {prefs.simpleMode ? 'Купить / Продать токены' : 'Свопнуть SUSDT → SRUB'}
+                {prefs.simpleMode ? t('dashboard.quickActions.buySellTokens') : t('dashboard.quickActions.swapUsdt')}
               </Button>
               <Button
                 size="large"
@@ -369,7 +372,7 @@ export default function DashboardPage() {
                 onClick={() => navigate('/hedge')}
                 style={{ justifyContent: 'flex-start', textAlign: 'left' }}
               >
-                Открыть FX-хедж
+                {t('dashboard.quickActions.openHedge')}
               </Button>
               <Button
                 size="large"
@@ -378,7 +381,7 @@ export default function DashboardPage() {
                 onClick={() => navigate('/pools')}
                 style={{ justifyContent: 'flex-start', textAlign: 'left' }}
               >
-                Добавить ликвидность
+                {t('dashboard.quickActions.addLiquidity')}
               </Button>
             </Space>
           </Card>
@@ -387,17 +390,17 @@ export default function DashboardPage() {
         <Col xs={24} md={24} lg={8}>
           <Card
             className="sber-card"
-            title={<Text strong>Последние операции</Text>}
+            title={<Text strong>{t('dashboard.recentOps.title')}</Text>}
             extra={
               <a onClick={() => navigate('/transactions')} style={{ color: 'var(--sber-green)', fontSize: 'var(--text-sm)', cursor: 'pointer' }}>
-                Вся история <ArrowRightOutlined style={{ fontSize: 'var(--text-xs)' }} />
+                {t('dashboard.recentOps.viewAll')} <ArrowRightOutlined style={{ fontSize: 'var(--text-xs)' }} />
               </a>
             }
             styles={{ body: { padding: 0 } }}
             style={{ height: '100%' }}
           >
             {!recentTx?.content?.length ? (
-              <div style={{ padding: 18, color: 'var(--text-secondary)' }}>Транзакций пока нет</div>
+              <div style={{ padding: 18, color: 'var(--text-secondary)' }}>{t('dashboard.recentOps.empty')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {recentTx.content.slice(0, 5).map((tx: Transaction, i: number) => {
@@ -408,7 +411,7 @@ export default function DashboardPage() {
                     <div
                       key={tx.id}
                       onClick={() => navigate('/transactions')}
-                      {...rowButtonProps(() => navigate('/transactions'), 'Открыть транзакции')}
+                      {...rowButtonProps(() => navigate('/transactions'), t('dashboard.recentOps.openAria'))}
                       style={{
                         padding: '10px 16px',
                         borderTop: i === 0 ? 'none' : '1px solid var(--border-light)',
@@ -420,7 +423,7 @@ export default function DashboardPage() {
                     >
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
-                          {txTypeLabels[tx.txType]?.text ?? tx.txType}
+                          {t(`dashboard.txType.${tx.txType}`, { defaultValue: tx.txType })}
                           {pair && (
                             <Text type="secondary" style={{ fontSize: 'var(--text-xs)', marginLeft: 6 }}>
                               {pair}
@@ -435,7 +438,7 @@ export default function DashboardPage() {
                         color={tx.status === 'CONFIRMED' ? 'success' : tx.status === 'FAILED' ? 'error' : 'processing'}
                         style={{ borderRadius: 'var(--radius-pill)', marginInlineEnd: 0, padding: '0 8px' }}
                       >
-                        {statusLabels[tx.status]?.text ?? tx.status}
+                        {t(`dashboard.txStatus.${tx.status}`, { defaultValue: tx.status })}
                       </Tag>
                     </div>
                   )
@@ -447,8 +450,8 @@ export default function DashboardPage() {
       </Row>
 
       {/* Token balances */}
-      <Card className="sber-card" title={<Text strong>Мои токены</Text>}
-        extra={<Button type="link" onClick={() => navigate('/swap')}>Обменять <ArrowRightOutlined /></Button>}>
+      <Card className="sber-card" title={<Text strong>{t('dashboard.tokens.title')}</Text>}
+        extra={<Button type="link" onClick={() => navigate('/swap')}>{t('dashboard.myTokens.swap')} <ArrowRightOutlined /></Button>}>
         <Table
           scroll={{ x: 'max-content' }}
           className="sber-table"
@@ -462,7 +465,7 @@ export default function DashboardPage() {
           size="middle"
           columns={[
             {
-              title: 'Токен',
+              title: t('dashboard.tokens.symbol'),
               dataIndex: 'symbol',
               render: (sym: string) => (
                 <Space>
@@ -472,19 +475,19 @@ export default function DashboardPage() {
               ),
             },
             {
-              title: 'Доступно',
+              title: t('dashboard.tokens.available'),
               dataIndex: 'available',
               align: 'right' as const,
               render: (v: number) => v.toLocaleString('ru-RU', { maximumFractionDigits: 4 }),
             },
             {
-              title: 'Заблокировано',
+              title: t('dashboard.tokens.locked'),
               dataIndex: 'locked',
               align: 'right' as const,
               render: (v: number) => v > 0 ? <Text type="warning">{v.toLocaleString('ru-RU', { maximumFractionDigits: 4 })}</Text> : '—',
             },
             {
-              title: 'Цена',
+              title: t('dashboard.tokens.price'),
               key: 'price',
               align: 'right' as const,
               render: (_: unknown, row: TokenBalance) => {
@@ -500,7 +503,7 @@ export default function DashboardPage() {
               },
             },
             {
-              title: 'Стоимость',
+              title: t('dashboard.tokens.value'),
               key: 'value',
               align: 'right' as const,
               render: (_: unknown, row: TokenBalance) => {
@@ -516,8 +519,8 @@ export default function DashboardPage() {
 
       {/* Active positions */}
       {activePositions.length > 0 && (
-        <Card className="sber-card" title={<Text strong>Активные позиции</Text>}
-          extra={<Button type="link" onClick={() => navigate('/positions')}>Все позиции <ArrowRightOutlined /></Button>}>
+        <Card className="sber-card" title={<Text strong>{t('dashboard.activePositionsCard.title')}</Text>}
+          extra={<Button type="link" onClick={() => navigate('/positions')}>{t('dashboard.activePositionsCard.viewAll')} <ArrowRightOutlined /></Button>}>
           <Table
             scroll={{ x: 'max-content' }}
             className="sber-table"
@@ -527,7 +530,7 @@ export default function DashboardPage() {
             size="middle"
             columns={[
               {
-                title: 'Пул',
+                title: t('dashboard.activePositionsCard.pool'),
                 key: 'pool',
                 render: (_: unknown, r: Position) => {
                   // Sprint 9 — Position DTO has no tokenXSymbol/tokenYSymbol,
@@ -535,16 +538,16 @@ export default function DashboardPage() {
                   // "SBER/SRUB" instead of "/" or "undefined/undefined".
                   const pool = poolById.get(r.poolId)
                   if (pool) return <Text strong>{pool.tokenXSymbol}/{pool.tokenYSymbol}</Text>
-                  return <Text type="secondary">пул {r.poolId.slice(0, 6)}…</Text>
+                  return <Text type="secondary">{t('positions.table.poolFallback', { id: r.poolId.slice(0, 6) })}</Text>
                 },
               },
               {
-                title: 'Стратегия',
+                title: t('dashboard.activePositionsCard.strategy'),
                 dataIndex: 'strategy',
                 render: (s: string) => <Tag color="blue">{s}</Tag>,
               },
               {
-                title: 'Диапазон цен',
+                title: t('dashboard.activePositionsCard.priceRange'),
                 key: 'range',
                 render: (_: unknown, r: Position) => {
                   const pool = poolById.get(r.poolId)
@@ -564,7 +567,7 @@ export default function DashboardPage() {
                 },
               },
               {
-                title: 'Незабранные комиссии',
+                title: t('dashboard.activePositionsCard.unclaimedFees'),
                 key: 'fees',
                 align: 'right' as const,
                 render: (_: unknown, r: Position) => {

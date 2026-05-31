@@ -3,6 +3,7 @@ import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Ro
 import { DollarOutlined, DeleteOutlined, DownloadOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined, DownOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { pools, fees, farming } from '@/api/services'
 import type { Position, Pool, FeeHistoryEntry } from '@/api/types'
 import { KpiRow, PageHeader, TokenPairChip } from '@/components/sber'
@@ -49,6 +50,7 @@ function formatBinPriceRange(
 }
 
 export default function PositionsPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [removeModalPos, setRemoveModalPos] = useState<Position | null>(null)
@@ -97,13 +99,13 @@ export default function PositionsPage() {
     mutationFn: ({ positionId, quoteOnly }: { positionId: string; quoteOnly?: boolean }) =>
       fees.claimFees({ positionId }, quoteOnly ?? false),
     onSuccess: () => {
-      message.success('Комиссии забраны')
+      message.success(t('positions.messages.feesClaimed'))
       queryClient.invalidateQueries({ queryKey: ['myPositions'] })
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
       queryClient.invalidateQueries({ queryKey: ['myFeeSummary'] })
       queryClient.invalidateQueries({ queryKey: ['myFeeHistory'] })
     },
-    onError: (err: any) => message.error(err?.response?.data?.message || 'Ошибка'),
+    onError: (err: any) => message.error(err?.response?.data?.message || t('positions.messages.errorFallback')),
   })
 
   // Sprint 17 — LP-farming rewards (SSPAS).
@@ -111,11 +113,11 @@ export default function PositionsPage() {
   const claimFarmMutation = useMutation({
     mutationFn: () => farming.claimRewards(),
     onSuccess: (claimed) => {
-      message.success(`Награды забраны: ${formatRub(claimed)}`)
+      message.success(t('positions.messages.farmClaimed', { amount: formatRub(claimed) }))
       queryClient.invalidateQueries({ queryKey: ['myFarmRewards'] })
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
     },
-    onError: () => message.error('Не удалось забрать награды'),
+    onError: () => message.error(t('positions.messages.farmClaimError')),
   })
 
   const removeMutation = useMutation({
@@ -126,12 +128,12 @@ export default function PositionsPage() {
         idempotencyKey: crypto.randomUUID(),
       }),
     onSuccess: () => {
-      message.success('Ликвидность удалена')
+      message.success(t('positions.messages.liquidityRemoved'))
       setRemoveModalPos(null)
       queryClient.invalidateQueries({ queryKey: ['myPositions'] })
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
     },
-    onError: (err: any) => message.error(err?.response?.data?.message || 'Ошибка'),
+    onError: (err: any) => message.error(err?.response?.data?.message || t('positions.messages.errorFallback')),
   })
 
   // UI-CRITIQUE 2026-05-22 fix — wrap in useMemo so reference is
@@ -181,27 +183,22 @@ export default function PositionsPage() {
   const confirmRemoveAll = () => {
     if (activePositions.length === 0) return
     Modal.confirm({
-      title: `Закрыть все позиции (${activePositions.length})?`,
+      title: t('positions.confirmCloseAll.title', { count: activePositions.length }),
       width: 480,
       content: (
         <Space direction="vertical" size={8}>
-          <Text>
-            Будут последовательно сняты <b>{activePositions.length}</b> активных
-            позиций. С каждой будут одновременно забраны накопленные комиссии.
-          </Text>
+          <Text>{t('positions.confirmCloseAll.body', { count: activePositions.length })}</Text>
           <Text type="warning" style={{ fontSize: 'var(--text-xs)' }}>
-            Операция необратима. Каждое снятие выполняется как обычная транзакция
-            и может изменить цену пула.
+            {t('positions.confirmCloseAll.warning')}
           </Text>
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-            Позиции закрываются последовательно — это даёт более предсказуемое
-            влияние на цены пулов и помогает локализовать любую ошибку.
+            {t('positions.confirmCloseAll.note')}
           </Text>
         </Space>
       ),
-      okText: `Закрыть все ${activePositions.length}`,
+      okText: t('positions.confirmCloseAll.okText', { count: activePositions.length }),
       okButtonProps: { danger: true },
-      cancelText: 'Отмена',
+      cancelText: t('common.cancel'),
       onOk: async () => {
         let closed = 0
         for (const pos of activePositions) {
@@ -214,16 +211,19 @@ export default function PositionsPage() {
             closed++
           } catch (e: any) {
             message.error(
-              `Снятие позиции ${pos.id.slice(0, 6)}… не удалось: ${
-                e?.response?.data?.message || 'ошибка'
-              }. Закрыто ${closed} из ${activePositions.length}.`,
+              t('positions.messages.removeFailure', {
+                id: pos.id.slice(0, 6),
+                error: e?.response?.data?.message || t('positions.messages.errorWord'),
+                done: closed,
+                total: activePositions.length,
+              }),
             )
             queryClient.invalidateQueries({ queryKey: ['myPositions'] })
             queryClient.invalidateQueries({ queryKey: ['myBalances'] })
             return
           }
         }
-        message.success(`Закрыто позиций: ${closed}`)
+        message.success(t('positions.messages.closedCount', { count: closed }))
         queryClient.invalidateQueries({ queryKey: ['myPositions'] })
         queryClient.invalidateQueries({ queryKey: ['myBalances'] })
         queryClient.invalidateQueries({ queryKey: ['myFeeSummary'] })
@@ -240,19 +240,15 @@ export default function PositionsPage() {
   const confirmClaimAll = () => {
     if (positionsWithClaimableFees.length === 0) return
     Modal.confirm({
-      title: `Забрать комиссии со всех позиций (${positionsWithClaimableFees.length})?`,
+      title: t('positions.confirmClaimAll.title', { count: positionsWithClaimableFees.length }),
       width: 480,
       content: (
         <Space direction="vertical" size={8}>
-          <Text>
-            Будут забраны накопленные комиссии с{' '}
-            <b>{positionsWithClaimableFees.length}</b> позиций. Позиции остаются
-            открытыми и продолжают зарабатывать.
-          </Text>
+          <Text>{t('positions.confirmClaimAll.body', { count: positionsWithClaimableFees.length })}</Text>
         </Space>
       ),
-      okText: `Забрать с ${positionsWithClaimableFees.length} позиций`,
-      cancelText: 'Отмена',
+      okText: t('positions.confirmClaimAll.okText', { count: positionsWithClaimableFees.length }),
+      cancelText: t('common.cancel'),
       onOk: async () => {
         let claimed = 0
         for (const pos of positionsWithClaimableFees) {
@@ -261,9 +257,12 @@ export default function PositionsPage() {
             claimed++
           } catch (e: any) {
             message.error(
-              `Claim позиции ${pos.id.slice(0, 6)}… не удалось: ${
-                e?.response?.data?.message || 'ошибка'
-              }. Забрано с ${claimed} из ${positionsWithClaimableFees.length}.`,
+              t('positions.messages.claimFailure', {
+                id: pos.id.slice(0, 6),
+                error: e?.response?.data?.message || t('positions.messages.errorWord'),
+                done: claimed,
+                total: positionsWithClaimableFees.length,
+              }),
             )
             queryClient.invalidateQueries({ queryKey: ['myPositions'] })
             queryClient.invalidateQueries({ queryKey: ['myBalances'] })
@@ -271,7 +270,7 @@ export default function PositionsPage() {
             return
           }
         }
-        message.success(`Забрано с позиций: ${claimed}`)
+        message.success(t('positions.messages.claimedCount', { count: claimed }))
         queryClient.invalidateQueries({ queryKey: ['myPositions'] })
         queryClient.invalidateQueries({ queryKey: ['myBalances'] })
         queryClient.invalidateQueries({ queryKey: ['myFeeSummary'] })
@@ -283,8 +282,8 @@ export default function PositionsPage() {
   return (
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
       <PageHeader
-        title="Мои позиции"
-        subtitle="Ваши LP-позиции в DLMM-пулах — диапазоны бинов, незабранные комиссии, история выплат"
+        title={t('positions.title')}
+        subtitle={t('positions.subtitle')}
       />
 
       {/* Sprint 10 wave 3 — one-time onboarding banner explaining the
@@ -294,22 +293,22 @@ export default function PositionsPage() {
       <KpiRow
         tiles={[
           {
-            label: 'Активных позиций',
+            label: t('positions.kpi.activePositions'),
             value: activePositions.length.toLocaleString('ru-RU'),
-            sub: activePositions.length === 0 ? 'нет открытых' : 'предоставляют ликвидность',
+            sub: activePositions.length === 0 ? t('positions.kpi.activeNone') : t('positions.kpi.activeProvide'),
             icon: <PieChartOutlined style={{ color: '#9B59B6' }} />,
           },
           {
-            label: 'Незабранные комиссии',
+            label: t('positions.kpi.unclaimedFees'),
             value: formatRub(feeSummary?.totalUnclaimed ?? 0),
-            sub: 'готовы к claim',
+            sub: t('positions.kpi.readyToClaim'),
             icon: <WalletOutlined style={{ color: '#296AE3' }} />,
             accent: (feeSummary?.totalUnclaimed ?? 0) > 0 ? 'var(--sber-green)' : undefined,
           },
           {
-            label: 'Всего заработано',
+            label: t('positions.kpi.totalEarned'),
             value: formatRub(feeSummary?.totalClaimed ?? 0),
-            sub: 'за всё время',
+            sub: t('positions.kpi.allTime'),
             icon: <TrophyOutlined style={{ color: '#F2994A' }} />,
           },
         ]}
@@ -322,10 +321,10 @@ export default function PositionsPage() {
           icon={<TrophyOutlined />}
           message={
             <Space size={8} wrap>
-              <Text strong>Награды фарминга:</Text>
+              <Text strong>{t('positions.farming.title')}</Text>
               <Text strong style={{ color: 'var(--sber-green)' }}>{formatRub(farmRewards.totalUnclaimed)}</Text>
               <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                к получению{farmRewards.totalClaimed > 0 ? ` · забрано ${formatRub(farmRewards.totalClaimed)}` : ''}
+                {t('positions.farming.toClaim')}{farmRewards.totalClaimed > 0 ? ` · ${t('positions.farming.claimed', { amount: formatRub(farmRewards.totalClaimed) })}` : ''}
               </Text>
             </Space>
           }
@@ -337,7 +336,7 @@ export default function PositionsPage() {
               disabled={farmRewards.totalUnclaimed <= 0}
               onClick={() => claimFarmMutation.mutate()}
             >
-              Забрать награды
+              {t('positions.farming.claimButton')}
             </Button>
           }
           style={{ borderRadius: 'var(--radius-md)' }}
@@ -346,7 +345,7 @@ export default function PositionsPage() {
 
       <Card
         className="sber-card"
-        title={<Text strong>Позиции</Text>}
+        title={<Text strong>{t('positions.card.title')}</Text>}
         extra={
           // UI-CRITIQUE 2026-05-22 #2 fix — extras zone is now actions
           // only. Health filter (which is navigation / data selection)
@@ -362,9 +361,9 @@ export default function PositionsPage() {
               size="small"
               icon={<BellOutlined />}
               onClick={() => setAlertsDrawerOpen(true)}
-              aria-label="Открыть оповещения по позициям"
+              aria-label={t('positions.card.alertsAriaLabel')}
             >
-              Алерты{alertCount > 0 ? ` (${alertCount})` : ''}
+              {t('positions.card.alertsButton', { suffix: alertCount > 0 ? ` (${alertCount})` : '' })}
             </Button>
             {/* QW-1 (Batch #4) — CSV export of active positions. Useful
                 for finance team weekly reporting + audit. */}
@@ -397,7 +396,7 @@ export default function PositionsPage() {
               }}
               disabled={activePositions.length === 0}
             >
-              CSV
+              {t('positions.card.csv')}
             </Button>
             {activePositions.length > 0 && (
               <>
@@ -413,7 +412,7 @@ export default function PositionsPage() {
                   disabled={positionsWithClaimableFees.length === 0}
                   onClick={confirmClaimAll}
                 >
-                  Забрать всё ({positionsWithClaimableFees.length})
+                  {t('positions.card.claimAll', { count: positionsWithClaimableFees.length })}
                 </Button>
                 <Button
                   size="small"
@@ -421,7 +420,7 @@ export default function PositionsPage() {
                   icon={<ClearOutlined />}
                   onClick={confirmRemoveAll}
                 >
-                  Закрыть всё ({activePositions.length})
+                  {t('positions.card.closeAll', { count: activePositions.length })}
                 </Button>
               </>
             )}
@@ -432,17 +431,17 @@ export default function PositionsPage() {
             actions zone in Card extras. */}
         {allActive.length > 1 && (
           <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Фильтр по здоровью:</Text>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('positions.healthFilter.label')}</Text>
             <Segmented
               size="small"
               value={healthFilter}
               onChange={(v) => setHealthFilter(v as typeof healthFilter)}
               options={[
-                { label: `Все (${allActive.length})`, value: 'all' },
-                { label: 'Отлично', value: 'excellent' },
-                { label: 'Хорошо', value: 'good' },
-                { label: 'Так себе', value: 'fair' },
-                { label: 'Плохо', value: 'poor' },
+                { label: t('positions.healthFilter.all', { count: allActive.length }), value: 'all' },
+                { label: t('positions.healthFilter.excellent'), value: 'excellent' },
+                { label: t('positions.healthFilter.good'), value: 'good' },
+                { label: t('positions.healthFilter.fair'), value: 'fair' },
+                { label: t('positions.healthFilter.poor'), value: 'poor' },
               ]}
             />
           </div>
@@ -461,13 +460,13 @@ export default function PositionsPage() {
           })}
           columns={[
             {
-              title: 'Пул',
+              title: t('positions.table.pool'),
               key: 'pool',
               width: 220,
               render: (_: unknown, r: Position) => {
                 const pool = poolById.get(r.poolId)
                 if (pool) return <TokenPairChip x={pool.tokenXSymbol} y={pool.tokenYSymbol} />
-                return <Text type="secondary">пул {r.poolId.slice(0, 6)}…</Text>
+                return <Text type="secondary">{t('positions.table.poolFallback', { id: r.poolId.slice(0, 6) })}</Text>
               },
             },
             {
@@ -477,7 +476,7 @@ export default function PositionsPage() {
               // for the weights + calibration notes.
               // Sprint 10 wave 3 — sortable so the user can flip to
               // "show me my worst positions first" with one click.
-              title: <Tooltip title="Эвристическая оценка состояния позиции: соответствие диапазону, доходность по комиссиям, возраст. Не является инвестиционной рекомендацией.">Здоровье</Tooltip>,
+              title: <Tooltip title={t('positions.table.healthTooltip')}>{t('positions.table.health')}</Tooltip>,
               key: 'health',
               width: 110,
               align: 'center' as const,
@@ -488,9 +487,9 @@ export default function PositionsPage() {
               },
               render: (_: unknown, r: Position) => <HealthScoreBadge position={r} pool={poolById.get(r.poolId)} />,
             },
-            { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="green">{strategyLabel(s)}</Tag> },
+            { title: t('positions.table.strategy'), dataIndex: 'strategy', render: (s: string) => <Tag color="green">{strategyLabel(s)}</Tag> },
             {
-              title: 'Диапазон цен',
+              title: t('positions.table.priceRange'),
               key: 'range',
               render: (_: unknown, r: Position) => {
                 const pool = poolById.get(r.poolId)
@@ -519,7 +518,7 @@ export default function PositionsPage() {
               // before the schema migration carry initialDeposit=0
               // and show "—". Excludes fees (those have their own
               // column); pure mark-to-market P&L only.
-              title: <Tooltip title="Текущая стоимость позиции минус её первоначальная стоимость (в единицах второй монеты пары). Не включает комиссии — они в отдельной колонке.">P&L</Tooltip>,
+              title: <Tooltip title={t('positions.table.pnlTooltip')}>{t('positions.table.pnl')}</Tooltip>,
               key: 'pnl',
               align: 'right' as const,
               render: (_: unknown, r: Position) => {
@@ -533,7 +532,7 @@ export default function PositionsPage() {
 
                 if (initialX === 0 && initialY === 0) {
                   return (
-                    <Tooltip title="Позиция открыта до Sprint 9-DS-r4 — нет исходной стоимости.">
+                    <Tooltip title={t('positions.table.pnlLegacyTooltip')}>
                       <Text type="secondary">—</Text>
                     </Tooltip>
                   )
@@ -574,7 +573,7 @@ export default function PositionsPage() {
               },
             },
             {
-              title: 'Незабранные комиссии',
+              title: t('positions.table.unclaimed'),
               key: 'unclaimed',
               align: 'right' as const,
               render: (_: unknown, r: Position) => {
@@ -606,12 +605,12 @@ export default function PositionsPage() {
               },
             },
             {
-              title: 'Создана',
+              title: t('positions.table.createdAt'),
               dataIndex: 'createdAt',
               render: (d: string) => dayjs(d).format('DD.MM.YYYY'),
             },
             {
-              title: 'Действия',
+              title: t('positions.table.actions'),
               key: 'actions',
               render: (_: unknown, r: Position) => {
                 // F-04 (UX-FINDINGS 2026-05-26) — explain WHY the Claim
@@ -629,24 +628,24 @@ export default function PositionsPage() {
                     menu={{
                       items: [{
                         key: 'quote',
-                        label: `Забрать всё в ${r.tokenYSymbol}`,
+                        label: t('positions.table.claimInQuote', { symbol: r.tokenYSymbol }),
                         onClick: () => claimMutation.mutate({ positionId: r.id, quoteOnly: true }),
                       }],
                     }}
                   >
-                    <DollarOutlined /> Забрать
+                    <DollarOutlined /> {t('positions.table.claimButton')}
                   </Dropdown.Button>
                 )
                 return (
                   <Space onClick={(e) => e.stopPropagation()}>
                     {noClaim ? (
-                      <Tooltip title="Пока нет накопленных комиссий — позиция работает, но fee accrual ещё не начислил">
+                      <Tooltip title={t('positions.table.noClaimTooltip')}>
                         <span>{claimBtn}</span>
                       </Tooltip>
                     ) : claimBtn}
                     <Button size="small" danger icon={<DeleteOutlined />}
                       onClick={() => { setRemoveModalPos(r); setRemovePercent(100) }}>
-                      Удалить
+                      {t('positions.table.removeButton')}
                     </Button>
                   </Space>
                 )
@@ -658,7 +657,7 @@ export default function PositionsPage() {
 
       {/* Fee history */}
       {feeHistory?.content && feeHistory.content.length > 0 && (
-        <Card className="sber-card" title={<Text strong>История комиссий</Text>}>
+        <Card className="sber-card" title={<Text strong>{t('positions.feeHistory.title')}</Text>}>
           <Table
             className="sber-table"
             dataSource={feeHistory.content}
@@ -667,18 +666,18 @@ export default function PositionsPage() {
             size="small"
             columns={[
               {
-                title: 'Дата',
+                title: t('positions.feeHistory.date'),
                 dataIndex: 'accruedAt',
                 render: (d: string) => dayjs(d).format('DD.MM.YYYY HH:mm'),
               },
-              { title: 'Сумма', dataIndex: 'amount', align: 'right' as const, render: (v: number) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCompact(v)}</span> },
+              { title: t('positions.feeHistory.amount'), dataIndex: 'amount', align: 'right' as const, render: (v: number) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCompact(v)}</span> },
               {
-                title: 'Статус',
+                title: t('positions.feeHistory.status'),
                 dataIndex: 'claimed',
-                render: (v: boolean) => <Tag color={v ? 'success' : 'processing'}>{v ? 'Забрано' : 'Начислено'}</Tag>,
+                render: (v: boolean) => <Tag color={v ? 'success' : 'processing'}>{v ? t('positions.feeHistory.claimed') : t('positions.feeHistory.accrued')}</Tag>,
               },
               {
-                title: 'Дата выплаты',
+                title: t('positions.feeHistory.claimedAt'),
                 dataIndex: 'claimedAt',
                 render: (d: string | null) => d ? dayjs(d).format('DD.MM.YYYY HH:mm') : '—',
               },
@@ -688,23 +687,23 @@ export default function PositionsPage() {
       )}
 
       <Modal
-        title={<ModalHeader title="Удаление ликвидности" severity="danger" />}
+        title={<ModalHeader title={t('positions.removeModal.title')} severity="danger" />}
         open={!!removeModalPos}
         onCancel={() => setRemoveModalPos(null)}
         onOk={() => removeModalPos && removeMutation.mutate(removeModalPos.id)}
         confirmLoading={removeMutation.isPending}
-        okText="Удалить"
-        cancelText="Отмена"
+        okText={t('positions.removeModal.okText')}
+        cancelText={t('common.cancel')}
         okButtonProps={{ danger: true }}
       >
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <Text>
-            Какой процент ликвидности удалить из позиции{' '}
-            {(() => {
-              const pool = removeModalPos ? poolById.get(removeModalPos.poolId) : undefined
-              return pool ? `${pool.tokenXSymbol}/${pool.tokenYSymbol}` : ''
-            })()}
-            ?
+            {t('positions.removeModal.body', {
+              pair: (() => {
+                const pool = removeModalPos ? poolById.get(removeModalPos.poolId) : undefined
+                return pool ? `${pool.tokenXSymbol}/${pool.tokenYSymbol}` : ''
+              })(),
+            })}
           </Text>
           <Slider min={1} max={100} value={removePercent} onChange={setRemovePercent}
             marks={{ 25: '25%', 50: '50%', 75: '75%', 100: '100%' }} />
@@ -742,6 +741,7 @@ function PositionAlertsWatcherSlot({
   positions: Position[] | undefined
   pools: Pool[] | undefined
 }) {
+  const { t } = useTranslation()
   usePositionAlertWatcher(positions, pools)
   // Sprint 10 (new feature) — auto-claim watcher in the same helper
   // so we only mount one render-less child. Silent unless the user
@@ -754,12 +754,15 @@ function PositionAlertsWatcherSlot({
     // unclaimedFeeX + unclaimedFeeY across two different tokens (as the
     // watcher's `amount` heuristic does) is a meaningless figure.
     const pl = pools?.find((p) => p.id === position.poolId)
-    const pair = pl ? `${pl.tokenXSymbol}/${pl.tokenYSymbol}` : 'позиция'
+    const pair = pl ? `${pl.tokenXSymbol}/${pl.tokenYSymbol}` : t('positions.messages.autoClaimPairFallback')
     const parts: string[] = []
     if (pl && position.unclaimedFeeX > 0) parts.push(`${position.unclaimedFeeX.toLocaleString('ru-RU')} ${pl.tokenXSymbol}`)
     if (pl && position.unclaimedFeeY > 0) parts.push(`${position.unclaimedFeeY.toLocaleString('ru-RU')} ${pl.tokenYSymbol}`)
     message.success(
-      `Авто-сбор: ${pair} — забрано ${parts.length ? parts.join(' + ') : 'комиссии'}`,
+      t('positions.messages.autoClaim', {
+        pair,
+        amount: parts.length ? parts.join(' + ') : t('positions.messages.autoClaimFeesFallback'),
+      }),
       4,
     )
   })
