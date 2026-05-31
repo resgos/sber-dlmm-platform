@@ -5,6 +5,7 @@ import type {
   PageResponse,
   TransactionFilters,
 } from './types'
+import { scaleTransaction, scaleSuspiciousTransaction } from './scale'
 
 export const transactions = {
   getTransactions: async (
@@ -16,13 +17,13 @@ export const transactions = {
     const response = await apiClient.get<PageResponse<Transaction>>('/admin/transactions', {
       params,
     })
-    return response.data
+    return { ...response.data, content: response.data.content.map(scaleTransaction) }
   },
   getSuspiciousTransactions: async (): Promise<SuspiciousTransaction[]> => {
     const response = await apiClient.get<SuspiciousTransaction[]>(
       '/admin/transactions/suspicious',
     )
-    return response.data
+    return response.data.map(scaleSuspiciousTransaction)
   },
 
   /**

@@ -83,7 +83,7 @@ export default function NotificationBell() {
   })
 
   const content = (
-    <div style={{ width: 360 }}>
+    <div style={{ width: 'min(360px, calc(100vw - 24px))' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <Text strong style={{ fontSize: 15 }}>Уведомления</Text>
         {unreadCount > 0 && (

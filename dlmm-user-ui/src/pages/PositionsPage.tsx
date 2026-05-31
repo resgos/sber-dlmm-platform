@@ -406,6 +406,7 @@ export default function PositionsPage() {
           </div>
         )}
         <Table
+          scroll={{ x: 'max-content' }}
           className="sber-table"
           loading={isLoading}
           dataSource={activePositions}

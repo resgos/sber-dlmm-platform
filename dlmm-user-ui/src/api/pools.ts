@@ -11,29 +11,37 @@ import type {
   RemoveLiquidityRequest,
   Position,
 } from './types'
+import {
+  scalePool,
+  scalePoolDetail,
+  scalePosition,
+  scalePreviewAddLiquidity,
+  fromRaw,
+  toRaw,
+} from './scale'
 
 export const pools = {
   getPools: async (page = 0, size = 20): Promise<PageResponse<Pool>> => {
     const { data } = await apiClient.get<PageResponse<Pool>>('/pools', {
       params: { page, size },
     })
-    return data
+    return { ...data, content: data.content.map(scalePool) }
   },
 
   getPool: async (id: string): Promise<PoolDetail> => {
     const { data } = await apiClient.get(`/pools/${id}`)
     // Backend returns {pool: {...}, bins: [...], volatilityAccumulator, ...}
     if (data.pool) {
-      return {
+      return scalePoolDetail({
         ...data.pool,
         bins: data.bins || [],
         volatilityAccumulator: data.volatilityAccumulator ?? 0,
         currentDynamicFeeBps: data.currentDynamicFeeBps ?? 0,
         totalFeesCollectedX: data.totalFeesCollectedX ?? 0,
         totalFeesCollectedY: data.totalFeesCollectedY ?? 0,
-      } as PoolDetail
+      } as PoolDetail)
     }
-    return data as PoolDetail
+    return scalePoolDetail(data as PoolDetail)
   },
 
   getSwapQuote: async (req: Omit<SwapRequest, 'idempotencyKey' | 'minAmountOut'>): Promise<SwapQuote> => {
@@ -53,14 +61,20 @@ export const pools = {
       estimatedPrice: number
       priceImpactPct: number
     }
-    const { data } = await apiClient.post<RawQuote>('/pools/swap/quote', req)
+    // Request carries a human-unit amountIn — scale up to raw before sending.
+    const { data } = await apiClient.post<RawQuote>('/pools/swap/quote', {
+      ...req,
+      amountIn: toRaw(req.amountIn),
+    })
+    // Response amounts are raw — scale amountIn / amountOut / fee back to human.
+    // price / fee-bps / impact / binsCrossed are ratios/counts — leave as-is.
     return {
       poolId: data.poolId,
       tokenInId: data.tokenInId,
       tokenOutId: data.tokenOutId,
-      amountIn: data.amountIn,
-      amountOut: data.estimatedAmountOut,
-      fee: data.estimatedFee,
+      amountIn: fromRaw(data.amountIn),
+      amountOut: fromRaw(data.estimatedAmountOut),
+      fee: fromRaw(data.estimatedFee),
       feeBps: data.estimatedFeeBps,
       binsCrossed: data.estimatedBinsCrossed,
       estimatedPrice: data.estimatedPrice,
@@ -69,11 +83,20 @@ export const pools = {
   },
 
   executeSwap: async (req: SwapRequest): Promise<void> => {
-    await apiClient.post('/pools/swap', req)
+    // amountIn + minAmountOut are human units — scale up to raw for the backend.
+    await apiClient.post('/pools/swap', {
+      ...req,
+      amountIn: toRaw(req.amountIn),
+      minAmountOut: toRaw(req.minAmountOut),
+    })
   },
 
   addLiquidity: async (req: AddLiquidityRequest): Promise<void> => {
-    await apiClient.post('/pools/add-liquidity', req)
+    await apiClient.post('/pools/add-liquidity', {
+      ...req,
+      amountX: toRaw(req.amountX),
+      amountY: toRaw(req.amountY),
+    })
   },
 
   /**
@@ -84,8 +107,12 @@ export const pools = {
    * idempotencyKey as optional — we just don't send it.
    */
   previewAddLiquidity: async (req: PreviewAddLiquidityRequest): Promise<PreviewAddLiquidityResponse> => {
-    const { data } = await apiClient.post<PreviewAddLiquidityResponse>('/pools/preview-add-liquidity', req)
-    return data
+    const { data } = await apiClient.post<PreviewAddLiquidityResponse>('/pools/preview-add-liquidity', {
+      ...req,
+      amountX: toRaw(req.amountX),
+      amountY: toRaw(req.amountY),
+    })
+    return scalePreviewAddLiquidity(data)
   },
 
   removeLiquidity: async (req: RemoveLiquidityRequest): Promise<void> => {
@@ -103,7 +130,7 @@ export const pools = {
 
   getMyPositions: async (): Promise<Position[]> => {
     const { data } = await apiClient.get<Position[]>('/pools/positions/me')
-    return data
+    return data.map(scalePosition)
   },
 
   /**

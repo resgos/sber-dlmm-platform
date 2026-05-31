@@ -239,4 +239,44 @@ class FeeCalculatorExtendedTest {
                     "Fee after decay (" + feeAfterDecay + ") should be <= fee during spike (" + feeDuringSpike + ")");
         }
     }
+
+    // ── Sprint 16 math-audit fixes: overflow-safety, fee cap, decay clamp ──
+
+    @Nested
+    @DisplayName("Sprint 16: overflow-safety, MAX_FEE_BPS cap, decay clamp")
+    class MathAuditFixTests {
+
+        @Test
+        @DisplayName("large post-scale amountIn (1e16) does not overflow long")
+        void postScaleNoOverflow() {
+            long amountIn = 10_000_000_000_000_000L; // 1e16 raw (1e12 tokens at the 1e-4 platform scale)
+            long fee = FeeCalculator.calculateSwapFee(amountIn, 25, 0, 100);
+            // 1e16 * 25 / 10_000 = 2.5e13. Pre-fix, amountIn*baseFeeBps overflowed.
+            assertEquals(25_000_000_000_000L, fee, "1e16 at 25bps should be 2.5e13, not an overflowed value");
+            assertTrue(fee > 0 && fee < amountIn, "fee stays positive and below input");
+        }
+
+        @Test
+        @DisplayName("total fee rate is capped at MAX_FEE_BPS (10%)")
+        void feeRateCapped() {
+            assertEquals(FeeCalculator.MAX_FEE_BPS, FeeCalculator.totalFeeBps(5000, 0, 10),
+                    "base 5000bps must cap at 1000bps (10%)");
+            assertEquals(100_000_000L, FeeCalculator.calculateSwapFee(1_000_000_000L, 5000, 0, 10),
+                    "fee on 1e9 at capped 10% is 1e8, not 5e8");
+        }
+
+        @Test
+        @DisplayName("decay rate > 10000 is clamped (no negative-multiplier VA-zeroing bug)")
+        void decayRateClampedHigh() {
+            // decayPeriodSeconds=30 → scheduler computes decayRate=20000; without the
+            // clamp this made (10000-20000) negative and slammed VA to 0 wrongly.
+            assertEquals(0, FeeCalculator.decayVolatilityAccumulator(500, 20_000));
+        }
+
+        @Test
+        @DisplayName("negative decay rate is clamped to 0 (VA unchanged)")
+        void decayRateClampedLow() {
+            assertEquals(500, FeeCalculator.decayVolatilityAccumulator(500, -100));
+        }
+    }
 }

@@ -1,6 +1,8 @@
 package com.sber.dlmm.oracle.service;
 
 import com.sber.dlmm.common.exception.OracleUnavailableException;
+import com.sber.dlmm.oracle.client.MarketDataClient;
+import com.sber.dlmm.oracle.dto.MarketQuote;
 import com.sber.dlmm.oracle.dto.PriceFeedResponse;
 import com.sber.dlmm.oracle.entity.PriceFeed;
 import com.sber.dlmm.oracle.entity.PriceHistory;
@@ -16,6 +18,7 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -52,11 +55,37 @@ public class PriceOracleService {
             // (different endpoint than ISS equity) in Sprint 4.
             Map.entry("CNY", new BigDecimal("12.50")),
             Map.entry("USD", new BigDecimal("80.00")),
-            Map.entry("EUR", new BigDecimal("95.00"))
+            Map.entry("EUR", new BigDecimal("95.00")),
+            // Sprint 16 — extra MOEX equities/indices on the synthetic walk (MOEX ISS
+            // is geo-blocked from this env → no real feed; anchored on seed spot).
+            Map.entry("TATN", new BigDecimal("720.00")),
+            Map.entry("NLMK", new BigDecimal("189.30")),
+            Map.entry("SMOEX", new BigDecimal("3215.00")),
+            Map.entry("SRTSI", new BigDecimal("1098.50")),
+            Map.entry("SOIL", new BigDecimal("6800.00")),
+            Map.entry("SNGAS", new BigDecimal("3540.00"))
     );
+
+    // ── Real-market source maps (free APIs reachable from this environment) ──
+    /** platform symbol → CoinGecko coin id (priced in RUB). */
+    private static final Map<String, String> CRYPTO_COINGECKO = Map.of(
+            "SBTC", "bitcoin",
+            "SETH", "ethereum");
+    /** platform token → CBR FX char-code (RUB per 1 unit). USDT≈USD official rate. */
+    private static final Map<String, String> FX_CBR = Map.of(
+            "SUSDT", "USD",
+            "SEUR", "EUR",
+            "SCNY", "CNY");
+    /** platform token → CBR precious-metal code (1=gold,2=silver,3=platinum,4=palladium), RUB/gram. */
+    private static final Map<String, Integer> METALS_CBR = Map.of(
+            "SGOLD", 1,
+            "SSILV", 2,
+            "SPLAT", 3,
+            "SPALD", 4);
 
     private final PriceFeedRepository priceFeedRepository;
     private final PriceHistoryRepository priceHistoryRepository;
+    private final MarketDataClient marketDataClient;
     private final Random random = new Random();
     private final ConcurrentHashMap<String, BigDecimal> lastPrices = new ConcurrentHashMap<>();
 
@@ -148,10 +177,74 @@ public class PriceOracleService {
                 .setScale(2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * Sprint 16 — REAL market prices from free public APIs: crypto via CoinGecko,
+     * FX + precious metals via Bank of Russia. Runs every 2 min (well within free
+     * rate limits); fail-soft per source so a down API leaves the last good price.
+     * This is what surfaces "биржевые цены" — MOEX equities stay synthetic (geo-blocked).
+     */
+    // NOT @Transactional: the three marketDataClient.fetch* calls below are
+    // blocking external HTTP (6s connect + 12s read each). Holding a JPA tx —
+    // and its Hikari connection — open across them would pin a connection for up
+    // to ~54s during a third-party brownout and can exhaust the pool. Each
+    // upsertFeed save auto-commits in its own short tx instead (the symbols here
+    // are written by no other scheduler, so per-feed commits are safe).
+    @Scheduled(fixedRate = 120_000, initialDelay = 8_000)
+    public void syncRealMarketPrices() {
+        int updated = 0;
+
+        Map<String, MarketQuote> crypto = marketDataClient.fetchCryptoRub(new HashSet<>(CRYPTO_COINGECKO.values()));
+        for (Map.Entry<String, String> e : CRYPTO_COINGECKO.entrySet()) {
+            MarketQuote q = crypto.get(e.getValue());
+            if (q != null) { upsertFeed(e.getKey(), q.priceRub(), q.change24hPct(), "COINGECKO"); updated++; }
+        }
+
+        Map<String, MarketQuote> fx = marketDataClient.fetchFxRub(new HashSet<>(FX_CBR.values()));
+        for (Map.Entry<String, String> e : FX_CBR.entrySet()) {
+            MarketQuote q = fx.get(e.getValue());
+            if (q != null) { upsertFeed(e.getKey(), q.priceRub(), q.change24hPct(), "CBR-FX"); updated++; }
+        }
+
+        Map<Integer, MarketQuote> metals = marketDataClient.fetchMetalsRub();
+        for (Map.Entry<String, Integer> e : METALS_CBR.entrySet()) {
+            MarketQuote q = metals.get(e.getValue());
+            if (q != null) { upsertFeed(e.getKey(), q.priceRub(), q.change24hPct(), "CBR-METALS"); updated++; }
+        }
+
+        log.info("Real market prices synced: {} feeds (crypto/FX/metals)", updated);
+    }
+
+    /** Upsert a price feed by symbol + record a TWAP tick. */
+    private void upsertFeed(String symbol, BigDecimal price, BigDecimal change24h, String source) {
+        if (price == null || price.signum() <= 0) return;
+        long nowMs = System.currentTimeMillis();
+        LocalDateTime now = LocalDateTime.now();
+        BigDecimal chg = change24h != null ? change24h : BigDecimal.ZERO;
+        PriceFeed feed = priceFeedRepository.findByAssetSymbol(symbol)
+                .orElseGet(() -> PriceFeed.builder()
+                        .assetSymbol(symbol).source(source)
+                        .currentPrice(price).twapPrice(price)
+                        .priceChange24hPct(chg)
+                        .updatedAtEpochMs(nowMs).updatedAt(now)
+                        .build());
+        feed.setCurrentPrice(price);
+        feed.setSource(source);
+        feed.setPriceChange24hPct(chg);
+        feed.setUpdatedAtEpochMs(nowMs);
+        feed.setUpdatedAt(now);
+        priceFeedRepository.save(feed);
+        priceHistoryRepository.save(PriceHistory.builder()
+                .priceFeedId(feed.getId())
+                .price(price)
+                .timestampEpochMs(nowMs)
+                .build());
+    }
+
+    /** Synthetic random-walk for MOEX equities/indices that have no reachable real feed. */
     @Scheduled(fixedRate = 15_000)
     @Transactional
     public void fetchPricesFromMoex() {
-        log.debug("Fetching mock MOEX prices...");
+        log.debug("Fetching synthetic equity/index prices...");
 
         for (Map.Entry<String, BigDecimal> entry : INITIAL_PRICES.entrySet()) {
             String symbol = entry.getKey();
@@ -170,7 +263,7 @@ public class PriceOracleService {
             PriceFeed feed = priceFeedRepository.findByAssetSymbol(symbol)
                     .orElseGet(() -> PriceFeed.builder()
                             .assetSymbol(symbol)
-                            .source("MOEX")
+                            .source("SYNTHETIC")
                             .currentPrice(newPrice)
                             .twapPrice(newPrice)
                             .priceChange24hPct(BigDecimal.ZERO)

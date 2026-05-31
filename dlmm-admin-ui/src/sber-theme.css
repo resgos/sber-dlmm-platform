@@ -100,7 +100,7 @@
   /* Warm ink ramp from the mockup (slightly warmer than the Plasma greys). */
   --ds-ink-1: #14171A;
   --ds-ink-2: #4B5560;
-  --ds-ink-3: #8A93A0;
+  --ds-ink-3: #6A7280; /* a11y P7: #8A93A0 was 3.11:1 as text; #6A7280 ≈ 4.6:1 */
   --ds-ink-4: #B7BEC8;
   --ds-row-hover: #FAF8F1;                    /* warm row hover */
   --ds-surface-soft: #F4F2EB;                 /* chips, segmented track */

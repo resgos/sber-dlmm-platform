@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { admin, transactions as txApi, pools as poolsApi } from '@/api/services'
+import { rowButtonProps } from '@/lib/a11y'
 import type { Pool, Transaction, TxStatus } from '@/api/types'
 import { formatRub, formatRubParts, formatPercent, poolTvlRub, shortId } from '@/lib/format'
 import {
@@ -359,6 +360,7 @@ export default function DashboardPage() {
                   key={p.id}
                   style={{ cursor: 'pointer' }}
                   onClick={() => navigate(`/pools/${p.id}`)}
+                  {...rowButtonProps(() => navigate(`/pools/${p.id}`), `Открыть пул ${p.tokenXSymbol}/${p.tokenYSymbol}`)}
                 >
                   <span className="ds-pair-chip">
                     {p.tokenXSymbol}/{p.tokenYSymbol}
@@ -406,6 +408,7 @@ export default function DashboardPage() {
                   className="ds-tx"
                   key={tx.id}
                   onClick={() => navigate(`/transactions/${tx.id}`)}
+                  {...rowButtonProps(() => navigate(`/transactions/${tx.id}`), 'Открыть транзакцию')}
                 >
                   <span className="ds-tx-time">
                     {tx.createdAt ? dayjs(tx.createdAt).format('HH:mm:ss') : '—'}

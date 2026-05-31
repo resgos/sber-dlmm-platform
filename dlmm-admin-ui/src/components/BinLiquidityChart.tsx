@@ -223,6 +223,7 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
               <Button
                 size="small"
                 type="text"
+                aria-label="Приблизить"
                 icon={<ZoomInOutlined />}
                 disabled={zoomIndex === 0}
                 onClick={() => setZoomIndex(Math.max(0, zoomIndex - 1))}
@@ -232,6 +233,7 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
               <Button
                 size="small"
                 type="text"
+                aria-label="К текущей цене"
                 icon={<AimOutlined />}
                 onClick={() => setZoomIndex(DEFAULT_ZOOM_INDEX)}
               />
@@ -240,6 +242,7 @@ export default function BinLiquidityChart({ poolId }: BinLiquidityChartProps) {
               <Button
                 size="small"
                 type="text"
+                aria-label="Отдалить"
                 icon={<ZoomOutOutlined />}
                 disabled={zoomIndex === ZOOM_LEVELS.length - 1}
                 onClick={() => setZoomIndex(Math.min(ZOOM_LEVELS.length - 1, zoomIndex + 1))}

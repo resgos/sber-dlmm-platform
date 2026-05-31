@@ -5,6 +5,7 @@ import type {
   CreateTokenRequest,
   MintBurnRequest,
 } from './types'
+import { toRaw } from './scale'
 
 export const tokens = {
   getTokens: async (page = 0, size = 20): Promise<PageResponse<Token>> => {
@@ -22,11 +23,19 @@ export const tokens = {
     return response.data
   },
   mint: async (id: string, data: MintBurnRequest): Promise<Token> => {
-    const response = await apiClient.post<Token>(`/admin/tokens/${id}/mint`, data)
+    // amount is a human token quantity — scale up to raw. Token response has
+    // only supply fields, which are deliberately left unscaled (see scale.ts).
+    const response = await apiClient.post<Token>(`/admin/tokens/${id}/mint`, {
+      ...data,
+      amount: toRaw(data.amount),
+    })
     return response.data
   },
   burn: async (id: string, data: MintBurnRequest): Promise<Token> => {
-    const response = await apiClient.post<Token>(`/admin/tokens/${id}/burn`, data)
+    const response = await apiClient.post<Token>(`/admin/tokens/${id}/burn`, {
+      ...data,
+      amount: toRaw(data.amount),
+    })
     return response.data
   },
 }

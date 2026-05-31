@@ -1,4 +1,5 @@
 import apiClient from './client'
+import { toRaw, fromRaw, fromRawN } from './scale'
 
 export interface SpasiboOperation {
   id: string
@@ -24,7 +25,12 @@ export interface SpasiboConvertRequest {
  */
 export const spasibo = {
   convertToRub: async (req: SpasiboConvertRequest): Promise<SpasiboOperation> => {
-    const { data } = await apiClient.post<SpasiboOperation>('/spasibo/convert', req)
-    return data
+    // points is a human SSPAS amount (validated against the scaled balance) —
+    // scale up to raw; scale the echoed points + credited SRUB back to human.
+    const { data } = await apiClient.post<SpasiboOperation>('/spasibo/convert', {
+      ...req,
+      points: toRaw(req.points),
+    })
+    return { ...data, points: fromRaw(data.points), rubAmount: fromRawN(data.rubAmount) }
   },
 }

@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, tokens, balances, transactions } from '@/api/services'
+import { rowButtonProps } from '@/lib/a11y'
 import type { Pool, Token, TokenBalance, Transaction } from '@/api/types'
 import { bpsToPercent } from '@/utils/format'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
@@ -510,6 +511,7 @@ export default function HedgePage() {
                     <div
                       key={c.pool.id}
                       onClick={() => setSelectedPoolId(c.pool.id)}
+                      {...rowButtonProps(() => setSelectedPoolId(c.pool.id), `Выбрать пул ${c.pool.tokenXSymbol} / ${c.pool.tokenYSymbol}`)}
                       className={`sber-hedge-pair${selected ? ' sber-hedge-pair--selected' : ''}`}
                     >
                       <Row justify="space-between" align="middle">
@@ -751,6 +753,7 @@ export default function HedgePage() {
           </Text>
         ) : (
           <Table
+            scroll={{ x: 'max-content' }}
             dataSource={openHedges}
             rowKey="id"
             pagination={false}

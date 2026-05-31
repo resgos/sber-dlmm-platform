@@ -14,6 +14,8 @@ import java.util.UUID;
 @Repository
 public interface PoolBinRepository extends JpaRepository<PoolBin, PoolBinId> {
 
+    List<PoolBin> findByPoolId(UUID poolId);
+
     List<PoolBin> findByPoolIdAndBinIdBetween(UUID poolId, int minBin, int maxBin);
 
     List<PoolBin> findByPoolIdAndLiquidityGreaterThan(UUID poolId, long minLiquidity);

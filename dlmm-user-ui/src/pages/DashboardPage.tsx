@@ -11,9 +11,11 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { balances, pools, fees, transactions, oracle, tokens as tokensApi } from '@/api/services'
+import { rowButtonProps } from '@/lib/a11y'
 import TokenIcon from '@/components/TokenIcon'
 import StatCard, { formatRub } from '@/components/StatCard'
 import SpasiboWidget from '@/components/SpasiboWidget'
+import MarketTicker from '@/components/MarketTicker'
 import { uiPrefStore } from '@/store/uiPrefStore'
 import { DASHBOARD_TILE_PALETTE } from '@/styles/palette'
 import type { TokenBalance, Position, Transaction, TokenPrice, Pool, Token } from '@/api/types'
@@ -336,6 +338,8 @@ export default function DashboardPage() {
           middle — the three shortcuts a treasurer hits most often,
           (3) Recent activity teaser on the right that's also a link to
           the full transactions page. */}
+      <MarketTicker prices={prices} />
+
       <Row gutter={[16, 16]} align="stretch">
         <Col xs={24} md={12} lg={8}>
           <SpasiboWidget />
@@ -404,6 +408,7 @@ export default function DashboardPage() {
                     <div
                       key={tx.id}
                       onClick={() => navigate('/transactions')}
+                      {...rowButtonProps(() => navigate('/transactions'), 'Открыть транзакции')}
                       style={{
                         padding: '10px 16px',
                         borderTop: i === 0 ? 'none' : '1px solid var(--border-light)',
@@ -445,6 +450,7 @@ export default function DashboardPage() {
       <Card className="sber-card" title={<Text strong>Мои токены</Text>}
         extra={<Button type="link" onClick={() => navigate('/swap')}>Обменять <ArrowRightOutlined /></Button>}>
         <Table
+          scroll={{ x: 'max-content' }}
           className="sber-table"
           dataSource={[...(myBalances || [])].sort(
             (a: TokenBalance, b: TokenBalance) =>
@@ -513,6 +519,7 @@ export default function DashboardPage() {
         <Card className="sber-card" title={<Text strong>Активные позиции</Text>}
           extra={<Button type="link" onClick={() => navigate('/positions')}>Все позиции <ArrowRightOutlined /></Button>}>
           <Table
+            scroll={{ x: 'max-content' }}
             className="sber-table"
             dataSource={activePositions.slice(0, 3)}
             rowKey="id"

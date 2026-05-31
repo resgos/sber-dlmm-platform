@@ -272,9 +272,11 @@ public class PoolService {
     }
 
     private int calculateDynamicFee(LiquidityPool pool) {
-        long vaSquared = (long) pool.getVolatilityAccumulator() * pool.getVolatilityAccumulator();
-        long variableFeeBps = vaSquared * pool.getBinStep() / 10_000_000_000L;
-        return (int) (pool.getBaseFeeBps() + variableFeeBps);
+        // Shared with FeeCalculator.calculateSwapFee so the displayed "current
+        // dynamic fee" and the fee actually charged stay identical (and both honour
+        // the 10% MAX_FEE_BPS cap). Was a duplicated formula that could drift.
+        return FeeCalculator.totalFeeBps(pool.getBaseFeeBps(),
+                pool.getVolatilityAccumulator(), pool.getBinStep());
     }
 
     private BigDecimal calculateEstimatedApy(LiquidityPool pool, int dynamicFeeBps) {

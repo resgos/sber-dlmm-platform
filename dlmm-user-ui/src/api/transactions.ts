@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { Transaction, PageResponse, TransactionFilters } from './types'
+import { scaleTransaction } from './scale'
 
 export const transactions = {
   getMyTransactions: async (
@@ -10,12 +11,12 @@ export const transactions = {
     const { data } = await apiClient.get<PageResponse<Transaction>>('/transactions/me', {
       params: { page, size, ...filters },
     })
-    return data
+    return { ...data, content: data.content.map(scaleTransaction) }
   },
 
   getTransaction: async (id: string): Promise<Transaction> => {
     const { data } = await apiClient.get<Transaction>(`/transactions/${id}`)
-    return data
+    return scaleTransaction(data)
   },
 
   /**
@@ -31,6 +32,6 @@ export const transactions = {
       `/transactions/pool/${poolId}`,
       { params: { limit } },
     )
-    return data
+    return data.map(scaleTransaction)
   },
 }

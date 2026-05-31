@@ -84,7 +84,10 @@
   --text-primary: #080808;
   --text-secondary: rgba(8, 8, 8, 0.56);
   --text-paragraph: rgba(8, 8, 8, 0.80);
-  --text-muted: rgba(8, 8, 8, 0.28);
+  /* WCAG 1.4.3 (a11y audit P2): was rgba(8,8,8,.28) = 1.94:1 on white, but
+     used for real text (pool labels, tokensel name, order-book head, "Не
+     верифицирован"). Raised to .55 ≈ 4.5:1 to pass AA for normal-size text. */
+  --text-muted: rgba(8, 8, 8, 0.55);
 
   /* Plasma semantic colours. Names match @salutejs/plasma-tokens-web
      so future component code can read them by Plasma name. */
@@ -106,7 +109,7 @@
      without touching every call site. */
   --color-negative: #DC2626;
   --color-negative-strong: #EF4444;
-  --color-warning-amber: #D97706;
+  --color-warning-amber: #B45309; /* a11y P8: #D97706 was 3.19:1 as text; #B45309 = 4.5:1 */
 
   /* Modern shadow ramp */
   --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
@@ -213,7 +216,7 @@
   --text-primary: rgba(255, 255, 255, 0.92);
   --text-secondary: rgba(255, 255, 255, 0.60);
   --text-paragraph: rgba(255, 255, 255, 0.80);
-  --text-muted: rgba(255, 255, 255, 0.32);
+  --text-muted: rgba(255, 255, 255, 0.42); /* a11y P9: .32 was 2.91:1 on dark; .42 ≈ 4.5:1 */
 
   /* T-01 — brand-soft as a bg tint was #E8F5E9 (near-white) in both
      themes, so any "active/selected" surface using it went white-on-dark
@@ -609,8 +612,8 @@ body {
 }
 .sber-sidebar .ant-menu-item-selected {
   background: #E8F5E9 !important;
-  color: #21A038 !important;
-  font-weight: 500;
+  color: #0E6B1E !important; /* a11y P6: #21A038 on mint was 3.04:1; #0E6B1E = 4.5:1+ */
+  font-weight: 600;
 }
 .sber-sidebar .ant-menu-item-selected::after {
   display: none;
@@ -1079,7 +1082,7 @@ body {
   letter-spacing: -0.5px;
 }
 .sber-swap-amount .ant-input-number-input::placeholder {
-  color: #D1D5DB;
+  color: #767676; /* a11y P1: #D1D5DB was 1.47:1 (invisible); #767676 = 4.5:1 */
   font-weight: 500;
 }
 .sber-swap-flip {
@@ -2698,4 +2701,39 @@ a:focus-visible {
 @media (max-width: 414px) {
   .sber-simple-card .ant-card-body { padding: var(--space-5) !important; }
   .sber-simple-cta.ant-btn { height: 48px !important; }
+}
+
+/* «Биржевые цены» ticker (MarketTicker) — real CoinGecko / ЦБ РФ quotes. */
+.sber-market-ticker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+.sber-market-ticker__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+.sber-market-ticker__meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.sber-market-ticker__name {
+  font-weight: 600; font-size: var(--text-sm); color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sber-market-ticker__src.ant-tag {
+  font-size: 10px; line-height: 16px; color: var(--text-secondary);
+  background: var(--bg-page); align-self: flex-start; padding: 0 6px; margin: 2px 0 0;
+}
+.sber-market-ticker__px { display: flex; flex-direction: column; align-items: flex-end; }
+.sber-market-ticker__price {
+  font-weight: 700; font-size: var(--text-sm); color: var(--text-primary); white-space: nowrap;
+}
+.sber-market-ticker__chg { font-size: var(--text-xs); display: inline-flex; align-items: center; gap: 2px; }
+.sber-market-ticker__chg.is-up { color: var(--plasma-success); }
+.sber-market-ticker__chg.is-down { color: var(--color-negative); }
+@media (max-width: 480px) {
+  .sber-market-ticker { grid-template-columns: 1fr 1fr; }
 }

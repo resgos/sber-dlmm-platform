@@ -344,6 +344,8 @@ export interface TokenPrice {
   symbol: string
   price: number
   change24h: number
+  /** feed source: COINGECKO / CBR-FX / CBR-METALS / SYNTHETIC / MOEX… */
+  source?: string
 }
 
 // Pagination

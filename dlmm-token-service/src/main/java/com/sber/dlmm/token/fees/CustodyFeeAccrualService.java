@@ -58,15 +58,31 @@ public class CustodyFeeAccrualService {
         long days = Math.min(MAX_ACCRUAL_DAYS, Duration.between(since, now).toDays());
         if (days <= 0) return 0;
 
-        long fee = (b.getAvailable() * (long) custodyBpsPerAnnum * days)
-                / (BPS_DIVISOR * DAYS_IN_YEAR);
+        // Advance the watermark by the whole days we actually charge — NOT to
+        // `now`. Duration.toDays() floors and `days` is capped at
+        // MAX_ACCRUAL_DAYS, so marking `now` silently drops the sub-day
+        // remainder (and any time beyond the 90-day cap) every tick, which
+        // systematically under-charges custody over time. Carrying the
+        // remainder forward makes accrual lossless (#27).
+        LocalDateTime accruedThrough = since.plusDays(days);
+
+        // Overflow-safe: after the 1e-4 platform amount scale, `available` is a
+        // large raw integer (≈1e15+ for a treasury/whale row), so
+        // `available * custodyBpsPerAnnum * days` overflows long and would wrap
+        // NEGATIVE → the fee<=0 branch → a silent zero-charge on exactly the
+        // biggest balances. Same hazard the swap-fee path was hardened for.
+        long fee = java.math.BigInteger.valueOf(b.getAvailable())
+                .multiply(java.math.BigInteger.valueOf(custodyBpsPerAnnum))
+                .multiply(java.math.BigInteger.valueOf(days))
+                .divide(java.math.BigInteger.valueOf(BPS_DIVISOR * DAYS_IN_YEAR))
+                .longValue();
 
         if (fee <= 0) {
             // Sub-unit accrual → still mark accrued so the cron doesn't
             // re-evaluate this row every tick forever. Uses a dedicated
             // UPDATE rather than entity.save() to avoid round-tripping
             // stale `available` (see markCustodyAccrued javadoc).
-            userBalanceRepository.markCustodyAccrued(b.getUserId(), b.getTokenId(), now);
+            userBalanceRepository.markCustodyAccrued(b.getUserId(), b.getTokenId(), accruedThrough);
             return 0;
         }
         if (fee >= b.getAvailable()) {
@@ -101,7 +117,7 @@ public class CustodyFeeAccrualService {
         // undo the deduct we just made. Caught in Sprint 3 day 3
         // smoke-test: ivanov's SBER showed unchanged despite a
         // CustodyFeeAccrued event being published.
-        userBalanceRepository.markCustodyAccrued(b.getUserId(), b.getTokenId(), now);
+        userBalanceRepository.markCustodyAccrued(b.getUserId(), b.getTokenId(), accruedThrough);
 
         String symbol = tokenRepository.findById(b.getTokenId())
                 .map(t -> t.getSymbol())

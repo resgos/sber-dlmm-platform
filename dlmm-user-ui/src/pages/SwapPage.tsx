@@ -16,6 +16,7 @@ import { tokens, pools, balances } from '@/api/services'
 import type { Token, Pool, TokenBalance } from '@/api/types'
 import TokenChip from '@/components/TokenChip'
 import TokenSelect from '@/components/TokenSelect'
+import { rowButtonProps } from '@/lib/a11y'
 import PoolPriceChart from '@/components/PoolPriceChart'
 import { bpsToPercent } from '@/utils/format'
 import { TokenPairChip } from '@/components/sber'
@@ -241,6 +242,7 @@ export default function SwapPage() {
         <InputNumber
           className="sber-swap-amount"
           placeholder="0.0"
+          aria-label={opts.readOnly ? 'Сумма, которую вы получите' : 'Сумма, которую вы отдаёте'}
           value={opts.value}
           onChange={opts.onValueChange}
           min={0}
@@ -581,6 +583,7 @@ function SwapInfoPanel({
                 <div
                   key={p.id}
                   onClick={() => onPickPair(p)}
+                  {...rowButtonProps(() => onPickPair(p), `Выбрать пул ${p.tokenXSymbol} / ${p.tokenYSymbol}`)}
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',

@@ -10,6 +10,7 @@ import { tokens, pools, balances } from '@/api/services'
 import type { Token, Pool, TokenBalance, Position } from '@/api/types'
 import TokenChip from '@/components/TokenChip'
 import TokenSelect from '@/components/TokenSelect'
+import { rowButtonProps } from '@/lib/a11y'
 import { TokenPairChip } from '@/components/sber'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
 import { celebrateSberkot } from '@/components/sberkot/events'
@@ -422,6 +423,7 @@ export default function SimpleTradePage() {
                 size="large"
                 style={{ width: '100%' }}
                 placeholder="0.00"
+                aria-label="Сумма сделки"
                 value={amount}
                 onChange={(v) => setAmount(v)}
                 min={0}
@@ -523,6 +525,7 @@ export default function SimpleTradePage() {
                   <Select
                     size="large"
                     style={{ width: '100%' }}
+                    aria-label="Пул"
                     placeholder="Выберите пул"
                     value={lpPoolId || undefined}
                     onChange={(v) => { setLpPoolId(v); setLpAmountX(null); setLpAmountY(null); setLpError(null) }}
@@ -551,7 +554,7 @@ export default function SimpleTradePage() {
                           </Space>
                         )}
                       </div>
-                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00"
+                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00" aria-label={`Количество ${selectedLpPool.tokenXSymbol}`}
                         value={lpAmountX} onChange={(v) => setLpAmountX(v)} min={0} controls={false} />
                     </div>
 
@@ -568,7 +571,7 @@ export default function SimpleTradePage() {
                           </Space>
                         )}
                       </div>
-                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00"
+                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00" aria-label={`Количество ${selectedLpPool.tokenYSymbol}`}
                         value={lpAmountY} onChange={(v) => setLpAmountY(v)} min={0} controls={false} />
                     </div>
 
@@ -618,6 +621,7 @@ export default function SimpleTradePage() {
                           <div
                             key={p.id}
                             onClick={() => setLpPoolId(p.id)}
+                            {...rowButtonProps(() => setLpPoolId(p.id), `Выбрать пул ${p.tokenXSymbol} / ${p.tokenYSymbol}`)}
                             className="sber-simple-poolrow"
                             style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--border-light)' : 'none' }}
                           >
@@ -661,6 +665,7 @@ export default function SimpleTradePage() {
                       <Select
                         size="large"
                         style={{ width: '100%' }}
+                        aria-label="Позиция"
                         placeholder="Выберите позицию"
                         value={removePositionId || undefined}
                         onChange={(v) => { setRemovePositionId(v); setRemoveError(null) }}

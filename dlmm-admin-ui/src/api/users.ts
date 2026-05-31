@@ -6,6 +6,7 @@ import type {
   KycStatus,
   UserRole,
 } from './types'
+import { scaleTransaction } from './scale'
 
 export const users = {
   getUsers: async (page = 0, size = 20, email?: string): Promise<PageResponse<User>> => {
@@ -43,6 +44,6 @@ export const users = {
       `/admin/users/${id}/transactions`,
       { params: { page, size } },
     )
-    return response.data
+    return { ...response.data, content: response.data.content.map(scaleTransaction) }
   },
 }

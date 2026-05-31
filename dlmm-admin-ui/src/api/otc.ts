@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { PageResponse } from './types'
+import { scaleOtcBlockTrade, toRaw } from './scale'
 
 /**
  * Sprint 9 #6.1 — OTC desk API client.
@@ -64,41 +65,49 @@ export const otc = {
     size?: number
   }): Promise<PageResponse<OtcBlockTrade>> => {
     const { data } = await apiClient.get<PageResponse<OtcBlockTrade>>('/otc', { params })
-    return data
+    return { ...data, content: data.content.map(scaleOtcBlockTrade) }
   },
 
   getOne: async (id: string): Promise<OtcBlockTrade> => {
     const { data } = await apiClient.get<OtcBlockTrade>(`/otc/${id}`)
-    return data
+    return scaleOtcBlockTrade(data)
   },
 
   create: async (req: CreateOtcRequest): Promise<OtcBlockTrade> => {
-    const { data } = await apiClient.post<OtcBlockTrade>('/otc', req)
-    return data
+    // amountIn is a human quantity — scale up to raw before sending.
+    const { data } = await apiClient.post<OtcBlockTrade>('/otc', {
+      ...req,
+      amountIn: toRaw(req.amountIn),
+    })
+    return scaleOtcBlockTrade(data)
   },
 
   quote: async (id: string, req: QuoteOtcRequest): Promise<OtcBlockTrade> => {
-    const { data } = await apiClient.post<OtcBlockTrade>(`/otc/${id}/quote`, req)
-    return data
+    // amountOut is a human quantity; quotedPriceMicro is a price — leave it.
+    const { data } = await apiClient.post<OtcBlockTrade>(`/otc/${id}/quote`, {
+      ...req,
+      amountOut: toRaw(req.amountOut),
+    })
+    return scaleOtcBlockTrade(data)
   },
 
   accept: async (id: string): Promise<OtcBlockTrade> => {
     const { data } = await apiClient.post<OtcBlockTrade>(`/otc/${id}/accept`)
-    return data
+    return scaleOtcBlockTrade(data)
   },
 
   reject: async (id: string, reason?: string): Promise<OtcBlockTrade> => {
     const { data } = await apiClient.post<OtcBlockTrade>(`/otc/${id}/reject`, { reason })
-    return data
+    return scaleOtcBlockTrade(data)
   },
 
   settle: async (id: string, req: SettleOtcRequest): Promise<OtcBlockTrade> => {
     const { data } = await apiClient.post<OtcBlockTrade>(`/otc/${id}/settle`, req)
-    return data
+    return scaleOtcBlockTrade(data)
   },
 
   cancel: async (id: string, reason?: string): Promise<OtcBlockTrade> => {
     const { data } = await apiClient.post<OtcBlockTrade>(`/otc/${id}/cancel`, { reason })
-    return data
+    return scaleOtcBlockTrade(data)
   },
 }

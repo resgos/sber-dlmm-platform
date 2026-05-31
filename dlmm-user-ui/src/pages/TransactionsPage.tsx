@@ -149,6 +149,7 @@ export default function TransactionsPage() {
       </Space>
 
       <Table
+        scroll={{ x: 'max-content' }}
         className="sber-table"
         loading={isLoading}
         dataSource={data?.content || []}

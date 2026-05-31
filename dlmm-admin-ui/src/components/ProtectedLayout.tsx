@@ -113,6 +113,7 @@ function SberLogo({ size = 28 }: { size?: number }) {
 
 export default function ProtectedLayout() {
   const [collapsed, setCollapsed] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const user = authStore.getUser()
@@ -254,13 +255,26 @@ export default function ProtectedLayout() {
           </Space>
 
           <Space size={16}>
-            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+            <Dropdown
+              menu={{ items: userMenuItems }}
+              placement="bottomRight"
+              open={userMenuOpen}
+              onOpenChange={setUserMenuOpen}
+            >
               <Space
                 style={{ cursor: 'pointer' }}
                 role="button"
                 tabIndex={0}
                 aria-label={`Меню администратора ${user?.email || 'Администратор'}`}
                 aria-haspopup="menu"
+                aria-expanded={userMenuOpen}
+                onKeyDown={(e) => {
+                  // a11y R2: keyboard open for the AntD Dropdown trigger.
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setUserMenuOpen((o) => !o)
+                  }
+                }}
               >
                 <Avatar
                   icon={<UserOutlined aria-hidden />}
