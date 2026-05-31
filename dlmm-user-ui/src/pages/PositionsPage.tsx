@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip, Dropdown } from 'antd'
+import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip, Dropdown, Alert } from 'antd'
 import { DollarOutlined, DeleteOutlined, DownloadOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined, DownOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { pools, fees } from '@/api/services'
+import { pools, fees, farming } from '@/api/services'
 import type { Position, Pool, FeeHistoryEntry } from '@/api/types'
 import { KpiRow, PageHeader, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
@@ -104,6 +104,18 @@ export default function PositionsPage() {
       queryClient.invalidateQueries({ queryKey: ['myFeeHistory'] })
     },
     onError: (err: any) => message.error(err?.response?.data?.message || 'Ошибка'),
+  })
+
+  // Sprint 17 — LP-farming rewards (SSPAS).
+  const { data: farmRewards } = useQuery({ queryKey: ['myFarmRewards'], queryFn: farming.getMyRewards })
+  const claimFarmMutation = useMutation({
+    mutationFn: () => farming.claimRewards(),
+    onSuccess: (claimed) => {
+      message.success(`Награды забраны: ${formatRub(claimed)}`)
+      queryClient.invalidateQueries({ queryKey: ['myFarmRewards'] })
+      queryClient.invalidateQueries({ queryKey: ['myBalances'] })
+    },
+    onError: () => message.error('Не удалось забрать награды'),
   })
 
   const removeMutation = useMutation({
@@ -302,6 +314,35 @@ export default function PositionsPage() {
           },
         ]}
       />
+
+      {farmRewards && (farmRewards.totalUnclaimed > 0 || farmRewards.totalClaimed > 0) && (
+        <Alert
+          type="success"
+          showIcon
+          icon={<TrophyOutlined />}
+          message={
+            <Space size={8} wrap>
+              <Text strong>Награды фарминга:</Text>
+              <Text strong style={{ color: 'var(--sber-green)' }}>{formatRub(farmRewards.totalUnclaimed)}</Text>
+              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
+                к получению{farmRewards.totalClaimed > 0 ? ` · забрано ${formatRub(farmRewards.totalClaimed)}` : ''}
+              </Text>
+            </Space>
+          }
+          action={
+            <Button
+              size="small"
+              type="primary"
+              loading={claimFarmMutation.isPending}
+              disabled={farmRewards.totalUnclaimed <= 0}
+              onClick={() => claimFarmMutation.mutate()}
+            >
+              Забрать награды
+            </Button>
+          }
+          style={{ borderRadius: 'var(--radius-md)' }}
+        />
+      )}
 
       <Card
         className="sber-card"

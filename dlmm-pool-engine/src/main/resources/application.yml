@@ -91,6 +91,14 @@ dlmm:
     warning-bin-distance: ${DLMM_MARGIN_WARNING_DISTANCE:3}     # bins to boundary
     event-cooldown-hours: ${DLMM_MARGIN_COOLDOWN_HOURS:6}       # dedupe window
     page-size: ${DLMM_MARGIN_PAGE_SIZE:500}                     # positions per page
+  # Sprint 17 — LP-farming rewards (reward token = Spasibo / SSPAS).
+  # LpFarmingScheduler accrues each enabled pool's pro-rated daily emission to
+  # its in-range active positions; users claim via POST /api/v1/pools/farming/claim.
+  # accrual-rate-ms is BOTH the scheduler cadence and the cycle length used to
+  # pro-rate emission_per_day (cycleEmission = emissionPerDay * accrual-rate-ms / 86_400_000).
+  farming:
+    enabled: ${DLMM_FARMING_ENABLED:true}
+    accrual-rate-ms: ${DLMM_FARMING_ACCRUAL_RATE_MS:3600000}    # 1 h → 1/24 of daily emission per cycle
 
 logging:
   level:

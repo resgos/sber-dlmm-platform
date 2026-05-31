@@ -206,6 +206,51 @@ CREATE INDEX IF NOT EXISTS idx_limit_orders_user_id ON limit_orders (user_id);
 CREATE INDEX IF NOT EXISTS idx_limit_orders_status ON limit_orders (status);
 CREATE INDEX IF NOT EXISTS idx_limit_orders_pool_id ON limit_orders (pool_id);
 
+-- ─── LP-farming rewards (pool-engine) ───────────────────────────────────────
+-- Sprint 17 — LP-farming rewards (reward token = Spasibo / SSPAS). Each enabled
+-- pool_rewards_config row emits emission_per_day raw (×10⁴) units of its reward
+-- token; a scheduled accrual splits each cycle's pro-rated slice across the
+-- in-range active positions (proportional to total_liquidity_shares) into
+-- pool_position_rewards.unclaimed_reward; a claim zeroes unclaimed, moves it to
+-- claimed_reward, and credits the user's SSPAS balance. Mirrored by Liquibase
+-- changeset 013. Emission + reward amounts are raw ×10⁴ units.
+-- NOTE: config is intentionally NOT seeded here — there is no SSPAS token id at
+-- bootstrap. To enable farming on a pool after the SSPAS token exists:
+--   INSERT INTO pool_rewards_config (pool_id, reward_token_id, emission_per_day, enabled)
+--   SELECT p.id, t.id, 1000000000, true
+--   FROM liquidity_pools p, tokens t
+--   WHERE t.symbol = 'SSPAS' AND p.id = '<POOL_ID>'
+--   ON CONFLICT (pool_id) DO UPDATE
+--     SET reward_token_id = EXCLUDED.reward_token_id,
+--         emission_per_day = EXCLUDED.emission_per_day,
+--         enabled = EXCLUDED.enabled,
+--         updated_at = CURRENT_TIMESTAMP;
+CREATE TABLE IF NOT EXISTS pool_rewards_config (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pool_id UUID NOT NULL UNIQUE,
+    reward_token_id UUID NOT NULL,
+    emission_per_day BIGINT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS pool_position_rewards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    position_id UUID NOT NULL,
+    pool_id UUID,
+    user_id UUID NOT NULL,
+    reward_token_id UUID NOT NULL,
+    unclaimed_reward BIGINT NOT NULL DEFAULT 0,
+    claimed_reward BIGINT NOT NULL DEFAULT 0,
+    last_accrual_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pool_position_rewards_position_id ON pool_position_rewards (position_id);
+CREATE INDEX IF NOT EXISTS idx_pool_position_rewards_user_id ON pool_position_rewards (user_id);
+CREATE INDEX IF NOT EXISTS idx_pool_position_rewards_position_id ON pool_position_rewards (position_id);
+
 -- ─── transactions (transaction-service) ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS transactions (

@@ -1699,7 +1699,7 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/PositionsPage.tsx",
-    "line": 670,
+    "line": 711,
     "match": "fontSize: 24",
     "snippet": "style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--colo"
   },
