@@ -20,7 +20,7 @@ import { rowButtonProps } from '@/lib/a11y'
 import PoolPriceChart from '@/components/PoolPriceChart'
 import { bpsToPercent } from '@/utils/format'
 import { TokenPairChip } from '@/components/sber'
-import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
 
 const { Title, Text } = Typography
 
@@ -408,11 +408,15 @@ export default function SwapPage() {
             >
               <div className="sber-swap-quote__row">
                 <Text type="secondary">Курс</Text>
-                <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  {quote.amountIn && quote.amountIn > 0 && quote.amountOut != null
-                    ? `1 ${tokenInSymbol} ≈ ${(quote.amountOut / quote.amountIn).toFixed(6)} ${tokenOutSymbol}`
-                    : '—'}
-                </Text>
+                {(() => {
+                  const r = exchangeRatePair(quote.amountIn, quote.amountOut, tokenInSymbol, tokenOutSymbol)
+                  return (
+                    <div style={{ textAlign: 'right' }}>
+                      <Text strong style={{ fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r?.forward ?? '—'}</Text>
+                      {r && <Text type="secondary" style={{ fontVariantNumeric: 'tabular-nums', display: 'block', fontSize: 'var(--text-xs)' }}>{r.reverse}</Text>}
+                    </div>
+                  )
+                })()}
               </div>
               <div className="sber-swap-quote__row">
                 <Text type="secondary">
@@ -736,11 +740,11 @@ function SwapInfoPanel({
 
             <InfoRow
               label="Эффективный курс"
-              value={
-                quote.amountIn && quote.amountIn > 0 && quote.amountOut != null
-                  ? `1 ${tokenIn.symbol} ≈ ${(quote.amountOut / quote.amountIn).toFixed(6)} ${tokenOut.symbol}`
-                  : '—'
-              }
+              value={exchangeRatePair(quote.amountIn, quote.amountOut, tokenIn.symbol, tokenOut.symbol)?.forward ?? '—'}
+            />
+            <InfoRow
+              label="Обратный курс"
+              value={exchangeRatePair(quote.amountIn, quote.amountOut, tokenIn.symbol, tokenOut.symbol)?.reverse ?? '—'}
             />
             <InfoRow
               label="Влияние на цену"

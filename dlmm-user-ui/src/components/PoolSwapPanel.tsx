@@ -4,7 +4,7 @@ import { ArrowDownOutlined, ThunderboltFilled, SwapOutlined } from '@ant-design/
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, balances } from '@/api/services'
 import type { Pool, TokenBalance, SwapQuote } from '@/api/types'
-import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
 
 const { Text } = Typography
 
@@ -238,7 +238,18 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       {/* Quote summary */}
       {quote && !quoteLoading && (
         <div style={{ padding: '8px 12px', background: 'var(--surface-1, #F9FAFB)', borderRadius: 'var(--radius-sm)', marginBottom: 12 }}>
-          <Row label="Курс" value={`1 ${tokenInSym} ≈ ${(quote.amountOut / quote.amountIn).toFixed(6)} ${tokenOutSym}`} />
+          {(() => {
+            const r = exchangeRatePair(quote.amountIn, quote.amountOut, tokenInSym, tokenOutSym)
+            return (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '4px 0', fontSize: 'var(--text-xs)', borderBottom: '1px solid var(--border-light)' }}>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Курс</Text>
+                <div style={{ textAlign: 'right' }}>
+                  <Text strong style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r?.forward ?? '—'}</Text>
+                  {r && <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r.reverse}</Text>}
+                </div>
+              </div>
+            )
+          })()}
           <Row
             label="Влияние на цену"
             value={`${quote.priceImpact.toFixed(2)}%`}

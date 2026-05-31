@@ -403,12 +403,11 @@ describe('SwapPage — quote panel formatting', () => {
     await selectTokenOut('SBER — Sberbank')
     await userEvent.type(amountInInput(), '100')
 
-    // Rate row text: "1 SRUB ≈ 0.990000 SBER"
-    // Sprint 9-DS-r4 (CI fix) — rate row appears in BOTH the
-    // inline quote panel and the right-rail SwapInfoPanel; allow
-    // multiplicity.
+    // Rate row text: "1 SRUB ≈ 0,99 SBER" (Sprint 16 — adaptive ru-RU rate
+    // format, now shown BOTH ways: this forward line + a reverse "1 SBER ≈ …").
+    // The rate appears in both the inline quote panel and the right-rail panel.
     await waitFor(() => {
-      expect(screen.getAllByText(/1 SRUB.*0\.990000.*SBER/).length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText(/1 SRUB.*0,99.*SBER/).length).toBeGreaterThanOrEqual(1)
     })
   })
 

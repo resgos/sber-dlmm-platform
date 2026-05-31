@@ -1735,31 +1735,31 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/SimpleTradePage.tsx",
-    "line": 631,
+    "line": 643,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 421,
+    "line": 425,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 437,
+    "line": 441,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 609,
+    "line": 613,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10 }}>"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 640,
+    "line": 644,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },

@@ -12,7 +12,7 @@ import TokenChip from '@/components/TokenChip'
 import TokenSelect from '@/components/TokenSelect'
 import { rowButtonProps } from '@/lib/a11y'
 import { TokenPairChip } from '@/components/sber'
-import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
 import { celebrateSberkot } from '@/components/sberkot/events'
 
 const { Title, Text } = Typography
@@ -445,6 +445,18 @@ export default function SimpleTradePage() {
                     {formatTokenAmount(quote.amountOut, tokenOutSymbol, { compact: true, maxFractionDigits: 4 })}
                   </Text>
                 </div>
+                {(() => {
+                  const r = exchangeRatePair(quote.amountIn, quote.amountOut, tokenInSymbol, tokenOutSymbol)
+                  return r ? (
+                    <div className="sber-simple-est__row" style={{ alignItems: 'flex-start' }}>
+                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Курс</Text>
+                      <div style={{ textAlign: 'right' }}>
+                        <Text style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r.forward}</Text>
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r.reverse}</Text>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
                 <div className="sber-simple-est__row">
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Комиссия пула</Text>
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>

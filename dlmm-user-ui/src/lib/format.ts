@@ -79,6 +79,37 @@ export function formatPercent(value: number | null | undefined, digits = 2): str
 }
 
 /**
+ * Adaptive rate-number formatter. A swap rate can be huge (1 SBTC ≈ 5 000 000 ₽)
+ * or tiny (1 ₽ ≈ 0,0000002 SBTC), so plain toFixed(6) loses the small side and
+ * over-pads the big side. Scale the precision to the magnitude, keeping ~4
+ * significant figures for sub-1 values so the reverse rate stays visible.
+ */
+export function formatRateValue(v: number): string {
+  if (!Number.isFinite(v) || v <= 0) return '—'
+  if (v >= 1000) return v.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
+  if (v >= 1) return v.toLocaleString('ru-RU', { maximumFractionDigits: 4 })
+  return Number(v.toPrecision(4)).toLocaleString('ru-RU', { maximumFractionDigits: 20 })
+}
+
+/**
+ * Bidirectional exchange-rate strings for a swap quote — both
+ * "1 In ≈ N Out" and the reverse "1 Out ≈ M In", so the user sees the rate
+ * в обе стороны, not just one equivalent. Returns null if amounts are unusable.
+ */
+export function exchangeRatePair(
+  amountIn: number | null | undefined,
+  amountOut: number | null | undefined,
+  symIn: string | null | undefined,
+  symOut: string | null | undefined,
+): { forward: string; reverse: string } | null {
+  if (!amountIn || amountIn <= 0 || !amountOut || amountOut <= 0 || !symIn || !symOut) return null
+  return {
+    forward: `1 ${symIn} ≈ ${formatRateValue(amountOut / amountIn)} ${symOut}`,
+    reverse: `1 ${symOut} ≈ ${formatRateValue(amountIn / amountOut)} ${symIn}`,
+  }
+}
+
+/**
  * Truncate a UUID to its last 6 chars with leading ellipsis — used
  * everywhere we render an ID in a table cell. The seed data shares
  * long prefixes ("a0000000-…" / "88000000-…") so the tail is what
