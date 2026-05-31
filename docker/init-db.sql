@@ -15,13 +15,11 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(20) NOT NULL DEFAULT 'USER',
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- Sprint 10 fix: the User entity maps last_login_at under ddl-auto: validate.
-    -- It was previously added only by the un-mounted manual seed
-    -- 07-seed-fix-backend-bugs.sql, so a clean `docker compose up` failed schema
-    -- validation and user-service crash-looped. Bootstrapped here so the base
-    -- schema is self-sufficient (mirrored by Liquibase changeset 007).
-    last_login_at TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    -- TD-1 B1: last_login_at removed from this inline CREATE; it is owned by
+    -- user-service Liquibase changeset 007-add-last-login-at-to-users.xml,
+    -- which now becomes the single source of truth (no entrypoint seed
+    -- INSERT references this column, so a fresh boot is safe).
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_sber_id ON users (sber_id);
@@ -91,22 +89,20 @@ CREATE TABLE IF NOT EXISTS liquidity_pools (
     volume_24h BIGINT NOT NULL DEFAULT 0,
     total_fees_collected_x BIGINT NOT NULL DEFAULT 0,
     total_fees_collected_y BIGINT NOT NULL DEFAULT 0,
-    -- Sprint 6 #3.2 / pool-engine Liquibase 009 — protocol-side fee
-    -- accumulator, separate from total_fees_collected (which is gross).
-    -- Treasury sweep job (Sprint 7+) drains these.
-    total_protocol_fee_x BIGINT NOT NULL DEFAULT 0,
-    total_protocol_fee_y BIGINT NOT NULL DEFAULT 0,
-    -- Sprint 4 #4.2 / pool-engine Liquibase 007 — per-pool
-    -- counterparty caps. NULL = uncapped on that side.
-    max_single_swap_nominal_x BIGINT,
-    max_single_swap_nominal_y BIGINT,
+    -- TD-1 B1: total_protocol_fee_x/y removed here — owned by pool-engine
+    -- Liquibase changeset 009-add-protocol-fee-accumulators.xml (single
+    -- source of truth). No entrypoint seed INSERT names these columns.
+    -- TD-1 B1: max_single_swap_nominal_x/y removed here — owned by pool-engine
+    -- Liquibase changeset 007-add-counterparty-limits-to-pools.xml. No
+    -- entrypoint seed INSERT names these columns.
     status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
     created_by UUID NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- Sprint 4 #4.7 / pool-engine Liquibase 006 — JPA @Version optimistic
-    -- lock. Without this column the entity @Version fails ddl-auto:validate
-    -- on a fresh init-db.sql deploy, AND 04-spasibo-seed.sql's INSERT
-    -- references the column.
+    -- lock. KEPT in init-db.sql (TD-1 B1): 04-spasibo-seed.sql's INSERT runs
+    -- at the Postgres entrypoint BEFORE Liquibase and lists `version` in its
+    -- column-list, so a fresh boot needs the column present here. The
+    -- covering changeset 006-add-version-to-liquidity-pools.xml MARK_RANs.
     version BIGINT NOT NULL DEFAULT 0,
     UNIQUE (token_x_id, token_y_id, bin_step)
 );
@@ -149,14 +145,10 @@ CREATE TABLE IF NOT EXISTS lp_positions (
     unclaimed_fee_y BIGINT NOT NULL DEFAULT 0,
     last_fee_growth_x BIGINT NOT NULL DEFAULT 0,
     last_fee_growth_y BIGINT NOT NULL DEFAULT 0,
-    -- Sprint 9-DS-r4 (P1-10) — cost-basis tracking for the position P&L
-    -- column on PositionsPage. Initial-deposit pair stays in base units
-    -- (matches reserve_x/y); the UI computes P&L = currentValue - deposit
-    -- in pair-quote. Updated by LiquidityService: += on every add to the
-    -- same position; *= (1-pct/100) on partial removes (proportional
-    -- cost-basis reduction). Mirrored by Liquibase 011.
-    initial_deposit_x BIGINT NOT NULL DEFAULT 0,
-    initial_deposit_y BIGINT NOT NULL DEFAULT 0,
+    -- TD-1 B1: initial_deposit_x/y removed here — owned by pool-engine
+    -- Liquibase changeset 011-add-initial-deposit-to-lp-positions.xml (single
+    -- source of truth). No entrypoint seed INSERT (init-db.sql or
+    -- 03-seed-trading-history.sql) names these columns.
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     closed_at TIMESTAMP
@@ -267,18 +259,15 @@ CREATE TABLE IF NOT EXISTS transactions (
     fee_rate DECIMAL(10,6),
     bins_crossed INT NOT NULL DEFAULT 0,
     idempotency_key VARCHAR(255) UNIQUE,
-    -- Sprint 9-DS-r4 (P0-4) — pool-engine's own swap row id, propagated via
-    -- the SwapExecuted Kafka event. Lets the consumer dedup re-deliveries
-    -- even when no client-supplied idempotencyKey was attached (programmatic
-    -- swaps, internal flows). UNIQUE so we get a real DB-level guarantee
-    -- rather than relying on an in-app SELECT-then-INSERT race window.
-    pool_engine_tx_id UUID UNIQUE,
-    -- Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" flag for the
-    -- SuspiciousTransactionsPage. Null = not yet reviewed; non-null =
-    -- reviewer's userId + timestamp. admin-bff's suspicious detection
-    -- skips reviewed rows so they stop showing up after acknowledgement.
-    reviewed_at TIMESTAMP,
-    reviewed_by UUID,
+    -- TD-1 B1: pool_engine_tx_id (incl. its UNIQUE constraint + index) removed
+    -- here — owned by transaction-service Liquibase changeset
+    -- 006-add-pool-engine-tx-id-to-transactions.xml (adds the column, the
+    -- UNIQUE constraint, and idx_transactions_pool_engine_tx_id). No entrypoint
+    -- seed INSERT names this column.
+    -- TD-1 B1: reviewed_at / reviewed_by removed here — owned by
+    -- transaction-service Liquibase changeset
+    -- 007-add-reviewed-at-to-transactions.xml. No entrypoint seed INSERT names
+    -- these columns.
     metadata TEXT,
     error_message TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -291,7 +280,8 @@ CREATE INDEX IF NOT EXISTS idx_transactions_pool_id ON transactions (pool_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_tx_type ON transactions (tx_type);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions (status);
 CREATE INDEX IF NOT EXISTS idx_transactions_idempotency_key ON transactions (idempotency_key);
-CREATE INDEX IF NOT EXISTS idx_transactions_pool_engine_tx_id ON transactions (pool_engine_tx_id);
+-- TD-1 B1: idx_transactions_pool_engine_tx_id removed with its column above —
+-- created by transaction-service changeset 006-add-pool-engine-tx-id-to-transactions.xml.
 CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions (created_at);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_status ON transactions (user_id, status);
 
@@ -398,15 +388,14 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (create
 -- here so any service that boots into a fresh DB sees the table regardless
 -- of which service runs Liquibase first. Append-only — never updated, never
 -- deleted; compliance replay depends on immutability.
--- Sprint 13 G-28 / S13-02 — actor_type distinguishes ADMIN-side
--- mutations (KYC update, pool pause, OTC quote) from USER-side
--- mutations (swap, add/remove liquidity, fee claim). DEFAULT 'ADMIN'
--- so pre-existing rows stay valid and the user-service Liquibase
--- changeset 006-add-actor-type-to-admin-audit-log no-ops via
--- preCondition when the table is pre-bootstrapped here.
+-- Sprint 13 G-28 / S13-02 — actor_type (distinguishing ADMIN-side from
+-- USER-side mutations) and its filter index are NOT defined here anymore.
+-- TD-1 B1: they are owned by user-service Liquibase changeset
+-- 006-add-actor-type-to-admin-audit-log.xml (single source of truth — it
+-- adds the column with DEFAULT 'ADMIN' and creates idx_admin_audit_actor_type).
+-- No entrypoint seed INSERTs into admin_audit_log, so a fresh boot is safe.
 CREATE TABLE IF NOT EXISTS admin_audit_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    actor_type VARCHAR(10) NOT NULL DEFAULT 'ADMIN',
     actor_user_id UUID,
     actor_role VARCHAR(40),
     action VARCHAR(60) NOT NULL,
@@ -425,10 +414,8 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_target
     ON admin_audit_log (target_type, target_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_created
     ON admin_audit_log (created_at DESC);
--- Sprint 13 G-28 / S13-02 — filter index for "all USER actions" /
--- "all ADMIN actions" dashboard slices.
-CREATE INDEX IF NOT EXISTS idx_admin_audit_actor_type
-    ON admin_audit_log (actor_type, created_at DESC);
+-- TD-1 B1: idx_admin_audit_actor_type removed with its actor_type column —
+-- created by user-service changeset 006-add-actor-type-to-admin-audit-log.xml.
 
 -- ─── outbox_events (token-service, optionally other services) ───────────────
 -- Transactional outbox: domain-mutation @Transactional writes a row here
