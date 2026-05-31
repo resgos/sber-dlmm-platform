@@ -1343,6 +1343,7 @@ body {
 .sberkot-dock > * { pointer-events: auto; }
 
 .sberkot-fab {
+  position: relative; /* anchor for the pet hearts */
   border: none;
   background: transparent;
   padding: 0;
@@ -2736,4 +2737,30 @@ a:focus-visible {
 .sber-market-ticker__chg.is-down { color: var(--color-negative); }
 @media (max-width: 480px) {
   .sber-market-ticker { grid-template-columns: 1fr 1fr; }
+}
+
+/* SK-03 — Сберкот «погладь меня»: pet wiggle + milestone hearts. */
+.sberkot--pet { animation: sberkotPet 0.5s ease; transform-origin: 50% 80%; }
+@keyframes sberkotPet {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-9deg) scale(1.06); }
+  55% { transform: rotate(7deg) scale(1.05); }
+  80% { transform: rotate(-3deg) scale(1.02); }
+}
+.sberkot-hearts { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.sberkot-hearts span {
+  position: absolute; bottom: 55%; font-size: 18px; opacity: 0;
+  animation: sberkotHeart 1.5s ease-out forwards;
+}
+.sberkot-hearts span:nth-child(1) { left: 22%; animation-delay: 0s; }
+.sberkot-hearts span:nth-child(2) { left: 46%; animation-delay: 0.18s; }
+.sberkot-hearts span:nth-child(3) { left: 66%; animation-delay: 0.34s; }
+@keyframes sberkotHeart {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-52px) scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sberkot--pet { animation: none; }
+  .sberkot-hearts span { animation: none; opacity: 0; }
 }

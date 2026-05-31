@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Button, Typography } from 'antd'
 import { CloseOutlined } from '@ant-design/icons'
 import SberkotMascot from './SberkotMascot'
 import { resolveHint, OFF_KEY, seenKey } from './hints'
 import { SBERKOT_CELEBRATE, type SberkotCelebrateDetail } from './events'
+import { petReaction, milestoneMessage } from './sberkotQuips'
+import { oracle } from '@/api/services'
 
 const { Text } = Typography
 
@@ -32,6 +35,8 @@ const ls = {
 }
 
 const CELEBRATE_MS = 6000
+const PET_QUIP_MS = 4500
+const PET_KEY = 'dlmm.sberkot.pets'
 
 export default function SberkotAssistant() {
   const { pathname } = useLocation()
@@ -41,6 +46,16 @@ export default function SberkotAssistant() {
   // SK-01 v2 — transient celebration message (overrides the hint while shown).
   const [celebration, setCelebration] = useState<string | null>(null)
   const celebrateTimer = useRef<number | null>(null)
+  // SK-03 — "pet the cat": tap the mascot while open for a reaction.
+  const [petCount, setPetCount] = useState(() => Number(ls.get(PET_KEY) || '0') || 0)
+  const [petQuip, setPetQuip] = useState<string | null>(null)
+  const [wiggle, setWiggle] = useState(false)
+  const [hearts, setHearts] = useState(false)
+  const petTimer = useRef<number | null>(null)
+  const wiggleTimer = useRef<number | null>(null)
+  const heartsTimer = useRef<number | null>(null)
+  // Shares the dashboard's ['tokenPrices'] cache so the cat can comment on real moves.
+  const { data: prices } = useQuery({ queryKey: ['tokenPrices'], queryFn: oracle.getPrices, staleTime: 30_000 })
 
   // Auto-open this route's hint once (unless seen or globally off).
   useEffect(() => {
@@ -78,6 +93,8 @@ export default function SberkotAssistant() {
       celebrateTimer.current = null
     }
     setCelebration(null)
+    if (petTimer.current) { window.clearTimeout(petTimer.current); petTimer.current = null }
+    setPetQuip(null)
   }, [pathname])
 
   const dismissHere = () => {
@@ -95,10 +112,33 @@ export default function SberkotAssistant() {
     setOpen(false)
   }
 
+  // SK-03 — pet reaction: a quick wiggle + a quip (rotating tips, a LIVE market
+  // line every 3rd pet, or a milestone message with hearts). Pet count persists.
+  const pet = () => {
+    const next = petCount + 1
+    setPetCount(next)
+    ls.set(PET_KEY, String(next))
+
+    setWiggle(true)
+    if (wiggleTimer.current) window.clearTimeout(wiggleTimer.current)
+    wiggleTimer.current = window.setTimeout(() => setWiggle(false), 500)
+
+    if (milestoneMessage(next)) {
+      setHearts(true)
+      if (heartsTimer.current) window.clearTimeout(heartsTimer.current)
+      heartsTimer.current = window.setTimeout(() => setHearts(false), 1600)
+    }
+
+    setPetQuip(petReaction(next, prices))
+    if (petTimer.current) window.clearTimeout(petTimer.current)
+    petTimer.current = window.setTimeout(() => setPetQuip(null), PET_QUIP_MS)
+  }
+
   const showingCelebration = !!celebration
-  const pose = showingCelebration ? 'celebrate' : hint.pose
-  const title = showingCelebration ? 'Отлично! 🎉' : hint.title
-  const text = showingCelebration ? celebration! : hint.text
+  const showingPet = !showingCelebration && open && !!petQuip
+  const pose = showingCelebration ? 'celebrate' : showingPet ? 'greet' : hint.pose
+  const title = showingCelebration ? 'Отлично! 🎉' : showingPet ? 'Сберкот 🐾' : hint.title
+  const text = showingCelebration ? celebration! : showingPet ? petQuip! : hint.text
 
   return (
     <div className={`sberkot-dock${showingCelebration ? ' sberkot-dock--celebrate' : ''}`} aria-live="polite">
@@ -117,7 +157,7 @@ export default function SberkotAssistant() {
           <Text style={{ display: 'block', fontSize: 'var(--text-sm)', color: 'var(--text-paragraph)', lineHeight: 'var(--leading-snug)' }}>
             {text}
           </Text>
-          {!showingCelebration && (
+          {!showingCelebration && !showingPet && (
             <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)', justifyContent: 'flex-end' }}>
               <Button size="small" type="text" onClick={turnOff} style={{ color: 'var(--text-muted)' }}>
                 Скрыть подсказки
@@ -131,11 +171,27 @@ export default function SberkotAssistant() {
       )}
       <button
         className="sberkot-fab"
-        onClick={() => { if (showingCelebration) dismissCelebration(); else setOpen((v) => !v) }}
-        aria-label={showingCelebration ? 'Закрыть сообщение Сберкота' : open ? 'Скрыть Сберкота' : 'Открыть подсказку Сберкота'}
-        title="Сберкот — помощник"
+        onClick={() => {
+          if (showingCelebration) { dismissCelebration(); return }
+          if (open) pet(); else setOpen(true)
+        }}
+        aria-label={
+          showingCelebration ? 'Закрыть сообщение Сберкота'
+            : open ? 'Погладить Сберкота' : 'Открыть подсказку Сберкота'
+        }
+        title={open ? 'Погладь меня 🐾' : 'Сберкот — помощник'}
       >
-        <SberkotMascot pose={open || showingCelebration ? pose : 'idle'} size={56} animated={!open} />
+        {hearts && (
+          <div className="sberkot-hearts" aria-hidden>
+            <span>💚</span><span>🐾</span><span>💚</span>
+          </div>
+        )}
+        <SberkotMascot
+          pose={open || showingCelebration ? pose : 'idle'}
+          size={56}
+          animated={!open}
+          className={wiggle ? 'sberkot--pet' : undefined}
+        />
       </button>
     </div>
   )
