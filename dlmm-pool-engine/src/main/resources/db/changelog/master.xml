@@ -16,5 +16,6 @@
     <include file="009-add-protocol-fee-accumulators.xml" relativeToChangelogFile="true"/>
     <include file="010-enable-protocol-fee-on-top-pools.xml" relativeToChangelogFile="true"/>
     <include file="011-add-initial-deposit-to-lp-positions.xml" relativeToChangelogFile="true"/>
+    <include file="012-create-limit-orders-table.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

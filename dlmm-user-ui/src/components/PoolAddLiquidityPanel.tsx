@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Typography, Space, InputNumber, Button, Alert, Tag, Tooltip, Slider } from 'antd'
+import { Typography, Space, InputNumber, Button, Alert, Tag, Tooltip, Slider, Segmented } from 'antd'
 import { PlusOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { pools, balances } from '@/api/services'
@@ -31,6 +31,11 @@ interface PoolAddLiquidityPanelProps {
     binMax: number
     strategy: LiquidityStrategy
   } | null) => void
+  /**
+   * Sprint 16 (Meteora parity) — a bin range the user dragged on the chart.
+   * A new object on each drag; the panel applies it to its min/max bin inputs.
+   */
+  externalRange?: { binMin: number; binMax: number } | null
 }
 
 // Inline SVG glyphs matching Meteora's strategy icons.
@@ -69,9 +74,11 @@ const STRATEGIES: { value: LiquidityStrategy; label: string }[] = [
   { value: 'BID_ASK', label: 'Bid Ask' },
 ]
 
-export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAddLiquidityPanelProps) {
+export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalRange }: PoolAddLiquidityPanelProps) {
   const queryClient = useQueryClient()
   const [strategy, setStrategy] = useState<LiquidityStrategy>('SPOT')
+  // Sprint 16 (Meteora parity) — single-sided liquidity mode (BOTH / only X / only Y).
+  const [side, setSide] = useState<'BOTH' | 'X' | 'Y'>('BOTH')
   // Default to ±10 bins around the active bin (matches our hint copy).
   const [binMin, setBinMin] = useState<number | null>(pool.activeBinId - 10)
   const [binMax, setBinMax] = useState<number | null>(pool.activeBinId + 10)
@@ -88,6 +95,14 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
     }
     return () => onPreviewChange?.(null)
   }, [binMin, binMax, strategy, onPreviewChange])
+
+  // Sprint 16 (Meteora parity) — apply a bin range dragged on the chart.
+  useEffect(() => {
+    if (externalRange) {
+      setBinMin(externalRange.binMin)
+      setBinMax(externalRange.binMax)
+    }
+  }, [externalRange])
   const [amountX, setAmountX] = useState<number | null>(null)
   const [amountY, setAmountY] = useState<number | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -104,8 +119,8 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
     mutationFn: () =>
       pools.addLiquidity({
         poolId: pool.id,
-        amountX: amountX!,
-        amountY: amountY!,
+        amountX: side === 'Y' ? 0 : (amountX ?? 0),
+        amountY: side === 'X' ? 0 : (amountY ?? 0),
         binRangeMin: binMin!,
         binRangeMax: binMax!,
         strategy,
@@ -128,8 +143,12 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
 
   const totalBins =
     binMin != null && binMax != null && binMax >= binMin ? binMax - binMin + 1 : 0
+  // Single-sided (Sprint 16): only the active side(s) are required.
+  const needX = side !== 'Y'
+  const needY = side !== 'X'
   const canAdd =
-    amountX != null && amountY != null && amountX > 0 && amountY > 0 &&
+    (!needX || (amountX != null && amountX > 0)) &&
+    (!needY || (amountY != null && amountY > 0)) &&
     binMin != null && binMax != null && binMax > binMin && totalBins <= 1000
 
   /**
@@ -213,24 +232,55 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
         />
       )}
 
-      {/* Amount */}
+      {/* Amount + single-sided mode (Sprint 16, Meteora parity) */}
       <div>
         <Text type="secondary" style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
           Сумма
         </Text>
-        <Space direction="vertical" size={8} style={{ width: '100%', marginTop: 8 }}>
-          <AmountField
-            symbol={pool.tokenXSymbol}
-            value={amountX}
-            onChange={setAmountX}
-            available={balanceX?.available ?? 0}
-          />
-          <AmountField
-            symbol={pool.tokenYSymbol}
-            value={amountY}
-            onChange={setAmountY}
-            available={balanceY?.available ?? 0}
-          />
+        <Segmented
+          block
+          value={side}
+          onChange={(v) => {
+            const next = v as 'BOTH' | 'X' | 'Y'
+            setSide(next)
+            setError(null)
+            // Steer the range to the side that will actually be filled: X lands
+            // in bins ≥ active, Y in bins ≤ active.
+            if (next === 'X') { setAmountY(null); setBinMin(pool.activeBinId); setBinMax(pool.activeBinId + 20) }
+            else if (next === 'Y') { setAmountX(null); setBinMin(pool.activeBinId - 20); setBinMax(pool.activeBinId) }
+            else { setBinMin(pool.activeBinId - 10); setBinMax(pool.activeBinId + 10) }
+          }}
+          options={[
+            { label: 'Обе стороны', value: 'BOTH' },
+            { label: `Только ${pool.tokenXSymbol}`, value: 'X' },
+            { label: `Только ${pool.tokenYSymbol}`, value: 'Y' },
+          ]}
+          style={{ margin: '8px 0' }}
+        />
+        {side !== 'BOTH' && (
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 8 }}>
+            {side === 'X'
+              ? `Односторонняя: ${pool.tokenXSymbol} встанет в бины ВЫШЕ активного — как заявки на продажу.`
+              : `Односторонняя: ${pool.tokenYSymbol} встанет в бины НИЖЕ активного — как заявки на покупку.`}
+          </Text>
+        )}
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          {side !== 'Y' && (
+            <AmountField
+              symbol={pool.tokenXSymbol}
+              value={amountX}
+              onChange={setAmountX}
+              available={balanceX?.available ?? 0}
+            />
+          )}
+          {side !== 'X' && (
+            <AmountField
+              symbol={pool.tokenYSymbol}
+              value={amountY}
+              onChange={setAmountY}
+              available={balanceY?.available ?? 0}
+            />
+          )}
         </Space>
       </div>
 
@@ -465,8 +515,8 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange }: PoolAdd
         loading={addMutation.isPending}
         onClick={() => addMutation.mutate()}
       >
-        {!amountX || !amountY
-          ? 'Введите суммы'
+        {(needX && !amountX) || (needY && !amountY)
+          ? 'Введите сумму'
           : !binMin || !binMax || binMax <= binMin
           ? 'Укажите диапазон'
           : 'Добавить ликвидность'}

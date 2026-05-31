@@ -139,6 +139,12 @@ public class LiquidityService {
             throw new InvalidBinRangeException("Bin range must be between 1 and 1000 bins");
         }
 
+        // Sprint 16 (Meteora parity) — single-sided liquidity is allowed (one side
+        // may be 0), but at least one side must be positive.
+        if (req.amountX() <= 0 && req.amountY() <= 0) {
+            throw new InvalidBinRangeException("Provide a positive amountX or amountY");
+        }
+
         int activeBinId = pool.getActiveBinId();
         BigDecimal basePrice = pool.getBasePrice();
         int binStep = pool.getBinStep();

@@ -1,8 +1,10 @@
 import { Card, Tabs } from 'antd'
-import { PlusOutlined, SwapOutlined } from '@ant-design/icons'
+import { PlusOutlined, SwapOutlined, AimOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import type { Pool } from '@/api/types'
 import PoolAddLiquidityPanel from './PoolAddLiquidityPanel'
 import PoolSwapPanel from './PoolSwapPanel'
+import LimitOrdersPanel from './LimitOrdersPanel'
+import PoolZapPanel from './PoolZapPanel'
 
 /**
  * Sprint 9-DS-r4 — Meteora-style tabbed action panel for the pool
@@ -10,8 +12,9 @@ import PoolSwapPanel from './PoolSwapPanel'
  * Swap as sibling tabs so the LP never leaves the page to perform
  * any action.
  *
- * <p>Meteora itself has three tabs (Create Position / Limit Order /
- * Swap). We don't have limit orders yet, so two tabs for now.
+ * <p>Meteora's Dynamic Terminal has three tabs (Create Position / Limit
+ * Order / Swap); Sprint 16 brought us to parity — Add Liquidity / Limit
+ * Order / Swap.
  */
 interface PoolActionTabsProps {
   pool: Pool
@@ -19,15 +22,15 @@ interface PoolActionTabsProps {
    * Which tab to open first. Add-liquidity is the primary LP action,
    * but pages that came from "Обмен" CTA can deep-link to swap.
    */
-  defaultTab?: 'add' | 'swap'
+  defaultTab?: 'add' | 'swap' | 'orders' | 'zap'
   /**
    * OB-01 — optional controlled mode. When provided, the active tab is
    * driven by the parent (PoolDetailPage uses this so a click on an
    * order-book row jumps to the Swap tab). `onTabChange` is fired on
    * every user-driven switch so the parent state stays in sync.
    */
-  activeTab?: 'add' | 'swap'
-  onTabChange?: (tab: 'add' | 'swap') => void
+  activeTab?: 'add' | 'swap' | 'orders' | 'zap'
+  onTabChange?: (tab: 'add' | 'swap' | 'orders' | 'zap') => void
   /**
    * Sprint 9-DS-r4 (P1-2) — forwarded to {@link PoolAddLiquidityPanel}
    * so the parent page (PoolDetailPage) can mirror the user's
@@ -44,6 +47,11 @@ interface PoolActionTabsProps {
    * through to {@link PoolSwapPanel} which surfaces it as a reference.
    */
   pickedPrice?: number | null
+  /**
+   * Sprint 16 (Meteora parity) — a bin range the user dragged on the chart;
+   * forwarded to {@link PoolAddLiquidityPanel} which applies it to its bin inputs.
+   */
+  externalRange?: { binMin: number; binMax: number } | null
 }
 
 export default function PoolActionTabs({
@@ -53,6 +61,7 @@ export default function PoolActionTabs({
   onTabChange,
   onPreviewChange,
   pickedPrice,
+  externalRange,
 }: PoolActionTabsProps) {
   const controlled = activeTab != null
   return (
@@ -70,7 +79,7 @@ export default function PoolActionTabs({
         // resting "your existing positions only" overlay.
         onChange={(key) => {
           if (key !== 'add') onPreviewChange?.(null)
-          onTabChange?.(key as 'add' | 'swap')
+          onTabChange?.(key as 'add' | 'swap' | 'orders' | 'zap')
         }}
         items={[
           {
@@ -82,7 +91,7 @@ export default function PoolActionTabs({
               </span>
             ),
             children: (
-              <PoolAddLiquidityPanel pool={pool} onPreviewChange={onPreviewChange} />
+              <PoolAddLiquidityPanel pool={pool} onPreviewChange={onPreviewChange} externalRange={externalRange} />
             ),
           },
           {
@@ -94,6 +103,26 @@ export default function PoolActionTabs({
               </span>
             ),
             children: <PoolSwapPanel pool={pool} embedded pickedPrice={pickedPrice} />,
+          },
+          {
+            key: 'orders',
+            label: (
+              <span>
+                <AimOutlined style={{ marginRight: 6 }} />
+                Лимит
+              </span>
+            ),
+            children: <LimitOrdersPanel pool={pool} />,
+          },
+          {
+            key: 'zap',
+            label: (
+              <span>
+                <ThunderboltOutlined style={{ marginRight: 6 }} />
+                Zap
+              </span>
+            ),
+            children: <PoolZapPanel pool={pool} />,
           },
         ]}
       />

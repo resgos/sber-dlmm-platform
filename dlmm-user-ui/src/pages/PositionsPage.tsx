@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip } from 'antd'
-import { DollarOutlined, DeleteOutlined, DownloadOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined } from '@ant-design/icons'
+import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip, Dropdown } from 'antd'
+import { DollarOutlined, DeleteOutlined, DownloadOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined, DownOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { pools, fees } from '@/api/services'
@@ -94,7 +94,8 @@ export default function PositionsPage() {
   })
 
   const claimMutation = useMutation({
-    mutationFn: (positionId: string) => fees.claimFees({ positionId }),
+    mutationFn: ({ positionId, quoteOnly }: { positionId: string; quoteOnly?: boolean }) =>
+      fees.claimFees({ positionId }, quoteOnly ?? false),
     onSuccess: () => {
       message.success('Комиссии забраны')
       queryClient.invalidateQueries({ queryKey: ['myPositions'] })
@@ -577,12 +578,23 @@ export default function PositionsPage() {
                 // buttons and assume the feature is broken.
                 const noClaim = r.unclaimedFeeX === 0 && r.unclaimedFeeY === 0
                 const claimBtn = (
-                  <Button size="small" type="primary" ghost icon={<DollarOutlined />}
-                    onClick={() => claimMutation.mutate(r.id)}
+                  <Dropdown.Button
+                    size="small"
+                    type="primary"
+                    icon={<DownOutlined />}
                     loading={claimMutation.isPending}
-                    disabled={noClaim}>
-                    Забрать
-                  </Button>
+                    disabled={noClaim}
+                    onClick={() => claimMutation.mutate({ positionId: r.id, quoteOnly: false })}
+                    menu={{
+                      items: [{
+                        key: 'quote',
+                        label: `Забрать всё в ${r.tokenYSymbol}`,
+                        onClick: () => claimMutation.mutate({ positionId: r.id, quoteOnly: true }),
+                      }],
+                    }}
+                  >
+                    <DollarOutlined /> Забрать
+                  </Dropdown.Button>
                 )
                 return (
                   <Space onClick={(e) => e.stopPropagation()}>

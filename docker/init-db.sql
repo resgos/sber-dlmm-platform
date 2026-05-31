@@ -178,6 +178,34 @@ CREATE TABLE IF NOT EXISTS position_bins (
 
 CREATE INDEX IF NOT EXISTS idx_position_bins_position_id ON position_bins (position_id);
 
+-- ─── limit_orders (pool-engine) ─────────────────────────────────────────────
+-- Sprint 16 (Meteora parity) — escrow-settled DLMM limit orders. On placement
+-- amount_in of token_in is escrowed (deducted); a scheduled watcher credits
+-- amount_out of token_out at limit_price when the pool's market-synced price
+-- crosses the trigger (SELL: price >= limit; BUY: price <= limit). Mirrored by
+-- Liquibase changeset 012. Amounts are raw ×10⁴ units; limit_price is unscaled.
+CREATE TABLE IF NOT EXISTS limit_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    pool_id UUID NOT NULL,
+    side VARCHAR(8) NOT NULL,
+    token_in_id UUID NOT NULL,
+    token_out_id UUID NOT NULL,
+    amount_in BIGINT NOT NULL,
+    limit_price DECIMAL(30,18) NOT NULL,
+    amount_out BIGINT NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'OPEN',
+    idempotency_key VARCHAR(255) UNIQUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    filled_at TIMESTAMP,
+    cancelled_at TIMESTAMP,
+    version BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_limit_orders_user_id ON limit_orders (user_id);
+CREATE INDEX IF NOT EXISTS idx_limit_orders_status ON limit_orders (status);
+CREATE INDEX IF NOT EXISTS idx_limit_orders_pool_id ON limit_orders (pool_id);
+
 -- ─── transactions (transaction-service) ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS transactions (

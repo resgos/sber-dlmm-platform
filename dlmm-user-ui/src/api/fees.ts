@@ -43,8 +43,11 @@ export const fees = {
     return { ...data, content: data.content.map(scaleFeeHistory) }
   },
 
-  claimFees: async (req: ClaimFeesRequest): Promise<void> => {
-    await apiClient.post('/fees/claim', req)
+  claimFees: async (req: ClaimFeesRequest, quoteOnly = false): Promise<void> => {
+    // quoteOnly (Sprint 16, Meteora parity) — receive the whole claim consolidated
+    // in the pool's quote token instead of X+Y. Sent as a query param so the
+    // request body shape stays unchanged.
+    await apiClient.post('/fees/claim', req, { params: { quoteOnly } })
   },
 
   // Sprint 12 G-16 — auto-claim policy CRUD.

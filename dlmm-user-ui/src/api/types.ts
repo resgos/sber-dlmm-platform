@@ -218,6 +218,40 @@ export interface RemoveLiquidityRequest {
   idempotencyKey: string
 }
 
+// Limit Orders (Sprint 16, Meteora parity) — escrow-settled DLMM limit orders.
+// side is relative to the pool's token X (price = token_y per 1 token_x):
+//  • SELL escrows X, pays Y, fills when price ≥ limitPrice;
+//  • BUY  escrows Y, pays X, fills when price ≤ limitPrice.
+// amountIn/amountOut are human units (scale.ts divides raw by AMOUNT_SCALE);
+// limitPrice is a Y/X ratio and is NOT scaled.
+export type LimitOrderSide = 'BUY' | 'SELL'
+export type LimitOrderStatus = 'OPEN' | 'FILLED' | 'CANCELLED'
+
+export interface LimitOrder {
+  id: string
+  poolId: string
+  tokenInId: string
+  tokenOutId: string
+  tokenInSymbol: string | null
+  tokenOutSymbol: string | null
+  side: LimitOrderSide
+  amountIn: number
+  limitPrice: number
+  amountOut: number
+  status: LimitOrderStatus
+  createdAt: string
+  filledAt: string | null
+  cancelledAt: string | null
+}
+
+export interface CreateLimitOrderRequest {
+  poolId: string
+  side: LimitOrderSide
+  amountIn: number
+  limitPrice: number
+  idempotencyKey: string
+}
+
 // Swap
 export interface SwapRequest {
   poolId: string

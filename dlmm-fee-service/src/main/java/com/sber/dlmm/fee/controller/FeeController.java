@@ -39,9 +39,10 @@ public class FeeController {
     @PostMapping("/claim")
     @UserAudit(action = "CLAIM_FEES", targetType = "POSITION")
     public ResponseEntity<ClaimFeesResponse> claimFees(@Valid @RequestBody ClaimFeesRequest request,
+                                                       @RequestParam(required = false, defaultValue = "false") boolean quoteOnly,
                                                        Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
-        ClaimFeesResponse response = feeService.claimFees(request, userId);
+        ClaimFeesResponse response = feeService.claimFees(request, userId, quoteOnly);
         return ResponseEntity.ok(response);
     }
 

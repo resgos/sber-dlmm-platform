@@ -4,6 +4,7 @@ import type {
   Pool,
   PoolDetail,
   Position,
+  LimitOrder,
   SwapQuote,
   Transaction,
   FeeSummary,
@@ -92,6 +93,13 @@ export const scalePosition = (p: Position): Position => ({
   currentValueY: fromRaw(p.currentValueY),
   initialDepositX: fromRawN(p.initialDepositX),
   initialDepositY: fromRawN(p.initialDepositY),
+})
+
+/** amountIn / amountOut are amounts; limitPrice is a Y/X ratio — left untouched. */
+export const scaleLimitOrder = (o: LimitOrder): LimitOrder => ({
+  ...o,
+  amountIn: fromRaw(o.amountIn),
+  amountOut: fromRaw(o.amountOut),
 })
 
 /** amountIn / amountOut / fee are amounts; feeBps / binsCrossed / price / impact are not. */

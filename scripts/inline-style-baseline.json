@@ -85,37 +85,37 @@
   },
   {
     "file": "dlmm-admin-ui/src/components/BinLiquidityChart.tsx",
-    "line": 248,
+    "line": 251,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11, color: '#9CA3AF', minWidth: 48, textAlign: 'right' }}>"
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 190,
+    "line": 191,
     "match": "fontSize: 15",
     "snippet": "fontSize: 15,"
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 200,
+    "line": 201,
     "match": "fontSize: 11",
     "snippet": "fontSize: 11,"
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 249,
+    "line": 250,
     "match": "fontSize: 16",
     "snippet": "style={{ fontSize: 16, color: 'var(--text-secondary)' }}"
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 270,
+    "line": 284,
     "match": "fontSize: 13",
     "snippet": "style={{ fontSize: 13, color: 'var(--text-primary)' }}>"
   },
   {
     "file": "dlmm-admin-ui/src/components/ProtectedLayout.tsx",
-    "line": 274,
+    "line": 288,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11, color: 'var(--text-muted)' }}>"
   },
@@ -1555,49 +1555,49 @@
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 135,
+    "line": 141,
     "match": "fontSize: 10",
     "snippet": "style={{ background: '#FEF3C7', color: '#D97706', fontSize: 10,"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 141,
+    "line": 147,
     "match": "fontSize: 10",
     "snippet": "style={{ background: 'rgba(147,51,234,0.12)', color: '#7C3AED', fontSize: 10,"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 146,
+    "line": 152,
     "match": "fontSize: 10",
     "snippet": "style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10,"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 301,
+    "line": 329,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 302,
+    "line": 330,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 305,
+    "line": 333,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 308,
+    "line": 336,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
   {
     "file": "dlmm-user-ui/src/components/BinLiquidityChart.tsx",
-    "line": 314,
+    "line": 342,
     "match": "borderRadius: 2",
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
@@ -1615,13 +1615,13 @@
   },
   {
     "file": "dlmm-user-ui/src/components/PoolAddLiquidityPanel.tsx",
-    "line": 353,
+    "line": 403,
     "match": "fontSize: 10",
     "snippet": "style={{ borderRadius: 'var(--radius-pill)', fontSize: 10, padding: '0 6px', lin"
   },
   {
     "file": "dlmm-user-ui/src/components/PoolAddLiquidityPanel.tsx",
-    "line": 535,
+    "line": 585,
     "match": "fontSize: 10",
     "snippet": "style={{ color: 'var(--sber-green)', fontSize: 10, fontWeight: 600 }}>"
   },
@@ -1645,19 +1645,19 @@
   },
   {
     "file": "dlmm-user-ui/src/components/UserLayout.tsx",
-    "line": 217,
+    "line": 201,
     "match": "fontSize: 15",
     "snippet": "fontSize: 15,"
   },
   {
     "file": "dlmm-user-ui/src/pages/HedgePage.tsx",
-    "line": 529,
+    "line": 531,
     "match": "fontSize: 15",
     "snippet": "style={{ fontSize: 15, fontWeight: 600 }}>"
   },
   {
     "file": "dlmm-user-ui/src/pages/HedgePage.tsx",
-    "line": 571,
+    "line": 573,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
@@ -1693,13 +1693,13 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/PoolDetailPage.tsx",
-    "line": 582,
+    "line": 587,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, color: 'var(--text-muted)' }}>незабранные</div>"
   },
   {
     "file": "dlmm-user-ui/src/pages/PositionsPage.tsx",
-    "line": 657,
+    "line": 670,
     "match": "fontSize: 24",
     "snippet": "style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--colo"
   },
@@ -1735,31 +1735,31 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/SimpleTradePage.tsx",
-    "line": 628,
+    "line": 631,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 425,
+    "line": 421,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 441,
+    "line": 437,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 612,
+    "line": 609,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10 }}>"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 643,
+    "line": 640,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },

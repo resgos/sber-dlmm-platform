@@ -16,11 +16,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,6 +48,11 @@ public class FeeService {
     // so @CircuitBreaker + @Retry can be applied (AOP needs a public method on
     // a separate bean — same-class private calls aren't intercepted).
     private final TokenServiceClient tokenServiceClient;
+    // Sprint 16 (Meteora parity, quote-only fees) — read the pool's X/Y token ids
+    // + price straight from the shared DB to convert an X-fee into the quote token.
+    private final JdbcTemplate jdbcTemplate;
+
+    private static final MathContext MC = MathContext.DECIMAL128;
 
     private final Set<String> processedIdempotencyKeys = ConcurrentHashMap.newKeySet();
 
@@ -110,7 +118,19 @@ public class FeeService {
 
     @Transactional
     public ClaimFeesResponse claimFees(ClaimFeesRequest request, UUID userId) {
-        log.info("Claiming fees for position: {} by user: {}", request.positionId(), userId);
+        return claimFees(request, userId, false);
+    }
+
+    /**
+     * Sprint 16 (Meteora parity) — {@code quoteOnly} consolidates the claim into
+     * the pool's quote token (Y): the X-fee is converted at the pool's current
+     * price and credited as Y, so the LP receives a single token instead of two.
+     * If the pool can't be read, it falls back to the standard split credit so
+     * fees are never lost.
+     */
+    @Transactional
+    public ClaimFeesResponse claimFees(ClaimFeesRequest request, UUID userId, boolean quoteOnly) {
+        log.info("Claiming fees for position: {} by user: {} (quoteOnly={})", request.positionId(), userId, quoteOnly);
 
         if (request.idempotencyKey() != null && !request.idempotencyKey().isBlank()) {
             if (!processedIdempotencyKeys.add(request.idempotencyKey())) {
@@ -138,33 +158,71 @@ public class FeeService {
         Map<UUID, Long> claimedByToken = unclaimedAccruals.stream()
                 .collect(Collectors.groupingBy(FeeAccrual::getTokenId, Collectors.summingLong(FeeAccrual::getAmount)));
 
+        UUID poolId = unclaimedAccruals.get(0).getPoolId();
+
+        // Quote-only — convert the X-fee to the quote token (Y) and credit one token.
+        PoolXY pool = quoteOnly ? lookupPoolXY(poolId) : null;
+        if (quoteOnly && pool != null) {
+            try {
+                long claimedX = claimedByToken.getOrDefault(pool.tokenXId(), 0L);
+                long claimedY = claimedByToken.getOrDefault(pool.tokenYId(), 0L);
+                long totalY = quoteOnlyTotalY(claimedX, claimedY, pool.price());
+                if (totalY > 0) {
+                    tokenServiceClient.credit(userId, pool.tokenYId(), totalY);
+                }
+                kafkaTemplate.send(FEE_EVENTS_TOPIC, request.positionId().toString(),
+                        new FeeClaimedEvent(request.positionId(), userId, poolId, 0, totalY, null, pool.tokenYId(), now));
+                log.info("Claimed fees quote-only for position {}: {} of token {}", request.positionId(), totalY, pool.tokenYId());
+                return new ClaimFeesResponse(request.positionId(), 0, totalY, null, pool.tokenYId());
+            } catch (ArithmeticException overflow) {
+                // Conversion overflowed a long (absurd for real fee sizes) — fall
+                // back to the standard split credit below so the claim still settles.
+                log.warn("Quote-only conversion overflowed for position {}, using split credit", request.positionId());
+            }
+        }
+
+        // Standard path — credit each accrued token as-is.
         List<UUID> tokenIds = new ArrayList<>(claimedByToken.keySet());
         UUID tokenXId = tokenIds.isEmpty() ? null : tokenIds.get(0);
         UUID tokenYId = tokenIds.size() > 1 ? tokenIds.get(1) : null;
         long claimedX = tokenXId != null ? claimedByToken.getOrDefault(tokenXId, 0L) : 0;
         long claimedY = tokenYId != null ? claimedByToken.getOrDefault(tokenYId, 0L) : 0;
 
-        UUID poolId = unclaimedAccruals.get(0).getPoolId();
-
         tokenServiceClient.credit(userId, tokenXId, claimedX);
         if (tokenYId != null && claimedY > 0) {
             tokenServiceClient.credit(userId, tokenYId, claimedY);
         }
 
-        FeeClaimedEvent event = new FeeClaimedEvent(
-                request.positionId(),
-                userId,
-                poolId,
-                claimedX,
-                claimedY,
-                tokenXId,
-                tokenYId,
-                now
-        );
-        kafkaTemplate.send(FEE_EVENTS_TOPIC, request.positionId().toString(), event);
+        kafkaTemplate.send(FEE_EVENTS_TOPIC, request.positionId().toString(),
+                new FeeClaimedEvent(request.positionId(), userId, poolId, claimedX, claimedY, tokenXId, tokenYId, now));
         log.info("Published FeeClaimedEvent for position: {}", request.positionId());
 
         return new ClaimFeesResponse(request.positionId(), claimedX, claimedY, tokenXId, tokenYId);
+    }
+
+    /** Output (raw Y units) for a quote-only claim: claimedY + floor(claimedX × price). Package-private + static for unit testing. */
+    static long quoteOnlyTotalY(long claimedX, long claimedY, BigDecimal price) {
+        if (claimedX <= 0 || price == null || price.signum() <= 0) return claimedY;
+        long feeXInY = BigDecimal.valueOf(claimedX).multiply(price, MC).setScale(0, RoundingMode.FLOOR).longValueExact();
+        return claimedY + feeXInY;
+    }
+
+    private PoolXY lookupPoolXY(UUID poolId) {
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT token_x_id, token_y_id, base_price FROM liquidity_pools WHERE id = ?",
+                    (rs, n) -> new PoolXY(
+                            (UUID) rs.getObject("token_x_id"),
+                            (UUID) rs.getObject("token_y_id"),
+                            rs.getBigDecimal("base_price")),
+                    poolId);
+        } catch (Exception e) {
+            log.warn("Quote-only claim: pool {} lookup failed, falling back to split credit: {}", poolId, e.toString());
+            return null;
+        }
+    }
+
+    private record PoolXY(UUID tokenXId, UUID tokenYId, BigDecimal price) {
     }
 
     @Transactional(readOnly = true)

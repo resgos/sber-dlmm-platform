@@ -2,6 +2,7 @@ export { auth } from './auth'
 export { balances } from './balances'
 export { tokens } from './tokens'
 export { pools } from './pools'
+export { limitOrders } from './limitOrders'
 export { transactions } from './transactions'
 export { fees } from './fees'
 // G-16 follow-up — re-export wire types so `@/store/autoClaimStore` can

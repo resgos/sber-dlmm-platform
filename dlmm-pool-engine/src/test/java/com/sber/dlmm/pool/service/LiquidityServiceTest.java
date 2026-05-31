@@ -332,6 +332,63 @@ class LiquidityServiceTest {
             assertTrue(pool.getTotalTvlX() > 0 || pool.getTotalTvlY() > 0,
                     "TVL should increase after adding liquidity");
         }
+
+        // ── Sprint 16 (Meteora parity) — single-sided liquidity ──────────────
+
+        @Test
+        @DisplayName("single-sided X (amountY=0) deposits only the base side, above the active bin")
+        void singleSidedXDepositsOnlyBaseSide() {
+            mockCommonDependencies();
+            when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
+            when(poolBinRepository.findByPoolIdAndBinId(eq(POOL_ID), anyInt())).thenReturn(Optional.empty());
+
+            // active bin = 5; range 6..9 is entirely ABOVE active → all X, no Y.
+            AddLiquidityRequest req = new AddLiquidityRequest(
+                    POOL_ID, 400_000, 0, 6, 9, LiquidityStrategy.SPOT, "ss-x");
+            AddLiquidityResponse resp = liquidityService.addLiquidity(req, USER_ID);
+
+            assertNotNull(resp);
+            assertTrue(resp.liquidityShares() > 0);
+            assertTrue(pool.getTotalTvlX() > 0, "X TVL should grow");
+            assertEquals(0, pool.getTotalTvlY(), "Y TVL must stay 0 for a single-sided X deposit");
+            verify(tokenServiceClient).deductBalance(eq(USER_ID), eq(TOKEN_X_ID), anyLong());
+            verify(tokenServiceClient, never()).deductBalance(eq(USER_ID), eq(TOKEN_Y_ID), anyLong());
+        }
+
+        @Test
+        @DisplayName("single-sided Y (amountX=0) deposits only the quote side, below the active bin")
+        void singleSidedYDepositsOnlyQuoteSide() {
+            mockCommonDependencies();
+            when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
+            when(poolBinRepository.findByPoolIdAndBinId(eq(POOL_ID), anyInt())).thenReturn(Optional.empty());
+
+            // active bin = 5; range 1..4 is entirely BELOW active → all Y, no X.
+            AddLiquidityRequest req = new AddLiquidityRequest(
+                    POOL_ID, 0, 400_000, 1, 4, LiquidityStrategy.SPOT, "ss-y");
+            AddLiquidityResponse resp = liquidityService.addLiquidity(req, USER_ID);
+
+            assertNotNull(resp);
+            assertTrue(resp.liquidityShares() > 0);
+            assertTrue(pool.getTotalTvlY() > 0, "Y TVL should grow");
+            assertEquals(0, pool.getTotalTvlX(), "X TVL must stay 0 for a single-sided Y deposit");
+            verify(tokenServiceClient).deductBalance(eq(USER_ID), eq(TOKEN_Y_ID), anyLong());
+            verify(tokenServiceClient, never()).deductBalance(eq(USER_ID), eq(TOKEN_X_ID), anyLong());
+        }
+
+        @Test
+        @DisplayName("both amounts zero is rejected")
+        void bothAmountsZeroThrows() {
+            when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
+            when(tokenServiceClient.isTokenActive(any())).thenReturn(true);
+            when(userServiceClient.isUserKycVerified(USER_ID)).thenReturn(true);
+
+            AddLiquidityRequest req = new AddLiquidityRequest(
+                    POOL_ID, 0, 0, 3, 7, LiquidityStrategy.SPOT, null);
+
+            assertThrows(InvalidBinRangeException.class,
+                    () -> liquidityService.addLiquidity(req, USER_ID));
+            verify(tokenServiceClient, never()).deductBalance(any(), any(), anyLong());
+        }
     }
 
     // ── removeLiquidity ─────────────────────────────────────────

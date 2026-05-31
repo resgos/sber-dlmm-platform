@@ -14,6 +14,7 @@ import TeamPage from '@/pages/TeamPage'
 import PoolDetailPage from '@/pages/PoolDetailPage'
 import LiquidityPage from '@/pages/LiquidityPage'
 import PositionsPage from '@/pages/PositionsPage'
+import OrdersPage from '@/pages/OrdersPage'
 import TransactionsPage from '@/pages/TransactionsPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ReviewsPage from '@/pages/ReviewsPage'
@@ -39,6 +40,7 @@ function App() {
         <Route path="pools/:id" element={<PoolDetailPage />} />
         <Route path="pools/:id/liquidity" element={<LiquidityPage />} />
         <Route path="positions" element={<PositionsPage />} />
+        <Route path="orders" element={<OrdersPage />} />
         <Route path="rebalance" element={<RebalancePage />} />
         <Route path="pools/compare" element={<PoolComparePage />} />
         <Route path="team" element={<TeamPage />} />

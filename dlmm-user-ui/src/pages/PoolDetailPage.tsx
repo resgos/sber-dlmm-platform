@@ -60,12 +60,16 @@ export default function PoolDetailPage() {
     binMax: number
     strategy: LiquidityStrategy
   } | null>(null)
+  // Sprint 16 (Meteora parity) — bin range chosen by dragging on the bin chart;
+  // pushed down into the Add-liquidity panel (which then re-overlays it as the
+  // pending preview). New object per drag so the panel's effect always re-fires.
+  const [chartRange, setChartRange] = useState<{ binMin: number; binMax: number } | null>(null)
 
   // OB-01 — order-book → action-panel handoff. Clicking a price level
   // in the «стакан» jumps the right-rail tabs to «Обмен» and surfaces
   // the picked level there as a reference. Controlled tab so the jump
   // is deterministic; defaults to the add-liquidity tab otherwise.
-  const [actionTab, setActionTab] = useState<'add' | 'swap'>('add')
+  const [actionTab, setActionTab] = useState<'add' | 'swap' | 'orders' | 'zap'>('add')
   const [pickedPrice, setPickedPrice] = useState<number | null>(null)
 
   // Sprint 15 perf — list→detail handoff. If the user navigated from
@@ -499,6 +503,7 @@ export default function PoolDetailPage() {
               userBinRanges={userBinRanges}
               pendingPreview={pendingPreview}
               userBinSharePctByBinId={userBinSharePctByBinId}
+              onRangeDrag={(binMin, binMax) => { setActionTab('add'); setChartRange({ binMin, binMax }) }}
             />
           </Card>
 
@@ -633,6 +638,7 @@ export default function PoolDetailPage() {
               if (tab !== 'swap') setPickedPrice(null)
             }}
             onPreviewChange={setPendingPreview}
+            externalRange={chartRange}
             pickedPrice={pickedPrice}
           />
         </Col>

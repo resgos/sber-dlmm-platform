@@ -17,6 +17,7 @@ import {
   StarOutlined,
   ThunderboltOutlined,
   AppstoreOutlined,
+  AimOutlined,
 } from '@ant-design/icons'
 import { authStore } from '@/store/authStore'
 import { auth } from '@/api/services'
@@ -68,6 +69,7 @@ function buildMenuItems(simpleMode: boolean) {
       label: 'Управление',
       children: [
         { key: '/positions', icon: <PieChartOutlined />, label: 'Мои позиции' },
+        { key: '/orders', icon: <AimOutlined />, label: 'Ордера' },
         ...(!simpleMode ? [{ key: '/rebalance', icon: <RetweetOutlined />, label: 'Ребаланс' }] : []),
         { key: '/transactions', icon: <TransactionOutlined />, label: 'Транзакции' },
       ],

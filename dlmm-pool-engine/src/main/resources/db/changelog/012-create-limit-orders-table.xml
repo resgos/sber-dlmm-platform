@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Sprint 16 (Meteora parity) — escrow-settled DLMM limit orders. -->
+    <changeSet id="012-create-limit-orders-table" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="limit_orders"/></not>
+        </preConditions>
+        <createTable tableName="limit_orders">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="pool_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="side" type="VARCHAR(8)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="token_in_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="token_out_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount_in" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="limit_price" type="DECIMAL(30,18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="amount_out" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="VARCHAR(16)" defaultValue="OPEN">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="VARCHAR(255)"/>
+            <column name="created_at" type="TIMESTAMP" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="filled_at" type="TIMESTAMP"/>
+            <column name="cancelled_at" type="TIMESTAMP"/>
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addUniqueConstraint constraintName="uq_limit_orders_idempotency_key"
+                             tableName="limit_orders"
+                             columnNames="idempotency_key"/>
+
+        <createIndex indexName="idx_limit_orders_user_id" tableName="limit_orders">
+            <column name="user_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_limit_orders_status" tableName="limit_orders">
+            <column name="status"/>
+        </createIndex>
+
+        <createIndex indexName="idx_limit_orders_pool_id" tableName="limit_orders">
+            <column name="pool_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

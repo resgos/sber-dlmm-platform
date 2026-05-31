@@ -29,6 +29,7 @@ public class NotificationEventListener {
             switch (eventType) {
                 case "SwapExecutedEvent" -> handleSwapExecuted(node);
                 case "LiquidityAddedEvent" -> handleLiquidityAdded(node);
+                case "LimitOrderFilledEvent" -> handleLimitOrderFilled(node);
                 default -> log.debug("Ignoring pool event type: {}", eventType);
             }
         } catch (Exception e) {
@@ -133,6 +134,12 @@ public class NotificationEventListener {
     }
 
     private String determinePoolEventType(JsonNode node) {
+        // Sprint 16 — limit-order fill (unique fields limitOrderId + fillPrice;
+        // the Placed/Cancelled siblings lack fillPrice so they fall through to
+        // the default-ignore, which is intended — only fills get a notification).
+        if (node.has("limitOrderId") && node.has("fillPrice")) {
+            return "LimitOrderFilledEvent";
+        }
         if (node.has("tokenInId") && node.has("amountIn") && node.has("fee")) {
             return "SwapExecutedEvent";
         }
@@ -171,5 +178,22 @@ public class NotificationEventListener {
                 node.toString()
         );
         log.info("Created liquidity added notification for user {}", userId);
+    }
+
+    /**
+     * Sprint 16 (Meteora parity) — a limit order filled (possibly long after it
+     * was placed), so the user must be told. Reuses SWAP_COMPLETED (a fill is an
+     * executed trade) to avoid a cross-service NotificationType enum change.
+     */
+    private void handleLimitOrderFilled(JsonNode node) {
+        UUID userId = UUID.fromString(node.get("userId").asText());
+        notificationService.createNotification(
+                userId,
+                NotificationType.SWAP_COMPLETED,
+                "Лимитный ордер исполнен",
+                "Ваш лимитный ордер исполнен — средства зачислены на баланс.",
+                node.toString()
+        );
+        log.info("Created limit-order filled notification for user {}", userId);
     }
 }

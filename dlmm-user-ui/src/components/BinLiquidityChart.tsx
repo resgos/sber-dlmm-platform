@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer,
 } from 'recharts'
 import { Spin, Empty, Alert, Button, Space, Tooltip as AntTooltip } from 'antd'
 import { ZoomInOutlined, ZoomOutOutlined, AimOutlined } from '@ant-design/icons'
@@ -50,6 +50,12 @@ interface BinLiquidityChartProps {
    * currently fetch on this page.
    */
   userBinSharePctByBinId?: Map<number, number>
+  /**
+   * Sprint 16 (Meteora parity) — drag across the chart to pick a bin range.
+   * Fires (binMin, binMax) on drag end; the parent feeds it into the Add panel
+   * (which re-overlays the selection via pendingPreview).
+   */
+  onRangeDrag?: (binMin: number, binMax: number) => void
 }
 
 interface ChartDataPoint {
@@ -170,12 +176,34 @@ const makeTooltip = (
   )
 }
 
-export default function BinLiquidityChart({ poolId, userBinRanges, pendingPreview, userBinSharePctByBinId }: BinLiquidityChartProps) {
+export default function BinLiquidityChart({ poolId, userBinRanges, pendingPreview, userBinSharePctByBinId, onRangeDrag }: BinLiquidityChartProps) {
   // Sprint 9-DS-r4 (P1-5) — Meteora-style zoom level. Persisted only
   // for this render; no localStorage so different pools don't surprise
   // the user with a tight zoom that doesn't fit their layout.
   const [zoomIndex, setZoomIndex] = useState<number>(DEFAULT_ZOOM_INDEX)
   const windowRadius = ZOOM_LEVELS[zoomIndex]
+
+  // Sprint 16 (Meteora parity) — drag-to-select a bin range directly on the chart.
+  const dragStartRef = useRef<number | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const [dragEnd, setDragEnd] = useState<number | null>(null)
+  const commitDrag = () => {
+    const start = dragStartRef.current
+    if (dragging && start != null && dragEnd != null && dragEnd !== start && onRangeDrag) {
+      onRangeDrag(Math.min(start, dragEnd), Math.max(start, dragEnd))
+    }
+    setDragging(false)
+    dragStartRef.current = null
+    setDragEnd(null)
+  }
+  // Leaving the chart mid-gesture CANCELS the drag (no commit), so a half-finished
+  // range isn't pushed when the pointer exits the SVG before the button is released.
+  const cancelDrag = () => {
+    if (!dragging) return
+    setDragging(false)
+    dragStartRef.current = null
+    setDragEnd(null)
+  }
 
   const { data: pool, isLoading, error } = useQuery({
     queryKey: ['poolDetail', poolId],
@@ -356,8 +384,26 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
           </span>
         </Space>
       </div>
+      {onRangeDrag && (
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 4 }}>
+          Потяните по графику, чтобы выбрать диапазон бинов для добавления
+        </div>
+      )}
+      <div style={{ cursor: onRangeDrag ? (dragging ? 'grabbing' : 'crosshair') : 'default', userSelect: dragging ? 'none' : 'auto' }}>
       <ResponsiveContainer width="100%" height={320}>
-        <BarChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }} barCategoryGap="4%">
+        <BarChart
+          data={chartData}
+          margin={{ top: 10, right: 20, left: 0, bottom: 20 }}
+          barCategoryGap="4%"
+          onMouseDown={onRangeDrag ? (e: any) => {
+            if (e?.activeLabel != null) { dragStartRef.current = Number(e.activeLabel); setDragEnd(Number(e.activeLabel)); setDragging(true) }
+          } : undefined}
+          onMouseMove={onRangeDrag ? (e: any) => {
+            if (dragging && e?.activeLabel != null) setDragEnd(Number(e.activeLabel))
+          } : undefined}
+          onMouseUp={onRangeDrag ? commitDrag : undefined}
+          onMouseLeave={onRangeDrag ? cancelDrag : undefined}
+        >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
           <XAxis dataKey="binId" tick={false} axisLine={{ stroke: '#E5E7EB' }}
             label={{ value: `← ниже цены   |   ${activePrice != null ? activePrice.toFixed(4) : 'текущая цена'}   |   выше цены →`, position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 'var(--text-xs)' }} />
@@ -383,6 +429,14 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
             }} />
           <Tooltip content={Tooltip2} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
           <ReferenceLine x={pool.activeBinId} stroke="#F59E0B" strokeWidth={2} strokeDasharray="5 3" />
+          {dragging && dragStartRef.current != null && dragEnd != null && (
+            <ReferenceArea
+              x1={Math.min(dragStartRef.current, dragEnd)}
+              x2={Math.max(dragStartRef.current, dragEnd)}
+              fill="rgba(33,160,56,0.14)"
+              stroke="rgba(33,160,56,0.7)"
+            />
+          )}
           {/* F-02 root-cause fix (2026-05-27 review) — isAnimationActive={false}.
               Recharts Bar enter-animation runs on EVERY re-render; with ~50
               bars × Cells × 2 series, plus ResponsiveContainer re-measuring
@@ -410,6 +464,7 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
           )}
         </BarChart>
       </ResponsiveContainer>
+      </div>
     </div>
   )
 }
