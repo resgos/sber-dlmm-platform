@@ -20,6 +20,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
@@ -133,9 +135,23 @@ public class FeeService {
         log.info("Claiming fees for position: {} by user: {} (quoteOnly={})", request.positionId(), userId, quoteOnly);
 
         if (request.idempotencyKey() != null && !request.idempotencyKey().isBlank()) {
-            if (!processedIdempotencyKeys.add(request.idempotencyKey())) {
+            String idemKey = request.idempotencyKey();
+            if (!processedIdempotencyKeys.add(idemKey)) {
                 throw new IdempotencyConflictException(
-                        "Request with idempotency key '" + request.idempotencyKey() + "' has already been processed");
+                        "Request with idempotency key '" + idemKey + "' has already been processed");
+            }
+            // Release the key if this transaction rolls back, so a legitimate retry
+            // (e.g. after a transient credit failure) isn't permanently blocked.
+            // Mirrors the pool-engine #23 fix.
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCompletion(int status) {
+                        if (status == STATUS_ROLLED_BACK) {
+                            processedIdempotencyKeys.remove(idemKey);
+                        }
+                    }
+                });
             }
         }
 
@@ -181,17 +197,29 @@ public class FeeService {
             }
         }
 
-        // Standard path — credit each accrued token as-is.
-        List<UUID> tokenIds = new ArrayList<>(claimedByToken.keySet());
-        UUID tokenXId = tokenIds.isEmpty() ? null : tokenIds.get(0);
-        UUID tokenYId = tokenIds.size() > 1 ? tokenIds.get(1) : null;
+        // Standard path — credit every accrued token (nothing dropped), and label
+        // X/Y by the pool's REAL token ids. HashMap.keySet() order is hash-order, so
+        // the legacy get(0)/get(1) could swap the X/Y labels on the event + response
+        // (balances were always correct; only the reported sides could be inverted).
+        for (Map.Entry<UUID, Long> e : claimedByToken.entrySet()) {
+            if (e.getValue() != null && e.getValue() > 0) {
+                tokenServiceClient.credit(userId, e.getKey(), e.getValue());
+            }
+        }
+
+        PoolXY labelPool = (pool != null) ? pool : lookupPoolXY(poolId);
+        UUID tokenXId;
+        UUID tokenYId;
+        if (labelPool != null) {
+            tokenXId = labelPool.tokenXId();
+            tokenYId = labelPool.tokenYId();
+        } else {
+            List<UUID> tokenIds = new ArrayList<>(claimedByToken.keySet());
+            tokenXId = tokenIds.isEmpty() ? null : tokenIds.get(0);
+            tokenYId = tokenIds.size() > 1 ? tokenIds.get(1) : null;
+        }
         long claimedX = tokenXId != null ? claimedByToken.getOrDefault(tokenXId, 0L) : 0;
         long claimedY = tokenYId != null ? claimedByToken.getOrDefault(tokenYId, 0L) : 0;
-
-        tokenServiceClient.credit(userId, tokenXId, claimedX);
-        if (tokenYId != null && claimedY > 0) {
-            tokenServiceClient.credit(userId, tokenYId, claimedY);
-        }
 
         kafkaTemplate.send(FEE_EVENTS_TOPIC, request.positionId().toString(),
                 new FeeClaimedEvent(request.positionId(), userId, poolId, claimedX, claimedY, tokenXId, tokenYId, now));
