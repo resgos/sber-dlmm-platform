@@ -47,7 +47,7 @@ Compose builds each Java service from the root `Dockerfile` with `--build-arg MO
 ```bash
 bash scripts/redeploy-frontends.sh   # host `npm run build` + docker cp dist into the nginx containers
 ```
-Re-run this after **every** `docker compose up` — the copied `dist` is lost when a container is recreated — then hard-refresh the browser. `nginx.conf` changes are NOT covered by the script; `docker cp` them in and `nginx -s reload` manually.
+Re-run this after **every** `docker compose up` — the copied `dist` is lost when a container is recreated. nginx now serves `index.html` with `Cache-Control: no-cache` (content-hashed `/assets` stay `immutable`), so a plain browser reload picks up the fresh bundle — no manual hard-refresh needed, and stale UI now means the `dist` wasn't re-copied rather than a cached `index.html`. `nginx.conf` changes are NOT covered by the script; `docker cp` them in and `nginx -s reload` manually.
 
 ## Architecture (the parts you can't infer from one file)
 
