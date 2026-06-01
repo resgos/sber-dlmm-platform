@@ -31,6 +31,7 @@ import {
   type TargetAllocation,
   type RebalancePlan,
 } from '@/lib/rebalancePlanner'
+import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
 
 const { Title, Text } = Typography
@@ -199,11 +200,10 @@ export default function RebalancePage() {
           msg: `${hop.fromSymbol} → ${hop.toSymbol}: ${hop.amountIn.toLocaleString('ru-RU')} (≈ ${formatRub(hop.approxRubValue)})`,
         }])
       } catch (err: unknown) {
-        const e = err as { response?: { data?: { message?: string } } }
         setExecutionLog((prev) => [...prev, {
           hop: i,
           status: 'fail',
-          msg: `Шаг ${i + 1} (${hop.fromSymbol} → ${hop.toSymbol}): ${e?.response?.data?.message ?? 'ошибка обмена'}`,
+          msg: `Шаг ${i + 1} (${hop.fromSymbol} → ${hop.toSymbol}): ${apiErrorMessage(err, 'ошибка обмена')}`,
         }])
         break
       }

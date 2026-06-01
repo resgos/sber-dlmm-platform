@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { pools, balances } from '@/api/services'
 import type { Pool, LiquidityStrategy } from '@/api/types'
 import { formatCompact, formatRub } from '@/lib/format'
+import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
 
 const { Text } = Typography
@@ -138,7 +139,7 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
       setTimeout(() => setSuccess(null), 5000)
     },
     onError: (err: any) => {
-      setError(err?.response?.data?.message || 'Ошибка при добавлении ликвидности')
+      setError(apiErrorMessage(err, 'Ошибка при добавлении ликвидности'))
     },
   })
 

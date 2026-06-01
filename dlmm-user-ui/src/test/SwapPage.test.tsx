@@ -328,12 +328,14 @@ describe('SwapPage — swap mutation outcomes', () => {
     await waitFor(() => expect(amountInInput().value).toBe(''))
   })
 
-  it('failed swap shows server error message in red alert', async () => {
+  it('failed swap maps backend errorCode to a friendly message (no UUID leak)', async () => {
     quoteMock.mockResolvedValue({
       poolId: POOL.id, amountIn: 100, amountOut: 99, fee: 1, priceImpact: 0.1,
     })
+    // Backend message leaks internal UUIDs; the UI must show the friendly
+    // mapped text for the errorCode, NOT this raw message.
     executeMock.mockRejectedValue({
-      response: { data: { message: 'Недостаточно средств на балансе' } },
+      response: { data: { errorCode: 'INSUFFICIENT_BALANCE', message: 'Insufficient balance for user a0000000-0000-0000-0000-000000000002 token b0000000-0000-0000-0000-000000000001' } },
     })
     await renderSwap()
     await selectTokenIn('SRUB — Sber Rouble')
@@ -345,7 +347,9 @@ describe('SwapPage — swap mutation outcomes', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Обменять' }))
 
-    expect(await screen.findByText('Недостаточно средств на балансе')).toBeInTheDocument()
+    expect(await screen.findByText('Недостаточно средств на балансе для этой операции.')).toBeInTheDocument()
+    // the raw UUID-leaking backend message must NOT be rendered
+    expect(screen.queryByText(/a0000000-/)).not.toBeInTheDocument()
   })
 
   it('failed swap without server message falls back to generic text', async () => {

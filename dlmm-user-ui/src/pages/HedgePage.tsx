@@ -30,6 +30,7 @@ import { rowButtonProps } from '@/lib/a11y'
 import type { Pool, Token, TokenBalance, Transaction } from '@/api/types'
 import { bpsToPercent } from '@/utils/format'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { apiErrorMessage } from '@/lib/apiError'
 import RiskDisclosure from '@/components/RiskDisclosure'
 import { uuid } from '../lib/uuid'
 
@@ -228,8 +229,7 @@ export default function HedgePage() {
       setTimeout(() => setSuccess(false), 5000)
     },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { message?: string } } }
-      setError(e?.response?.data?.message || 'Не удалось выполнить хедж')
+      setError(apiErrorMessage(err, 'Не удалось выполнить хедж'))
     },
   })
 
@@ -317,8 +317,7 @@ export default function HedgePage() {
       setTimeout(() => setSuccess(false), 5000)
     },
     onError: (err: unknown, hedge) => {
-      const e = err as { response?: { data?: { message?: string } } }
-      setError(e?.response?.data?.message || 'Не удалось закрыть хедж')
+      setError(apiErrorMessage(err, 'Не удалось закрыть хедж'))
       // Sprint 9-DS-r4 (P2-3) — release the optimistic dismiss so
       // the user sees the row back and can retry.
       clearUnwinding(hedge.id)

@@ -16,6 +16,7 @@ import ModalHeader from '@/components/ModalHeader'
 import AddLiquidityPreview from '@/components/AddLiquidityPreview'
 import { useDebouncedValue } from '@/lib/useDebouncedValue'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
 
 const { Title, Text } = Typography
@@ -103,7 +104,7 @@ export default function LiquidityPage() {
       queryClient.invalidateQueries({ queryKey: ['poolDetail', id] })
     },
     onError: (err: any) => {
-      message.error(err?.response?.data?.message || 'Ошибка при добавлении ликвидности')
+      message.error(apiErrorMessage(err, 'Ошибка при добавлении ликвидности'))
     },
   })
 
@@ -122,7 +123,7 @@ export default function LiquidityPage() {
       queryClient.invalidateQueries({ queryKey: ['poolDetail', id] })
     },
     onError: (err: any) => {
-      message.error(err?.response?.data?.message || 'Ошибка при удалении ликвидности')
+      message.error(apiErrorMessage(err, 'Ошибка при удалении ликвидности'))
     },
   })
 
@@ -134,7 +135,7 @@ export default function LiquidityPage() {
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
     },
     onError: (err: any) => {
-      message.error(err?.response?.data?.message || 'Ошибка')
+      message.error(apiErrorMessage(err, 'Ошибка'))
     },
   })
 

@@ -8,6 +8,7 @@ import { limitOrders, balances } from '@/api/services'
 import type { Pool, TokenBalance, LimitOrderSide } from '@/api/types'
 import { celebrateSberkot } from '@/components/sberkot/events'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
 
 const { Text } = Typography
@@ -76,8 +77,7 @@ export default function LimitOrdersPanel({ pool }: { pool: Pool }) {
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
     },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { message?: string } } }
-      setError(e?.response?.data?.message || 'Не удалось разместить ордер')
+      setError(apiErrorMessage(err, 'Не удалось разместить ордер'))
     },
   })
 

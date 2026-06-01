@@ -6,6 +6,7 @@ import { pools, balances } from '@/api/services'
 import type { Pool, TokenBalance, SwapQuote } from '@/api/types'
 import { celebrateSberkot } from '@/components/sberkot/events'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
 
 const { Text } = Typography
@@ -82,9 +83,8 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
         })
       } catch (addErr) {
         // The swap already went through — be explicit so the user isn't confused.
-        const e = addErr as { response?: { data?: { message?: string } } }
         throw new Error(
-          `Обмен выполнен, но добавление ликвидности не удалось (${e?.response?.data?.message || 'ошибка'}). ` +
+          `Обмен выполнен, но добавление ликвидности не удалось (${apiErrorMessage(addErr, 'ошибка')}). ` +
           `Обменянные токены остались на балансе — добавьте ликвидность вручную во вкладке «Добавить».`,
         )
       }

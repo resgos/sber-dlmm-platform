@@ -16,6 +16,7 @@ import { useAutoClaimWatcher } from '@/lib/useAutoClaimWatcher'
 import { calculateHealth, type HealthScore } from '@/lib/positionHealth'
 import { exportToCsv } from '@/lib/csvExport'
 import { strategyLabel } from '@/lib/strategy'
+import { apiErrorMessage } from '@/lib/apiError'
 import { positionAlertsStore } from '@/store/positionAlertsStore'
 import { useSyncExternalStore } from 'react'
 import { Segmented } from 'antd'
@@ -106,7 +107,7 @@ export default function PositionsPage() {
       queryClient.invalidateQueries({ queryKey: ['myFeeSummary'] })
       queryClient.invalidateQueries({ queryKey: ['myFeeHistory'] })
     },
-    onError: (err: any) => message.error(err?.response?.data?.message || t('positions.messages.errorFallback')),
+    onError: (err: any) => message.error(apiErrorMessage(err, t('positions.messages.errorFallback'))),
   })
 
   // Sprint 17 — LP-farming rewards (SSPAS).
@@ -134,7 +135,7 @@ export default function PositionsPage() {
       queryClient.invalidateQueries({ queryKey: ['myPositions'] })
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
     },
-    onError: (err: any) => message.error(err?.response?.data?.message || t('positions.messages.errorFallback')),
+    onError: (err: any) => message.error(apiErrorMessage(err, t('positions.messages.errorFallback'))),
   })
 
   // UI-CRITIQUE 2026-05-22 fix — wrap in useMemo so reference is
@@ -214,7 +215,7 @@ export default function PositionsPage() {
             message.error(
               t('positions.messages.removeFailure', {
                 id: pos.id.slice(0, 6),
-                error: e?.response?.data?.message || t('positions.messages.errorWord'),
+                error: apiErrorMessage(e, t('positions.messages.errorWord')),
                 done: closed,
                 total: activePositions.length,
               }),
@@ -260,7 +261,7 @@ export default function PositionsPage() {
             message.error(
               t('positions.messages.claimFailure', {
                 id: pos.id.slice(0, 6),
-                error: e?.response?.data?.message || t('positions.messages.errorWord'),
+                error: apiErrorMessage(e, t('positions.messages.errorWord')),
                 done: claimed,
                 total: positionsWithClaimableFees.length,
               }),

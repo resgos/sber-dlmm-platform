@@ -13,6 +13,7 @@ import TokenSelect from '@/components/TokenSelect'
 import { rowButtonProps } from '@/lib/a11y'
 import { TokenPairChip } from '@/components/sber'
 import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
+import { apiErrorMessage } from '@/lib/apiError'
 import { celebrateSberkot } from '@/components/sberkot/events'
 import { uuid } from '../lib/uuid'
 
@@ -211,8 +212,7 @@ export default function SimpleTradePage() {
       setTimeout(() => setTradeSuccess(null), 5000)
     },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { message?: string } } }
-      setTradeError(e?.response?.data?.message || 'Не удалось выполнить операцию')
+      setTradeError(apiErrorMessage(err, 'Не удалось выполнить операцию'))
     },
   })
 
@@ -250,8 +250,7 @@ export default function SimpleTradePage() {
       setTimeout(() => setLpSuccess(null), 5000)
     },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { message?: string } } }
-      setLpError(e?.response?.data?.message || 'Не удалось добавить ликвидность')
+      setLpError(apiErrorMessage(err, 'Не удалось добавить ликвидность'))
     },
   })
 
@@ -287,8 +286,7 @@ export default function SimpleTradePage() {
       setTimeout(() => setRemoveSuccess(null), 5000)
     },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { message?: string } } }
-      setRemoveError(e?.response?.data?.message || 'Не удалось забрать ликвидность')
+      setRemoveError(apiErrorMessage(err, 'Не удалось забрать ликвидность'))
     },
   })
 

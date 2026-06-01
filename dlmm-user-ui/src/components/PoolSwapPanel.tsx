@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, balances } from '@/api/services'
 import type { Pool, TokenBalance, SwapQuote } from '@/api/types'
 import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
+import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
 
 const { Text } = Typography
@@ -91,8 +92,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       setTimeout(() => setSuccess(null), 5000)
     },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { message?: string } } }
-      setError(e?.response?.data?.message || 'Не удалось выполнить обмен')
+      setError(apiErrorMessage(err, 'Не удалось выполнить обмен'))
     },
   })
 

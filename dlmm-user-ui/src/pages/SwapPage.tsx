@@ -21,6 +21,7 @@ import PoolPriceChart from '@/components/PoolPriceChart'
 import { bpsToPercent } from '@/utils/format'
 import { TokenPairChip } from '@/components/sber'
 import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
+import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
 
 const { Title, Text } = Typography
@@ -101,8 +102,7 @@ export default function SwapPage() {
       setTimeout(() => setSwapSuccess(false), 5000)
     },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { message?: string } } }
-      setSwapError(e?.response?.data?.message || 'Ошибка при выполнении обмена')
+      setSwapError(apiErrorMessage(err, 'Ошибка при выполнении обмена'))
     },
   })
 
