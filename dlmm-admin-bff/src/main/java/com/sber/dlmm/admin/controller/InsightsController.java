@@ -7,6 +7,9 @@ import com.sber.dlmm.admin.service.AuditLogService;
 import com.sber.dlmm.admin.service.CustomerSuccessService;
 import com.sber.dlmm.admin.service.PilotHealthService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -41,26 +44,89 @@ public class InsightsController {
     private final PilotHealthService pilotHealth;
     private final AuditLogService auditLog;
 
+    /**
+     * Returns the weekly customer-success snapshot (B-04) consumed by the
+     * product owner — active orgs/users, new signups, transaction and fee
+     * totals, 2FA/KYC adoption, top fee-yielding orgs and churn warnings for the
+     * trailing 7 days.
+     *
+     * <p>Computed in-process from the shared database by
+     * {@code CustomerSuccessService}; no downstream service calls are involved.
+     *
+     * @return {@code 200 OK} wrapping the {@link CustomerSuccessWeekly} snapshot
+     */
     @GetMapping("/cs/weekly")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
-    @Operation(summary = "B-04 — weekly customer-success snapshot for PO")
+    @Operation(summary = "B-04 — weekly customer-success snapshot for PO",
+            description = "Admin backend-for-frontend endpoint returning the weekly customer-success snapshot "
+                    + "(B-04) consumed by the product owner. Computed in-process from the shared database; "
+                    + "no downstream service calls are involved.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Weekly customer-success snapshot returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication"),
+            @ApiResponse(responseCode = "403", description = "Caller lacks the ADMIN or SUPER_ADMIN role")
+    })
     public ResponseEntity<CustomerSuccessWeekly> getWeeklySnapshot() {
         return ResponseEntity.ok(customerSuccess.getWeeklySnapshot());
     }
 
+    /**
+     * Returns per-organisation pilot engagement/health scores (B-06) for the
+     * admin pilot-health dashboard — one {@link PilotHealth} row per pilot org,
+     * each with a 0–100 engagement score, a health flag and suggested next steps.
+     *
+     * <p>Computed in-process from the shared database by
+     * {@code PilotHealthService}; no downstream service calls are involved.
+     *
+     * @return {@code 200 OK} wrapping the list of per-org {@link PilotHealth} rows
+     */
     @GetMapping("/pilots/health")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
-    @Operation(summary = "B-06 — per-org pilot health scores")
+    @Operation(summary = "B-06 — per-org pilot health scores",
+            description = "Admin backend-for-frontend endpoint returning per-organisation pilot engagement/health "
+                    + "scores (B-06). Computed in-process from the shared database; no downstream service calls "
+                    + "are involved.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Per-org pilot health scores returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication"),
+            @ApiResponse(responseCode = "403", description = "Caller lacks the ADMIN or SUPER_ADMIN role")
+    })
     public ResponseEntity<List<PilotHealth>> getPilotHealth() {
         return ResponseEntity.ok(pilotHealth.getAllPilotHealth());
     }
 
+    /**
+     * Returns the most recent audit-log entries for a single entity (QW-5),
+     * powering the activity-log sidebar in the admin UI.
+     *
+     * <p>Queried directly from the shared database by {@code AuditLogService};
+     * no downstream service calls are involved.
+     *
+     * @param targetType type of the audited entity, e.g. {@code POOL},
+     *                   {@code USER}, {@code TOKEN}
+     * @param targetId   identifier of the audited entity
+     * @param limit      maximum number of entries to return (defaults to 20)
+     * @return {@code 200 OK} wrapping the entity's {@link AuditLogEntry} rows,
+     *         newest first
+     */
     @GetMapping("/audit-log")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
-    @Operation(summary = "QW-5 — audit-log entries for an entity (activity-log sidebar)")
+    @Operation(summary = "QW-5 — audit-log entries for an entity (activity-log sidebar)",
+            description = "Admin backend-for-frontend endpoint returning the most recent audit-log entries for a "
+                    + "single entity (QW-5), powering the activity-log sidebar. Queried directly from the shared "
+                    + "database; no downstream service calls are involved.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Audit-log entries for the entity returned"),
+            @ApiResponse(responseCode = "400", description = "Required query parameter (targetType or targetId) is missing"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication"),
+            @ApiResponse(responseCode = "403", description = "Caller lacks the ADMIN or SUPER_ADMIN role")
+    })
     public ResponseEntity<List<AuditLogEntry>> getAuditLog(
+            @Parameter(description = "Type of the audited entity, e.g. POOL, USER, TOKEN")
             @RequestParam String targetType,
+            @Parameter(description = "Identifier of the audited entity")
             @RequestParam String targetId,
+            @Parameter(description = "Maximum number of entries to return (default 20)")
             @RequestParam(defaultValue = "20") int limit) {
         return ResponseEntity.ok(auditLog.findByTarget(targetType, targetId, limit));
     }

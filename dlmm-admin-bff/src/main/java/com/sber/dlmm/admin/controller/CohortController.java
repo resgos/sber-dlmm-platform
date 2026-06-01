@@ -4,6 +4,8 @@ import com.sber.dlmm.admin.dto.CohortDataPoint;
 import com.sber.dlmm.admin.service.CohortService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -47,8 +49,15 @@ public class CohortController {
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(
             summary     = "Get cohort analytics",
-            description = "Returns DAU, MAU, D7 or D30 retention data points for the requested period"
+            description = "Admin backend-for-frontend endpoint returning DAU, MAU, D7 or D30 retention data points "
+                    + "for the requested period. Metrics are derived directly from the shared database "
+                    + "(transactions table); no downstream service calls are involved."
     )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Cohort time-series returned, ordered by date ascending"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication"),
+            @ApiResponse(responseCode = "403", description = "Caller lacks the ADMIN or SUPER_ADMIN role")
+    })
     public ResponseEntity<List<CohortDataPoint>> getCohorts(
             @Parameter(description = "Metric: DAU | MAU | D7 | D30", example = "DAU")
             @RequestParam(defaultValue = "DAU") String metric,

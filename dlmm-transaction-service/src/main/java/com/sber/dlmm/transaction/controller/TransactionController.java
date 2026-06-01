@@ -9,6 +9,11 @@ import com.sber.dlmm.transaction.dto.TransactionResponse;
 import com.sber.dlmm.transaction.entity.Transaction;
 import com.sber.dlmm.transaction.export.OneCExchangeFormatter;
 import com.sber.dlmm.transaction.service.TransactionService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -30,39 +35,117 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * REST API over the transaction ledger.
+ *
+ * <p>Surfaces history queries (admin-wide, per-user, by-id, pool-scoped feed),
+ * the AML "mark reviewed" action, and settlement-report download (CSV / 1C).
+ * Thin layer: it enforces authorization (owner-or-admin / role gates) and
+ * delegates all logic to {@link TransactionService}; the report endpoints add
+ * file streaming via {@link OneCExchangeFormatter}.
+ *
+ * <p>Ownership rule: user-facing reads derive the user id from the JWT
+ * ({@code authentication.getPrincipal()}), never from a request parameter, so
+ * a caller can only ever see their own data unless they hold ADMIN /
+ * SUPER_ADMIN.
+ *
+ * <p>Lombok {@code @RequiredArgsConstructor} injects {@link TransactionService}.
+ */
 @RestController
 @RequestMapping("/api/v1/transactions")
 @RequiredArgsConstructor
+@Tag(name = "Transactions", description = "Transaction ledger: query history, AML review, and settlement-report export")
 public class TransactionController {
 
     private final TransactionService transactionService;
 
+    /**
+     * Admin-wide transaction listing, optionally filtered by type/status.
+     * Authorization is enforced by {@code @PreAuthorize} (ADMIN / SUPER_ADMIN).
+     *
+     * @param type   optional transaction-type filter
+     * @param status optional status filter
+     * @param page   zero-based page index (default 0)
+     * @param size   page size (default 20)
+     * @return 200 with a {@link PageResponse} of {@link TransactionResponse}
+     */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @Operation(
+            summary = "List all transactions (admin)",
+            description = "Returns a paginated, createdAt-DESC page of every user's transactions across the platform, "
+                    + "optionally filtered by type and status. ADMIN / SUPER_ADMIN only.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Page of transactions returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid access token"),
+            @ApiResponse(responseCode = "403", description = "Caller is not ADMIN / SUPER_ADMIN")
+    })
     public ResponseEntity<PageResponse<TransactionResponse>> getAllTransactions(
-            @RequestParam(required = false) TransactionType type,
-            @RequestParam(required = false) TransactionStatus status,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Optional filter by transaction type") @RequestParam(required = false) TransactionType type,
+            @Parameter(description = "Optional filter by transaction status") @RequestParam(required = false) TransactionStatus status,
+            @Parameter(description = "Zero-based page index") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(transactionService.getAllTransactions(type, status, page, size));
     }
 
+    /**
+     * Lists the authenticated caller's own transactions (user id taken from the
+     * JWT), optionally filtered by type, status, and a created-at window.
+     *
+     * @param authentication the caller's authentication (principal = user id)
+     * @param type           optional transaction-type filter
+     * @param status         optional status filter
+     * @param from           optional inclusive lower bound on createdAt
+     * @param to             optional inclusive upper bound on createdAt
+     * @param page           zero-based page index (default 0)
+     * @param size           page size (default 20)
+     * @return 200 with a {@link PageResponse} of the caller's transactions
+     */
     @GetMapping("/me")
+    @Operation(
+            summary = "List the caller's own transactions",
+            description = "Returns a paginated, createdAt-DESC page of the authenticated caller's transactions "
+                    + "(user id taken from the JWT, never a request param), optionally filtered by type, status, "
+                    + "and a created-at date window. Any authenticated user.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Page of the caller's transactions returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid access token")
+    })
     public ResponseEntity<PageResponse<TransactionResponse>> getMyTransactions(
             Authentication authentication,
-            @RequestParam(required = false) TransactionType type,
-            @RequestParam(required = false) TransactionStatus status,
-            @RequestParam(required = false) LocalDateTime from,
-            @RequestParam(required = false) LocalDateTime to,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Optional filter by transaction type") @RequestParam(required = false) TransactionType type,
+            @Parameter(description = "Optional filter by transaction status") @RequestParam(required = false) TransactionStatus status,
+            @Parameter(description = "Optional inclusive lower bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) LocalDateTime from,
+            @Parameter(description = "Optional inclusive upper bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) LocalDateTime to,
+            @Parameter(description = "Zero-based page index") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
         UUID userId = (UUID) authentication.getPrincipal();
         return ResponseEntity.ok(transactionService.getUserTransactions(userId, type, status, from, to, page, size));
     }
 
+    /**
+     * Fetches a single transaction by id, enforcing owner-or-admin access in
+     * code (this endpoint has no {@code @PreAuthorize}; the check is manual
+     * because the rule depends on the row's owner).
+     *
+     * @param id             transaction id to fetch
+     * @param authentication the caller's authentication (principal = user id)
+     * @return 200 with the {@link TransactionResponse}
+     * @throws ForbiddenException if the caller neither owns the transaction nor
+     *         holds ADMIN / SUPER_ADMIN
+     */
     @GetMapping("/{id}")
+    @Operation(
+            summary = "Get a single transaction by id",
+            description = "Returns one transaction. The caller must either own the transaction or be ADMIN / "
+                    + "SUPER_ADMIN; otherwise access is denied.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Transaction returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid access token"),
+            @ApiResponse(responseCode = "403", description = "Caller is neither the owner nor an admin")
+    })
     public ResponseEntity<TransactionResponse> getTransaction(
-            @PathVariable UUID id,
+            @Parameter(description = "Transaction id") @PathVariable UUID id,
             Authentication authentication) {
         UUID userId = (UUID) authentication.getPrincipal();
         TransactionResponse transaction = transactionService.getTransaction(id);
@@ -78,14 +161,34 @@ public class TransactionController {
         return ResponseEntity.ok(transaction);
     }
 
+    /**
+     * Admin lookup of a specific user's transactions, optionally filtered by
+     * type/status. Authorization enforced by {@code @PreAuthorize}.
+     *
+     * @param userId user whose transactions to list
+     * @param type   optional transaction-type filter
+     * @param status optional status filter
+     * @param page   zero-based page index (default 0)
+     * @param size   page size (default 20)
+     * @return 200 with a {@link PageResponse} of the user's transactions
+     */
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @Operation(
+            summary = "List a specific user's transactions (admin)",
+            description = "Returns a paginated, createdAt-DESC page of the given user's transactions, optionally "
+                    + "filtered by type and status. ADMIN / SUPER_ADMIN only.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Page of the user's transactions returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid access token"),
+            @ApiResponse(responseCode = "403", description = "Caller is not ADMIN / SUPER_ADMIN")
+    })
     public ResponseEntity<PageResponse<TransactionResponse>> getUserTransactions(
-            @PathVariable UUID userId,
-            @RequestParam(required = false) TransactionType type,
-            @RequestParam(required = false) TransactionStatus status,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Id of the user whose transactions to list") @PathVariable UUID userId,
+            @Parameter(description = "Optional filter by transaction type") @RequestParam(required = false) TransactionType type,
+            @Parameter(description = "Optional filter by transaction status") @RequestParam(required = false) TransactionStatus status,
+            @Parameter(description = "Zero-based page index") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(transactionService.getUserTransactions(userId, type, status, null, null, page, size));
     }
 
@@ -96,11 +199,25 @@ public class TransactionController {
      * because pool history is on-chain-equivalent data — no PII
      * leaks; userId in the payload is already exposed elsewhere
      * (top-LPs list, leaderboard).
+     *
+     * @param poolId pool whose recent swaps to return
+     * @param limit  max rows; the service clamps it to [1, 100] (default 20)
+     * @return 200 with a newest-first list of {@link TransactionResponse}
      */
     @GetMapping("/pool/{poolId}")
+    @Operation(
+            summary = "Recent swap feed for a pool",
+            description = "Returns the most recent SWAP transactions for a pool, newest first, backing the "
+                    + "Meteora-style history panel on the pool detail page. The limit is clamped to [1, 100]. "
+                    + "Available to any authenticated user — the payload carries no PII beyond data already "
+                    + "exposed elsewhere (top-LP lists, leaderboard).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "List of recent pool swaps returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid access token")
+    })
     public ResponseEntity<List<TransactionResponse>> getRecentPoolTransactions(
-            @PathVariable UUID poolId,
-            @RequestParam(defaultValue = "20") int limit) {
+            @Parameter(description = "Pool id") @PathVariable UUID poolId,
+            @Parameter(description = "Max rows to return; clamped to [1, 100]") @RequestParam(defaultValue = "20") int limit) {
         return ResponseEntity.ok(transactionService.getRecentPoolTransactions(poolId, limit));
     }
 
@@ -109,12 +226,26 @@ public class TransactionController {
      * SuspiciousTransactionsPage. Stamps reviewedAt/reviewedBy on the
      * transaction so admin-bff's on-the-fly suspicious detection
      * stops re-surfacing it. ADMIN / SUPER_ADMIN only.
+     *
+     * @param id             transaction id to mark reviewed
+     * @param authentication the caller's authentication (principal = reviewer id)
+     * @return 200 with the updated {@link TransactionResponse}
      */
     @org.springframework.web.bind.annotation.PostMapping("/{id}/review")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @Operation(
+            summary = "Mark a transaction as AML-reviewed",
+            description = "Stamps reviewedAt / reviewedBy on the transaction so the admin BFF's suspicious-activity "
+                    + "detection stops re-surfacing it; idempotent (re-reviewing updates the reviewer to the latest "
+                    + "caller). Returns the updated transaction. ADMIN / SUPER_ADMIN only.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Transaction marked reviewed and returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid access token"),
+            @ApiResponse(responseCode = "403", description = "Caller is not ADMIN / SUPER_ADMIN")
+    })
     @AdminAudit(action = "TX_MARK_REVIEWED", targetType = "TX", targetIdParam = "id")
     public ResponseEntity<TransactionResponse> markReviewed(
-            @PathVariable UUID id,
+            @Parameter(description = "Transaction id to mark reviewed") @PathVariable UUID id,
             Authentication authentication) {
         UUID reviewer = (UUID) authentication.getPrincipal();
         Transaction reviewed = transactionService.markReviewed(id, reviewer);
@@ -143,14 +274,34 @@ public class TransactionController {
      * Streams up to 10k rows (capped in service). Anything bigger
      * should be paginated by date window — this endpoint is for
      * monthly / quarterly batches, not full audit dumps.
+     *
+     * @param authentication the caller's authentication (principal = caller id)
+     * @param userId         target user id; honoured only for ADMIN /
+     *                       SUPER_ADMIN, otherwise ignored in favour of the caller
+     * @param from           optional inclusive lower bound on createdAt
+     * @param to             optional inclusive upper bound on createdAt
+     * @param format         output format: {@code csv} (default) or {@code 1c}/{@code 1с}
+     * @param response       servlet response the report is streamed to
+     * @throws IOException if writing the response stream fails
      */
     @GetMapping(value = "/report")
+    @Operation(
+            summary = "Download a settlement report (CSV or 1C)",
+            description = "Streams the caller's transactions as a downloadable file over a created-at date window. "
+                    + "format=csv (default) returns a 14-column UTF-8 CSV; format=1c (also '1с') returns a "
+                    + "1CClientBankExchange v1.03 Windows-1251 text file for import into 1С Бухгалтерия. Regular "
+                    + "users always get their own data (the userId param is ignored); only ADMIN / SUPER_ADMIN may "
+                    + "pull another user's report via userId. Capped at 10k rows — use a tighter date window for more.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Report file streamed as an attachment"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid access token")
+    })
     public void downloadReport(
             Authentication authentication,
-            @RequestParam(required = false) UUID userId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
-            @RequestParam(required = false, defaultValue = "csv") String format,
+            @Parameter(description = "Target user id; honoured only for ADMIN / SUPER_ADMIN, otherwise ignored in favour of the caller") @RequestParam(required = false) UUID userId,
+            @Parameter(description = "Optional inclusive lower bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @Parameter(description = "Optional inclusive upper bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @Parameter(description = "Output format: 'csv' (default) or '1c'/'1с'") @RequestParam(required = false, defaultValue = "csv") String format,
             HttpServletResponse response) throws IOException {
 
         UUID callerId = (UUID) authentication.getPrincipal();
@@ -169,6 +320,18 @@ public class TransactionController {
         }
     }
 
+    /**
+     * Writes the rows as a UTF-8 CSV attachment with a frozen 14-column header
+     * (column order is contract for downstream ETL parsers). The filename
+     * encodes the target user prefix and the date window.
+     *
+     * @param target   user the report is for (drives the filename prefix)
+     * @param rows     transactions to write
+     * @param from     window lower bound, or {@code null} ("all" in filename)
+     * @param to       window upper bound, or {@code null} ("now" in filename)
+     * @param response servlet response to stream the CSV to
+     * @throws IOException if writing the response fails
+     */
     private static void writeCsvReport(UUID target,
                                         List<Transaction> rows,
                                         LocalDateTime from,
@@ -212,6 +375,17 @@ public class TransactionController {
      * convention). Charset is Windows-1251 — the spec mandates it, and
      * 1С import wizard reads the {@code Кодировка=Windows} header line
      * to pick the decoder.
+     *
+     * <p>Delegates the actual document text to {@link OneCExchangeFormatter}
+     * and writes the Windows-1251 bytes directly to the output stream,
+     * bypassing the servlet's default UTF-8 writer.
+     *
+     * @param target   user the report is for (drives the filename prefix)
+     * @param rows     transactions to write
+     * @param from     window lower bound, or {@code null}
+     * @param to       window upper bound, or {@code null}
+     * @param response servlet response to stream the file to
+     * @throws IOException if writing the response fails
      */
     private static void writeOneCReport(UUID target,
                                          List<Transaction> rows,
@@ -237,8 +411,22 @@ public class TransactionController {
         response.getOutputStream().flush();
     }
 
+    /**
+     * Renders a possibly-null value as a CSV cell: empty string for null,
+     * otherwise {@code toString()}.
+     *
+     * @param v value to render, possibly {@code null}
+     * @return the empty string if {@code v} is null, else {@code v.toString()}
+     */
     private static String nullable(Object v) { return v == null ? "" : v.toString(); }
 
+    /**
+     * Escapes a CSV field per RFC 4180: if it contains a comma, quote, or
+     * newline, wrap it in double quotes and double any embedded quotes.
+     *
+     * @param v field value, possibly {@code null}
+     * @return the escaped field (empty string for null)
+     */
     private static String csvEscape(String v) {
         if (v == null) return "";
         // Comma/quote/newline → wrap in quotes + double inner quotes.

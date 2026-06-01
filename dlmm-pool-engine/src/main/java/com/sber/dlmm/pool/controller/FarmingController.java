@@ -7,6 +7,8 @@ import com.sber.dlmm.pool.dto.ClaimRewardResponse;
 import com.sber.dlmm.pool.dto.FarmRewardSummary;
 import com.sber.dlmm.pool.service.LpFarmingService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -30,19 +32,59 @@ public class FarmingController {
 
     private final LpFarmingService farmingService;
 
+    /**
+     * @param farmingService service that computes accrued LP-farming rewards and settles claims
+     */
     public FarmingController(LpFarmingService farmingService) {
         this.farmingService = farmingService;
     }
 
+    /**
+     * Returns the authenticated caller's farming reward summary — total
+     * unclaimed SSPAS plus a per-pool breakdown. Read-only; the user is taken
+     * from the JWT-populated security context so callers can only ever see
+     * their own accruals.
+     *
+     * @return 200 with the caller's {@link FarmRewardSummary}
+     * @throws com.sber.dlmm.common.exception.ForbiddenException if there is no authenticated principal
+     */
     @GetMapping("/me")
-    @Operation(summary = "Current user's farming reward summary (total unclaimed + per-pool breakdown)")
+    @Operation(
+            summary = "Current user's farming reward summary (total unclaimed + per-pool breakdown)",
+            description = "Returns the authenticated caller's accrued LP-farming SSPAS rewards: the total "
+                    + "unclaimed amount plus a per-pool breakdown. Read-only; the user is resolved from the "
+                    + "JWT-populated security context. Requires authentication.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Farming reward summary for the current user"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication token"),
+            @ApiResponse(responseCode = "403", description = "Authentication required (no authenticated principal)")
+    })
     public ResponseEntity<FarmRewardSummary> mySummary() {
         JwtUserDetails user = getCurrentUser();
         return ResponseEntity.ok(farmingService.getUserSummary(user.userIdAsUUID()));
     }
 
+    /**
+     * Claims the caller's entire accrued farming balance, credits the SSPAS
+     * reward token, and returns the total claimed (0 when nothing has
+     * accrued). The user is resolved from the security context; the settlement
+     * is performed by the service inside its own transaction.
+     *
+     * @return 200 with a {@link ClaimRewardResponse} carrying the total amount credited
+     * @throws com.sber.dlmm.common.exception.ForbiddenException if there is no authenticated principal
+     */
     @PostMapping("/claim")
-    @Operation(summary = "Claim all accrued farming reward; credits SSPAS and returns the total")
+    @Operation(
+            summary = "Claim all accrued farming reward; credits SSPAS and returns the total",
+            description = "Claims the authenticated caller's entire accrued LP-farming balance, credits the "
+                    + "SSPAS reward token to their account, and returns the total amount claimed (0 when nothing "
+                    + "has accrued). The user is resolved from the JWT-populated security context; the action is "
+                    + "audited. Requires authentication.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Reward claimed; returns the total amount credited"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication token"),
+            @ApiResponse(responseCode = "403", description = "Authentication required (no authenticated principal)")
+    })
     @UserAudit(action = "FARMING_CLAIM", targetType = "POOL")
     public ResponseEntity<ClaimRewardResponse> claim() {
         JwtUserDetails user = getCurrentUser();
@@ -50,6 +92,15 @@ public class FarmingController {
         return ResponseEntity.ok(new ClaimRewardResponse(claimed));
     }
 
+    /**
+     * Extracts the current caller from the JWT-populated Spring
+     * {@code SecurityContext} into a {@link JwtUserDetails} (principal = user
+     * id, credentials = KYC status, first authority = role with the
+     * {@code ROLE_} prefix stripped).
+     *
+     * @return the authenticated caller's details
+     * @throws ForbiddenException if there is no authenticated, non-anonymous principal
+     */
     private JwtUserDetails getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || auth.getPrincipal() == null
