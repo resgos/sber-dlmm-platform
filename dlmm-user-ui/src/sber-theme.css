@@ -2552,6 +2552,18 @@ a:focus-visible {
   .sber-mode-toggle__opt { font-size: var(--text-xs); }
 }
 
+/* Mobile horizontal-overflow guard (phones reported the trade card / long
+   monetary values pushing the page past the right edge). `clip` stops any stray
+   child from forcing horizontal page scroll without creating a scroll container
+   (unlike `hidden`, it won't break sticky/fixed), and long unbroken numbers in
+   card rows wrap instead of widening the card. */
+@media (max-width: 768px) {
+  .ant-layout-content { overflow-x: clip; }
+  .sber-simple-card .ant-card-body,
+  .sber-swap-card__body,
+  .sber-swap-quote__row { overflow-wrap: anywhere; min-width: 0; }
+}
+
 /* — Simple page shell: airy, two-card grid that stacks on narrow — */
 .sber-simple-page {
   display: flex;
