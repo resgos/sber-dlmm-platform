@@ -1038,7 +1038,17 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+  /* Narrow screens: drop the "Доступно + 25/50/75/MAX" group onto its own
+     line(s) instead of squeezing the label/balance text into vertical
+     single-char columns (reported on mobile Pro swap). Harmless on desktop —
+     wrap only triggers when the row can't fit on one line. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
+/* Label + "Доступно: …" stay whole (never shatter char-by-char); the quick
+   buttons wrap as a unit if the balance is very long. */
+.sber-swap-box__head > .ant-typography { white-space: nowrap; }
+.sber-swap-box__head .ant-space { flex-wrap: wrap; row-gap: 2px; justify-content: flex-end; }
 .sber-swap-box__row {
   display: flex;
   align-items: center;
