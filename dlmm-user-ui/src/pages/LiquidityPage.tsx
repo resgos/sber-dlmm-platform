@@ -16,6 +16,7 @@ import ModalHeader from '@/components/ModalHeader'
 import AddLiquidityPreview from '@/components/AddLiquidityPreview'
 import { useDebouncedValue } from '@/lib/useDebouncedValue'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { uuid } from '../lib/uuid'
 
 const { Title, Text } = Typography
 
@@ -91,7 +92,7 @@ export default function LiquidityPage() {
         binRangeMin: binMin!,
         binRangeMax: binMax!,
         strategy,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: uuid(),
       }),
     onSuccess: () => {
       message.success('Ликвидность успешно добавлена')
@@ -111,7 +112,7 @@ export default function LiquidityPage() {
       pools.removeLiquidity({
         positionId,
         percentage: removePercent,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: uuid(),
       }),
     onSuccess: () => {
       message.success('Ликвидность удалена')

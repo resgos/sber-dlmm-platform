@@ -31,6 +31,7 @@ import {
   type TargetAllocation,
   type RebalancePlan,
 } from '@/lib/rebalancePlanner'
+import { uuid } from '../lib/uuid'
 
 const { Title, Text } = Typography
 
@@ -142,7 +143,7 @@ export default function RebalancePage() {
     }) => {
       return poolsApi.executeSwap({
         ...req,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: uuid(),
       })
     },
   })

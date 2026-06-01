@@ -4,6 +4,7 @@ import { GiftOutlined, SwapOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { balances, tokens, spasibo } from '@/api/services'
 import type { Token, TokenBalance } from '@/api/types'
+import { uuid } from '../lib/uuid'
 
 const { Text, Title } = Typography
 
@@ -47,7 +48,7 @@ export default function SpasiboWidget() {
   const convertMut = useMutation({
     mutationFn: () => spasibo.convertToRub({
       points: pointsToConvert!,
-      reference: `convert-${crypto.randomUUID()}`,
+      reference: `convert-${uuid()}`,
     }),
     onSuccess: () => {
       setSuccess(true)

@@ -28,6 +28,7 @@ import { bpsToPercent } from '@/utils/format'
 import { KpiRow, KpiTile, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
 import dayjs from 'dayjs'
+import { uuid } from '../lib/uuid'
 
 const { Title, Text } = Typography
 
@@ -290,7 +291,7 @@ export default function PoolDetailPage() {
               await pools.removeLiquidity({
                 positionId: pos.id,
                 percentage: 100,
-                idempotencyKey: crypto.randomUUID(),
+                idempotencyKey: uuid(),
               })
               await pools.addLiquidity({
                 poolId: pool.id,
@@ -299,7 +300,7 @@ export default function PoolDetailPage() {
                 binRangeMin: newBinMin,
                 binRangeMax: newBinMax,
                 strategy: pos.strategy,
-                idempotencyKey: crypto.randomUUID(),
+                idempotencyKey: uuid(),
               })
               done++
             } catch (e: any) {

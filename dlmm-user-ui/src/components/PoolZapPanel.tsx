@@ -6,6 +6,7 @@ import { pools, balances } from '@/api/services'
 import type { Pool, TokenBalance, SwapQuote } from '@/api/types'
 import { celebrateSberkot } from '@/components/sberkot/events'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
+import { uuid } from '../lib/uuid'
 
 const { Text } = Typography
 
@@ -66,7 +67,7 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
       setStep(1)
       await pools.executeSwap({
         poolId: pool.id, tokenInId: dep.id, amountIn: half, minAmountOut: minOut,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: uuid(),
       })
       swapDoneRef.current = true
       // Step 2 — add both sides as liquidity around the active bin.
@@ -77,7 +78,7 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
         await pools.addLiquidity({
           poolId: pool.id, amountX, amountY,
           binRangeMin: pool.activeBinId - RANGE, binRangeMax: pool.activeBinId + RANGE,
-          strategy: 'SPOT', idempotencyKey: crypto.randomUUID(),
+          strategy: 'SPOT', idempotencyKey: uuid(),
         })
       } catch (addErr) {
         // The swap already went through — be explicit so the user isn't confused.

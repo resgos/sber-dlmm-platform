@@ -19,6 +19,8 @@
 //   4. Frontend swap: localStorage reads → API reads. Rule shape
 //      stays identical so component code doesn't change.
 
+import { uuid } from '../lib/uuid'
+
 const STORAGE_KEY = 'dlmm.user.positionAlerts'
 
 export type AlertType =
@@ -106,7 +108,7 @@ export const positionAlertsStore = {
     const newAlert: PositionAlert = {
       ...rule,
       active: rule.active ?? true,
-      id: crypto.randomUUID(),
+      id: uuid(),
       lastFiredAt: null,
       createdAt: new Date().toISOString(),
     }

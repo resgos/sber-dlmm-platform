@@ -21,6 +21,7 @@ import { useSyncExternalStore } from 'react'
 import { Segmented } from 'antd'
 import ModalHeader from '@/components/ModalHeader'
 import dayjs from 'dayjs'
+import { uuid } from '../lib/uuid'
 
 const { Text } = Typography
 
@@ -125,7 +126,7 @@ export default function PositionsPage() {
       pools.removeLiquidity({
         positionId,
         percentage: removePercent,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: uuid(),
       }),
     onSuccess: () => {
       message.success(t('positions.messages.liquidityRemoved'))
@@ -206,7 +207,7 @@ export default function PositionsPage() {
             await pools.removeLiquidity({
               positionId: pos.id,
               percentage: 100,
-              idempotencyKey: crypto.randomUUID(),
+              idempotencyKey: uuid(),
             })
             closed++
           } catch (e: any) {

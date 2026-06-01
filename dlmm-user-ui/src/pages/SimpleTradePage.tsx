@@ -14,6 +14,7 @@ import { rowButtonProps } from '@/lib/a11y'
 import { TokenPairChip } from '@/components/sber'
 import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
 import { celebrateSberkot } from '@/components/sberkot/events'
+import { uuid } from '../lib/uuid'
 
 const { Title, Text } = Typography
 
@@ -190,7 +191,7 @@ export default function SimpleTradePage() {
       tokenInId,
       amountIn: amount!,
       minAmountOut,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: uuid(),
     }),
     onSuccess: () => {
       celebrateSberkot(
@@ -234,7 +235,7 @@ export default function SimpleTradePage() {
         strategy: 'SPOT',
         binRangeMin: active - SIMPLE_BIN_HALF_RANGE,
         binRangeMax: active + SIMPLE_BIN_HALF_RANGE,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: uuid(),
       })
     },
     onSuccess: () => {
@@ -268,7 +269,7 @@ export default function SimpleTradePage() {
     mutationFn: () => pools.removeLiquidity({
       positionId: removePositionId,
       percentage: removePercent,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: uuid(),
     }),
     onSuccess: () => {
       const poolId = selectedRemovePosition?.poolId

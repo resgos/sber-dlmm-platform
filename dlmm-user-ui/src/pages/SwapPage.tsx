@@ -21,6 +21,7 @@ import PoolPriceChart from '@/components/PoolPriceChart'
 import { bpsToPercent } from '@/utils/format'
 import { TokenPairChip } from '@/components/sber'
 import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
+import { uuid } from '../lib/uuid'
 
 const { Title, Text } = Typography
 
@@ -89,7 +90,7 @@ export default function SwapPage() {
       tokenInId,
       amountIn: amountIn!,
       minAmountOut,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: uuid(),
     }),
     onSuccess: () => {
       setSwapSuccess(true)

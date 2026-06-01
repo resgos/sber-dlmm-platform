@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, balances } from '@/api/services'
 import type { Pool, TokenBalance, SwapQuote } from '@/api/types'
 import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
+import { uuid } from '../lib/uuid'
 
 const { Text } = Typography
 
@@ -78,7 +79,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       tokenInId,
       amountIn: amountIn!,
       minAmountOut,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: uuid(),
     }),
     onSuccess: () => {
       setSuccess(`Обмен выполнен: ${formatTokenAmount(amountIn, tokenInSym)} → ${formatTokenAmount(quote?.amountOut, tokenOutSym)}`)

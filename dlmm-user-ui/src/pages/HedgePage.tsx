@@ -31,6 +31,7 @@ import type { Pool, Token, TokenBalance, Transaction } from '@/api/types'
 import { bpsToPercent } from '@/utils/format'
 import { formatCompact, formatTokenAmount } from '@/lib/format'
 import RiskDisclosure from '@/components/RiskDisclosure'
+import { uuid } from '../lib/uuid'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -215,7 +216,7 @@ export default function HedgePage() {
       // Sprint 5 #5.14 — hedge-prefix idempotency key so "My open
       // hedges" table can find this swap later without a backend schema
       // change. The unwind flow reuses the same uuid suffix.
-      idempotencyKey: HEDGE_KEY_PREFIX + crypto.randomUUID(),
+      idempotencyKey: HEDGE_KEY_PREFIX + uuid(),
     }),
     onSuccess: () => {
       setSuccess(true)
