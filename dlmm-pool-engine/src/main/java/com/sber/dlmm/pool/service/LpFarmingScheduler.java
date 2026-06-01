@@ -47,6 +47,15 @@ public class LpFarmingScheduler {
     private final boolean enabled;
     private final long cycleMs;
 
+    /**
+     * @param configRepository   enabled reward configs (the pools that emit)
+     * @param poolRepository      supplies each pool's active bin (in-range filter)
+     * @param positionRepository  active positions per pool
+     * @param farmingService      per-position accrual bean (own transaction)
+     * @param enabled             master switch ({@code dlmm.farming.enabled})
+     * @param cycleMs             accrual cadence, also the proration denominator;
+     *                            MUST track {@code fixedRateString} below
+     */
     public LpFarmingScheduler(PoolRewardsConfigRepository configRepository,
                               LiquidityPoolRepository poolRepository,
                               LpPositionRepository positionRepository,
@@ -61,6 +70,16 @@ public class LpFarmingScheduler {
         this.cycleMs = cycleMs;
     }
 
+    /**
+     * Scheduled sweep over every enabled reward config, accruing each pool's
+     * pro-rated cycle emission to its in-range positions.
+     *
+     * <p>A per-pool failure is logged and the sweep continues (each pool's
+     * accrual is independent). The heavy lifting — proration, in-range filter,
+     * liquidity-weighted split — is in {@link #accrueForPool}, and the actual
+     * per-position credit runs in {@link LpFarmingService}'s own transaction so
+     * one bad position can't roll back the others.
+     */
     @Scheduled(fixedRateString = "${dlmm.farming.accrual-rate-ms:3600000}", initialDelay = 30_000)
     public void accrueRewards() {
         if (!enabled) return;
@@ -81,7 +100,19 @@ public class LpFarmingScheduler {
         }
     }
 
-    /** Accrue one pool's cycle emission to its in-range active positions; returns positions credited. */
+    /**
+     * Accrue one pool's cycle emission to its in-range active positions; returns
+     * positions credited.
+     *
+     * <p>Pro-rates the daily emission to this cycle (see class javadoc), filters
+     * to active positions whose range contains the pool's active bin and that
+     * still hold shares, then splits the cycle emission across them by liquidity
+     * via {@link LpFarmingService#positionShare}. Returns 0 early when the pool
+     * is gone, the cycle emission floors to 0, or no position is in range.
+     *
+     * @param config the enabled reward config for one pool
+     * @return number of positions credited this cycle
+     */
     private int accrueForPool(PoolRewardsConfig config) {
         // Pro-rate the DAILY emission to this cycle (see class javadoc).
         long cycleEmission = config.getEmissionPerDay() * cycleMs / MS_PER_DAY;

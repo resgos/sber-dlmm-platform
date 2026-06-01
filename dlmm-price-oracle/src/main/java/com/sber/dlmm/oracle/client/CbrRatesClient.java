@@ -58,6 +58,19 @@ public class CbrRatesClient {
     private final XmlMapper xmlMapper;
     private final String cbrUrl;
 
+    /**
+     * Builds the client with short, bounded HTTP timeouts and a default
+     * {@link XmlMapper}.
+     *
+     * <p>WHY tight timeouts (5s connect / 10s read): this runs inside a daily
+     * scheduler, so a hung CBR endpoint must fail fast and let the next run
+     * retry rather than tying up a thread.
+     *
+     * @param cbrUrl  CBR XML endpoint; overridable via {@code dlmm.cbr.url},
+     *                defaulting to the official cbr.ru daily-rates URL
+     * @param builder Spring's {@link RestTemplateBuilder} used to construct the
+     *                timeout-configured {@link RestTemplate}
+     */
     public CbrRatesClient(@Value("${dlmm.cbr.url:https://www.cbr.ru/scripts/XML_daily.asp}") String cbrUrl,
                           RestTemplateBuilder builder) {
         this.cbrUrl = cbrUrl;
@@ -76,6 +89,8 @@ public class CbrRatesClient {
      * already normalised (CBR reports e.g. JPY as "100 JPY = X RUB" —
      * we divide by Nominal so callers always see "1 unit = N RUB").
      *
+     * @return map of currency CharCode (upper-cased) → per-unit RUB price;
+     *     duplicate codes keep the first occurrence
      * @throws RuntimeException if the network call fails or XML can't be
      *     parsed — caller (CbrRatesService) catches and logs; the stale
      *     cached rates remain in price_feeds.
@@ -119,6 +134,18 @@ public class CbrRatesClient {
         }
     }
 
+    /**
+     * Parses a CBR decimal string into a {@link BigDecimal}.
+     *
+     * <p>WHY a custom parser: CBR follows the Russian convention of a comma as
+     * the decimal separator (e.g. {@code "89,1234"}), which {@code BigDecimal}
+     * won't accept, so we swap it for a dot first.
+     *
+     * @param raw the raw value text from the XML, comma-separated
+     * @return the parsed decimal
+     * @throws NumberFormatException if {@code raw} is not a valid number after
+     *                               separator normalisation
+     */
     private static BigDecimal parseRussianDecimal(String raw) {
         // CBR XML uses "89,1234" (comma as decimal separator).
         return new BigDecimal(raw.trim().replace(',', '.'));
@@ -126,6 +153,14 @@ public class CbrRatesClient {
 
     // ── XML POJOs — matches CBR schema https://www.cbr.ru/scripts/XML_daily.asp ──
 
+    /**
+     * Root element of the CBR daily-rates XML ({@code <ValCurs>}).
+     *
+     * <p>Holds the publication date/name attributes and the list of
+     * {@link Valute} entries. Fields are public + Lombok {@code @Data} so
+     * Jackson can bind them directly; the {@code @JacksonXml*} annotations map
+     * the XML attribute/element names.
+     */
     @Data
     @NoArgsConstructor
     @JacksonXmlRootElement(localName = "ValCurs")
@@ -139,6 +174,16 @@ public class CbrRatesClient {
         public List<Valute> valutes;
     }
 
+    /**
+     * One currency entry within {@code <ValCurs>} ({@code <Valute>}).
+     *
+     * <p>Carries the char-code, the quoted {@code Value} (comma-decimal
+     * string) and the {@code Nominal} (number of units the value is quoted
+     * for, e.g. 100 for JPY). {@link #fetchTodayRates} normalises
+     * {@code Value / Nominal} to a per-unit RUB price. {@code VunitRate} is
+     * present in modern responses but deliberately re-derived for backward
+     * compatibility with older XML snapshots.
+     */
     @Data
     @NoArgsConstructor
     public static class Valute {

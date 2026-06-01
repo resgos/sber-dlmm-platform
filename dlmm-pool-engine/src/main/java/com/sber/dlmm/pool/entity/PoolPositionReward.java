@@ -37,15 +37,19 @@ public class PoolPositionReward {
     @Id
     private UUID id;
 
+    /** Position this reward row accrues for; unique (one row per position, UPSERTed each cycle). */
     @Column(name = "position_id", nullable = false)
     private UUID positionId;
 
+    /** Pool the position is in (denormalised for reporting); nullable for rows seeded before the column existed. */
     @Column(name = "pool_id")
     private UUID poolId;
 
+    /** Owner of the position; a claim aggregates all of a user's reward rows. */
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    /** Reward token (SSPAS), copied from the pool's {@link PoolRewardsConfig}. */
     @Column(name = "reward_token_id", nullable = false)
     private UUID rewardTokenId;
 
@@ -57,12 +61,18 @@ public class PoolPositionReward {
     @Column(name = "claimed_reward", nullable = false)
     private long claimedReward;
 
+    /** Timestamp of the last accrual cycle applied; null until the first accrual. */
     @Column(name = "last_accrual_at")
     private LocalDateTime lastAccrualAt;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * JPA pre-insert hook: defaults {@link #id} to a random UUID and
+     * {@link #createdAt} to {@code now()} when the accrual job inserts a row for
+     * a position seen for the first time.
+     */
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();

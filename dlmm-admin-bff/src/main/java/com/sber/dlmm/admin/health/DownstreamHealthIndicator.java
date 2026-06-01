@@ -25,12 +25,22 @@ import java.time.Duration;
  */
 public class DownstreamHealthIndicator implements HealthIndicator {
 
+    /** Max round-trip allowed for a downstream {@code /actuator/health} probe before it is treated as DOWN (see class Javadoc for why 3s, not 1s). */
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(3);
 
     private final String name;
     private final String baseUrl;
     private final WebClient webClient;
 
+    /**
+     * Builds an indicator that probes one downstream service.
+     *
+     * @param name    short service label (e.g. {@code "pool-engine"}); becomes
+     *                the section name under {@code /actuator/health/{name}} and
+     *                is echoed back in every probe result's {@code service} detail
+     * @param baseUrl base URL of the downstream service; {@code /actuator/health}
+     *                is appended to it for the probe
+     */
     public DownstreamHealthIndicator(String name, String baseUrl) {
         this.name = name;
         this.baseUrl = baseUrl;
@@ -39,6 +49,17 @@ public class DownstreamHealthIndicator implements HealthIndicator {
         this.webClient = WebClient.builder().baseUrl(baseUrl).build();
     }
 
+    /**
+     * Performs the actual probe: GET {@code {baseUrl}/actuator/health} bounded
+     * by {@link #PROBE_TIMEOUT}. Any error (timeout, connection refused, non-2xx)
+     * is mapped to an empty response and reported as DOWN rather than propagated,
+     * so one wedged downstream marks only its own section red and never throws
+     * the aggregate {@code /actuator/health} into a 500.
+     *
+     * @return {@link Health#up()} with {@code service}/{@code url} details when a
+     *         body comes back in time; otherwise {@link Health#down()} carrying
+     *         the same details plus a {@code reason} (timeout) or the exception
+     */
     @Override
     public Health health() {
         try {

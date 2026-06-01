@@ -12,6 +12,9 @@ package com.sber.dlmm.common.exception;
  * body, not an exception — the audit row still exists).
  */
 public class B2BSettlementValidationException extends DlmmException {
+    /**
+     * @param message human-readable detail describing the rejected settlement shape (surfaced in the error body)
+     */
     public B2BSettlementValidationException(String message) {
         super(message, "B2B_SETTLEMENT_INVALID", 400);
     }

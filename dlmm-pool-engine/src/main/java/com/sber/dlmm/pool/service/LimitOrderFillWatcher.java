@@ -39,6 +39,12 @@ public class LimitOrderFillWatcher {
     private final LimitOrderFiller filler;
     private final boolean enabled;
 
+    /**
+     * @param orderRepository open-order source for each sweep
+     * @param poolRepository  supplies each pool's market-synced {@code basePrice}
+     * @param filler          per-order settlement bean (own transaction)
+     * @param enabled         master switch ({@code dlmm.limit-orders.fill-enabled})
+     */
     public LimitOrderFillWatcher(LimitOrderRepository orderRepository,
                                  LiquidityPoolRepository poolRepository,
                                  LimitOrderFiller filler,
@@ -49,6 +55,17 @@ public class LimitOrderFillWatcher {
         this.enabled = enabled;
     }
 
+    /**
+     * Scheduled sweep: load all OPEN orders and fill each one whose pool price
+     * has crossed its limit.
+     *
+     * <p>Each pool's current price is fetched at most once per cycle (memoised in
+     * a local map) and orders the price hasn't reached are skipped via
+     * {@link #shouldFill}; the actual settlement is delegated to
+     * {@link LimitOrderFiller#fill} so it runs in its own transaction. A failure
+     * on one order is logged and the order is retried next cycle, never aborting
+     * the sweep.
+     */
     @Scheduled(fixedRateString = "${dlmm.limit-orders.fill-check-ms:15000}", initialDelay = 20_000)
     public void checkAndFill() {
         if (!enabled) return;
@@ -74,7 +91,16 @@ public class LimitOrderFillWatcher {
         }
     }
 
-    /** A SELL fills when the market reaches/exceeds its ask; a BUY when it reaches/falls below its bid. */
+    /**
+     * A SELL fills when the market reaches/exceeds its ask; a BUY when it
+     * reaches/falls below its bid. Package-private + static so the watcher and
+     * tests share one definition.
+     *
+     * @param side         order side
+     * @param currentPrice current pool price (Y per X)
+     * @param limitPrice   the order's trigger price
+     * @return true if the price has crossed the trigger for this side
+     */
     static boolean shouldFill(LimitOrderSide side, BigDecimal currentPrice, BigDecimal limitPrice) {
         return side == LimitOrderSide.SELL
                 ? currentPrice.compareTo(limitPrice) >= 0

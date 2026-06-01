@@ -15,6 +15,10 @@ import java.util.UUID;
  * <p>{@code reference} is the Spasibo-system event id and serves as
  * idempotency anchor — Spasibo BU guarantees at-least-once delivery,
  * we guarantee at-most-once application via this reference.
+ *
+ * @param userId    DLMM user to credit the earned points to (required)
+ * @param points    number of SSPAS loyalty points earned — a whole-point count, not a ×10⁴ scaled amount (required, &gt; 0)
+ * @param reference Spasibo-side event id used as the idempotency anchor (required, non-blank, ≤ 128 chars)
  */
 public record SpasiboMintWebhookRequest(
         @NotNull UUID userId,

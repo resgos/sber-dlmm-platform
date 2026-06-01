@@ -26,8 +26,23 @@ public class BearerTokenForwardingFilter {
     private static final Logger log = LoggerFactory.getLogger(BearerTokenForwardingFilter.class);
     private static final String AUTHORIZATION = "Authorization";
 
+    /** Non-instantiable: this is a factory of {@link ExchangeFilterFunction}s ({@link #create()}). */
     private BearerTokenForwardingFilter() {}
 
+    /**
+     * Builds the WebClient filter that propagates the inbound caller's
+     * {@code Authorization} header onto each outgoing request.
+     *
+     * <p>The header is only copied when (a) an inbound request scope exists and
+     * carries an {@code Authorization} header, and (b) the outgoing request does
+     * not already set one — an explicit per-call header always wins. Outside a
+     * request scope (e.g. a background scheduler), the filter forwards the
+     * request unchanged.
+     *
+     * @return an {@link ExchangeFilterFunction} to register on a
+     *         {@code WebClient.Builder} (done centrally by
+     *         {@link DlmmWebClientAutoConfiguration})
+     */
     public static ExchangeFilterFunction create() {
         return (ClientRequest request, ExchangeFunction next) -> {
             String inboundAuth = currentInboundAuthHeader();
@@ -41,6 +56,19 @@ public class BearerTokenForwardingFilter {
         };
     }
 
+    /**
+     * Reads the current servlet request's {@code Authorization} header from the
+     * thread-bound {@link RequestContextHolder}.
+     *
+     * <p>Works because pool-engine / admin-bff controllers call {@code .block()}
+     * on WebClient from the servlet request thread, so the request attributes
+     * are still bound. Returns {@code null} (no forwarding) when there is no
+     * servlet request scope or the header is absent; any lookup error is
+     * swallowed and treated as "no header".
+     *
+     * @return the inbound {@code Authorization} header value, or {@code null}
+     *         when unavailable
+     */
     private static String currentInboundAuthHeader() {
         try {
             var attrs = RequestContextHolder.getRequestAttributes();

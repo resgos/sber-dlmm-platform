@@ -34,6 +34,16 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 @ConditionalOnClass(StringRedisTemplate.class)
 public class DlmmJwtRedisRevocationAutoConfiguration {
 
+    /**
+     * Registers the Redis-backed {@link JwtRevocationService}. Wins over the
+     * no-op fallback in {@link DlmmJwtAutoConfiguration} because it is registered
+     * first (the fallback is {@code @ConditionalOnMissingBean}). Guarded by
+     * {@code @ConditionalOnBean(StringRedisTemplate.class)} so it self-skips when
+     * Redis auto-config didn't produce a template.
+     *
+     * @param redis the auto-configured Redis template
+     * @return the Redis-backed revocation denylist service
+     */
     @Bean
     @ConditionalOnMissingBean(JwtRevocationService.class)
     @ConditionalOnBean(StringRedisTemplate.class)

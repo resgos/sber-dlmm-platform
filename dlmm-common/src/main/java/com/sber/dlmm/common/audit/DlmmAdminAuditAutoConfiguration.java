@@ -74,6 +74,15 @@ public class DlmmAdminAuditAutoConfiguration {
         return new AdminAuditService(repository);
     }
 
+    /**
+     * Registers the AOP advice that captures {@code @AdminAudit}/{@code @UserAudit}
+     * calls. Gated on {@link AdminAuditService} so it self-skips on services
+     * where the writer wasn't wired (e.g. the repository isn't on their JPA scan
+     * path), since there is nothing to capture there anyway.
+     *
+     * @param service the audit writer the aspect delegates persistence to
+     * @return the audit-capturing aspect
+     */
     @Bean
     @ConditionalOnBean(AdminAuditService.class)
     public AdminAuditAspect adminAuditAspect(AdminAuditService service) {

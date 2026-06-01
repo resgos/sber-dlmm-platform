@@ -42,11 +42,24 @@ public class KafkaConsumerLagHealthIndicator implements HealthIndicator, Disposa
     private static final Logger log = LoggerFactory.getLogger(KafkaConsumerLagHealthIndicator.class);
     /** Total lag across all subscribed partitions before flipping to DOWN. */
     private static final long LAG_DOWN_THRESHOLD = 1000L;
+    /** Per-call timeout (seconds) for each admin probe, keeping the health endpoint snappy. */
     private static final long PROBE_TIMEOUT_SEC = 3L;
 
+    /** Long-lived Kafka {@link AdminClient} used to read committed and end offsets; closed on shutdown. */
     private final AdminClient adminClient;
+    /** Consumer group whose lag is measured ({@code dlmm-notification-service}). */
     private final String groupId;
 
+    /**
+     * Constructs the indicator and eagerly creates a dedicated {@link AdminClient}.
+     *
+     * <p>The admin client is configured with deliberately short request/API timeouts so a
+     * wedged or slow broker can never hold the {@code /actuator/health} probe open. The client
+     * is held for the lifetime of the bean and released in {@link #destroy()}.
+     *
+     * @param bootstrapServers Kafka broker list, injected from {@code spring.kafka.bootstrap-servers}
+     * @param groupId          consumer group id to measure, from {@code spring.kafka.consumer.group-id}
+     */
     public KafkaConsumerLagHealthIndicator(
             @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
             @Value("${spring.kafka.consumer.group-id}") String groupId) {
@@ -59,6 +72,20 @@ public class KafkaConsumerLagHealthIndicator implements HealthIndicator, Disposa
         this.groupId = groupId;
     }
 
+    /**
+     * Computes current consumer lag and reports it as a Spring Boot {@link Health} status.
+     *
+     * <p>Algorithm: (1) read the group's committed offset per partition; if none is assigned
+     * the consumer is idle (not lagging) and reports UP; (2) read the latest (end) offset of
+     * each of those partitions; (3) sum {@code end − committed} across all partitions. The
+     * status is UP while the total lag stays at or below {@link #LAG_DOWN_THRESHOLD} and DOWN
+     * otherwise, and the details expose the group, total lag, threshold and per-partition lag
+     * for debugging. Any probe failure (broker unreachable, timeout) is caught, logged at WARN
+     * and reported as DOWN rather than propagated — a health check must never throw.
+     *
+     * @return a {@link Health} of UP (idle or within threshold) or DOWN (over threshold or
+     *         probe failed), carrying diagnostic details
+     */
     @Override
     public Health health() {
         try {
@@ -116,6 +143,12 @@ public class KafkaConsumerLagHealthIndicator implements HealthIndicator, Disposa
         }
     }
 
+    /**
+     * Releases the Kafka {@link AdminClient} when the bean is destroyed.
+     *
+     * <p>Invoked by Spring via {@link DisposableBean} during context shutdown so the admin
+     * client's network connections and threads are closed cleanly (avoiding a resource leak).
+     */
     @Override
     public void destroy() {
         if (adminClient != null) {

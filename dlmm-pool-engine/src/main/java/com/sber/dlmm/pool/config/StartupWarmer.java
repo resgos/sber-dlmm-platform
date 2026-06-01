@@ -34,11 +34,22 @@ public class StartupWarmer {
     private final PoolService poolService;
     private final LiquidityService liquidityService;
 
+    /**
+     * @param poolService      used to warm the pool-list hot path (token batch lookup, Caffeine cache, query plans)
+     * @param liquidityService used to warm the active-positions-count query the admin dashboard hits
+     */
     public StartupWarmer(PoolService poolService, LiquidityService liquidityService) {
         this.poolService = poolService;
         this.liquidityService = liquidityService;
     }
 
+    /**
+     * Runs once on {@link ApplicationReadyEvent} and exercises the slow first-
+     * request paths (pool list + active-positions count) so the cold-start tax
+     * is paid here rather than by the first real user. Any exception is caught
+     * and logged at WARN — warming must never crash an otherwise healthy app
+     * (e.g. if token-service is briefly down during a rolling restart).
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void warm() {
         long started = System.currentTimeMillis();

@@ -18,6 +18,9 @@ import java.util.Map;
  * {@code OutboxService.append}), so the Kafka layer just forwards the
  * bytes. Using JsonSerializer here would double-encode the JSON (wrap
  * the already-stringified payload in quotes), breaking every consumer.
+ *
+ * <p>Spring config that supplies the {@code String}/{@code String} Kafka
+ * producer used by the outbox dispatcher to publish pool-engine domain events.
  */
 @Configuration
 public class KafkaConfig {
@@ -25,6 +28,13 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
+    /**
+     * Producer factory wired to the configured broker(s) with String
+     * serializers on both key and value — see the class note for why values
+     * are sent as already-serialised JSON strings rather than re-serialised.
+     *
+     * @return a {@link ProducerFactory} producing String-keyed, String-valued records
+     */
     @Bean
     public ProducerFactory<String, String> producerFactory() {
         Map<String, Object> config = new HashMap<>();
@@ -34,6 +44,12 @@ public class KafkaConfig {
         return new DefaultKafkaProducerFactory<>(config);
     }
 
+    /**
+     * The {@link KafkaTemplate} the application injects to publish events,
+     * backed by {@link #producerFactory()}.
+     *
+     * @return a String-keyed, String-valued {@link KafkaTemplate}
+     */
     @Bean
     public KafkaTemplate<String, String> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());

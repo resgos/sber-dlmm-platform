@@ -24,6 +24,17 @@ import java.util.UUID;
  * <p>Multi-member orgs counted с aggregated transactions / positions
  * (org-level not user-level), но last-login = max over members
  * (any member active = org active).
+ *
+ * @param orgId            identifier of the pilot organisation
+ * @param orgName          display name of the organisation
+ * @param memberCount      number of users in the organisation (count)
+ * @param lastActiveAt     most recent login across all members (max over members)
+ * @param transactions30d  transactions by the org in the last 30 days (count)
+ * @param activePositions  open liquidity positions held by the org (count)
+ * @param fees30dRub        fees collected by the org in the last 30 days, in roubles (₽)
+ * @param engagementScore  composite engagement score in the range 0–100
+ * @param healthFlag       derived band: {@code HEALTHY}, {@code WARNING} or {@code AT_RISK}
+ * @param suggestedActions human-readable next-step recommendations for the org
  */
 public record PilotHealth(
         UUID orgId,

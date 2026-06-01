@@ -59,16 +59,28 @@ public class OutboxProperties {
      */
     private String cleanupCron = "0 17 3 * * *";
 
+    /** @return this service's outbox tag ({@code dlmm.outbox.service-name}). */
     public String getServiceName() { return serviceName; }
+    /** @param serviceName this service's outbox tag. */
     public void setServiceName(String serviceName) { this.serviceName = serviceName; }
+    /** @return the dispatcher tick interval in milliseconds. */
     public long getDispatchIntervalMs() { return dispatchIntervalMs; }
+    /** @param dispatchIntervalMs the dispatcher tick interval in milliseconds. */
     public void setDispatchIntervalMs(long dispatchIntervalMs) { this.dispatchIntervalMs = dispatchIntervalMs; }
+    /** @return the maximum rows pulled per dispatcher tick. */
     public int getBatchSize() { return batchSize; }
+    /** @param batchSize the maximum rows to pull per dispatcher tick. */
     public void setBatchSize(int batchSize) { this.batchSize = batchSize; }
+    /** @return the per-record Kafka send timeout in seconds. */
     public long getSendTimeoutSec() { return sendTimeoutSec; }
+    /** @param sendTimeoutSec the per-record Kafka send timeout in seconds. */
     public void setSendTimeoutSec(long sendTimeoutSec) { this.sendTimeoutSec = sendTimeoutSec; }
+    /** @return retention in days for published rows (0 disables cleanup). */
     public int getRetentionDays() { return retentionDays; }
+    /** @param retentionDays retention in days for published rows (0 disables cleanup). */
     public void setRetentionDays(int retentionDays) { this.retentionDays = retentionDays; }
+    /** @return the cron expression controlling the cleanup job. */
     public String getCleanupCron() { return cleanupCron; }
+    /** @param cleanupCron the cron expression controlling the cleanup job. */
     public void setCleanupCron(String cleanupCron) { this.cleanupCron = cleanupCron; }
 }

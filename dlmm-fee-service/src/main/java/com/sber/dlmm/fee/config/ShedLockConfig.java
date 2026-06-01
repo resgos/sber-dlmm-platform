@@ -25,6 +25,16 @@ import java.time.ZoneOffset;
 @EnableSchedulerLock(defaultLockAtMostFor = "PT5M")
 public class ShedLockConfig {
 
+    /**
+     * JDBC-backed {@link LockProvider} for {@code @SchedulerLock}. Stores locks in the
+     * shared {@code shedlock} table so all fee-service replicas coordinate through Postgres,
+     * which is what stops two replicas from running the auto-claim sweep concurrently (and
+     * thus double-crediting). {@code usingDbTime()} makes Postgres' {@code NOW()} the lock
+     * clock, eliminating cross-replica clock-skew as a source of lock errors.
+     *
+     * @param dataSource the application {@link DataSource} pointing at the {@code dlmm} schema
+     * @return the configured {@link JdbcTemplateLockProvider}
+     */
     @Bean
     public LockProvider lockProvider(DataSource dataSource) {
         return new JdbcTemplateLockProvider(

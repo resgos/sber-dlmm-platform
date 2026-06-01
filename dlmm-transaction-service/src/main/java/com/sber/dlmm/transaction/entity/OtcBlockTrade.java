@@ -24,6 +24,11 @@ import java.util.UUID;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class OtcBlockTrade {
 
+    /**
+     * Workflow state of the block trade. Happy path is
+     * REQUESTED → QUOTED → ACCEPTED → SETTLED; REJECTED, EXPIRED and
+     * CANCELLED are terminal off-ramps.
+     */
     public enum Status {
         /** Trade created, awaiting operator-provided quote. */
         REQUESTED,
@@ -41,25 +46,32 @@ public class OtcBlockTrade {
         CANCELLED
     }
 
+    /** Surrogate primary key (server-generated UUID). */
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    /** Corp account that requested the trade (the "maker" side). */
     @Column(name = "initiator_user_id", nullable = false)
     private UUID initiatorUserId;
 
+    /** Corp account quoted to / settling against (the "taker" side). */
     @Column(name = "counterparty_user_id", nullable = false)
     private UUID counterpartyUserId;
 
+    /** Admin operator who created this workflow record on the OTC desk. */
     @Column(name = "created_by_admin_id", nullable = false)
     private UUID createdByAdminId;
 
+    /** Token the initiator gives up. */
     @Column(name = "token_in_id", nullable = false)
     private UUID tokenInId;
 
+    /** Token the initiator receives. */
     @Column(name = "token_out_id", nullable = false)
     private UUID tokenOutId;
 
+    /** Quantity offered in, raw ×10⁴ scale. */
     @Column(name = "amount_in", nullable = false)
     private long amountIn;
 
@@ -71,31 +83,43 @@ public class OtcBlockTrade {
     @Column(name = "quoted_price_micro")
     private Long quotedPriceMicro;
 
+    /** When the operator attached the quote (QUOTED transition). */
     @Column(name = "quoted_at")
     private LocalDateTime quotedAt;
 
+    /** Deadline by which the counterparty must accept; past it the quote may EXPIRE. */
     @Column(name = "quote_expires_at")
     private LocalDateTime quoteExpiresAt;
 
+    /** Current workflow state; defaults to REQUESTED on insert. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Status status;
 
+    /** FK to the {@code transactions} ledger row created when this trade SETTLED. */
     @Column(name = "settlement_tx_id")
     private UUID settlementTxId;
 
+    /** When the trade reached SETTLED. */
     @Column(name = "settled_at")
     private LocalDateTime settledAt;
 
+    /** Optional free-text operator notes. */
     @Column(length = 1000)
     private String notes;
 
+    /** Insert timestamp; immutable, set by {@link #onCreate()}. */
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /** Last-modified timestamp, maintained by {@link #onCreate()}/{@link #onUpdate()}. */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /**
+     * JPA pre-insert hook: defaults {@link #createdAt}/{@link #updatedAt}
+     * to now (only when unset) and {@link #status} to REQUESTED.
+     */
     @PrePersist
     void onCreate() {
         LocalDateTime now = LocalDateTime.now();
@@ -104,6 +128,10 @@ public class OtcBlockTrade {
         if (status == null) status = Status.REQUESTED;
     }
 
+    /**
+     * JPA pre-update hook: refreshes {@link #updatedAt} to now on every
+     * persisted mutation.
+     */
     @PreUpdate
     void onUpdate() {
         updatedAt = LocalDateTime.now();

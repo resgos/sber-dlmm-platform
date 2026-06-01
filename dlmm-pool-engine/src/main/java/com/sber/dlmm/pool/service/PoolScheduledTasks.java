@@ -12,18 +12,63 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * Periodic upkeep of the time-decaying pool state that the DLMM variable-fee
+ * model depends on but that no swap can advance on its own.
+ *
+ * <p>Two independent clocks run here against every {@link PoolStatus#ACTIVE}
+ * pool:
+ * <ul>
+ *   <li>the <b>volatility accumulator</b> — bumped up by {@link SwapService} on
+ *       each bin crossing and bled back down here so the variable-fee surcharge
+ *       relaxes toward the base fee during quiet periods (the EMA-style decay
+ *       that makes the fee "dynamic");</li>
+ *   <li>the <b>24h rolling volume</b> — the denominator-side input to the
+ *       APY/fee-revenue estimate, aged down here to approximate a sliding
+ *       window since this module keeps no separate per-swap volume table.</li>
+ * </ul>
+ *
+ * <p>Both tasks are {@code @Transactional} and persist per-pool, so they are
+ * write-light but touch every active pool each tick; they are deliberately
+ * best-effort (a missed tick simply means slightly staler decay, never a
+ * correctness problem) and do not move any token reserves or money.
+ */
 @Component
 public class PoolScheduledTasks {
 
     private static final Logger log = LoggerFactory.getLogger(PoolScheduledTasks.class);
+    /**
+     * Fallback per-period decay rate (in 1/10000ths → 100 = 1%) used when a
+     * pool has no positive {@code decayPeriodSeconds} configured, so the
+     * accumulator still relaxes instead of being stuck forever.
+     */
     private static final int DEFAULT_DECAY_RATE = 100; // 1% per period
 
     private final LiquidityPoolRepository poolRepository;
 
+    /**
+     * @param poolRepository source/sink for the active-pool rows whose
+     *                       volatility accumulator and 24h volume are decayed
+     */
     public PoolScheduledTasks(LiquidityPoolRepository poolRepository) {
         this.poolRepository = poolRepository;
     }
 
+    /**
+     * Once a minute, relax every active pool's volatility accumulator toward
+     * zero so the variable-fee surcharge fades during calm markets.
+     *
+     * <p>The per-tick decay rate is derived from the pool's own
+     * {@code decayPeriodSeconds} (normalised to a 60s tick:
+     * {@code 10000 * 60 / decayPeriodSeconds}) so a shorter configured
+     * half-life decays faster; pools with a non-positive period fall back to
+     * {@link #DEFAULT_DECAY_RATE}. Only pools with a positive accumulator are
+     * touched, and a pool is re-saved only when its value actually changed —
+     * keeping write churn proportional to genuinely-volatile pools. The actual
+     * decay arithmetic is delegated to
+     * {@link FeeCalculator#decayVolatilityAccumulator(int, int)} so the rule
+     * matches what the fee path expects.
+     */
     @Scheduled(fixedRate = 60_000)
     @Transactional
     public void decayVolatilityAccumulators() {
@@ -50,6 +95,19 @@ public class PoolScheduledTasks {
         }
     }
 
+    /**
+     * Every five minutes, age each active pool's {@code volume24h} downward to
+     * emulate a rolling 24-hour window without a per-swap volume ledger.
+     *
+     * <p>This module accrues volume incrementally on swaps but has no
+     * transactions table to recompute a true trailing sum, so the figure is
+     * decayed ~2% per 5-minute tick (288 ticks/day → an approximate 24h
+     * roll-off). Because {@code volume24h} feeds the displayed APY/fee-revenue
+     * estimate, this keeps an idle pool's headline numbers drifting toward zero
+     * rather than reporting yesterday's activity forever. In a production split
+     * this would instead aggregate authoritative volume from the
+     * transaction-service; the decay is the in-module stand-in.
+     */
     @Scheduled(fixedRate = 300_000)
     @Transactional
     public void updateVolume24h() {

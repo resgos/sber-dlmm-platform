@@ -29,6 +29,11 @@ public class LimitOrderFiller {
     private final LimitOrderBalanceWriter balanceWriter;
     private final OutboxService outbox;
 
+    /**
+     * @param orderRepository order rows (reload + status flip)
+     * @param balanceWriter   in-transaction credit of the order output
+     * @param outbox          transactional outbox for the {@code LimitOrderFilled} event
+     */
     public LimitOrderFiller(LimitOrderRepository orderRepository,
                             LimitOrderBalanceWriter balanceWriter,
                             OutboxService outbox) {
@@ -43,6 +48,7 @@ public class LimitOrderFiller {
      * no-op. Credit happens inside the tx: a failure rolls the fill back and the
      * order is retried next cycle.
      *
+     * @param orderId id of the order to settle
      * @return true if this call filled the order; false if it was already gone /
      *         not OPEN.
      */

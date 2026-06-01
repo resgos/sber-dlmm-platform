@@ -57,6 +57,15 @@ public class OrgService {
      * against the {@code creatorUserId}'s stored profile — supplying
      * a different email does not let the caller invite themselves
      * under a fake identity.
+     *
+     * @param creatorUserId the authenticated caller, who becomes the sole OWNER
+     * @param name          the organisation name (required, trimmed)
+     * @param ownerEmail    convenience owner email; falls back to the caller's profile email when blank
+     * @param ownerName     convenience owner display name; falls back to the caller's first+last name when blank
+     * @return the newly persisted {@link Org}
+     * @throws OrgException.InvalidState   if {@code name} is blank
+     * @throws OrgException.AlreadyHasOrg  if the caller already has an ACTIVE membership somewhere
+     * @throws OrgException.OrgNotFound    if the creator user id does not resolve to a user
      */
     @Transactional
     public Org create(UUID creatorUserId, String name, String ownerEmail, String ownerName) {
@@ -105,8 +114,17 @@ public class OrgService {
         return org;
     }
 
-    /** Returns the org the caller belongs to (OWNER or any ACTIVE
-     *  member), or empty if none. Used by {@code GET /orgs/me}. */
+    /**
+     * Returns the org the caller belongs to (OWNER or any ACTIVE
+     * member), or empty if none. Used by {@code GET /orgs/me}.
+     *
+     * <p>By invariant a user has at most one ACTIVE membership; if the data
+     * somehow violates that, the lowest membership is returned deterministically
+     * and the anomaly is logged.
+     *
+     * @param userId the caller's user id
+     * @return the caller's organisation, or {@link Optional#empty()} if they belong to none
+     */
     @Transactional(readOnly = true)
     public Optional<Org> findMyOrg(UUID userId) {
         List<OrgMember> memberships = memberRepository.findByUserIdAndStatus(
@@ -122,6 +140,16 @@ public class OrgService {
         return orgRepository.findById(orgId);
     }
 
+    /**
+     * Lists every member (any status) of the given org. The caller must be an
+     * ACTIVE member of that org — a non-member, even an authenticated one, is
+     * rejected so org rosters aren't readable across tenants.
+     *
+     * @param orgId        the organisation to list
+     * @param callerUserId the authenticated caller, who must be an ACTIVE member
+     * @return all members of the org, regardless of status
+     * @throws OrgException.PermissionDenied if the caller is not an ACTIVE member of the org
+     */
     @Transactional(readOnly = true)
     public List<OrgMember> listMembers(UUID orgId, UUID callerUserId) {
         requireActiveMember(orgId, callerUserId);
@@ -132,6 +160,22 @@ public class OrgService {
      * Invite a new member. OWNER-only. Refused if {@code email}
      * already maps to a row in this org (ACTIVE or PENDING) — the
      * caller must remove the existing row first.
+     *
+     * <p>The email is normalised (trim + lowercase) before the duplicate check
+     * and storage. If the invitee already has a platform account their
+     * {@code userId} is pre-resolved so they can find the invite on sign-in.
+     * The new row is created in {@code PENDING} status; inviting directly as
+     * {@code OWNER} is refused (use {@link #changeRole} on an existing member).
+     *
+     * @param orgId        the organisation to invite into
+     * @param callerUserId the authenticated caller, who must be the OWNER
+     * @param email        the invitee's email (normalised before use); required
+     * @param name         the invitee's display name; defaults to the email when blank
+     * @param role         the role to grant; required and must not be {@code OWNER}
+     * @return the persisted PENDING {@link OrgMember} invite row
+     * @throws OrgException.PermissionDenied   if the caller is not the OWNER
+     * @throws OrgException.InvalidState       if email is blank, role is null, or role is OWNER
+     * @throws OrgException.MemberAlreadyExists if the email is already a member of this org
      */
     @Transactional
     public OrgMember invite(UUID orgId, UUID callerUserId,
@@ -182,6 +226,21 @@ public class OrgService {
      * email (case-insensitive). If the row had a pre-resolved
      * {@code userId} it must equal the caller; otherwise we populate
      * {@code userId} now.
+     *
+     * <p>Two identity checks defend the invite: any pre-resolved
+     * {@code userId} must equal the caller, and the caller's profile email
+     * must match the invite email — so an invite issued to one address cannot
+     * be claimed by another account. The caller must also not already be
+     * ACTIVE in another org. On success {@code joinedAt} is stamped.
+     *
+     * @param orgId        the org the invite belongs to (cross-checked against the member row)
+     * @param memberId     the PENDING membership row id from the invite
+     * @param callerUserId the authenticated caller claiming the invite
+     * @return the membership row, now ACTIVE
+     * @throws OrgException.OrgNotFound            if the member or caller is missing, or the member is not in this org
+     * @throws OrgException.InvalidState           if the membership is not PENDING
+     * @throws OrgException.InvalidInviteeIdentity if the caller's id or email does not match the invite
+     * @throws OrgException.AlreadyHasOrg          if the caller is already ACTIVE in another org
      */
     @Transactional
     public OrgMember accept(UUID orgId, UUID memberId, UUID callerUserId) {
@@ -222,7 +281,19 @@ public class OrgService {
         return saved;
     }
 
-    /** Remove a member. OWNER-only; refuses to remove the last OWNER. */
+    /**
+     * Remove a member. OWNER-only; refuses to remove the last OWNER.
+     *
+     * <p>Deleting the final OWNER is blocked because it would orphan the org
+     * (no one left who could manage it) — promote another member to OWNER first.
+     *
+     * @param orgId        the org the member belongs to (cross-checked)
+     * @param memberId     the membership row id to delete
+     * @param callerUserId the authenticated caller, who must be the OWNER
+     * @throws OrgException.PermissionDenied if the caller is not the OWNER
+     * @throws OrgException.OrgNotFound      if the member is missing or not in this org
+     * @throws OrgException.LastOwner        if the member is the only OWNER of the org
+     */
     @Transactional
     public void remove(UUID orgId, UUID memberId, UUID callerUserId) {
         requireOwner(orgId, callerUserId);
@@ -244,7 +315,23 @@ public class OrgService {
         log.info("ORG REMOVE org={} member={} by={}", orgId, memberId, callerUserId);
     }
 
-    /** Change a member's role. OWNER-only; refuses to demote the last OWNER. */
+    /**
+     * Change a member's role. OWNER-only; refuses to demote the last OWNER.
+     *
+     * <p>This is also the supported path for creating a co-OWNER (promote an
+     * existing member). Demoting the sole OWNER is blocked for the same
+     * orphaning reason as {@link #remove} — promote a replacement first.
+     *
+     * @param orgId        the org the member belongs to (cross-checked)
+     * @param memberId     the membership row id to update
+     * @param callerUserId the authenticated caller, who must be the OWNER
+     * @param newRole      the role to assign; required
+     * @return the membership row with its new role
+     * @throws OrgException.PermissionDenied if the caller is not the OWNER
+     * @throws OrgException.InvalidState     if {@code newRole} is null
+     * @throws OrgException.OrgNotFound      if the member is missing or not in this org
+     * @throws OrgException.LastOwner        if this would demote the only OWNER
+     */
     @Transactional
     public OrgMember changeRole(UUID orgId, UUID memberId, UUID callerUserId,
                                  OrgMember.Role newRole) {
@@ -277,6 +364,13 @@ public class OrgService {
      * Returns the caller's ACTIVE membership in the given org, or empty.
      * Public so JWT issuance can embed the caller's
      * {@code orgId}+{@code orgRole} claims at login time.
+     *
+     * <p>(Despite the name, this is keyed purely on the user — it returns the
+     * user's single ACTIVE membership across all orgs, which is the one
+     * {@code UserService} stamps into the token.)
+     *
+     * @param userId the user whose active membership to look up
+     * @return the user's ACTIVE membership, or {@link Optional#empty()} if none
      */
     @Transactional(readOnly = true)
     public Optional<OrgMember> findActiveMembership(UUID userId) {
@@ -287,6 +381,14 @@ public class OrgService {
 
     // ── helpers ──
 
+    /**
+     * Authorization guard: asserts the user is an ACTIVE member of the org,
+     * throwing if not. Used to gate read operations on the org.
+     *
+     * @param orgId  the org being accessed
+     * @param userId the caller to authorize
+     * @throws OrgException.PermissionDenied if the user is not an ACTIVE member of the org
+     */
     private void requireActiveMember(UUID orgId, UUID userId) {
         boolean isMember = memberRepository.findByUserIdAndStatus(userId, OrgMember.Status.ACTIVE)
                 .stream()
@@ -297,6 +399,15 @@ public class OrgService {
         }
     }
 
+    /**
+     * Authorization guard: asserts the user is an ACTIVE {@code OWNER} of the
+     * org, throwing if not. Used to gate every mutating org operation (invite,
+     * remove, changeRole).
+     *
+     * @param orgId  the org being mutated
+     * @param userId the caller to authorize
+     * @throws OrgException.PermissionDenied if the user is not an ACTIVE OWNER of the org
+     */
     private void requireOwner(UUID orgId, UUID userId) {
         boolean isOwner = memberRepository.findByUserIdAndStatus(userId, OrgMember.Status.ACTIVE)
                 .stream()
@@ -307,6 +418,12 @@ public class OrgService {
         }
     }
 
+    /**
+     * Null-safe blank check used throughout the input validation above.
+     *
+     * @param s the string to test (may be null)
+     * @return true if {@code s} is null, empty, or whitespace-only
+     */
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
     }

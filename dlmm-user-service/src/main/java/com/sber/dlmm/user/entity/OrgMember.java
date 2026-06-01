@@ -47,14 +47,22 @@ import java.util.UUID;
 @Builder
 public class OrgMember {
 
+    /** Member's role within the org, in descending privilege:
+     *  {@code OWNER} &gt; {@code FINANCE_MGR} &gt; {@code ACCOUNTANT} &gt;
+     *  {@code AUDITOR} &gt; {@code VIEWER}. Surfaced as the JWT
+     *  {@code orgRole} claim for gateway permission checks. */
     public enum Role { OWNER, FINANCE_MGR, ACCOUNTANT, AUDITOR, VIEWER }
 
+    /** Membership state: {@code ACTIVE} (joined) or {@code PENDING}
+     *  (invited, not yet accepted). */
     public enum Status { ACTIVE, PENDING }
 
+    /** Surrogate primary key; server-generated UUID. */
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    /** FK → {@code orgs.id} — the organisation this membership belongs to. */
     @Column(name = "org_id", nullable = false)
     private UUID orgId;
 
@@ -68,20 +76,29 @@ public class OrgMember {
     @Column(nullable = false, length = 255)
     private String email;
 
+    /** Display name of the member (max 120 chars). */
     @Column(nullable = false, length = 120)
     private String name;
 
+    /** Assigned role within the org (see {@link Role}). */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Role role;
 
+    /** Membership state (see {@link Status}). */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Status status;
 
+    /** When the membership row was created (invite time for PENDING, join
+     *  time for ACTIVE). Defaulted in {@link #onCreate()}. */
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
 
+    /**
+     * JPA lifecycle hook fired before insert. Defaults {@link #joinedAt} to
+     * the current time when the caller did not set it.
+     */
     @PrePersist
     void onCreate() {
         if (joinedAt == null) joinedAt = LocalDateTime.now();

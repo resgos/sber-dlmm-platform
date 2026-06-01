@@ -50,6 +50,13 @@ public class PoolPriceSyncService {
     private final JdbcTemplate jdbcTemplate;
     private final boolean enabled;
 
+    /**
+     * @param poolRepository active pools to consider for repricing
+     * @param poolRepricer   per-pool repricer applying the new spot (own txn)
+     * @param jdbcTemplate   direct reads of {@code price_feeds} + {@code tokens}
+     *                       (scheduler thread has no JWT to call price-oracle)
+     * @param enabled        master switch ({@code dlmm.pool.price-sync-enabled})
+     */
     public PoolPriceSyncService(LiquidityPoolRepository poolRepository,
                                 PoolRepricer poolRepricer,
                                 JdbcTemplate jdbcTemplate,
@@ -60,6 +67,17 @@ public class PoolPriceSyncService {
         this.enabled = enabled;
     }
 
+    /**
+     * Every minute, pull oracle spot prices and reprice each active pool whose
+     * market price has moved more than {@link #MIN_REL_CHANGE}.
+     *
+     * <p>Loads the RUB price feed and token symbols once per cycle, then for each
+     * active pool computes the target spot (see {@link #targetPrice}) and skips
+     * sub-0.2% moves so bins don't churn on noise. The actual ladder rescale is
+     * delegated to {@link PoolRepricer#reprice} (own transaction); a pool that
+     * loses an optimistic-lock race to a concurrent swap is simply retried next
+     * cycle. An empty feed aborts the cycle rather than zeroing prices.
+     */
     @Scheduled(fixedRateString = "${dlmm.pool.price-sync-rate-ms:60000}", initialDelay = 25_000)
     public void syncPoolPrices() {
         if (!enabled) return;
@@ -100,6 +118,12 @@ public class PoolPriceSyncService {
      * Target spot price (token_y per 1 token_x) for a pool, from oracle RUB
      * prices. Pools quote against SRUB; for a non-SRUB cross we use the RUB
      * ratio. Package-private + static for unit testing.
+     *
+     * @param xSym      token X symbol (null → no target)
+     * @param ySym      token Y symbol (null → no target)
+     * @param pricesRub RUB-denominated spot prices keyed by symbol
+     * @return token_y-per-token_x target, or {@code null} if it can't be derived
+     *         (missing symbol/price, or a non-positive divisor)
      */
     static BigDecimal targetPrice(String xSym, String ySym, Map<String, BigDecimal> pricesRub) {
         if (xSym == null || ySym == null) return null;
@@ -115,6 +139,12 @@ public class PoolPriceSyncService {
         return (px != null && py != null && py.signum() > 0) ? px.divide(py, MC) : null;
     }
 
+    /**
+     * Read the current oracle spot prices (RUB) directly from {@code price_feeds},
+     * skipping non-positive entries.
+     *
+     * @return map of asset symbol → current price
+     */
     private Map<String, BigDecimal> loadOraclePrices() {
         Map<String, BigDecimal> m = new HashMap<>();
         for (Map<String, Object> row : jdbcTemplate.queryForList(
@@ -127,6 +157,12 @@ public class PoolPriceSyncService {
         return m;
     }
 
+    /**
+     * Read token id → symbol from {@code tokens} so a pool's token UUIDs can be
+     * matched against the symbol-keyed oracle feed.
+     *
+     * @return map of token id → symbol
+     */
     private Map<UUID, String> loadTokenSymbols() {
         Map<UUID, String> m = new HashMap<>();
         for (Map<String, Object> row : jdbcTemplate.queryForList("SELECT id, symbol FROM tokens")) {

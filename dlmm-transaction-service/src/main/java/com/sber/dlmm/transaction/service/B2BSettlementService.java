@@ -78,6 +78,17 @@ public class B2BSettlementService {
     @Value("${dlmm.b2b.vat-rate-pct:20}")
     private short vatRatePct;
 
+    /**
+     * Builds the service and pre-configures a REQUIRES_NEW
+     * {@link TransactionTemplate}. The propagation choice is deliberate:
+     * each PENDING / COMPLETED / FAILED commit must land in its own short
+     * transaction so a poller can observe the PENDING row even though the
+     * deduct/credit work runs outside any JPA transaction (see class doc).
+     *
+     * @param repository  B2B settlement persistence
+     * @param tokenClient client used to deduct/credit token balances
+     * @param txManager   platform transaction manager backing the template
+     */
     public B2BSettlementService(B2BSettlementRepository repository,
                                 TokenServiceClient tokenClient,
                                 PlatformTransactionManager txManager) {
@@ -109,6 +120,12 @@ public class B2BSettlementService {
      * <p>Package-private static so unit tests can hit it directly without
      * Spring wiring. Returns a record with the three numbers; caller
      * persists them into the entity.
+     *
+     * @param amount     principal the fee is charged on, raw units
+     * @param feeBps     fee rate in basis points
+     * @param vatRatePct НДС rate as a whole percent (e.g. 20)
+     * @return a {@link FeeSplit} of (gross, vat, net); all-zero when
+     *         {@code amount} ≤ 0 or {@code feeBps} ≤ 0
      */
     static FeeSplit computeFeeSplit(long amount, int feeBps, short vatRatePct) {
         if (amount <= 0 || feeBps <= 0) return new FeeSplit(0, 0, 0);
@@ -118,6 +135,15 @@ public class B2BSettlementService {
         return new FeeSplit(gross, vat, net);
     }
 
+    /**
+     * Immutable result of {@link #computeFeeSplit}: the customer-visible
+     * {@code gross} fee split into {@code vat} (remittable to ФНС) and
+     * {@code net} (DLMM revenue), all in raw units.
+     *
+     * @param gross total fee charged to the customer
+     * @param vat   НДС portion of the gross fee
+     * @param net   net revenue portion (gross − vat)
+     */
     record FeeSplit(long gross, long vat, long net) {}
 
     /**
@@ -125,6 +151,18 @@ public class B2BSettlementService {
      * attempt — a clean run returns COMPLETED, a deduct-rejection returns
      * FAILED with [CLEAN] error_message, a credit-after-deduct failure
      * returns FAILED with [RECONCILE] error_message.
+     *
+     * <p>Flow: reject self-transfers, short-circuit on a duplicate
+     * {@code reference}, compute the fee split, commit a PENDING audit row in
+     * its own transaction, then hand off to {@link #execute} for the money
+     * movement.
+     *
+     * @param req       settlement request (counterparty, token, amount,
+     *                  reference, notes)
+     * @param initiator JWT subject performing the debit side
+     * @return the resulting settlement state as a response DTO
+     * @throws B2BSettlementValidationException if the counterparty equals the
+     *         initiator
      */
     public B2BSettlementResponse submit(B2BSettlementRequest req, UUID initiator) {
         if (initiator.equals(req.counterpartyUserId())) {
@@ -173,6 +211,16 @@ public class B2BSettlementService {
      * status flip writes immediately. If credit fails after deduct
      * succeeded, the FAILED row carries the diagnostic; the initiator's
      * balance is debited but the counterparty wasn't credited.
+     *
+     * <p>Money-safety ordering — deduct FIRST, credit SECOND: a failed deduct
+     * means no money moved (safe to retry), whereas a failed credit after a
+     * successful deduct is the dangerous case and is flagged [RECONCILE] for
+     * an operator. Only the principal moves; the computed fee/НДС are quoted,
+     * not collected (no treasury rail yet), and that is logged explicitly.
+     *
+     * @param row the PENDING settlement row to execute
+     * @return the final settlement state (COMPLETED, or FAILED with a tagged
+     *         diagnostic) as a response DTO
      */
     private B2BSettlementResponse execute(B2BSettlement row) {
         try {
@@ -213,6 +261,14 @@ public class B2BSettlementService {
         return markCompleted(row.getId());
     }
 
+    /**
+     * Flips the row to COMPLETED with a {@code completedAt} stamp in its own
+     * short transaction (the deduct+credit already succeeded by this point).
+     *
+     * @param id id of the settlement to complete
+     * @return the completed settlement as a response DTO
+     * @throws TransactionFailedException if the row disappeared between phases
+     */
     private B2BSettlementResponse markCompleted(UUID id) {
         B2BSettlement row = txTemplate.execute(status -> {
             B2BSettlement r = repository.findById(id)
@@ -226,10 +282,18 @@ public class B2BSettlementService {
     }
 
     /**
+     * Flips the row to FAILED in its own short transaction, prefixing the
+     * stored {@code error_message} with a [CLEAN] / [RECONCILE] tag so
+     * operators can grep for settlements that need manual reconciliation.
+     *
+     * @param id           id of the settlement to fail
+     * @param message      human-readable failure diagnostic
      * @param balanceClean true if no balance was moved (caller can safely retry
      *                     with a fresh reference); false if the deduct landed
      *                     and operator action is needed. Stored as a prefix tag
      *                     in error_message ([CLEAN] / [RECONCILE]) for grep-ability.
+     * @return the failed settlement as a response DTO
+     * @throws TransactionFailedException if the row disappeared between phases
      */
     private B2BSettlementResponse markFailed(UUID id, String message, boolean balanceClean) {
         B2BSettlement row = txTemplate.execute(status -> {
@@ -244,6 +308,14 @@ public class B2BSettlementService {
         return B2BSettlementResponse.from(row);
     }
 
+    /**
+     * Fetches one settlement by id. Caller-side authorization (party-or-admin)
+     * is enforced by the controller.
+     *
+     * @param id settlement id to fetch
+     * @return the settlement as a response DTO
+     * @throws TransactionFailedException if no settlement with {@code id} exists
+     */
     @Transactional(readOnly = true)
     public B2BSettlementResponse get(UUID id) {
         return repository.findById(id)
@@ -251,6 +323,19 @@ public class B2BSettlementService {
                 .orElseThrow(() -> new TransactionFailedException("B2B settlement not found: " + id));
     }
 
+    /**
+     * Lists settlements where {@code userId} is either party (initiator or
+     * counterparty), createdAt-DESC, with optional status and date-window
+     * filters.
+     *
+     * @param userId the user who must be a party to the returned settlements
+     * @param status optional status filter, or {@code null}
+     * @param from   optional inclusive lower bound on createdAt, or {@code null}
+     * @param to     optional inclusive upper bound on createdAt, or {@code null}
+     * @param page   zero-based page index
+     * @param size   page size
+     * @return a {@link PageResponse} of {@link B2BSettlementResponse} rows
+     */
     @Transactional(readOnly = true)
     public PageResponse<B2BSettlementResponse> listForUser(UUID userId,
                                                             B2BSettlementStatus status,

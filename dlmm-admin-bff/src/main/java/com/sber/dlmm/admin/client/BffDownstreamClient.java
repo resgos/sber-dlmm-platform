@@ -53,6 +53,18 @@ public class BffDownstreamClient {
     private final WebClient transactionServiceWebClient;
     private final WebClient priceOracleWebClient;
 
+    /**
+     * Builds one base-URL-pinned {@link WebClient} per downstream (cloning the
+     * shared bearer-forwarding builder so each carries the caller's
+     * {@code Authorization}).
+     *
+     * @param webClientBuilder      shared, bearer-forwarding builder; cloned per downstream
+     * @param userServiceUrl        user-service base URL ({@code dlmm.services.user-service-url})
+     * @param tokenServiceUrl       token-service base URL ({@code dlmm.services.token-service-url})
+     * @param feeServiceUrl         fee-service base URL ({@code dlmm.services.fee-service-url})
+     * @param transactionServiceUrl transaction-service base URL ({@code dlmm.services.transaction-service-url})
+     * @param priceOracleUrl        price-oracle base URL ({@code dlmm.services.price-oracle-url})
+     */
     public BffDownstreamClient(
             WebClient.Builder webClientBuilder,
             @Value("${dlmm.services.user-service-url}") String userServiceUrl,
@@ -70,6 +82,16 @@ public class BffDownstreamClient {
 
     // ── user-service ──────────────────────────────────────────────
 
+    /**
+     * GET the first page of users from user-service (used by the dashboard's
+     * total / verified-user counts). Page content is unwrapped via
+     * {@link #fetchPageContent}, whose inline HTTP-error swallow keeps 4xx/5xx
+     * from tripping the breaker.
+     *
+     * @param size page size to request (page index fixed at 0)
+     * @return the page's user maps, or empty on error / CB-open (via
+     *         {@link #fetchUsersPageFallback(int, Throwable)})
+     */
     @CircuitBreaker(name = "user-service", fallbackMethod = "fetchUsersPageFallback")
     @Retry(name = "user-service")
     public List<Map<String, Object>> fetchUsersPage(int size) {
@@ -77,6 +99,14 @@ public class BffDownstreamClient {
                 "/api/v1/users?page=0&size=" + size, "users");
     }
 
+    /**
+     * Resilience4j fallback for {@link #fetchUsersPage(int)} — logs and returns
+     * an empty list so the dashboard's user counts read zero rather than failing.
+     *
+     * @param size requested page size (echoed for log correlation)
+     * @param ex   the failure / CB-open cause
+     * @return an empty list
+     */
     @SuppressWarnings("unused")
     private List<Map<String, Object>> fetchUsersPageFallback(int size, Throwable ex) {
         log.warn("user-service /users CB OPEN or call failed: {}. Returning empty.", ex.toString());
@@ -85,6 +115,15 @@ public class BffDownstreamClient {
 
     // ── token-service ─────────────────────────────────────────────
 
+    /**
+     * GET /api/v1/tokens/{id} — single token detail document, used by token
+     * analytics (supply / holders / transfer volume).
+     *
+     * @param tokenId id of the token to fetch
+     * @return the token-detail map, or an empty map if the body is {@code null}
+     *         or the call fails / CB is open (via
+     *         {@link #fetchTokenDetailFallback(UUID, Throwable)})
+     */
     @CircuitBreaker(name = "token-service", fallbackMethod = "fetchTokenDetailFallback")
     @Retry(name = "token-service")
     public Map<String, Object> fetchTokenDetail(UUID tokenId) {
@@ -96,6 +135,14 @@ public class BffDownstreamClient {
         return result == null ? Collections.emptyMap() : result;
     }
 
+    /**
+     * Resilience4j fallback for {@link #fetchTokenDetail(UUID)} — logs and
+     * returns an empty map so token analytics degrade to zeros.
+     *
+     * @param tokenId requested token id (echoed for log correlation)
+     * @param ex      the failure / CB-open cause
+     * @return an empty map
+     */
     @SuppressWarnings("unused")
     private Map<String, Object> fetchTokenDetailFallback(UUID tokenId, Throwable ex) {
         log.warn("token-service /tokens/{} CB OPEN or call failed: {}. Returning empty.", tokenId, ex.toString());
@@ -104,6 +151,16 @@ public class BffDownstreamClient {
 
     // ── fee-service ───────────────────────────────────────────────
 
+    /**
+     * GET /api/v1/fees/pool/{poolId}/history — daily fee history for a pool,
+     * used by pool analytics' fee chart.
+     *
+     * @param poolId id of the pool whose fee history to fetch
+     * @param days   number of trailing days to request
+     * @return the list of fee-history entry maps, or empty if the body is
+     *         {@code null} or the call fails / CB is open (via
+     *         {@link #fetchPoolFeeHistoryFallback(UUID, int, Throwable)})
+     */
     @CircuitBreaker(name = "fee-service", fallbackMethod = "fetchPoolFeeHistoryFallback")
     @Retry(name = "fee-service")
     public List<Map<String, Object>> fetchPoolFeeHistory(UUID poolId, int days) {
@@ -115,6 +172,15 @@ public class BffDownstreamClient {
         return result == null ? Collections.emptyList() : result;
     }
 
+    /**
+     * Resilience4j fallback for {@link #fetchPoolFeeHistory(UUID, int)} — logs
+     * and returns an empty list so the fee chart renders empty.
+     *
+     * @param poolId requested pool id (echoed for log correlation)
+     * @param days   requested day window (echoed for log correlation)
+     * @param ex     the failure / CB-open cause
+     * @return an empty list
+     */
     @SuppressWarnings("unused")
     private List<Map<String, Object>> fetchPoolFeeHistoryFallback(UUID poolId, int days, Throwable ex) {
         log.warn("fee-service /fees/pool/{}/history CB OPEN or call failed: {}. Returning empty.",
@@ -124,6 +190,15 @@ public class BffDownstreamClient {
 
     // ── transaction-service ───────────────────────────────────────
 
+    /**
+     * GET the first page of transactions (used by the dashboard's
+     * "transactions today" count). Page content is unwrapped via
+     * {@link #fetchPageContent}.
+     *
+     * @param size page size to request (page index fixed at 0)
+     * @return the page's transaction maps, or empty on error / CB-open (via
+     *         {@link #fetchTransactionsPageFallback(int, Throwable)})
+     */
     @CircuitBreaker(name = "transaction-service", fallbackMethod = "fetchTransactionsPageFallback")
     @Retry(name = "transaction-service")
     public List<Map<String, Object>> fetchTransactionsPage(int size) {
@@ -131,12 +206,30 @@ public class BffDownstreamClient {
                 "/api/v1/transactions?page=0&size=" + size, "transactions");
     }
 
+    /**
+     * Resilience4j fallback for {@link #fetchTransactionsPage(int)} — logs and
+     * returns an empty list.
+     *
+     * @param size requested page size (echoed for log correlation)
+     * @param ex   the failure / CB-open cause
+     * @return an empty list
+     */
     @SuppressWarnings("unused")
     private List<Map<String, Object>> fetchTransactionsPageFallback(int size, Throwable ex) {
         log.warn("transaction-service /transactions CB OPEN or call failed: {}. Returning empty.", ex.toString());
         return Collections.emptyList();
     }
 
+    /**
+     * GET a flat list of the most recent transactions (note: the {@code limit}
+     * query returns a bare JSON array, not a {@code Page}, so this does not go
+     * through {@link #fetchPageContent}). Feeds the suspicious-transaction scan.
+     *
+     * @param limit max number of recent transactions to request
+     * @return the transaction maps, or empty if the body is {@code null} or the
+     *         call fails / CB is open (via
+     *         {@link #fetchRecentTransactionsFallback(int, Throwable)})
+     */
     @CircuitBreaker(name = "transaction-service", fallbackMethod = "fetchRecentTransactionsFallback")
     @Retry(name = "transaction-service")
     public List<Map<String, Object>> fetchRecentTransactions(int limit) {
@@ -148,6 +241,14 @@ public class BffDownstreamClient {
         return result == null ? Collections.emptyList() : result;
     }
 
+    /**
+     * Resilience4j fallback for {@link #fetchRecentTransactions(int)} — logs and
+     * returns an empty list (the suspicious-transaction scan then yields nothing).
+     *
+     * @param limit requested limit (echoed for log correlation)
+     * @param ex    the failure / CB-open cause
+     * @return an empty list
+     */
     @SuppressWarnings("unused")
     private List<Map<String, Object>> fetchRecentTransactionsFallback(int limit, Throwable ex) {
         log.warn("transaction-service /transactions?limit={} CB OPEN or call failed: {}. Returning empty.",
@@ -157,6 +258,16 @@ public class BffDownstreamClient {
 
     // ── price-oracle ──────────────────────────────────────────────
 
+    /**
+     * GET /api/v1/prices/{tokenId}/history — token price history, used by token
+     * analytics' price chart.
+     *
+     * @param tokenId id of the token whose price history to fetch
+     * @param days    number of trailing days to request
+     * @return the list of price-history entry maps, or empty if the body is
+     *         {@code null} or the call fails / CB is open (via
+     *         {@link #fetchPriceHistoryFallback(UUID, int, Throwable)})
+     */
     @CircuitBreaker(name = "price-oracle", fallbackMethod = "fetchPriceHistoryFallback")
     @Retry(name = "price-oracle")
     public List<Map<String, Object>> fetchPriceHistory(UUID tokenId, int days) {
@@ -168,6 +279,15 @@ public class BffDownstreamClient {
         return result == null ? Collections.emptyList() : result;
     }
 
+    /**
+     * Resilience4j fallback for {@link #fetchPriceHistory(UUID, int)} — logs and
+     * returns an empty list so the price chart renders empty.
+     *
+     * @param tokenId requested token id (echoed for log correlation)
+     * @param days    requested day window (echoed for log correlation)
+     * @param ex      the failure / CB-open cause
+     * @return an empty list
+     */
     @SuppressWarnings("unused")
     private List<Map<String, Object>> fetchPriceHistoryFallback(UUID tokenId, int days, Throwable ex) {
         log.warn("price-oracle /prices/{}/history CB OPEN or call failed: {}. Returning empty.",
@@ -177,6 +297,21 @@ public class BffDownstreamClient {
 
     // ── shared helper for Page<...> shaped responses ──────────────
 
+    /**
+     * Shared GET-and-unwrap for Spring {@code Page<...>}-shaped JSON: fetches the
+     * page as a {@code Map}, then returns its {@code content} array.
+     *
+     * <p>Crucially, HTTP-level errors (4xx/5xx) are swallowed inline to
+     * {@link Mono#empty()} so the surrounding {@link Retry} sees a "success" and
+     * the breaker is <em>not</em> tripped — only genuine network / timeout
+     * failures count against the CB and reach a caller's fallback method.
+     *
+     * @param client the per-downstream {@link WebClient} to call
+     * @param uri    the request URI (path + query) relative to the client's base URL
+     * @param label  short downstream label for the warn log on HTTP error
+     * @return the {@code content} list, or an empty list on error, null body, or
+     *         an unexpected (non-list) {@code content} shape
+     */
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> fetchPageContent(WebClient client, String uri, String label) {
         Map<String, Object> page = client.get()

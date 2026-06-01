@@ -38,6 +38,7 @@ import java.util.UUID;
 @Builder
 public class B2BSettlement {
 
+    /** Surrogate primary key (server-generated UUID). */
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -50,9 +51,11 @@ public class B2BSettlement {
     @Column(name = "to_user_id", nullable = false)
     private UUID toUserId;
 
+    /** Token transferred (same on both legs — same-token transfer only for the prototype). */
     @Column(name = "token_id", nullable = false)
     private UUID tokenId;
 
+    /** Principal transferred, raw ×10⁴ scale (excludes the fee). */
     @Column(nullable = false)
     private long amount;
 
@@ -64,10 +67,12 @@ public class B2BSettlement {
     @Column(nullable = false, unique = true, length = 128)
     private String reference;
 
+    /** Lifecycle state; defaults to PENDING on insert, then COMPLETED / FAILED. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private B2BSettlementStatus status;
 
+    /** Optional free-text operator notes. */
     @Column(length = 500)
     private String notes;
 
@@ -78,12 +83,15 @@ public class B2BSettlement {
     @Column(name = "requested_by", nullable = false)
     private UUID requestedBy;
 
+    /** Human-readable failure reason; populated when status becomes FAILED. */
     @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
 
+    /** Insert timestamp, defaulted by {@link #onCreate()}. */
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /** When the settlement reached COMPLETED; null while PENDING/FAILED. */
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
@@ -93,18 +101,26 @@ public class B2BSettlement {
      * remit to ФНС); net = DLMM-revenue side. See
      * {@code B2BSettlementService.computeFeeSplit()} for the formula.
      */
+    /** Total fee charged (gross = net + vat), raw ×10⁴ scale. */
     @Column(name = "gross_fee_amount", nullable = false)
     private long grossFeeAmount;
 
+    /** НДС component embedded in the gross fee (remitted to ФНС), raw ×10⁴ scale. */
     @Column(name = "vat_amount", nullable = false)
     private long vatAmount;
 
+    /** DLMM-revenue portion of the fee (gross minus vat), raw ×10⁴ scale. */
     @Column(name = "net_fee_amount", nullable = false)
     private long netFeeAmount;
 
+    /** НДС rate applied, in whole percent (e.g. 20). */
     @Column(name = "vat_rate_pct", nullable = false)
     private short vatRatePct;
 
+    /**
+     * JPA pre-insert hook: defaults {@link #createdAt} to now and
+     * {@link #status} to PENDING when they are not already set.
+     */
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();

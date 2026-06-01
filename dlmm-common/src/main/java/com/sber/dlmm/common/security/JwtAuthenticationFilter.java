@@ -44,17 +44,61 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
      * for callers that don't care about Sprint 8 AU-3 (i.e. legacy tests).
      * Production wiring goes via {@link DlmmJwtAutoConfiguration} which
      * picks the Redis-backed impl when available.
+     *
+     * @param jwtTokenProvider validates signatures and reads claims; revocation
+     *                        checks are disabled (no-op denylist)
      */
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
         this(jwtTokenProvider, new NoopJwtRevocationService());
     }
 
+    /**
+     * Production constructor — wires both the token parser and the revocation
+     * denylist. Invoked by {@link DlmmJwtAutoConfiguration}, which supplies the
+     * Redis-backed {@link JwtRevocationService} where available and the no-op
+     * fallback otherwise.
+     *
+     * @param jwtTokenProvider validates signatures and reads claims
+     * @param revocationService consulted per request to reject revoked {@code jti}s
+     */
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
                                     JwtRevocationService revocationService) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.revocationService = revocationService;
     }
 
+    /**
+     * Authenticates the request from a {@code Bearer} access token, if present.
+     *
+     * <p>This filter is <em>permissive</em>: a missing, malformed, expired,
+     * revoked or refresh-type token leaves the {@link SecurityContextHolder}
+     * unauthenticated and the chain continues — it never short-circuits with a
+     * 401 itself. Authorization is enforced downstream (Spring Security's
+     * {@code authorizeHttpRequests} / {@code @PreAuthorize}), which rejects the
+     * now-anonymous request. This keeps the filter reusable across services with
+     * different public-endpoint sets.
+     *
+     * <p>Order of checks (fail-closed at each step):
+     * <ol>
+     *   <li>signature/expiry valid ({@link JwtTokenProvider#validateToken});</li>
+     *   <li>not a refresh token (refresh tokens are barred from business
+     *       endpoints — see {@link JwtTokenProvider#isRefreshToken});</li>
+     *   <li>{@code jti} not on the revocation denylist
+     *       ({@link JwtRevocationService#isRevoked}); a revoked token leaves the
+     *       context anonymous.</li>
+     * </ol>
+     * On success it sets a {@link UsernamePasswordAuthenticationToken} whose
+     * principal is the userId {@link java.util.UUID} (falling back to the raw
+     * String only if the subject isn't a UUID), credentials are the kycStatus,
+     * and authorities are {@code ROLE_*}. Any unexpected exception is caught and
+     * the request proceeds unauthenticated.
+     *
+     * @param request the inbound HTTP request, read for the {@code Authorization} header
+     * @param response the HTTP response (passed through untouched)
+     * @param filterChain the remaining filter chain, always invoked once
+     * @throws ServletException if a downstream filter raises it
+     * @throws IOException if a downstream filter raises it
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,

@@ -28,6 +28,10 @@ public class PoolRepricer {
     private final LiquidityPoolRepository poolRepository;
     private final PoolBinRepository poolBinRepository;
 
+    /**
+     * @param poolRepository    pool row (base price + status) read &amp; updated
+     * @param poolBinRepository  the pool's bin ladder, rescaled per reprice
+     */
     public PoolRepricer(LiquidityPoolRepository poolRepository, PoolBinRepository poolBinRepository) {
         this.poolRepository = poolRepository;
         this.poolBinRepository = poolBinRepository;
@@ -48,6 +52,8 @@ public class PoolRepricer {
      * double-count the move and misalign the add-liquidity X/Y split. (The math-#14
      * Stage-3 createPool half-bin precision tweak is left for a dedicated pass.)
      *
+     * @param poolId pool to reprice
+     * @param target new anchor (base) price the ladder should be shifted to
      * @return true if repriced; false if the pool vanished / went inactive / had
      *         a non-positive base or target price.
      */

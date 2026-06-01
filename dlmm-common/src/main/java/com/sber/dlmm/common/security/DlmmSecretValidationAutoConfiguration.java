@@ -24,6 +24,17 @@ import org.springframework.core.env.Environment;
 @AutoConfiguration
 public class DlmmSecretValidationAutoConfiguration {
 
+    /**
+     * Registers the startup secret validator. The {@code dlmm.jwt.secret:}
+     * default (empty) means services that don't define the property still get a
+     * bean — the validator then treats an empty value as "no JWT in use" and
+     * skips, except in {@code prod} where a missing/weak secret aborts boot.
+     *
+     * @param jwtSecret the configured {@code dlmm.jwt.secret}, defaulting to ""
+     * @param environment used to detect the active profile (prod ⇒ fail-fast)
+     * @return the {@link SecretValidationOnStartup} runner that validates the
+     *         secret at application startup
+     */
     @Bean
     @ConditionalOnMissingBean
     public SecretValidationOnStartup dlmmSecretValidationOnStartup(

@@ -40,6 +40,12 @@ public class RedisQuoteStore implements QuoteStore {
     private final ObjectMapper mapper;
     private final long ttlSeconds;
 
+    /**
+     * @param redis      Redis template used for the quote JSON + executed marker
+     * @param mapper     Jackson mapper serialising/deserialising {@link QuotedSwap}
+     * @param ttlSeconds quote TTL in seconds (a small grace is added on top so an
+     *                   edge-of-window execute reports "expired" not "not found")
+     */
     public RedisQuoteStore(StringRedisTemplate redis,
                            ObjectMapper mapper,
                            @Value("${dlmm.swap.quote-ttl-seconds:30}") long ttlSeconds) {
@@ -48,6 +54,13 @@ public class RedisQuoteStore implements QuoteStore {
         this.ttlSeconds = ttlSeconds;
     }
 
+    /**
+     * Serialise the quote to JSON and store it under {@code swap:quote:<id>} with
+     * TTL = configured TTL + 5s grace.
+     *
+     * @param quote the quote to persist
+     * @throws IllegalStateException if the quote cannot be serialised
+     */
     @Override
     public void save(QuotedSwap quote) {
         String key = QUOTE_PREFIX + quote.quoteId();
@@ -66,6 +79,14 @@ public class RedisQuoteStore implements QuoteStore {
         }
     }
 
+    /**
+     * Read the quote JSON and layer the (separate) executed-marker key back onto
+     * the returned record, so callers see a consistent {@code executedAt}
+     * without knowing about the sibling key.
+     *
+     * @param quoteId id of the quote to fetch
+     * @return the quote, or empty if missing/evicted or if the JSON can't be parsed
+     */
     @Override
     public Optional<QuotedSwap> findById(UUID quoteId) {
         String key = QUOTE_PREFIX + quoteId;
@@ -90,6 +111,15 @@ public class RedisQuoteStore implements QuoteStore {
         }
     }
 
+    /**
+     * SETNX the executed-marker key {@code swap:quote:executed:<id>}: the first
+     * caller writes and wins, later callers see the marker and get {@code false}
+     * — the atomic hook the double-execute guard relies on. The marker carries a
+     * generous 24h TTL so a late retry still reads "already executed".
+     *
+     * @param quoteId id of the quote to mark executed
+     * @return {@code true} if this call set the marker, {@code false} if present
+     */
     @Override
     public boolean markExecuted(UUID quoteId) {
         String key = EXECUTED_PREFIX + quoteId;
@@ -104,7 +134,12 @@ public class RedisQuoteStore implements QuoteStore {
         return Boolean.TRUE.equals(wasAbsent);
     }
 
-    /** Visible to {@link SwapService} so it can stamp createdAt + TTL math consistently. */
+    /**
+     * Visible to {@link SwapService} so it can stamp createdAt + TTL math
+     * consistently.
+     *
+     * @return the configured quote TTL in seconds (without the storage grace)
+     */
     public long getTtlSeconds() {
         return ttlSeconds;
     }

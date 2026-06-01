@@ -50,6 +50,12 @@ public class SecretValidationOnStartup implements ApplicationRunner {
     private final String jwtSecret;
     private final Environment environment;
 
+    /**
+     * @param jwtSecret the configured {@code dlmm.jwt.secret}; empty when the
+     *                 service declares no JWT secret at all
+     * @param environment used to detect the {@code prod} profile, which switches
+     *                   the validator from warn-and-continue to fail-fast
+     */
     public SecretValidationOnStartup(
             @Value("${dlmm.jwt.secret:}") String jwtSecret,
             Environment environment) {
@@ -57,11 +63,32 @@ public class SecretValidationOnStartup implements ApplicationRunner {
         this.environment = environment;
     }
 
+    /**
+     * {@link ApplicationRunner} entry point — runs once after the context is
+     * ready and delegates to {@link #validateJwtSecret()}.
+     *
+     * @param args the application arguments (unused)
+     */
     @Override
     public void run(ApplicationArguments args) {
         validateJwtSecret();
     }
 
+    /**
+     * Validates {@code dlmm.jwt.secret} and decides whether to abort startup.
+     *
+     * <p>Outcomes, in order:
+     * <ul>
+     *   <li>empty secret + non-prod ⇒ skip silently (service doesn't use JWT);</li>
+     *   <li>a documented dev-default placeholder ⇒ fail in {@code prod}, WARN
+     *       elsewhere — a leaked {@code .env.example} secret could otherwise be
+     *       used to forge tokens;</li>
+     *   <li>shorter than {@link DevDefaultSecrets#MIN_SECRET_BYTES} ⇒ fail in
+     *       {@code prod}, WARN elsewhere (HS* would reject it at first use);</li>
+     *   <li>otherwise ⇒ log an INFO confirming validation.</li>
+     * </ul>
+     * Fail-fast is delegated to {@link #failOrWarn(boolean, String, String)}.
+     */
     private void validateJwtSecret() {
         boolean prod = environment.acceptsProfiles(Profiles.of(PROD_PROFILE));
 
@@ -115,6 +142,11 @@ public class SecretValidationOnStartup implements ApplicationRunner {
     /**
      * In prod, throws an {@link IllegalStateException} with {@code prodMsg}.
      * Otherwise logs {@code warnMsg} at WARN and returns.
+     *
+     * @param prod whether the {@code prod} profile is active (⇒ fail-fast)
+     * @param prodMsg the exception message used when {@code prod} is {@code true}
+     * @param warnMsg the message logged at WARN when {@code prod} is {@code false}
+     * @throws IllegalStateException in {@code prod} to abort startup
      */
     private static void failOrWarn(boolean prod, String prodMsg, String warnMsg) {
         if (prod) {

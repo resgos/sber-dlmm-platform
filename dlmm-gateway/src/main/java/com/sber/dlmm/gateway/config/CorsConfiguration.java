@@ -27,9 +27,38 @@ import java.util.List;
 @Configuration
 public class CorsConfiguration {
 
+    /**
+     * Allowed browser origins, bound from the comma-separated
+     * {@code dlmm.cors.allowed-origins} property and split with SpEL into a
+     * list. Profile-specific (localhost UIs in dev, Sber-owned domains in
+     * prod) and env-var overridable — see the class Javadoc for why the
+     * comma-string + {@code .split(',')} form is used instead of a YAML list.
+     */
     @Value("#{'${dlmm.cors.allowed-origins}'.split(',')}")
     private List<String> allowedOrigins;
 
+    /**
+     * Builds the single reactive CORS filter applied to every gateway route.
+     *
+     * <p>Why this bean exists: as the sole public ingress the gateway, not the
+     * downstream services, owns CORS for browser SPAs. The policy here:
+     * <ul>
+     *   <li>origins restricted to {@link #allowedOrigins} (never {@code *}),
+     *       because {@code allowCredentials(true)} below forbids a wildcard
+     *       origin and would also leak cookies/Authorization cross-site;</li>
+     *   <li>methods limited to the verbs the API actually uses (GET/POST/
+     *       PUT/DELETE) plus OPTIONS so the browser pre-flight succeeds;</li>
+     *   <li>request headers limited to {@code Authorization} (the bearer JWT),
+     *       {@code Content-Type}, and {@code X-Trace-Id} (the correlation id
+     *       from {@link com.sber.dlmm.gateway.filter.RequestLoggingFilter});</li>
+     *   <li>credentials allowed so the SPAs may send the bearer token;</li>
+     *   <li>pre-flight cached for 3600s to cut OPTIONS chatter.</li>
+     * </ul>
+     * The config is registered for {@code /**} so it covers the whole route
+     * table from one place.
+     *
+     * @return a {@link CorsWebFilter} enforcing the above policy on all paths
+     */
     @Bean
     public CorsWebFilter corsWebFilter() {
         org.springframework.web.cors.CorsConfiguration corsConfig = new org.springframework.web.cors.CorsConfiguration();

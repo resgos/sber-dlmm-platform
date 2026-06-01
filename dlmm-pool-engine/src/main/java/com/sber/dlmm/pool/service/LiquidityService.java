@@ -45,6 +45,42 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Manages LP positions: depositing liquidity across a bin range per a chosen
+ * strategy, removing it (with fee claim + exit fee), previewing a deposit, and
+ * reading a user's positions with live valuation. The counterpart to
+ * {@link SwapService} — together they own pool bin reserves and must both keep
+ * the F-12 invariant {@code liquidity = reserveX·price + reserveY} per bin.
+ *
+ * <h2>Deposit model</h2>
+ * A request supplies amountX/amountY, a bin range, and a
+ * {@link LiquidityStrategy} (SPOT/CURVE/BID_ASK). The strategy yields per-bin
+ * weights; each bin's target liquidity is split into X and Y by the canonical
+ * DLMM side rule: bins <b>below</b> the active price hold Y, bins <b>above</b>
+ * hold X, and the active bin splits by its composition factor (clamped to
+ * [0,1]). Bin prices are computed via {@link BinMath#binPriceAtBin} relative to
+ * {@code activeBinId} — feeding a raw absolute bin id to the plain
+ * {@code binPrice} overflowed at the 2^23 anchor and silently zeroed the X side
+ * (the Sprint 9-DS-r3 incident; the helper now encapsulates the offset so a
+ * careless edit can't reintroduce it).
+ *
+ * <h2>Money-safety &amp; idempotency</h2>
+ * Amounts are raw ×10⁴ units; all splits FLOOR. Token deduct/credit go through
+ * {@link TokenServiceClient}; the durable {@code LiquidityAdded}/
+ * {@code LiquidityRemoved} events go through the transactional
+ * {@link OutboxService} in the same transaction as the bin/position writes.
+ * Client idempotency keys are claimed via Redis SETNX (add and remove use
+ * distinct key prefixes). KYC is fail-closed and add-liquidity is gated by the
+ * 115-ФЗ self-restriction; removing/closing a position is deliberately NOT
+ * gated (restricted users can always exit).
+ *
+ * <h2>Fees on remove</h2>
+ * Accrued LP fees are derived from per-unit {@code feeGrowth} deltas since the
+ * position's snapshot (clamped ≥ 0) and paid on the removed share. A separate
+ * {@code lp-exit-bps} exit fee is charged on withdrawn PRINCIPAL only and routed
+ * to the pool's protocol-fee accumulator. Partial removes scale the cost-basis
+ * snapshot down proportionally so the P&amp;L column doesn't jump.
+ */
 @Service
 public class LiquidityService {
 
@@ -70,6 +106,19 @@ public class LiquidityService {
     @Value("${dlmm.fees.lp-exit-bps:10}")
     private int lpExitFeeBps;
 
+    /**
+     * @param poolRepository        pool rows (active bin, base price, TVL +
+     *                              protocol-fee accumulators)
+     * @param poolBinRepository     per-bin reserves/price/fee-growth read &amp;
+     *                              written on add/remove
+     * @param positionRepository    LP position rows (shares, fee snapshot,
+     *                              cost basis, active flag)
+     * @param positionBinRepository per-bin share rows linking a position to bins
+     * @param tokenServiceClient    token-active validation + balance deduct/credit
+     * @param userServiceClient     fail-closed KYC + 115-ФЗ self-restriction gate
+     * @param outbox                transactional outbox for liquidity events
+     * @param redisTemplate         Redis backing the idempotency-key claim
+     */
     public LiquidityService(LiquidityPoolRepository poolRepository,
                             PoolBinRepository poolBinRepository,
                             LpPositionRepository positionRepository,
@@ -88,6 +137,36 @@ public class LiquidityService {
         this.redisTemplate = redisTemplate;
     }
 
+    /**
+     * Deposit liquidity across a bin range, creating a new LP position and
+     * crediting per-bin shares.
+     *
+     * <p>Validates pool ACTIVE, both tokens active, caller KYC-verified
+     * (fail-closed) and not 115-ФЗ self-restricted, claims the idempotency key,
+     * and checks the bin range (1..1000 bins, at least one positive side —
+     * single-sided is allowed for Meteora parity). It then distributes the
+     * combined liquidity over the range by the strategy weights, computes each
+     * bin's X/Y split (canonical side rule, see {@link #computeBinAmounts}),
+     * upserts each {@link PoolBin} (reserves + composition factor) and records a
+     * {@link PositionBin} share row. Only the amounts that actually fit are
+     * deducted from the user; pool TVL is bumped by the deposited totals; the
+     * position snapshots the active bin's fee growth and the initial deposit as
+     * cost basis. A {@code LiquidityAdded} event is appended to the outbox in
+     * this transaction.
+     *
+     * @param req    deposit request (pool, amounts, bin range, strategy,
+     *               idempotency key)
+     * @param userId authenticated depositor, debited the deposited amounts
+     * @return the created position with its per-bin allocations and deposited totals
+     * @throws PoolNotFoundException        if the pool does not exist
+     * @throws PoolNotActiveException       if the pool or either token is not active
+     * @throws ForbiddenException           if the caller is not KYC-verified
+     * @throws com.sber.dlmm.common.exception.UserSelfRestrictedException if 115-ФЗ
+     *                                      self-restriction is active
+     * @throws IdempotencyConflictException if the idempotency key is already in flight
+     * @throws InvalidBinRangeException     if the range is invalid, both sides are
+     *                                      ≤ 0, or nothing could be allocated
+     */
     @Transactional
     public AddLiquidityResponse addLiquidity(AddLiquidityRequest req, UUID userId) {
         // 1. Check pool is ACTIVE
@@ -324,6 +403,14 @@ public class LiquidityService {
      * warnings before committing. Solves Dmitry's "how much does my
      * add shift the price?" question (medium-business request,
      * Sprint 11 backlog).
+     *
+     * @param req the same add-liquidity request the user is composing
+     * @return projected TVL before/after, TVL share, in-range flag, rough price
+     *         impact, per-bin allocations, fee-per-day estimate and human-readable
+     *         warnings
+     * @throws PoolNotFoundException    if the pool does not exist
+     * @throws PoolNotActiveException   if the pool is not active
+     * @throws InvalidBinRangeException if the bin range is malformed
      */
     @Transactional(readOnly = true)
     public PreviewAddLiquidityResponse previewAddLiquidity(AddLiquidityRequest req) {
@@ -456,7 +543,15 @@ public class LiquidityService {
      * active, X above, both at active). Touching this without reading
      * that incident note will likely reintroduce the bug.
      *
-     * <p>Returns {@code long[2] = {amountX, amountY}}.
+     * <p>Side rule: below the active bin → all Y; above → all X (= liquidity /
+     * price, floored); at the active bin → composition-factor split (Y = L·c,
+     * X = L·(1−c) / price), with {@code c} clamped to [0,1].
+     *
+     * @param pool         pool (supplies the active bin id)
+     * @param binId        bin being filled
+     * @param binLiquidity target liquidity (L) for this bin
+     * @param binPrice     this bin's price (Y per X)
+     * @return {@code long[2] = {amountX, amountY}}
      */
     private long[] computeBinAmounts(LiquidityPool pool, int binId, long binLiquidity, BigDecimal binPrice) {
         long amountX;
@@ -487,6 +582,33 @@ public class LiquidityService {
         return new long[]{amountX, amountY};
     }
 
+    /**
+     * Withdraw a percentage of an LP position, paying out principal + accrued
+     * fees (minus an exit fee) and closing the position on a full withdrawal.
+     *
+     * <p>Verifies ownership and that the position is open, claims the (remove-
+     * scoped) idempotency key, and validates {@code percentageBps} in
+     * [1..10000]. For each position bin it removes the proportional share,
+     * returns the proportional reserveX/reserveY, and computes accrued fees from
+     * the per-unit fee-growth delta since the position's snapshot (clamped ≥ 0);
+     * empty bin-share rows are deleted. An exit fee ({@code lp-exit-bps}) is
+     * skimmed from withdrawn PRINCIPAL only (not from fees, which already paid
+     * the protocol on accrual) and routed to the pool's protocol-fee
+     * accumulator; the user is credited principal − exit fee + fees. Pool TVL is
+     * reduced by the withdrawn principal, the position's shares and cost basis
+     * are scaled down by the removed fraction, its fee snapshot is refreshed,
+     * and at 100% it is marked closed. A {@code LiquidityRemoved} event is
+     * appended to the outbox in this transaction.
+     *
+     * @param req    remove request (position id, percentageBps, idempotency key)
+     * @param userId authenticated owner, credited the proceeds
+     * @return withdrawn X/Y and claimed fee X/Y
+     * @throws PoolNotFoundException        if the position or its pool is missing
+     * @throws ForbiddenException           if the position is not the caller's
+     * @throws PoolNotActiveException       if the position is already closed
+     * @throws IdempotencyConflictException if the idempotency key is already in flight
+     * @throws InvalidBinRangeException     if {@code percentageBps} is out of [1..10000]
+     */
     @Transactional
     public RemoveLiquidityResponse removeLiquidity(RemoveLiquidityRequest req, UUID userId) {
         // 1. Find position
@@ -654,11 +776,29 @@ public class LiquidityService {
      * Total open LP positions across all users — used by /admin/dashboard
      * to surface platform-wide liquidity engagement without paging through
      * every pool's position list.
+     *
+     * @return count of currently-active LP positions
      */
     public long countActivePositions() {
         return positionRepository.countByIsActiveTrue();
     }
 
+    /**
+     * List a user's open positions with each one's CURRENT value and unclaimed
+     * fees recomputed live from pool state.
+     *
+     * <p>For every position bin it values the share against the bin's current
+     * reserves ({@code reserve · shares / liquidity}) and computes pending fees
+     * from the fee-growth delta since the position's snapshot (clamped ≥ 0),
+     * summing per position. Bins whose pool bin has been drained contribute zero
+     * value but are still listed (with their share) so the breakdown stays
+     * complete. The cost-basis fields are surfaced for the P&amp;L column (0 for
+     * legacy positions created before that snapshot existed).
+     *
+     * @param userId user whose active positions to return
+     * @return one response per active position, with live valuation, unclaimed
+     *         fees, cost basis and per-bin allocations
+     */
     public List<PositionResponse> getUserPositions(UUID userId) {
         List<LpPosition> positions = positionRepository.findByUserIdAndIsActiveTrue(userId);
         List<PositionResponse> responses = new ArrayList<>();
@@ -716,6 +856,25 @@ public class LiquidityService {
 
     // ── Strategy Weight Calculation ─────────────────────────────
 
+    /**
+     * Compute per-bin liquidity weights (summing to ~1) for a deposit strategy.
+     *
+     * <ul>
+     *   <li>{@code SPOT} — uniform: every bin gets {@code 1/numBins}.</li>
+     *   <li>{@code CURVE} — Gaussian centred on the active bin ({@code sigma =
+     *       range/6}), concentrating liquidity near the current price, then
+     *       normalised.</li>
+     *   <li>{@code BID_ASK} — edge-weighted: weight grows with distance from the
+     *       active bin (floored at 0.05 so no bin is empty), then normalised —
+     *       the inverse profile, deeper at the range edges.</li>
+     * </ul>
+     *
+     * @param strategy    chosen liquidity-shape strategy
+     * @param binMin      inclusive lower bin id of the range
+     * @param binMax      inclusive upper bin id of the range
+     * @param activeBinId pool's active bin, the centre for CURVE/BID_ASK
+     * @return a weight per bin in {@code [binMin, binMax]}, normalised to sum ≈ 1
+     */
     private double[] calculateDistributionWeights(LiquidityStrategy strategy, int binMin, int binMax, int activeBinId) {
         int numBins = binMax - binMin + 1;
         double[] weights = new double[numBins];
@@ -771,6 +930,15 @@ public class LiquidityService {
         return weights;
     }
 
+    /**
+     * Composition factor for an existing bin, defaulting to {@code 0.5} (an even
+     * 50/50 X/Y split) when the bin doesn't exist yet — so a first deposit into
+     * the active bin starts balanced rather than all on one side.
+     *
+     * @param poolId pool owning the bin
+     * @param binId  bin to read the composition factor of
+     * @return the bin's composition factor, or {@code 0.5} if the bin is absent
+     */
     private BigDecimal getOrDefaultCompositionFactor(UUID poolId, int binId) {
         return poolBinRepository.findByPoolIdAndBinId(poolId, binId)
                 .map(PoolBin::getCompositionFactor)

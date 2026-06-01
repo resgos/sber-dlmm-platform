@@ -13,6 +13,12 @@ import org.springframework.context.annotation.Bean;
 @AutoConfiguration
 public class DlmmCalendarAutoConfiguration {
 
+    /**
+     * Registers the default {@link BankingCalendarService} unless a consumer
+     * already defines its own (e.g. a holidays-API-backed implementation).
+     *
+     * @return the singleton banking-calendar bean
+     */
     @Bean
     @ConditionalOnMissingBean
     public BankingCalendarService bankingCalendarService() {

@@ -36,9 +36,11 @@ public class PoolRewardsConfig {
     @Id
     private UUID id;
 
+    /** Pool this config governs; unique — at most one farming config per pool. */
     @Column(name = "pool_id", nullable = false, unique = true)
     private UUID poolId;
 
+    /** Token paid out as the farming reward (Spasibo / SSPAS). */
     @Column(name = "reward_token_id", nullable = false)
     private UUID rewardTokenId;
 
@@ -46,15 +48,22 @@ public class PoolRewardsConfig {
     @Column(name = "emission_per_day", nullable = false)
     private long emissionPerDay;
 
+    /** Master switch: when false the accrual scheduler skips this pool (it queries {@code findByEnabledTrue}). */
     @Column(name = "enabled", nullable = false)
     private boolean enabled;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /** Last time the config was changed; refreshed by {@link #preUpdate()}. */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /**
+     * JPA pre-insert hook: assigns a random {@link #id} and stamps both
+     * {@link #createdAt} and {@link #updatedAt} with a single {@code now()} when
+     * unset, so the two timestamps start equal.
+     */
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();
@@ -63,6 +72,7 @@ public class PoolRewardsConfig {
         if (updatedAt == null) updatedAt = now;
     }
 
+    /** JPA pre-update hook: bumps {@link #updatedAt} to {@code now()} on every modification. */
     @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();

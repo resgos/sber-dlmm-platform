@@ -24,10 +24,25 @@ public class StartupWarmer {
 
     private final AdminService adminService;
 
+    /**
+     * @param adminService the aggregation service whose {@code getDashboard()}
+     *                     is invoked once on startup to prime the WebClient /
+     *                     connection-pool cold paths
+     */
     public StartupWarmer(AdminService adminService) {
         this.adminService = adminService;
     }
 
+    /**
+     * Fires once when the context is fully started ({@link ApplicationReadyEvent})
+     * and performs a single throwaway dashboard aggregation to warm the
+     * downstream WebClients and connection pools, so the first real admin page
+     * load is fast.
+     *
+     * <p>Best-effort: any exception (e.g. a downstream still booting) is caught
+     * and logged at WARN, never rethrown — a failed warm-up must not stop the
+     * BFF from starting; the first real request simply pays the cold-start cost.
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void warm() {
         long started = System.currentTimeMillis();

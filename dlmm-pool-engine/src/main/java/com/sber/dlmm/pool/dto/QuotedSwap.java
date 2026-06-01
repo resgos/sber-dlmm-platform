@@ -26,6 +26,20 @@ import java.util.UUID;
  * timestamp on first successful execute. A second execute call with
  * the same {@code quoteId} sees a non-null {@code executedAt} and is
  * rejected with {@link com.sber.dlmm.common.exception.QuoteAlreadyExecutedException}.
+ *
+ * @param quoteId            id of this quote; the handle the client passes to execute
+ * @param userId             user the quote was issued to; execution is bound to them
+ * @param poolId             pool the quote is for
+ * @param tokenInId          token to be sold
+ * @param tokenOutId         token to be received
+ * @param amountIn           quoted input amount, raw integer at 10⁻⁴ scale
+ * @param estimatedAmountOut quoted output amount, raw integer at 10⁻⁴ scale
+ * @param estimatedFee       quoted fee, raw integer at 10⁻⁴ scale, in the input token
+ * @param signature          opaque token bound to the user/quote; re-presented and
+ *                           checked on execute (see class doc)
+ * @param createdAt          when the quote was minted; TTL is measured from here
+ * @param executedAt         when the quote was consumed, or {@code null} while it is
+ *                           still unused (the double-spend guard)
  */
 public record QuotedSwap(
         UUID quoteId,

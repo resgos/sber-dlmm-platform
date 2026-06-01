@@ -46,12 +46,15 @@ public class LimitOrder {
     @Id
     private UUID id;
 
+    /** User who placed (and escrowed for) the order. */
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    /** Pool whose market-synced price ({@code basePrice}) the trigger watches. */
     @Column(name = "pool_id", nullable = false)
     private UUID poolId;
 
+    /** BUY (escrow Y, fill when price ≤ limit) or SELL (escrow X, fill when price ≥ limit). */
     @Enumerated(EnumType.STRING)
     @Column(name = "side", nullable = false, length = 8)
     private LimitOrderSide side;
@@ -76,6 +79,7 @@ public class LimitOrder {
     @Column(name = "amount_out", nullable = false)
     private long amountOut;
 
+    /** Lifecycle state: OPEN → (FILLED | CANCELLED). See {@link LimitOrderStatus}. */
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
     private LimitOrderStatus status;
@@ -87,16 +91,29 @@ public class LimitOrder {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /** When the fill watcher settled the order; null until FILLED. */
     @Column(name = "filled_at")
     private LocalDateTime filledAt;
 
+    /** When the user cancelled (escrow refunded); null unless CANCELLED. */
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
 
+    /**
+     * Optimistic-lock version. Guards against a double-settle race between the
+     * scheduled fill watcher and a concurrent user cancel — whichever commits
+     * second hits an {@code OptimisticLockingFailureException} instead of both
+     * moving the order out of OPEN.
+     */
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
 
+    /**
+     * JPA pre-insert hook supplying defaults: random {@link #id}, {@code now()}
+     * {@link #createdAt}, status {@code OPEN}, version 0 — so a newly placed
+     * order persists from a minimal builder.
+     */
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();

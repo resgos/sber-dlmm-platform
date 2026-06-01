@@ -94,7 +94,25 @@ public class TwoFactorService {
 
     // ── DTO records — used by controller layer ─────────────────────────────
 
+    /**
+     * Result of {@link #beginSetup}: the data the client needs to render the
+     * enrolment UI. Nothing here is persisted yet — the client must echo
+     * {@code secret} and {@code recoveryCodes} back to {@link #enable}. The
+     * plaintext recovery codes are shown to the user exactly once, here.
+     *
+     * @param secret        the freshly generated base32 TOTP secret
+     * @param otpauthUri    the {@code otpauth://} URI to encode as a QR code
+     * @param recoveryCodes the 10 one-time recovery codes in display form (XXXX-XXXX)
+     */
     public record SetupChallenge(String secret, String otpauthUri, List<String> recoveryCodes) {}
+
+    /**
+     * Read-only view of a user's 2FA state returned by {@link #status}.
+     *
+     * @param enabled                 whether 2FA is currently enabled for the user
+     * @param enabledAt               when 2FA was enabled, or null if not enabled
+     * @param recoveryCodesRemaining  how many unused recovery codes are left (0 when disabled)
+     */
     public record StatusView(boolean enabled, LocalDateTime enabledAt, int recoveryCodesRemaining) {}
 
     // ── Begin setup ────────────────────────────────────────────────────────
@@ -109,6 +127,11 @@ public class TwoFactorService {
      * first. Otherwise an interrupted re-enrol would overwrite the secret
      * on the next enable() call, silently invalidating the still-valid
      * authenticator entry.
+     *
+     * @param userId       the user beginning enrolment
+     * @param accountLabel label shown in the authenticator app (typically the user's email)
+     * @return the setup challenge (secret, otpauth URI, plaintext recovery codes)
+     * @throws TwoFactorException 409 ({@link TwoFactorException#alreadyEnabled}) if 2FA is already enabled
      */
     @Transactional(readOnly = true)
     public SetupChallenge beginSetup(UUID userId, String accountLabel) {
@@ -134,6 +157,13 @@ public class TwoFactorService {
      * <p>Recovery codes are bcrypt-hashed before storage; plaintext is
      * never persisted. Order is preserved so the UI can show
      * "code #3 used" provenance.
+     *
+     * @param userId        the user being enrolled
+     * @param secret        the base32 secret echoed back from {@link #beginSetup}
+     * @param recoveryCodes the exactly-{@value #RECOVERY_CODE_COUNT} recovery codes echoed back from begin
+     * @param code          a 6-digit TOTP the user read from their app, proving the secret is loaded
+     * @throws TwoFactorException 400 if the secret/recovery-code payload is malformed or the TOTP code is invalid;
+     *                            409 if 2FA is already enabled
      */
     @Transactional
     public void enable(UUID userId, String secret, List<String> recoveryCodes, String code) {
@@ -180,6 +210,9 @@ public class TwoFactorService {
      * from the array) so it can't be reused. Counter increments
      * monotonically for analytics.
      *
+     * @param userId the user whose second factor is being checked
+     * @param code   the submitted credential — a 6-digit TOTP or a recovery code
+     * @return true on success (the method never returns false — failure throws)
      * @throws TwoFactorException 401 if neither TOTP nor recovery matches.
      *                            409 if user has no 2FA enrolment.
      */
@@ -203,6 +236,16 @@ public class TwoFactorService {
         throw TwoFactorException.verifyFailed();
     }
 
+    /**
+     * Attempts to match a submitted recovery code against the user's stored
+     * hashes and, on a hit, consumes it: removes that one hash (preserving the
+     * order of the rest), bumps the used-counter, and persists. Each recovery
+     * code is therefore single-use.
+     *
+     * @param row       the user's 2FA row (mutated and saved on a match)
+     * @param submitted the raw recovery code as typed (normalised before comparison)
+     * @return true if a matching code was found and consumed; false otherwise
+     */
     private boolean consumeRecoveryCode(UserTwoFactor row, String submitted) {
         String normalised = normaliseRecoveryCode(submitted);
         String[] hashes = row.getRecoveryCodesHashed();
@@ -229,6 +272,11 @@ public class TwoFactorService {
     /**
      * Idempotent — disabling a not-enrolled user is a no-op (the UI may
      * fire this on logout-and-forget flows).
+     *
+     * <p>Deletes the row entirely (secret + recovery codes), so re-enabling
+     * later goes through {@link #beginSetup} from scratch with a fresh secret.
+     *
+     * @param userId the user to un-enrol from 2FA
      */
     @Transactional
     public void disable(UUID userId) {
@@ -240,6 +288,13 @@ public class TwoFactorService {
 
     // ── Status ────────────────────────────────────────────────────────────
 
+    /**
+     * Reports the user's current 2FA state for display.
+     *
+     * @param userId the user to inspect
+     * @return a {@link StatusView}; {@code enabled=false} with null timestamp and
+     *         0 codes when the user is not enrolled
+     */
     @Transactional(readOnly = true)
     public StatusView status(UUID userId) {
         return repository.findById(userId)
@@ -257,6 +312,17 @@ public class TwoFactorService {
      * Visible-package-private for unit testing — verifies a TOTP code
      * against a given instant. Production callers use {@link #verify}
      * / {@link #enable} which pass {@code Instant.now()}.
+     *
+     * <p>Checks the current 30-second step and ±{@value #TOLERANCE_STEPS} steps
+     * to tolerate clock drift / roll-over. The comparison is computed across the
+     * whole window without short-circuiting to avoid leaking which step matched.
+     * A non-6-digit input or an undecodable secret returns false rather than
+     * throwing.
+     *
+     * @param secret the base32-encoded shared secret
+     * @param code   the candidate 6-digit code
+     * @param now    the instant to evaluate the code at
+     * @return true if {@code code} matches the expected TOTP within tolerance
      */
     boolean verifyTotp(String secret, String code, Instant now) {
         if (code == null || !code.matches("\\d{6}")) return false;
@@ -280,7 +346,19 @@ public class TwoFactorService {
         return matched;
     }
 
-    /** Pure function exposed for tests — generate the TOTP code for a given step. */
+    /**
+     * Pure function exposed for tests — generate the TOTP code for a given step.
+     *
+     * <p>Implements RFC 4226 HMAC-SHA1 + dynamic truncation: HMAC the 8-byte
+     * big-endian step counter with {@code key}, take the offset from the low
+     * nibble of the last byte, read a 31-bit integer from there, and reduce mod
+     * {@value #CODE_MODULO} to a 6-digit code.
+     *
+     * @param key  the raw (decoded) HMAC key bytes
+     * @param step the time-step counter (epoch seconds / {@value #TIME_STEP_SECONDS})
+     * @return the 6-digit TOTP value for that step
+     * @throws IllegalStateException if HMAC-SHA1 is unavailable in the JVM (effectively unreachable)
+     */
     static int generateCodeForStep(byte[] key, long step) {
         byte[] data = ByteBuffer.allocate(Long.BYTES).putLong(step).array();
         try {
@@ -304,12 +382,27 @@ public class TwoFactorService {
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
+    /**
+     * Generates a new {@value #SECRET_BYTE_LENGTH}-byte ({@code 160}-bit)
+     * cryptographically random secret and returns it base32-encoded for the
+     * authenticator app.
+     *
+     * @return the base32-encoded TOTP secret
+     */
     private String generateSecret() {
         byte[] bytes = new byte[SECRET_BYTE_LENGTH];
         random.nextBytes(bytes);
         return base32Encode(bytes);
     }
 
+    /**
+     * Generates {@value #RECOVERY_CODE_COUNT} random recovery codes, each
+     * {@value #RECOVERY_CODE_CHARS} base32 characters formatted as
+     * {@code XXXX-XXXX} for readability. These are the plaintext codes shown to
+     * the user once; only their bcrypt hashes are persisted.
+     *
+     * @return the list of display-formatted recovery codes
+     */
     private List<String> generateRecoveryCodes() {
         List<String> codes = new ArrayList<>(RECOVERY_CODE_COUNT);
         for (int i = 0; i < RECOVERY_CODE_COUNT; i++) {
@@ -323,7 +416,16 @@ public class TwoFactorService {
         return codes;
     }
 
-    /** Strip whitespace + dashes, uppercase. Symmetric between hash + verify. */
+    /**
+     * Strip whitespace + dashes, uppercase. Symmetric between hash + verify.
+     *
+     * <p>Applied identically when hashing a code for storage and when checking
+     * a submitted one, so a code pasted with or without its {@code -} separator
+     * still matches.
+     *
+     * @param raw the recovery code as entered (may be null)
+     * @return the canonical form (empty string for null input)
+     */
     private String normaliseRecoveryCode(String raw) {
         if (raw == null) return "";
         return raw.trim().toUpperCase().replace("-", "").replaceAll("\\s+", "");
@@ -334,6 +436,10 @@ public class TwoFactorService {
      * Issuer doubled (in path label + query param) per the de-facto
      * convention — both Google and Microsoft authenticators read either,
      * but some prefer the path form and some the query form.
+     *
+     * @param accountLabel the per-user label (typically email) shown in the app
+     * @param secret       the base32 secret to embed
+     * @return an {@code otpauth://totp/...} URI ready to render as a QR code
      */
     static String buildOtpauthUri(String accountLabel, String secret) {
         String issuer = urlEncode("Sber DLMM");
@@ -346,6 +452,12 @@ public class TwoFactorService {
                 + "&period=" + TIME_STEP_SECONDS;
     }
 
+    /**
+     * UTF-8 URL-encodes a component for safe inclusion in the otpauth URI.
+     *
+     * @param s the raw string to encode
+     * @return the percent-encoded string
+     */
     private static String urlEncode(String s) {
         return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8);
     }
@@ -354,6 +466,14 @@ public class TwoFactorService {
     // Inline implementation — Apache Commons Codec would also work, but
     // adding a transitive dep for ~30 lines is overkill.
 
+    /**
+     * Encodes bytes to an unpadded RFC 4648 base32 string using the
+     * authenticator-standard {@value #BASE32_ALPHABET} alphabet. Package-private
+     * and {@code static} for direct unit testing.
+     *
+     * @param data the bytes to encode (empty array yields an empty string)
+     * @return the base32-encoded representation
+     */
     static String base32Encode(byte[] data) {
         if (data.length == 0) return "";
         StringBuilder sb = new StringBuilder((data.length * 8 + 4) / 5);
@@ -379,6 +499,17 @@ public class TwoFactorService {
         return sb.toString();
     }
 
+    /**
+     * Decodes an RFC 4648 base32 string (case-insensitive, whitespace
+     * tolerated) back to bytes. Package-private and {@code static} for direct
+     * unit testing; {@link #verifyTotp} relies on the
+     * {@link IllegalArgumentException} to reject a corrupt secret as a failed
+     * verification rather than a 500.
+     *
+     * @param s the base32 text to decode
+     * @return the decoded bytes (empty array for empty/whitespace input)
+     * @throws IllegalArgumentException if {@code s} is null or contains a non-base32 character
+     */
     static byte[] base32Decode(String s) {
         if (s == null) throw new IllegalArgumentException("null base32 input");
         String cleaned = s.trim().toUpperCase().replaceAll("\\s+", "");

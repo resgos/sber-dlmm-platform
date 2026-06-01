@@ -49,10 +49,13 @@ import java.util.UUID;
 @Builder
 public class Org {
 
+    /** Surrogate primary key; server-generated UUID. Referenced by
+     *  {@link OrgMember#getOrgId()} and embedded in the JWT {@code orgId} claim. */
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    /** Human-readable organisation name (max 200 chars). */
     @Column(nullable = false, length = 200)
     private String name;
 
@@ -62,9 +65,15 @@ public class Org {
     @Column(name = "owner_id", nullable = false)
     private UUID ownerId;
 
+    /** Creation timestamp; set once and never updated
+     *  ({@code updatable = false}). Defaulted in {@link #onCreate()}. */
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * JPA lifecycle hook fired before insert. Defaults {@link #createdAt} to
+     * the current time when the caller did not set it.
+     */
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();

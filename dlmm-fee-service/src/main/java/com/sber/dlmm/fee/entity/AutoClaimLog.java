@@ -40,40 +40,60 @@ import java.util.UUID;
 @Builder
 public class AutoClaimLog {
 
+    /**
+     * Outcome of one auto-claim attempt. {@code SUCCESS} = value was claimed
+     * (counts toward the cooldown and dailyCap); {@code FAILURE} = the claim
+     * threw (recorded to avoid retry-spamming a broken position, but not
+     * counted); {@code SKIPPED} = below threshold / on cooldown / cap reached,
+     * so nothing was attempted.
+     */
     public enum Status { SUCCESS, FAILURE, SKIPPED }
 
+    /** Surrogate primary key; DB-generated UUID, immutable once assigned. */
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
+    /** User whose auto-claim policy fired. */
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    /** Position the auto-claim targeted. */
     @Column(name = "position_id", nullable = false)
     private UUID positionId;
 
+    /** Pool the position belongs to. */
     @Column(name = "pool_id", nullable = false)
     private UUID poolId;
 
+    /** X-token amount claimed (raw ×10⁴ base units); {@code 0} for non-SUCCESS rows. */
     @Builder.Default
     @Column(name = "amount_x", nullable = false)
     private long amountX = 0;
 
+    /** Y-token amount claimed (raw ×10⁴ base units); {@code 0} for non-SUCCESS rows. */
     @Builder.Default
     @Column(name = "amount_y", nullable = false)
     private long amountY = 0;
 
+    /** Outcome of the attempt; persisted as its enum name. */
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private Status status;
 
+    /** Failure detail when {@link Status#FAILURE}; {@code null} otherwise. */
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    /** When the auto-claim fired; defaulted to now on persist if unset. */
     @Column(name = "fired_at", nullable = false)
     private LocalDateTime firedAt;
 
+    /**
+     * JPA lifecycle hook: stamps {@link #firedAt} with the current time when the
+     * row is first persisted and no fire timestamp was supplied.
+     */
     @PrePersist
     public void prePersist() {
         if (firedAt == null) {

@@ -11,8 +11,14 @@ package com.sber.dlmm.common.exception;
  * tracks executedAt on the quote itself, so a network-retried execute
  * call with the same quoteId is rejected regardless of any client-side
  * key.
+ *
+ * <p>Rendered by {@link GlobalExceptionHandler} as <b>HTTP 409 Conflict</b> with error code
+ * {@code "QUOTE_ALREADY_EXECUTED"}.
  */
 public class QuoteAlreadyExecutedException extends DlmmException {
+    /**
+     * @param message human-readable detail (typically the already-consumed quoteId) surfaced in the error body
+     */
     public QuoteAlreadyExecutedException(String message) {
         super(message, "QUOTE_ALREADY_EXECUTED", 409);
     }

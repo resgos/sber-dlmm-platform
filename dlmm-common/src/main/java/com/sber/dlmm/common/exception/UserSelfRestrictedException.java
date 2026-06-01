@@ -10,6 +10,9 @@ package com.sber.dlmm.common.exception;
  * self-restriction API (and Sprint 7+ real ЦБ РФ verification step).
  */
 public class UserSelfRestrictedException extends DlmmException {
+    /**
+     * @param message human-readable detail explaining the active self-restriction (surfaced in the error body)
+     */
     public UserSelfRestrictedException(String message) {
         super(message, "USER_SELF_RESTRICTED", 403);
     }

@@ -34,6 +34,40 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Core service for the token catalog and per-user balances — the heart of
+ * {@code dlmm-token-service}.
+ *
+ * <p><b>Responsibilities:</b>
+ * <ul>
+ *   <li><b>Catalog</b>: create/list/lookup tokens, pause/unpause, and supply
+ *       cap enforcement on mint.</li>
+ *   <li><b>Balances</b>: admin mint/burn/transfer, and the internal
+ *       {@link #deductInternal}/{@link #creditInternal} pair that pool-engine
+ *       calls per swap/liquidity leg.</li>
+ * </ul>
+ *
+ * <p><b>Eventing — transactional outbox:</b> every state change appends to the
+ * {@link OutboxService} <i>inside</i> the business transaction rather than sending
+ * to Kafka inline. This closed the lost-event window where a balance mutation
+ * could commit while its Kafka send failed (see the field comment on
+ * {@link #outbox}). A separate dispatcher drains the outbox to the
+ * {@code token-events} topic.
+ *
+ * <p><b>Amount scale (#14):</b> every token {@code amount} here is a raw integer
+ * where 1 token = 10000 raw units (4 platform decimals). Supplies, balances and
+ * mint/burn/transfer amounts are all in these raw units. Prices, basis points and
+ * ratios are NOT scaled (this service deals only in quantities).
+ *
+ * <p><b>Idempotency invariant:</b> transfers carrying an {@code idempotencyKey}
+ * are deduplicated in-process via {@link #processedIdempotencyKeys}. This is a
+ * single-instance, in-memory guard (see {@link #transfer}) — it does not survive
+ * a restart and is not shared across instances.
+ *
+ * <p>Collaborators: {@link TokenRepository}, {@link UserBalanceRepository}
+ * (whose atomic {@code creditAvailable}/{@code deductAvailable} UPDATEs are the
+ * concurrency-safe primitives this service is built on), {@link OutboxService}.
+ */
 @Service
 public class TokenService {
 
@@ -49,6 +83,11 @@ public class TokenService {
     private final OutboxService outbox;
     private final Set<String> processedIdempotencyKeys = ConcurrentHashMap.newKeySet();
 
+    /**
+     * @param tokenRepository       token catalog persistence
+     * @param userBalanceRepository per-user balance persistence (atomic credit/deduct UPDATEs)
+     * @param outbox                transactional outbox the domain events are appended to
+     */
     public TokenService(TokenRepository tokenRepository,
                         UserBalanceRepository userBalanceRepository,
                         OutboxService outbox) {
@@ -57,6 +96,21 @@ public class TokenService {
         this.outbox = outbox;
     }
 
+    /**
+     * Create a new token in the catalog with zero supply.
+     *
+     * <p>Enforces symbol uniqueness and the per-type {@code underlyingAsset}
+     * requirement (delegated to {@link TokenType#requiresUnderlyingAsset()} so the
+     * price-oracle can always resolve backed tokens), then persists the row and
+     * emits a {@link TokenCreatedEvent}. {@code totalSupply} starts at 0 — tokens
+     * are minted into existence afterwards via {@link #mint}.
+     *
+     * @param req         token definition (symbol, decimals, type, caps, flags)
+     * @param adminUserId admin creating the token (stored as {@code createdBy} and in the event)
+     * @return the created token as a response DTO
+     * @throws IllegalArgumentException if the symbol already exists, or the type
+     *         requires an {@code underlyingAsset} that is missing/blank
+     */
     @Transactional
     public TokenResponse createToken(CreateTokenRequest req, UUID adminUserId) {
         if (tokenRepository.existsBySymbol(req.symbol())) {
@@ -99,6 +153,13 @@ public class TokenService {
         return toTokenResponse(token);
     }
 
+    /**
+     * Page through the full token catalog, newest first.
+     *
+     * @param page zero-based page index
+     * @param size page size
+     * @return a page of token DTOs plus paging metadata
+     */
     @Transactional(readOnly = true)
     public PageResponse<TokenResponse> getAllTokens(int page, int size) {
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -112,6 +173,11 @@ public class TokenService {
                 tokenPage.getTotalElements(), tokenPage.getTotalPages());
     }
 
+    /**
+     * @param tokenId token id
+     * @return the token DTO
+     * @throws TokenNotFoundException if no token exists for {@code tokenId}
+     */
     @Transactional(readOnly = true)
     public TokenResponse getToken(UUID tokenId) {
         Token token = findTokenOrThrow(tokenId);
@@ -132,6 +198,11 @@ public class TokenService {
                 .toList();
     }
 
+    /**
+     * @param symbol token ticker symbol (e.g. {@code SRUB})
+     * @return the token DTO
+     * @throws TokenNotFoundException if no token exists with that symbol
+     */
     @Transactional(readOnly = true)
     public TokenResponse getTokenBySymbol(String symbol) {
         Token token = tokenRepository.findBySymbol(symbol)
@@ -139,6 +210,22 @@ public class TokenService {
         return toTokenResponse(token);
     }
 
+    /**
+     * Mint new units of a token to a user, increasing total supply.
+     *
+     * <p>Guards: the token must be mintable, active (not paused), and the mint must
+     * not push {@code totalSupply} past {@code maxSupply} (when a cap is set). Bumps
+     * supply, lazily creates the recipient's balance row, credits it atomically via
+     * {@link UserBalanceRepository#creditAvailable}, and emits a
+     * {@link TokenMintedEvent}.
+     *
+     * @param req         mint request (token id, recipient, raw-unit amount)
+     * @param adminUserId admin performing the mint (currently for audit/caller context)
+     * @return the recipient's updated balance
+     * @throws TokenNotFoundException if the token does not exist
+     * @throws IllegalStateException  if the token is not mintable, is paused, the
+     *         mint would exceed max supply, or the credit unexpectedly fails
+     */
     @Transactional
     public BalanceResponse mint(MintRequest req, UUID adminUserId) {
         Token token = findTokenOrThrow(req.tokenId());
@@ -185,6 +272,20 @@ public class TokenService {
         return toBalanceResponse(balance, token.getSymbol());
     }
 
+    /**
+     * Burn units of a token from a user, decreasing total supply.
+     *
+     * <p>The deduct happens first (atomic {@link UserBalanceRepository#deductAvailable})
+     * so an insufficient balance fails before any supply change; then supply is
+     * decremented and a {@link TokenBurnedEvent} emitted.
+     *
+     * @param req         burn request (token id, holder, raw-unit amount)
+     * @param adminUserId admin performing the burn (currently for audit/caller context)
+     * @return the holder's updated balance
+     * @throws TokenNotFoundException        if the token does not exist
+     * @throws IllegalStateException         if the token is not burnable
+     * @throws InsufficientBalanceException  if the holder's available balance is below the amount
+     */
     @Transactional
     public BalanceResponse burn(BurnRequest req, UUID adminUserId) {
         Token token = findTokenOrThrow(req.tokenId());
@@ -214,6 +315,13 @@ public class TokenService {
         return toBalanceResponse(balance, token.getSymbol());
     }
 
+    /**
+     * List every non-empty balance row a user holds, each resolved to its token
+     * symbol ({@code "UNKNOWN"} if the token row has since vanished).
+     *
+     * @param userId the holder
+     * @return one {@link BalanceResponse} per token the user has a balance row for
+     */
     @Transactional(readOnly = true)
     public List<BalanceResponse> getUserBalances(UUID userId) {
         List<UserBalance> balances = userBalanceRepository.findByUserId(userId);
@@ -227,6 +335,15 @@ public class TokenService {
                 .toList();
     }
 
+    /**
+     * Get a user's balance for one token. A user with no balance row yields a
+     * zeroed response (rather than an error) so callers can render "0" uniformly.
+     *
+     * @param userId  the holder
+     * @param tokenId the token
+     * @return the balance, or an all-zero balance if no row exists
+     * @throws TokenNotFoundException if the token itself does not exist
+     */
     @Transactional(readOnly = true)
     public BalanceResponse getUserTokenBalance(UUID userId, UUID tokenId) {
         Token token = findTokenOrThrow(tokenId);
@@ -239,6 +356,21 @@ public class TokenService {
         return toBalanceResponse(balance, token.getSymbol());
     }
 
+    /**
+     * Move a token amount between two users (peer-to-peer transfer).
+     *
+     * <p>If an {@code idempotencyKey} is supplied it is claimed in-process first
+     * (see {@link #processedIdempotencyKeys}) so a duplicate request is rejected
+     * rather than re-applied. The token must be active; the sender is debited
+     * atomically before the recipient is credited (lazily creating the recipient
+     * row), and a {@link TokenTransferredEvent} is emitted.
+     *
+     * @param req transfer request (token, from/to users, raw-unit amount, optional idempotency key)
+     * @throws IdempotencyConflictException if the idempotency key was already processed
+     * @throws TokenNotFoundException       if the token does not exist
+     * @throws IllegalStateException        if the token is paused, or the credit unexpectedly fails
+     * @throws InsufficientBalanceException if the sender's available balance is below the amount
+     */
     @Transactional
     public void transfer(TransferRequest req) {
         if (req.idempotencyKey() != null && !req.idempotencyKey().isBlank()) {
@@ -289,6 +421,13 @@ public class TokenService {
      * Used by pool-engine during swap (debit caller's input token) and
      * add-liquidity (debit deposited tokens). Throws InsufficientBalanceException
      * if balance is insufficient — the caller should treat that as a hard fail.
+     *
+     * @param userId  the user being debited
+     * @param tokenId the token being debited
+     * @param amount  raw-unit amount to deduct (1 token = 10000 units)
+     * @throws TokenNotFoundException        if the token does not exist
+     * @throws IllegalStateException         if the token is paused
+     * @throws InsufficientBalanceException  if available balance is below {@code amount}
      */
     @Transactional
     public void deductInternal(UUID userId, UUID tokenId, long amount) {
@@ -316,6 +455,12 @@ public class TokenService {
      * Used by pool-engine during swap (credit caller's output token) and
      * remove-liquidity (return withdrawn tokens). Creates the balance row
      * if it doesn't exist yet.
+     *
+     * @param userId  the user being credited
+     * @param tokenId the token being credited
+     * @param amount  raw-unit amount to credit (1 token = 10000 units)
+     * @throws TokenNotFoundException if the token does not exist
+     * @throws IllegalStateException  if the credit unexpectedly fails after row creation
      */
     @Transactional
     public void creditInternal(UUID userId, UUID tokenId, long amount) {
@@ -356,6 +501,14 @@ public class TokenService {
             LocalDateTime occurredAt
     ) {}
 
+    /**
+     * Pause a token: sets {@code active=false}, which makes mint and transfer
+     * reject it (an admin kill-switch). Idempotent in effect.
+     *
+     * @param tokenId token to pause
+     * @return the updated token DTO
+     * @throws TokenNotFoundException if the token does not exist
+     */
     @Transactional
     public TokenResponse pauseToken(UUID tokenId) {
         Token token = findTokenOrThrow(tokenId);
@@ -365,6 +518,13 @@ public class TokenService {
         return toTokenResponse(token);
     }
 
+    /**
+     * Unpause a token: sets {@code active=true}, re-enabling mint/transfer.
+     *
+     * @param tokenId token to unpause
+     * @return the updated token DTO
+     * @throws TokenNotFoundException if the token does not exist
+     */
     @Transactional
     public TokenResponse unpauseToken(UUID tokenId) {
         Token token = findTokenOrThrow(tokenId);
@@ -374,11 +534,25 @@ public class TokenService {
         return toTokenResponse(token);
     }
 
+    /**
+     * Lookup-or-throw helper that every catalog/balance method routes through so
+     * a missing token surfaces a uniform {@link TokenNotFoundException}.
+     *
+     * @param tokenId token id
+     * @return the token entity
+     * @throws TokenNotFoundException if the token does not exist
+     */
     private Token findTokenOrThrow(UUID tokenId) {
         return tokenRepository.findById(tokenId)
                 .orElseThrow(() -> new TokenNotFoundException("Token not found: " + tokenId));
     }
 
+    /**
+     * Maps a {@link Token} entity to its API {@link TokenResponse} DTO.
+     *
+     * @param token entity to map
+     * @return the response DTO
+     */
     private TokenResponse toTokenResponse(Token token) {
         return new TokenResponse(
                 token.getId(),
@@ -396,6 +570,14 @@ public class TokenService {
         );
     }
 
+    /**
+     * Maps a {@link UserBalance} entity to a {@link BalanceResponse}, deriving the
+     * total as {@code available + locked}. All three amounts are raw token units.
+     *
+     * @param balance balance entity to map
+     * @param symbol  the token's symbol (resolved by the caller)
+     * @return the response DTO
+     */
     private BalanceResponse toBalanceResponse(UserBalance balance, String symbol) {
         return new BalanceResponse(
                 balance.getUserId(),

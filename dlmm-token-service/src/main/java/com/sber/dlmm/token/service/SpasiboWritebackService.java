@@ -54,6 +54,20 @@ public class SpasiboWritebackService {
     private final int maxAttempts;
     private final int batchSize;
 
+    /**
+     * All tunables are injected from config so accrual policy can change without
+     * a redeploy (and load tests can disable the whole path).
+     *
+     * @param repository     write-back entry store (idempotency + flush queue)
+     * @param enabled        master on/off switch for accrual and flush
+     * @param endpoint       Spasibo BU push URL; blank keeps {@link #shipToSpasibo} in stub mode
+     * @param capDaily       max points a single user may accrue in a rolling 24h window
+     * @param capMonthly     max points a single user may accrue in a rolling 30-day window
+     * @param minSwapAmount  anti-gaming minimum base-unit amount to accrue on a swap
+     * @param minHedgeAmount anti-gaming minimum base-unit amount to accrue on a hedge
+     * @param maxAttempts    flush retries before an entry is moved to DEAD_LETTER
+     * @param batchSize      max entries pulled per scheduled flush
+     */
     public SpasiboWritebackService(
             SpasiboWritebackRepository repository,
             @Value("${dlmm.spasibo.writeback.enabled:true}") boolean enabled,
@@ -84,6 +98,12 @@ public class SpasiboWritebackService {
      * <p>Returns the persisted entry (or the existing one on
      * idempotency hit). Returns empty when the call was filtered:
      * service disabled, below threshold, cap exceeded, or zero points.
+     *
+     * @param dlmmTxId          originating DLMM transaction id; the UNIQUE idempotency anchor
+     * @param userId            user earning the cashback
+     * @param reasonCode        op type ({@code SWAP}/{@code HEDGE}/{@code ADD_LIQUIDITY}/{@code CLAIM_FEE}) selecting the rate
+     * @param amountInBaseUnits operation size in base units (decimals=2 for SRUB, so 100 = 1 ₽)
+     * @return the persisted (or pre-existing) entry, or empty if the accrual was filtered out
      */
     @Transactional
     public Optional<SpasiboWritebackEntry> accrue(UUID dlmmTxId,
@@ -196,6 +216,11 @@ public class SpasiboWritebackService {
      *
      * <p>Extracted so unit tests can verify the accrual + flush
      * orchestration without needing a real HTTP server in the loop.
+     *
+     * @param e the entry to push; in stub mode it is stamped with a synthetic
+     *          {@code spasiboTxId} so the row stays traceable
+     * @throws UnsupportedOperationException if an endpoint is configured but the
+     *         real HTTP client is not yet wired (Sprint 10)
      */
     protected void shipToSpasibo(SpasiboWritebackEntry e) {
         if (endpoint == null || endpoint.isBlank()) {
@@ -215,6 +240,12 @@ public class SpasiboWritebackService {
                 "Spasibo write-back endpoint set but client not wired (Sprint 10)");
     }
 
+    /**
+     * Maps an operation reason code to its cashback rate (design §3 schedule).
+     *
+     * @param reasonCode the op type
+     * @return rate in basis points, or 0 for an unknown code (which suppresses accrual)
+     */
     private int rateForReasonBps(String reasonCode) {
         // Design §3 rate schedule.
         return switch (reasonCode) {
@@ -226,6 +257,14 @@ public class SpasiboWritebackService {
         };
     }
 
+    /**
+     * Anti-gaming minimum operation size below which no cashback accrues
+     * (design §R-SP-3). HEDGE uses its own higher floor; everything else uses
+     * the swap floor.
+     *
+     * @param reasonCode the op type
+     * @return the minimum qualifying amount in base units
+     */
     private long minAmountForReason(String reasonCode) {
         // Design §R-SP-3 — anti-gaming threshold per op type.
         // Amounts in base units (decimals=2 for SRUB ⇒ 10_000 base units = 100 ₽).

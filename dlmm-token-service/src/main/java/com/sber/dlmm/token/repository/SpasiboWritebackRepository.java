@@ -24,6 +24,15 @@ import java.util.UUID;
 @Repository
 public interface SpasiboWritebackRepository extends JpaRepository<SpasiboWritebackEntry, UUID> {
 
+    /**
+     * Idempotency check before insert: has a write-back entry already been
+     * created for this originating DLMM transaction? Backs the
+     * {@code uk_spasibo_wb_dlmm_tx} unique constraint at the application
+     * layer so a re-delivered Kafka event is treated as a duplicate.
+     *
+     * @param dlmmTxId the originating DLMM transaction id
+     * @return the existing entry for that transaction, or empty if first-seen
+     */
     Optional<SpasiboWritebackEntry> findByDlmmTxId(UUID dlmmTxId);
 
     /**
@@ -31,6 +40,13 @@ public interface SpasiboWritebackRepository extends JpaRepository<SpasiboWriteba
      * RETRY entries are returned alongside PENDING because the backoff
      * is enforced by the scheduler itself (re-checking attempt_count
      * + last_attempt_at), keeping this query a simple status-equality.
+     *
+     * <p>Results are ordered oldest-created first ({@code createdAt} ascending)
+     * so the queue drains FIFO; {@code pageable} bounds the batch size.
+     *
+     * @param statuses the statuses to ship (typically PENDING + RETRY)
+     * @param pageable batch size / ordering bound for one scheduler tick
+     * @return matching entries, oldest first (possibly empty)
      */
     @Query("SELECT e FROM SpasiboWritebackEntry e WHERE e.status IN (:statuses) " +
            "ORDER BY e.createdAt ASC")
@@ -54,6 +70,11 @@ public interface SpasiboWritebackRepository extends JpaRepository<SpasiboWriteba
      * method sumPointsByUserSince"). Use parameter binding via a default
      * method to preserve the public API while routing through a query
      * Hibernate accepts.
+     *
+     * @param userId   the user whose accrued points are summed
+     * @param since    rolling-window lower bound (inclusive) on {@code createdAt}
+     * @param statuses the statuses to include in the sum
+     * @return total {@code amountPoints} for that user/window/statuses, or 0 if none
      */
     @Query("SELECT COALESCE(SUM(e.amountPoints), 0) FROM SpasiboWritebackEntry e " +
            "WHERE e.userId = :userId AND e.createdAt >= :since " +
@@ -66,6 +87,10 @@ public interface SpasiboWritebackRepository extends JpaRepository<SpasiboWriteba
      * Public API kept stable — implementation hard-codes the cap-counting
      * statuses (PENDING + RETRY + ACCEPTED, excludes REJECTED/DEAD_LETTER)
      * matching the original inline query.
+     *
+     * @param userId the user whose accrued points are summed
+     * @param since  rolling-window lower bound (inclusive) on {@code createdAt}
+     * @return total points counted toward the user's daily/monthly cap
      */
     default long sumPointsByUserSince(UUID userId, LocalDateTime since) {
         return sumPointsByUserSinceInternal(userId, since,

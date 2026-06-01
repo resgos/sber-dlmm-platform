@@ -63,6 +63,12 @@ public class OhlcvAggregator {
      */
     private final ConcurrentMap<BucketKey, Bucket> buckets = new ConcurrentHashMap<>();
 
+    /**
+     * Creates the aggregator with its persistence gateway.
+     *
+     * @param repository repository used by {@link #flush} to upsert sealed
+     *                   candles into Postgres
+     */
     public OhlcvAggregator(OhlcvCandleRepository repository) {
         this.repository = repository;
     }
@@ -72,6 +78,20 @@ public class OhlcvAggregator {
      * thread. {@code price} is the swap's execution price in pool's
      * tokenY-per-tokenX terms (matches what
      * {@code SwapResponse.executionPrice} produces).
+     *
+     * <p>The update is atomic per (pool, minute) key via
+     * {@link ConcurrentHashMap#compute}: a new bucket seeds O=H=L=C=price,
+     * an existing one extends high/low, advances close, and accumulates
+     * volume/count. Null or non-positive prices (and null pool ids) are
+     * ignored so a malformed event can't corrupt a candle.
+     *
+     * @param poolId       pool the swap belongs to; ignored if {@code null}
+     * @param swapEpochSec swap time in epoch seconds, floored to the minute to
+     *                     pick the bucket
+     * @param price        execution price (tokenY-per-tokenX); ignored if
+     *                     {@code null} or {@code <= 0}
+     * @param amountIn     input amount of the swap, added to the bucket's
+     *                     volume
      */
     public void record(UUID poolId, long swapEpochSec, BigDecimal price, long amountIn) {
         if (poolId == null || price == null || price.signum() <= 0) return;
@@ -130,11 +150,29 @@ public class OhlcvAggregator {
      * Test hook — verifies the in-memory state without touching the
      * scheduler. Returns a snapshot copy so callers can't mutate the
      * internal map.
+     *
+     * @return a shallow copy of the live (pool, minute) → bucket map
      */
     Map<BucketKey, Bucket> snapshot() {
         return new HashMap<>(buckets);
     }
 
+    /**
+     * Writes one sealed bucket to the candle table, idempotently.
+     *
+     * <p>WHAT: converts the bucket's minute to a UTC {@link LocalDateTime} open
+     * time, then either inserts a fresh candle or merges into an existing one
+     * for the same (pool, interval, openTime).
+     *
+     * <p>WHY merge-on-conflict: a Kafka consumer restart can replay events from
+     * a committed offset before this minute sealed, so the same minute may be
+     * persisted twice. Merging high/low/close/volume/count in place (rather
+     * than inserting) keeps the unique constraint satisfied and the candle
+     * correct under replay.
+     *
+     * @param key the (pool, minuteStart) identity of the bucket
+     * @param b   the immutable bucket snapshot to persist
+     */
     private void persistBucket(BucketKey key, Bucket b) {
         LocalDateTime openTime = LocalDateTime.ofEpochSecond(key.minuteStart, 0, ZoneOffset.UTC);
         // Idempotent on re-delivery: if an earlier flush already wrote
@@ -165,14 +203,38 @@ public class OhlcvAggregator {
                 );
     }
 
-    /** Composite map key — keeps the bucket index O(1) without a nested map. */
+    /**
+     * Composite map key — keeps the bucket index O(1) without a nested map.
+     *
+     * @param poolId      the pool this candle belongs to (non-null)
+     * @param minuteStart epoch-second of the minute floor that this candle
+     *                    covers
+     */
     record BucketKey(UUID poolId, long minuteStart) {
+        /**
+         * Compact constructor enforcing the non-null pool invariant.
+         *
+         * <p>WHY: the key is used in a hash map and a null pool would both NPE
+         * on hashing and silently merge candles across pools — fail fast at
+         * construction instead.
+         *
+         * @throws NullPointerException if {@code poolId} is {@code null}
+         */
         public BucketKey {
             Objects.requireNonNull(poolId);
         }
     }
 
-    /** Immutable bucket value. Replaced atomically inside compute() on each tick. */
+    /**
+     * Immutable bucket value. Replaced atomically inside compute() on each tick.
+     *
+     * @param open      first trade price in the minute
+     * @param high      highest trade price seen so far
+     * @param low       lowest trade price seen so far
+     * @param close     most recent trade price
+     * @param volumeIn  accumulated input volume over the minute
+     * @param swapCount number of swaps folded into this candle
+     */
     record Bucket(BigDecimal open, BigDecimal high, BigDecimal low, BigDecimal close,
                   long volumeIn, int swapCount) {}
 }

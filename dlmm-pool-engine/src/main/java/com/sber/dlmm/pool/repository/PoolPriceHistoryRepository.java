@@ -58,10 +58,16 @@ import java.util.UUID;
 @Repository
 public class PoolPriceHistoryRepository {
 
+    /** Milliseconds in a day — the bucket width for the daily-mean collapse. */
     private static final long ONE_DAY_MS = 86_400_000L;
 
     private final EntityManager em;
 
+    /**
+     * @param em JPA entity manager used to run native read-only queries against
+     *           the shared {@code price_history} table (this repository owns no
+     *           {@code @Entity})
+     */
     public PoolPriceHistoryRepository(EntityManager em) {
         this.em = em;
     }
@@ -95,6 +101,22 @@ public class PoolPriceHistoryRepository {
         return queryDailyMeans(poolId, "token_y_id", since);
     }
 
+    /**
+     * Runs the daily-mean aggregation for one side of the pool's pair: joins
+     * {@code price_history → price_feeds → tokens → liquidity_pools} on the
+     * given side column, buckets rows into UTC days, and returns
+     * {@code AVG(price)} per day in ascending date order. Rows with a
+     * non-positive mean are dropped. Any {@link RuntimeException} (schema drift,
+     * connection blip) is swallowed and treated as "no data" so the comparator
+     * UX degrades gracefully rather than erroring.
+     *
+     * @param poolId       pool to resolve to a price feed
+     * @param tokenColumn  side to use — must be the literal {@code "token_x_id"}
+     *                     or {@code "token_y_id"} (the only callers; not user
+     *                     input, so no SQL-injection surface)
+     * @param sinceEpochMs inclusive lower bound on {@code timestamp_epoch_ms}
+     * @return daily (day, mean-price) tuples oldest-first, or empty on no data / error
+     */
     @SuppressWarnings("unchecked")
     private List<DailyPrice> queryDailyMeans(UUID poolId, String tokenColumn, long sinceEpochMs) {
         // Parameterised on column name — only "token_x_id" / "token_y_id"
@@ -136,6 +158,15 @@ public class PoolPriceHistoryRepository {
         return out;
     }
 
+    /**
+     * Coerces a JDBC {@code AVG()} result to {@link BigDecimal} regardless of
+     * the driver's chosen numeric type (it may hand back a {@code BigDecimal},
+     * a {@code Double}, etc.). Goes via {@code toString()} for non-BigDecimal
+     * {@link Number}s to avoid binary-float artefacts.
+     *
+     * @param o raw column value from the result row
+     * @return the value as BigDecimal, or {@code null} if null/unconvertible
+     */
     private static BigDecimal toBigDecimal(Object o) {
         if (o == null) return null;
         if (o instanceof BigDecimal bd) return bd;

@@ -57,6 +57,20 @@ public class MarketDataClient {
     private final String cbrFxUrl;
     private final String cbrMetalsUrl;
 
+    /**
+     * Builds the client with bounded timeouts and the three upstream URLs.
+     *
+     * <p>WHY tolerant timeouts (6s connect / 12s read): these public APIs are
+     * occasionally slow but the fetch runs on a 2-minute scheduler, so a
+     * generous-but-capped wait beats both a premature failure and an unbounded
+     * hang. Each URL is overridable via config to allow pointing at a mirror.
+     *
+     * @param builder      Spring's builder used to make the timeout-configured
+     *                     {@link RestTemplate}
+     * @param coingeckoUrl CoinGecko {@code simple/price} base URL
+     * @param cbrFxUrl     CBR daily FX JSON URL ({@code cbr-xml-daily.ru})
+     * @param cbrMetalsUrl CBR precious-metals XML URL ({@code xml_metall.asp})
+     */
     public MarketDataClient(
             RestTemplateBuilder builder,
             @Value("${dlmm.market.coingecko-url:https://api.coingecko.com/api/v3/simple/price}") String coingeckoUrl,
@@ -71,7 +85,22 @@ public class MarketDataClient {
         this.cbrMetalsUrl = cbrMetalsUrl;
     }
 
-    /** CoinGecko coin id (e.g. "bitcoin") → quote (price in RUB + 24h %). Empty on failure. */
+    /**
+     * CoinGecko coin id (e.g. "bitcoin") → quote (price in RUB + 24h %). Empty
+     * on failure.
+     *
+     * <p>WHAT: one batched {@code simple/price} call for all requested ids,
+     * reading the {@code rub} price and {@code rub_24h_change} fields.
+     *
+     * <p>WHY fail-soft (empty map, not throw): a transient CoinGecko outage
+     * must leave the oracle's last good crypto prices in place rather than
+     * wiping them; the caller upserts only the entries that come back.
+     *
+     * @param coinIds CoinGecko coin ids to price; an empty collection short-
+     *                circuits to an empty result without a network call
+     * @return map of coin id → {@link MarketQuote}; empty on any error or for
+     *         ids CoinGecko omits
+     */
     public Map<String, MarketQuote> fetchCryptoRub(Collection<String> coinIds) {
         if (coinIds.isEmpty()) return Map.of();
         try {
@@ -96,7 +125,23 @@ public class MarketDataClient {
         }
     }
 
-    /** CBR char-code (USD/EUR/CNY) → quote (RUB per 1 unit + 24h % vs the prior fixing). */
+    /**
+     * CBR char-code (USD/EUR/CNY) → quote (RUB per 1 unit + 24h % vs the prior
+     * fixing).
+     *
+     * <p>WHAT: reads the CBR daily JSON, and for each requested char-code
+     * normalises {@code Value / Nominal} to a per-unit RUB price and derives
+     * the 24h change from the {@code Previous} fixing.
+     *
+     * <p>WHY normalise by Nominal: CBR quotes some currencies per 10/100 units
+     * (e.g. JPY), so dividing by {@code Nominal} guarantees callers always get
+     * "1 unit = N RUB". Fails soft to an empty map on any error.
+     *
+     * @param charCodes CBR currency char-codes to fetch; empty short-circuits
+     *                  to an empty result
+     * @return map of char-code → {@link MarketQuote}; empty on any error or for
+     *         codes absent from the response
+     */
     public Map<String, MarketQuote> fetchFxRub(Collection<String> charCodes) {
         if (charCodes.isEmpty()) return Map.of();
         try {
@@ -120,7 +165,23 @@ public class MarketDataClient {
         }
     }
 
-    /** CBR metal code (1=gold, 2=silver, 3=platinum, 4=palladium) → quote (RUB/gram + 24h %). */
+    /**
+     * CBR metal code (1=gold, 2=silver, 3=platinum, 4=palladium) → quote
+     * (RUB/gram + 24h %).
+     *
+     * <p>WHAT: requests a ~12-day window of the metals XML, groups the
+     * {@code Buy} prices per metal code in document (date-ascending) order, and
+     * reports the latest value plus its change vs the prior record.
+     *
+     * <p>WHY a date range rather than a single day: CBR only publishes metal
+     * fixings on banking days, so asking for one day can return nothing on a
+     * weekend/holiday; a short window guarantees at least one (usually two)
+     * records to derive both the latest price and a 24h delta. Fails soft to an
+     * empty map on any error.
+     *
+     * @return map of metal code → {@link MarketQuote} (RUB per gram); empty on
+     *         any error
+     */
     public Map<Integer, MarketQuote> fetchMetalsRub() {
         try {
             String to = LocalDate.now().format(CBR_DATE);
@@ -153,7 +214,19 @@ public class MarketDataClient {
         }
     }
 
-    /** Parse a CBR numeric like "10 464,39" (comma decimal, nbsp/space thousands). */
+    /**
+     * Parse a CBR numeric like "10 464,39" (comma decimal, nbsp/space
+     * thousands).
+     *
+     * <p>WHY all the stripping: CBR formats numbers the Russian way — a comma
+     * decimal separator and space/no-break-space thousands grouping — none of
+     * which {@code BigDecimal} accepts, so we remove the separators before
+     * parsing. Returns {@code null} (rather than throwing) on blank/garbage so
+     * a single bad record is skipped by the caller.
+     *
+     * @param s raw CBR numeric text; may be {@code null}/blank
+     * @return the parsed value, or {@code null} if absent or unparseable
+     */
     static BigDecimal parseCbrNumber(String s) {
         if (s == null || s.isBlank()) return null;
         try {
@@ -163,7 +236,19 @@ public class MarketDataClient {
         }
     }
 
-    /** 24h % change, 4dp; 0 when the prior value is missing or non-positive. */
+    /**
+     * 24h % change, 4dp; 0 when the prior value is missing or non-positive.
+     *
+     * <p>WHY the guard: dividing by a missing or non-positive {@code prev}
+     * would NPE or produce a meaningless percentage, so those cases collapse to
+     * a neutral 0% rather than propagating an error into the feed.
+     *
+     * @param prev    the prior reference value (denominator)
+     * @param current the latest value
+     * @return {@code (current - prev) / prev * 100} rounded to 4dp, or
+     *         {@link BigDecimal#ZERO} when {@code prev} is null/non-positive or
+     *         {@code current} is null
+     */
     static BigDecimal pctChange(BigDecimal prev, BigDecimal current) {
         if (prev == null || prev.signum() <= 0 || current == null) return BigDecimal.ZERO;
         return current.subtract(prev).divide(prev, MC)

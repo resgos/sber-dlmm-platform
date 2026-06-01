@@ -16,13 +16,37 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Application service encapsulating all notification business logic.
+ *
+ * <p>Sits between the two entry points — the Kafka {@link com.sber.dlmm.notification.listener.NotificationEventListener}
+ * (write path: persist a notification crafted from a domain event) and the REST
+ * {@link com.sber.dlmm.notification.controller.NotificationController} (read/mutate path: list,
+ * count, mark read) — and the {@link NotificationRepository}. It owns transaction boundaries
+ * and the entity→{@link NotificationResponse} mapping. The constructor and logger are generated
+ * by Lombok ({@code @RequiredArgsConstructor}/{@code @Slf4j}).
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class NotificationService {
 
+    /** Data-access gateway for the {@code notifications} table. */
     private final NotificationRepository notificationRepository;
 
+    /**
+     * Persists a new notification for a user (the write path invoked by the Kafka listener).
+     *
+     * <p>Builds the entity unread with the current timestamp and saves it. The {@code payload}
+     * is the original raw event JSON, retained for client-side context/deep-linking.
+     *
+     * @param userId  recipient the notification is created for
+     * @param type    notification category driving client rendering
+     * @param title   short headline (already localized by the caller)
+     * @param message body text (already localized by the caller)
+     * @param payload original raw event JSON, or {@code null}
+     * @return the persisted {@link Notification} (with its generated id populated)
+     */
     @Transactional
     public Notification createNotification(UUID userId, NotificationType type,
                                             String title, String message, String payload) {
@@ -41,6 +65,19 @@ public class NotificationService {
         return saved;
     }
 
+    /**
+     * Returns a page of a user's notifications, newest first, optionally restricted to unread.
+     *
+     * <p>Sorts by {@code createdAt} descending so the freshest notifications surface at the top
+     * of the panel, then maps the entity page into the transport-friendly {@link PageResponse}
+     * of {@link NotificationResponse}. Runs read-only.
+     *
+     * @param userId     owner whose notifications to list
+     * @param unreadOnly when {@code true}, return only unread notifications; otherwise all
+     * @param page       zero-based page index
+     * @param size       page size (notifications per page)
+     * @return a paged response of mapped notifications plus paging metadata
+     */
     @Transactional(readOnly = true)
     public PageResponse<NotificationResponse> getUserNotifications(UUID userId,
                                                                      boolean unreadOnly,
@@ -63,6 +100,17 @@ public class NotificationService {
         );
     }
 
+    /**
+     * Marks a single notification as read, enforcing that it belongs to the requesting user.
+     *
+     * <p>Loads the notification scoped by both id and {@code userId}; a missing/foreign id
+     * throws (surfaced as 404). The update is a no-op when the notification is already read,
+     * making repeated clicks idempotent and avoiding a redundant write/timestamp churn.
+     *
+     * @param notificationId id of the notification to mark read
+     * @param userId         owner making the request (ownership guard)
+     * @throws RuntimeException if no notification with that id exists for the user
+     */
     @Transactional
     public void markAsRead(UUID notificationId, UUID userId) {
         Notification notification = notificationRepository.findByIdAndUserId(notificationId, userId)
@@ -76,17 +124,40 @@ public class NotificationService {
         }
     }
 
+    /**
+     * Marks every unread notification of a user as read in one bulk UPDATE.
+     *
+     * <p>Delegates to the bulk repository query (a single statement rather than load-then-save
+     * per row) and logs how many rows were affected.
+     *
+     * @param userId owner whose notifications to mark read
+     */
     @Transactional
     public void markAllAsRead(UUID userId) {
         int updated = notificationRepository.markAllAsReadByUserId(userId);
         log.info("Marked {} notifications as read for user {}", updated, userId);
     }
 
+    /**
+     * Returns the number of unread notifications for a user (for the badge counter). Read-only.
+     *
+     * @param userId owner whose unread notifications to count
+     * @return count of unread notifications
+     */
     @Transactional(readOnly = true)
     public long getUnreadCount(UUID userId) {
         return notificationRepository.countByUserIdAndReadFalse(userId);
     }
 
+    /**
+     * Maps a persisted {@link Notification} entity to its API {@link NotificationResponse} DTO.
+     *
+     * <p>Single point of entity→DTO translation so the API shape stays decoupled from the
+     * persistence model.
+     *
+     * @param n the entity to convert
+     * @return the equivalent response DTO
+     */
     private NotificationResponse toResponse(Notification n) {
         return new NotificationResponse(
                 n.getId(),

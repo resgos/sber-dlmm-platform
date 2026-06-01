@@ -59,28 +59,40 @@ public class SpasiboWritebackEntry {
     @Column(name = "amount_points", nullable = false)
     private int amountPoints;
 
+    /** Why cashback was earned; one of {@link ReasonCodes} (e.g. {@code DLMM_SWAP}). */
     @Column(name = "reason_code", nullable = false, length = 40)
     private String reasonCode;
 
+    /** Current position in the delivery state machine (see {@link Status}). */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Status status;
 
+    /** Number of ship-to-Spasibo attempts so far; drives retry backoff and
+     *  the eventual move to {@link Status#DEAD_LETTER}. */
     @Column(name = "attempt_count", nullable = false)
     private int attemptCount;
 
+    /** Last delivery error message (truncated to column length); null until first failure. */
     @Column(name = "last_error", length = 500)
     private String lastError;
 
+    /** External Spasibo BU transaction id returned on ACCEPTED; null until then. */
     @Column(name = "spasibo_tx_id", length = 64)
     private String spasiboTxId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /** When the entry reached a terminal state (ACCEPTED/REJECTED); null while in flight. */
     @Column(name = "settled_at")
     private LocalDateTime settledAt;
 
+    /**
+     * JPA lifecycle callback fired before INSERT: stamps {@link #createdAt}
+     * and defaults {@link #status} to {@link Status#PENDING} (the queue
+     * entry point) when the caller left them unset.
+     */
     @PrePersist
     public void prePersist() {
         if (createdAt == null) createdAt = LocalDateTime.now();
@@ -108,6 +120,7 @@ public class SpasiboWritebackEntry {
         public static final String ADD_LIQUIDITY = "DLMM_ADD_LIQ";
         public static final String CLAIM_FEE = "DLMM_CLAIM_FEE";
 
+        /** Non-instantiable constants holder. */
         private ReasonCodes() {}
     }
 }

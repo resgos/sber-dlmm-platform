@@ -38,25 +38,32 @@ public class MarginCallEvent {
     @Id
     private UUID id;
 
+    /** Position whose range proximity triggered the event. */
     @Column(name = "position_id", nullable = false)
     private UUID positionId;
 
+    /** Owner of the position (so the alert can be routed to one user). */
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    /** Pool the position belongs to. */
     @Column(name = "pool_id", nullable = false)
     private UUID poolId;
 
+    /** Severity: only {@code MARGIN_WARNING} (approaching) or {@code MARGIN_CALL} (out of range). */
     @Enumerated(EnumType.STRING)
     @Column(name = "event_type", nullable = false, length = 20)
     private NotificationType eventType;
 
+    /** Pool's active bin at the moment the event was raised (snapshot for the alert context). */
     @Column(name = "active_bin_id", nullable = false)
     private int activeBinId;
 
+    /** Lower bound of the position's bin range at event time. */
     @Column(name = "range_min", nullable = false)
     private int rangeMin;
 
+    /** Upper bound of the position's bin range at event time. */
     @Column(name = "range_max", nullable = false)
     private int rangeMax;
 
@@ -72,6 +79,11 @@ public class MarginCallEvent {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * JPA pre-insert hook: defaults the {@link #id} to a random UUID and the
+     * {@link #createdAt} timestamp to {@code now()} (the de-dup cooldown query
+     * orders on it) when the caller hasn't set them.
+     */
     @PrePersist
     void onCreate() {
         if (id == null) id = UUID.randomUUID();

@@ -207,12 +207,27 @@ public class YsrubService {
 
     // ── helpers ──
 
+    /**
+     * Guards that a deposit/withdrawal amount is strictly positive.
+     *
+     * @param amount the raw-unit amount to validate
+     * @param field  field name used in the error message
+     * @throws IllegalArgumentException if {@code amount <= 0}
+     */
     private void validateAmount(long amount, String field) {
         if (amount <= 0) {
             throw new IllegalArgumentException(field + " must be positive (was " + amount + ")");
         }
     }
 
+    /**
+     * Resolves a token symbol (SRUB/YSRUB) to its id, failing loudly if the seed
+     * row is missing (a deployment/migration problem, not a user error).
+     *
+     * @param symbol token symbol to resolve
+     * @return the token's id
+     * @throws TokenNotFoundException if no token row exists for the symbol
+     */
     private UUID resolveTokenId(String symbol) {
         return tokenRepository.findBySymbol(symbol)
                 .orElseThrow(() -> new TokenNotFoundException(

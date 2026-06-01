@@ -36,14 +36,25 @@ import java.util.UUID;
 @Builder
 public class B2BIssuer {
 
+    /**
+     * KYB (Know-Your-Business) review state.
+     * {@code PENDING} just registered → {@code APPROVED} (may create tokens)
+     * or {@code REJECTED} (see {@link #rejectionReason}).
+     */
     public enum KybStatus { PENDING, APPROVED, REJECTED }
 
+    /**
+     * Commercial tier driving the billing engine's pricing (#5.7):
+     * {@code BASIC} / {@code PRO} / {@code ENTERPRISE}.
+     */
     public enum Tier { BASIC, PRO, ENTERPRISE }
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    /** Russian taxpayer number (ИНН); the natural business key — DB-unique
+     *  so one legal entity maps to at most one issuer. */
     @Column(nullable = false, unique = true, length = 12)
     private String inn;
 
@@ -79,6 +90,12 @@ public class B2BIssuer {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * JPA lifecycle callback fired before INSERT: stamps {@link #createdAt}
+     * and applies safe defaults for a freshly-registered issuer —
+     * {@link KybStatus#PENDING} (awaiting review) and {@link Tier#BASIC} —
+     * when the caller left them unset.
+     */
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();

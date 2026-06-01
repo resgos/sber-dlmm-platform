@@ -70,6 +70,23 @@ public class TokenServiceClient {
         log.info("Credited {} of token {} to user {}", amount, tokenId, userId);
     }
 
+    /**
+     * Circuit-breaker fallback for {@link #credit}: invoked when the breaker is OPEN or
+     * the call failed. It deliberately re-throws rather than swallowing — a credit is
+     * money, so a failed credit must abort the enclosing {@code @Transactional} fee-claim
+     * (rolling back the accrual flip) instead of silently marking fees paid that were
+     * never credited. The user can retry once token-service recovers.
+     *
+     * <p>Referenced by name in {@code @CircuitBreaker(fallbackMethod = "creditFallback")};
+     * Resilience4j requires the same parameter list as {@link #credit} plus the trailing
+     * {@link Throwable}. {@code @SuppressWarnings("unused")} because it is only called reflectively.
+     *
+     * @param userId  the user the original credit targeted
+     * @param tokenId the token the original credit targeted
+     * @param amount  the raw amount the original credit attempted
+     * @param ex      the failure (or open-circuit signal) that triggered the fallback
+     * @throws IllegalStateException always, to force the fee-claim transaction to roll back
+     */
     @SuppressWarnings("unused")
     private void creditFallback(UUID userId, UUID tokenId, long amount, Throwable ex) {
         log.error("Token-service circuit OPEN or call failed on CREDIT "

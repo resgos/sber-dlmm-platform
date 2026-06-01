@@ -44,6 +44,53 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * The core DLMM swap engine — quotes and executes token-for-token trades by
+ * walking the pool's price-bin ladder, and hosts the quote→execute idempotency
+ * layer. This is the platform's hottest money path; correctness and
+ * money-safety dominate every design choice here.
+ *
+ * <h2>Bin-walk model (price = Y per X)</h2>
+ * A swap consumes liquidity bin by bin from the active bin outward. Per the
+ * canonical LB-DLMM with {@code price = Y/X}: an <b>X→Y</b> swap drains Y and
+ * walks DOWN into bins below the active price; a <b>Y→X</b> swap drains X and
+ * walks UP. Within a single bin the price is CONSTANT, so a trade that doesn't
+ * cross a bin boundary has zero slippage by construction. Each bin maintains the
+ * F-12 invariant {@code liquidity = reserveX·price + reserveY}; the execute path
+ * updates reserves, composition factor and per-unit fee growth so the invariant
+ * and LP fee accounting stay consistent.
+ *
+ * <h2>Money-safety ordering (do not reorder)</h2>
+ * {@link #swapTransactional} computes the whole fill, then
+ * {@code saveAndFlush}es the pool <b>before</b> the cross-service balance
+ * settlement. The flush forces the pool's optimistic-lock ({@code @Version})
+ * check to fire HERE, while still in-transaction — so a concurrent same-pool
+ * swap conflicts before any token-service deduct/credit runs, not at commit
+ * after money already moved. The outer {@link #swap} retries on that conflict;
+ * without the early flush a retry would re-run the deduct/credit and
+ * double-spend the user.
+ *
+ * <h2>Idempotency &amp; events</h2>
+ * Client-supplied {@code idempotencyKey}s are claimed once in {@link #swap}
+ * (Redis SETNX, released on genuine failure so the user can retry the same key).
+ * The {@code SwapExecuted} event is published via the transactional
+ * {@link OutboxService} inside the same DB transaction as the bin mutations, so
+ * either everything commits and Kafka eventually sees the event, or nothing
+ * does — no half-applied swaps.
+ *
+ * <h2>Amount &amp; price conventions</h2>
+ * Amounts are raw integer units (uniform ×10⁴ platform scale). All
+ * within-bin arithmetic uses {@link BigDecimal} and FLOORs to integers (the
+ * house never rounds in the user's favour). Execution price and price impact
+ * are always normalised to the spot "Y per X" frame before differencing — Y→X
+ * ratios are reciprocals of spot and would otherwise read ~100% impact.
+ *
+ * <p>Collaborators: {@link LiquidityPoolRepository}/{@link PoolBinRepository}
+ * (state), {@link TokenServiceClient} (token-active check + balance
+ * deduct/credit), {@link UserServiceClient} (fail-closed KYC + 115-ФЗ
+ * self-restriction), {@link FeeCalculator}/{@link BinMath} (fee + bin math),
+ * {@link QuoteStore} (quote persistence for the two-call flow).
+ */
 @Service
 public class SwapService {
 
@@ -78,6 +125,21 @@ public class SwapService {
      */
     private final long quoteTtlSeconds;
 
+    /**
+     * @param poolRepository     pool-row state (active bin, base price, fee
+     *                           params, TVL + fee accumulators)
+     * @param poolBinRepository  per-bin reserves/price/fee-growth read &amp;
+     *                           written during the bin walk
+     * @param tokenServiceClient token-active validation and the (non-idempotent)
+     *                           balance deduct/credit settlement
+     * @param userServiceClient  fail-closed KYC + 115-ФЗ self-restriction gate
+     * @param outbox             transactional outbox for the durable
+     *                           {@code SwapExecuted} event
+     * @param redisTemplate      Redis backing the client idempotency-key claim
+     * @param quoteStore         persistence for the quote→execute idempotency
+     *                           flow ({@link #issueQuote}/{@link #executeQuoted})
+     * @param quoteTtlSeconds    quote freshness window (default 30s)
+     */
     public SwapService(LiquidityPoolRepository poolRepository,
                        PoolBinRepository poolBinRepository,
                        TokenServiceClient tokenServiceClient,
@@ -115,6 +177,20 @@ public class SwapService {
      * Result: impact is ~0 for normal trades and grows monotonically only as
      * the swap consumes liquidity across additional bins — which is the
      * behaviour treasurers expect from "влияние на цену".
+     *
+     * <p>Package-private + static so it can be unit-tested in isolation.
+     *
+     * @param swapXtoY         true for an X→Y trade (determines which way the
+     *                         execution-price ratio must be oriented)
+     * @param consumedAmountIn gross input actually consumed (raw units)
+     * @param totalAmountOut   total output produced (raw units)
+     * @param totalFee         total fee skimmed from the input (raw units),
+     *                         excluded from the impact measure
+     * @param binsCrossed      number of bin boundaries crossed; {@code <= 0}
+     *                         means within the active bin → zero impact
+     * @param spotPrice        reference spot price (Y per X) to compare against
+     * @return absolute price impact as a percentage (4 dp); {@link BigDecimal#ZERO}
+     *         when no bin was crossed or any input is non-positive
      */
     static BigDecimal computePriceImpact(boolean swapXtoY, long consumedAmountIn,
                                          long totalAmountOut, long totalFee,
@@ -134,6 +210,26 @@ public class SwapService {
                 .setScale(4, RoundingMode.HALF_UP);
     }
 
+    /**
+     * Price a swap without executing it — a pure, read-only dry run of the bin
+     * walk that returns expected output, fee, bins crossed, execution price and
+     * price impact.
+     *
+     * <p>Mirrors the {@link #swapTransactional} fill logic exactly (same
+     * direction rules, same FLOOR rounding, same fee formula) but mutates
+     * nothing, so the figures the UI shows match what an execute would produce
+     * against current pool state. Walks at most {@link #MAX_BIN_ITERATIONS} bins
+     * as a safety bound. The spot reference is the pool's stored
+     * {@code basePrice} (not a {@code BinMath} computation over the 2^23 anchor,
+     * which overflows — see class/PoolService notes). Execution price is
+     * normalised to the "Y per X" frame for both directions.
+     *
+     * @param req quote request (pool, input token, input amount)
+     * @return the quote: consumed input, estimated output, total fee, effective
+     *         fee bps, bins crossed, execution price and price impact
+     * @throws PoolNotFoundException        if the pool does not exist
+     * @throws InsufficientLiquidityException if no output could be produced
+     */
     public SwapQuoteResponse quote(SwapQuoteRequest req) {
         LiquidityPool pool = poolRepository.findById(req.poolId())
                 .orElseThrow(() -> new PoolNotFoundException("Pool not found: " + req.poolId()));
@@ -303,6 +399,30 @@ public class SwapService {
     @Autowired
     private ApplicationContext appCtx;
 
+    /**
+     * Public swap entry point: claims the client idempotency key once, then runs
+     * the transactional swap under a bounded optimistic-lock retry loop.
+     *
+     * <p>The idempotency claim (Redis SETNX) happens here, not per retry, so a
+     * legitimate internal retry doesn't trip over its own "processing" marker.
+     * Each attempt calls {@link #swapTransactional} via the Spring bean (proxy
+     * self-invocation) so {@code @Transactional} actually fires on every retry;
+     * an {@link ObjectOptimisticLockingFailureException} from two concurrent
+     * same-pool swaps is retried up to {@link #MAX_SWAP_ATTEMPTS} times with a
+     * tiny jittered backoff to avoid synchronised retry storms. On genuine
+     * failure (validation/KYC/slippage/liquidity, or retries exhausted) the
+     * idempotency key is released best-effort so the user may retry with the
+     * SAME key; on success the key is kept so an accidental replay is rejected.
+     *
+     * @param req    swap request (pool, input token, amount, min-out, optional
+     *               idempotency key)
+     * @param userId authenticated caller, charged/credited by the trade
+     * @return the executed swap result
+     * @throws IdempotencyConflictException if the idempotency key is already in
+     *                                      flight / consumed
+     * @throws ObjectOptimisticLockingFailureException if lock contention
+     *                                      persists past the retry budget
+     */
     public SwapResponse swap(SwapRequest req, UUID userId) {
         // Idempotency must run ONCE per request, not per retry —
         // otherwise the second attempt sees its own "processing"
@@ -357,6 +477,44 @@ public class SwapService {
         }
     }
 
+    /**
+     * Execute one swap atomically: validate, walk the bins mutating reserves +
+     * fee growth, flush the pool (lock check), settle balances cross-service,
+     * then emit the durable event.
+     *
+     * <p><b>Gates (in order):</b> pool ACTIVE, input token active, caller KYC
+     * verified (fail-closed), not 115-ФЗ self-restricted, and the per-pool
+     * single-swap counterparty cap (NULL = no cap). Then the bin walk produces
+     * output/fee/bins-crossed exactly as {@link #quote} previews. The
+     * <b>slippage check</b> ({@code minAmountOut}) runs before any balance moves.
+     *
+     * <p><b>Side effects &amp; ordering — money-safety critical:</b> per bin it
+     * updates reserveX/reserveY, composition factor, and the LP fee-growth /
+     * total-fee accumulators (protocol vs LP split per
+     * {@code protocolFeePct}); it advances the pool's active bin, volatility
+     * accumulator and TVL rollups (adding only the NET input that entered bins,
+     * since fees are held in the fee accumulators not in any reserve). It then
+     * {@code saveAndFlush}es the pool so the {@code @Version} conflict surfaces
+     * BEFORE the {@link TokenServiceClient} deduct/credit — see the class
+     * Javadoc for why this prevents double-spend under the {@link #swap} retry.
+     * Finally it appends a {@code SwapExecuted} event (with txId, tokenOut,
+     * execution price and idempotency key) to the outbox in this same
+     * transaction.
+     *
+     * @param req    swap request (pool, input token, amount, min-out, idempotency key)
+     * @param userId authenticated caller, debited the input and credited the output
+     * @return the executed swap (tx id, amounts, fee, fee bps, bins crossed,
+     *         execution price, price impact)
+     * @throws PoolNotFoundException          if the pool does not exist
+     * @throws PoolNotActiveException         if the pool or input token is not active
+     * @throws ForbiddenException             if the caller is not KYC-verified
+     * @throws com.sber.dlmm.common.exception.UserSelfRestrictedException if 115-ФЗ
+     *                                        self-restriction is active
+     * @throws com.sber.dlmm.common.exception.CounterpartyLimitExceededException if
+     *                                        the amount exceeds the pool's single-swap cap
+     * @throws InsufficientLiquidityException if the walk produced no output
+     * @throws SlippageExceededException      if output is below {@code minAmountOut}
+     */
     @Transactional
     public SwapResponse swapTransactional(SwapRequest req, UUID userId) {
         // 1. Validate
@@ -655,6 +813,12 @@ public class SwapService {
      * parameters would be stronger; the contract on the test side is
      * just "the signature on execute must equal the signature on the
      * persisted quote").
+     *
+     * @param req       quote request (pool, input token, amount)
+     * @param userId    caller the quote is bound to
+     * @param signature server-derived signature stored on the quote and
+     *                  re-checked at execute time
+     * @return the priced quote (its {@code quoteId} is the execute handle)
      */
     public SwapQuoteResponse issueQuote(SwapQuoteRequest req, UUID userId, String signature) {
         SwapQuoteResponse quote = quote(req);
@@ -680,6 +844,23 @@ public class SwapService {
      * already executed, signature matches — then delegates to the
      * existing {@link #swap} path (which still gates KYC, pool-active,
      * counterparty cap, slippage etc.).
+     *
+     * <p>Checks run in a deliberate order to avoid information leaks: expiry
+     * first (a stolen-but-expired quoteId reveals nothing about the signature),
+     * then the persisted double-execute marker, then signature match. The
+     * executed-marker is flipped via {@link QuoteStore#markExecuted} BEFORE any
+     * balance mutation so a concurrent double-execute races at that narrow SETNX
+     * boundary rather than at the wide {@link #swap} boundary. The request's own
+     * amounts are ignored — the trade is rebuilt from the persisted quote
+     * ("execute what was quoted").
+     *
+     * @param req    execute request (quote id + signature)
+     * @param userId authenticated caller
+     * @return the executed swap result
+     * @throws QuoteExpiredException          if the quote is unknown/evicted or past TTL
+     * @throws QuoteAlreadyExecutedException  if the quote was already consumed
+     *                                        (or lost the concurrent execute race)
+     * @throws InvalidQuoteSignatureException if the supplied signature does not match
      */
     public SwapResponse executeQuoted(SwapExecuteRequest req, UUID userId) {
         Optional<QuotedSwap> maybeQuote = quoteStore.findById(req.quoteId());

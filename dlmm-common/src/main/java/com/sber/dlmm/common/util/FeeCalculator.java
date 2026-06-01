@@ -2,8 +2,41 @@ package com.sber.dlmm.common.util;
 
 import java.math.BigInteger;
 
+/**
+ * Pure swap-fee math on the pool-engine money path. Computes the fee charged
+ * on a swap's <em>input</em> amount as {@code base + volatility-variable},
+ * capped at {@link #MAX_FEE_BPS}, plus the volatility-accumulator (VA)
+ * update/decay helpers that drive the variable term. Stateless,
+ * side-effect-free, all-static; safe to call from any thread.
+ *
+ * <h3>Units and conventions</h3>
+ * <ul>
+ *   <li>All fee rates are in basis points (bps); 1 bp = 1/10000 of the input.</li>
+ *   <li>{@code binStep} is in bps; {@code volatilityAccumulator} (VA) is a raw
+ *       bin count (0..maxVolatility), NOT Meteora's 1e4-scaled VA — see
+ *       {@link #variableFeeBps(int, int)}.</li>
+ *   <li>Amounts are integer base units ({@code long}, the 10⁻⁴ platform scale).</li>
+ *   <li><b>Rounding is FLOOR</b> throughout (never over-charge), matching the
+ *       rest of the engine; this also keeps a calm market exactly at the base
+ *       fee.</li>
+ *   <li><b>Overflow safety:</b> the post-scale {@code amountIn * feeBps} and the
+ *       squared {@code (VA·binStep)²} are computed in {@link BigInteger}.</li>
+ * </ul>
+ *
+ * <h3>Variable-fee shape (Meteora)</h3>
+ * The surcharge follows Meteora's {@code compute_variable_fee} shape,
+ * {@code control · (VA · binStep)² / 1e11}, capped at {@link #MAX_FEE_BPS}. At
+ * {@code VA == 0} the surcharge is exactly 0, so the total reduces to the pure
+ * base fee and VA=0 outputs are byte-identical to the pre-variable-fee engine
+ * (every seeded pool has VA=0). Calibration of {@link #VARIABLE_FEE_CONTROL}
+ * is provisional pending Stage 2 economics sign-off.
+ *
+ * @see #variableFeeBps(int, int) the variable-term formula and its Meteora reference
+ * @see com.sber.dlmm.common.util.BinMath bin↔price + liquidity / fee-growth math
+ */
 public final class FeeCalculator {
 
+    /** Non-instantiable static utility holder. */
     private FeeCalculator() {}
 
     /**
@@ -14,6 +47,7 @@ public final class FeeCalculator {
      */
     public static final int MAX_FEE_BPS = 1_000;
 
+    /** Basis-point denominator (10000) used to turn a bps rate into a fraction of the amount. */
     private static final BigInteger BPS_DIVISOR = BigInteger.valueOf(10_000L);
 
     /**
@@ -65,6 +99,13 @@ public final class FeeCalculator {
      * are byte-identical to before this change (every seeded pool has VA=0). The VA
      * reference-frame wiring + per-pool control column are Stage 2 (deferred);
      * calibration is provisional pending that economics sign-off.
+     *
+     * @param amountIn             swap input amount in base units; ≤ 0 ⇒ fee 0
+     * @param baseFeeBps           pool's base fee in bps
+     * @param volatilityAccumulator current VA (raw bin count)
+     * @param binStep              bin step in bps
+     * @return the fee to deduct from {@code amountIn}, in base units, FLOOR-rounded;
+     *         0 when {@code amountIn <= 0}
      */
     public static long calculateSwapFee(long amountIn, int baseFeeBps, int volatilityAccumulator, int binStep) {
         if (amountIn <= 0) return 0;
@@ -78,7 +119,13 @@ public final class FeeCalculator {
     /**
      * Total fee rate in bps = base + variable, capped at {@link #MAX_FEE_BPS} (M-3).
      * Shared by {@code calculateSwapFee} and the pool's displayed "current dynamic
-     * fee" so the charged fee and the shown fee can never diverge.
+     * fee" so the charged fee and the shown fee can never diverge. Summed as
+     * {@code long} before the cap so the {@code base + variable} add cannot overflow.
+     *
+     * @param baseFeeBps           pool's base fee in bps
+     * @param volatilityAccumulator current VA (raw bin count)
+     * @param binStep              bin step in bps
+     * @return the effective fee rate in bps, in {@code [0, MAX_FEE_BPS]}
      */
     public static int totalFeeBps(int baseFeeBps, int volatilityAccumulator, int binStep) {
         long total = (long) baseFeeBps + variableFeeBps(volatilityAccumulator, binStep);
@@ -143,11 +190,44 @@ public final class FeeCalculator {
         return surcharge.longValueExact();
     }
 
+    /**
+     * Bumps the volatility accumulator after a swap by the (unsigned) number
+     * of bins the swap crossed, clamped to {@code maxVolatility}:
+     * {@code min(currentVA + |binsCrossed|, maxVolatility)}.
+     *
+     * <p>VA only ever rises here; it is brought back down by
+     * {@link #decayVolatilityAccumulator(int, int)} between swaps. Direction of
+     * the price move is irrelevant, hence {@code Math.abs}.
+     *
+     * @param currentVA     the bin's current volatility accumulator
+     * @param binsCrossed   bins the swap moved through (sign ignored)
+     * @param maxVolatility upper clamp for VA (per-pool ceiling)
+     * @return the new VA, in {@code [currentVA, maxVolatility]}
+     */
     public static int updateVolatilityAccumulator(int currentVA, int binsCrossed, int maxVolatility) {
         int newVA = currentVA + Math.abs(binsCrossed);
         return Math.min(newVA, maxVolatility);
     }
 
+    /**
+     * Decays the volatility accumulator toward 0 by {@code decayRate} bps of
+     * its current value: {@code currentVA · (10000 - r) / 10000}, where
+     * {@code r} is {@code decayRate} clamped to {@code [0, 10000]}. Result is
+     * floored at 0. Called periodically by the pool-engine scheduler so VA (and
+     * thus the variable fee) relaxes back to base as a market calms.
+     *
+     * <p><b>Why the clamp (C-3, math audit):</b> the scheduler derives
+     * {@code decayRate = 10000·60/decayPeriodSeconds}, which exceeds 10000 for
+     * any decay period under 60s; without the clamp {@code (10000 - decayRate)}
+     * goes negative and slams VA to 0 every tick. Clamping makes a short decay
+     * period decay fast-but-correctly instead of destroying the volatility
+     * state. Integer division rounds the decayed value down (FLOOR).
+     *
+     * @param currentVA the bin's current volatility accumulator
+     * @param decayRate decay fraction in bps (e.g. 2000 = decay 20% per tick);
+     *                  values outside {@code [0, 10000]} are clamped
+     * @return the decayed VA, ≥ 0
+     */
     public static int decayVolatilityAccumulator(int currentVA, int decayRate) {
         // C-3 (math audit): clamp the decay rate to [0, 10000]. The scheduler computes
         // decayRate = 10000*60/decayPeriodSeconds, which EXCEEDS 10000 whenever

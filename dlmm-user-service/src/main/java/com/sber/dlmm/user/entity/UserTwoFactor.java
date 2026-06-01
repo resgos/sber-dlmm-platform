@@ -43,6 +43,8 @@ import java.util.UUID;
 @Builder
 public class UserTwoFactor {
 
+    /** FK → {@code users.id}; doubles as the primary key (one 2FA row per
+     *  user, see class doc). Never reassigned ({@code updatable = false}). */
     @Id
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
@@ -55,10 +57,14 @@ public class UserTwoFactor {
     @Column(nullable = false, length = 64)
     private String secret;
 
+    /** The gate: {@code true} once setup is confirmed and 2FA is enforced at
+     *  login. A row can exist with {@code enabled == false} during begin-setup
+     *  before the user verifies their first code. Defaults to {@code false}. */
     @Column(nullable = false)
     @Builder.Default
     private boolean enabled = false;
 
+    /** Timestamp 2FA was switched on; {@code null} while still in setup. */
     @Column(name = "enabled_at")
     private LocalDateTime enabledAt;
 

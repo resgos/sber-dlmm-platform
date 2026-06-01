@@ -29,6 +29,9 @@ public class AdminAuditService {
 
     private final AdminAuditLogRepository repository;
 
+    /**
+     * @param repository the JPA repository backing {@code admin_audit_log}
+     */
     public AdminAuditService(AdminAuditLogRepository repository) {
         this.repository = repository;
     }
@@ -37,6 +40,11 @@ public class AdminAuditService {
      * Persist a single audit row. {@link Propagation#REQUIRES_NEW} so this
      * commits even if the caller's transaction rolls back — we want the
      * FAILED audit row to survive the failure that caused the rollback.
+     *
+     * <p>Also catches and logs any persistence error instead of rethrowing, so a
+     * broken audit store can never break the business path it is observing.
+     *
+     * @param row the audit row to persist
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(AdminAuditLog row) {
@@ -51,22 +59,58 @@ public class AdminAuditService {
         }
     }
 
+    /**
+     * Returns the most recent audit rows, newest first — backs the SUPER_ADMIN
+     * audit dashboard list.
+     *
+     * @param page zero-based page index (clamped to ≥ 0)
+     * @param size page size (clamped to 1..200)
+     * @return a page of audit rows ordered by {@code createdAt} descending
+     */
     @Transactional(readOnly = true)
     public Page<AdminAuditLog> recent(int page, int size) {
         return repository.findAllByOrderByCreatedAtDesc(pageable(page, size));
     }
 
+    /**
+     * Returns audit rows for a single acting user, newest first — drill-down by
+     * who performed the action.
+     *
+     * @param actorUserId the acting user's id
+     * @param page zero-based page index (clamped to ≥ 0)
+     * @param size page size (clamped to 1..200)
+     * @return a page of that actor's audit rows, newest first
+     */
     @Transactional(readOnly = true)
     public Page<AdminAuditLog> byActor(UUID actorUserId, int page, int size) {
         return repository.findByActorUserIdOrderByCreatedAtDesc(actorUserId, pageable(page, size));
     }
 
+    /**
+     * Returns audit rows touching one specific target, newest first — drill-down
+     * by which object was acted upon (e.g. a single pool or user).
+     *
+     * @param targetType the target category (e.g. {@code "POOL"})
+     * @param targetId the target's stringified id
+     * @param page zero-based page index (clamped to ≥ 0)
+     * @param size page size (clamped to 1..200)
+     * @return a page of audit rows for that target, newest first
+     */
     @Transactional(readOnly = true)
     public Page<AdminAuditLog> byTarget(String targetType, String targetId, int page, int size) {
         return repository.findByTargetTypeAndTargetIdOrderByCreatedAtDesc(
                 targetType, targetId, pageable(page, size));
     }
 
+    /**
+     * Builds a defensive {@link Pageable}: the page index floors at 0 and the
+     * size is clamped to 1..200 so a caller can't request a negative page or an
+     * unbounded result set.
+     *
+     * @param page the requested zero-based page index
+     * @param size the requested page size
+     * @return a sanitized {@link PageRequest}
+     */
     private static Pageable pageable(int page, int size) {
         return PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 200));
     }

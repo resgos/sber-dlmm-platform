@@ -36,9 +36,12 @@ public class YsrubYieldAccrual {
     @Column(name = "yield_amount", nullable = false)
     private long yieldAmount;
 
+    /** CBR overnight rate used for this accrual, in basis points
+     *  (stored for compliance replay of "what rate on day X"). */
     @Column(name = "overnight_rate_bps", nullable = false)
     private int overnightRateBps;
 
+    /** Platform spread subtracted from the overnight rate, in basis points. */
     @Column(name = "spread_bps", nullable = false)
     private int spreadBps;
 
@@ -48,6 +51,11 @@ public class YsrubYieldAccrual {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * JPA lifecycle callback fired before INSERT: stamps {@link #createdAt}
+     * with the current time when unset (the column is {@code updatable = false},
+     * so creation time is immutable).
+     */
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();

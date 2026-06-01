@@ -43,6 +43,11 @@ import java.util.UUID;
 @Builder
 public class B2BInvoice {
 
+    /**
+     * Invoice lifecycle state: {@code ISSUED} (raised, unpaid) →
+     * {@code PAID} (settled, see {@link #paidAt}) or {@code OVERDUE}
+     * (past due, unpaid); {@code CANCELLED} = voided.
+     */
     public enum Status { ISSUED, PAID, OVERDUE, CANCELLED }
 
     @Id
@@ -58,24 +63,34 @@ public class B2BInvoice {
     @Column(name = "period_end", nullable = false)
     private LocalDate periodEnd;
 
+    /** One-off listing fee, SRUB-equivalent units (charged only in the
+     *  first invoice after KYB-APPROVED; 0 otherwise). */
     @Column(name = "listing_fee", nullable = false)
     private long listingFee;
 
+    /** Monthly recurring retainer, SRUB-equivalent units (tier-dependent). */
     @Column(name = "retainer_fee", nullable = false)
     private long retainerFee;
 
+    /** Volume-based fee for the period, SRUB-equivalent units. */
     @Column(name = "volume_fee", nullable = false)
     private long volumeFee;
 
+    /** Gross amount due = {@link #netTotal} + {@link #vatAmount}
+     *  (SRUB-equivalent units). */
     @Column(name = "gross_total", nullable = false)
     private long grossTotal;
 
+    /** НДС (VAT) portion of the gross (SRUB-equivalent units). */
     @Column(name = "vat_amount", nullable = false)
     private long vatAmount;
 
+    /** Net (pre-VAT) total = sum of the three fee components
+     *  (SRUB-equivalent units). */
     @Column(name = "net_total", nullable = false)
     private long netTotal;
 
+    /** VAT rate applied, whole percent (e.g. 20 for 20% НДС). */
     @Column(name = "vat_rate_pct", nullable = false)
     private short vatRatePct;
 
@@ -89,6 +104,10 @@ public class B2BInvoice {
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
+    /**
+     * JPA lifecycle callback fired before INSERT: stamps {@link #createdAt}
+     * and defaults {@link #status} to {@link Status#ISSUED} when unset.
+     */
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();

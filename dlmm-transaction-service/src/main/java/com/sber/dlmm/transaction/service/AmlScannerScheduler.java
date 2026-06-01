@@ -124,6 +124,14 @@ public class AmlScannerScheduler {
      * Runs all 3 detectors for one user. Each fire goes through its own
      * REQUIRES_NEW transaction so persistence + outbox happen together
      * but a failure on user N doesn't roll back user N-1's alerts.
+     *
+     * <p>Detector hits already alerted within the cooldown window are skipped
+     * (see {@link #alreadyAlertedRecently}).
+     *
+     * @param userId  the user being scanned
+     * @param userTxs that user's transactions in the scan window
+     * @param now     reference "now" for window + cooldown math
+     * @return number of new alerts fired for this user
      */
     private int scanOneUser(UUID userId, List<Transaction> userTxs, LocalDateTime now) {
         int fired = 0;
@@ -137,6 +145,14 @@ public class AmlScannerScheduler {
         return fired;
     }
 
+    /**
+     * Runs all three pure {@link AmlPatternDetectionService} detectors over one
+     * user's transactions and collects whichever fired.
+     *
+     * @param userTxs one user's transactions in the scan window
+     * @param now     reference "now" for the sub-threshold-split detector
+     * @return the detection results that fired (0–3 entries)
+     */
     private List<AmlPatternDetectionService.DetectionResult> runDetectors(
             List<Transaction> userTxs, LocalDateTime now) {
         List<AmlPatternDetectionService.DetectionResult> hits = new ArrayList<>(3);
@@ -146,6 +162,18 @@ public class AmlScannerScheduler {
         return hits;
     }
 
+    /**
+     * Dedup guard: true if an alert of the same pattern already fired for this
+     * user inside the cooldown window, so the scanner doesn't re-raise the same
+     * alert every tick while the underlying pattern persists.
+     *
+     * @param userId  user to check
+     * @param pattern alert pattern to check
+     * @param now     reference "now"; the cooldown cutoff is {@code now} minus
+     *                the configured cooldown hours
+     * @return {@code true} if a matching recent alert exists (suppress),
+     *         {@code false} otherwise (allow)
+     */
     private boolean alreadyAlertedRecently(UUID userId, AmlAlert.Pattern pattern, LocalDateTime now) {
         LocalDateTime cooldownCutoff = now.minus(Duration.ofHours(cooldownHours));
         Optional<AmlAlert> existing = alertRepository
@@ -163,6 +191,14 @@ public class AmlScannerScheduler {
      * Each alert persistence + outbox emit runs in its own short
      * REQUIRES_NEW transaction so one failure doesn't block other
      * detectors for the same user.
+     *
+     * <p>Persisting the {@link AmlAlert} row and appending the outbox event
+     * share the one transaction (transactional outbox) so the compliance event
+     * can never be emitted without the row, or vice versa. A loud WARN is
+     * logged after commit.
+     *
+     * @param userId user the alert is for
+     * @param result the detector result to persist and publish
      */
     private void persistAndPublish(UUID userId, AmlPatternDetectionService.DetectionResult result) {
         TransactionTemplate tt = new TransactionTemplate(txManager);
@@ -196,6 +232,15 @@ public class AmlScannerScheduler {
     /**
      * Outbox payload — notification-service / compliance email gateway
      * consume from compliance-events topic and route as appropriate.
+     *
+     * @param alertId          persisted alert row id
+     * @param userId           user the alert concerns
+     * @param pattern          which detector fired
+     * @param severity         alert severity
+     * @param transactionCount transactions forming the evidence
+     * @param totalAmount      aggregate amount across the evidence
+     * @param evidenceJson     compact JSON evidence snippet
+     * @param detectedAt       when the alert row was created
      */
     public record AmlAlertEventPayload(
             UUID alertId,

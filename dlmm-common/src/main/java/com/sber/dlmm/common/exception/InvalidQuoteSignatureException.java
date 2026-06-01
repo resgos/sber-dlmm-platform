@@ -12,8 +12,14 @@ package com.sber.dlmm.common.exception;
  * (or, in the OTC desk pattern, an HMAC over the quoted parameters)
  * — the test treats it as an opaque string so the contract pins
  * "wrong signature ⇒ rejected" without coupling to the chosen scheme.
+ *
+ * <p>Rendered by {@link GlobalExceptionHandler} as <b>HTTP 403</b> with error code
+ * {@code "INVALID_QUOTE_SIGNATURE"}.
  */
 public class InvalidQuoteSignatureException extends DlmmException {
+    /**
+     * @param message human-readable detail about the signature mismatch (surfaced in the error body)
+     */
     public InvalidQuoteSignatureException(String message) {
         super(message, "INVALID_QUOTE_SIGNATURE", 403);
     }

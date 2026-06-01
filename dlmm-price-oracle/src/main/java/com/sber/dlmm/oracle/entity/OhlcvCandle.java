@@ -46,10 +46,12 @@ import java.util.UUID;
 @Builder
 public class OhlcvCandle {
 
+    /** Surrogate primary key (server-generated UUID). */
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    /** Pool this candle aggregates swaps for; part of the (pool, interval, openTime) unique key. */
     @Column(name = "pool_id", nullable = false)
     private UUID poolId;
 
@@ -61,15 +63,19 @@ public class OhlcvCandle {
     @Column(name = "open_time", nullable = false)
     private LocalDateTime openTime;
 
+    /** Open: execution price of the first swap in the bucket (quote-per-base ratio). */
     @Column(name = "open_price", nullable = false, precision = 30, scale = 18)
     private BigDecimal openPrice;
 
+    /** High: maximum swap execution price observed in the bucket. */
     @Column(name = "high_price", nullable = false, precision = 30, scale = 18)
     private BigDecimal highPrice;
 
+    /** Low: minimum swap execution price observed in the bucket. */
     @Column(name = "low_price", nullable = false, precision = 30, scale = 18)
     private BigDecimal lowPrice;
 
+    /** Close: execution price of the last swap in the bucket (quote-per-base ratio). */
     @Column(name = "close_price", nullable = false, precision = 30, scale = 18)
     private BigDecimal closePrice;
 
@@ -77,6 +83,7 @@ public class OhlcvCandle {
     @Column(name = "volume_in", nullable = false)
     private long volumeIn;
 
+    /** Number of swaps aggregated into this bucket (the tick count behind the OHLC values). */
     @Column(name = "swap_count", nullable = false)
     private int swapCount;
 }

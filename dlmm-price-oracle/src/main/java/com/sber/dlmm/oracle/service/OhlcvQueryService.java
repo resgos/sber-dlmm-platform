@@ -29,6 +29,11 @@ public class OhlcvQueryService {
 
     private final OhlcvCandleRepository repository;
 
+    /**
+     * Creates the query service with its read-only candle repository.
+     *
+     * @param repository repository used to page recent candles for a pool
+     */
     public OhlcvQueryService(OhlcvCandleRepository repository) {
         this.repository = repository;
     }
@@ -38,10 +43,19 @@ public class OhlcvQueryService {
      * at the requested {@code intervalSec}, ordered oldest-first
      * (TradingView convention).
      *
+     * <p>WHY the clamp + reverse: the repository query is DESC and paged, so we
+     * cap {@code limit} to {@link #MAX_LIMIT} to bound the payload, then reverse
+     * to ASC so the chart paints left→right chronologically.
+     *
+     * @param poolId      pool whose candles to fetch
      * @param intervalSec only 60 is supported today; higher intervals
      *                    are emitted by a future hourly roll-up job
      *                    (Sprint 10) but rejected here for now to
      *                    avoid silently serving empty arrays
+     * @param limit       requested candle count; clamped to the range
+     *                    {@code 1..}{@link #MAX_LIMIT}
+     * @return candles oldest-first, or an empty list when the interval is
+     *         unsupported or the pool has no candles
      */
     @Transactional(readOnly = true)
     public List<OhlcvCandleResponse> getCandles(UUID poolId, int intervalSec, int limit) {

@@ -37,10 +37,12 @@ import java.util.UUID;
 @Builder
 public class AutoClaimPolicy {
 
+    /** Primary key: the owning user. Exactly one policy row per user. */
     @Id
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
+    /** Master on/off switch; only {@code true} policies are walked by the scheduler. */
     @Builder.Default
     @Column(name = "enabled", nullable = false)
     private boolean enabled = false;
@@ -71,9 +73,14 @@ public class AutoClaimPolicy {
     @Column(name = "skip_pool_ids", length = 4_096)
     private String skipPoolIds;
 
+    /** Last time the policy was created or modified; maintained by {@link #touchTimestamp()}. */
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /**
+     * JPA lifecycle hook: refreshes {@link #updatedAt} to the current time on
+     * every insert and update so the column always reflects the latest change.
+     */
     @PrePersist
     @PreUpdate
     public void touchTimestamp() {

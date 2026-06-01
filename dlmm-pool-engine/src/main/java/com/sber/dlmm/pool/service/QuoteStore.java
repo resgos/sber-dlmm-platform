@@ -18,10 +18,19 @@ import java.util.UUID;
  */
 public interface QuoteStore {
 
-    /** Persist a fresh quote with the configured TTL. */
+    /**
+     * Persist a fresh quote with the configured TTL.
+     *
+     * @param quote the quote to store, keyed by its {@code quoteId}
+     */
     void save(QuotedSwap quote);
 
-    /** Look up a quote by id; empty when expired (Redis evicted it) or never issued. */
+    /**
+     * Look up a quote by id; empty when expired (Redis evicted it) or never issued.
+     *
+     * @param quoteId id of the quote to fetch
+     * @return the quote (with any persisted executed-marker applied), or empty
+     */
     Optional<QuotedSwap> findById(UUID quoteId);
 
     /**
@@ -30,6 +39,10 @@ public interface QuoteStore {
      * was already consumed (this is the double-execute guard's hook).
      * Implementations must serialize concurrent calls — Redis WATCH/MULTI
      * or a similar SET-IF-MATCH is fine.
+     *
+     * @param quoteId id of the quote to mark executed
+     * @return {@code true} if this call won the marker (first execute),
+     *         {@code false} if it was already marked
      */
     boolean markExecuted(UUID quoteId);
 }

@@ -40,11 +40,24 @@ public class LimitOrderBalanceWriter {
 
     private final JdbcTemplate jdbcTemplate;
 
+    /**
+     * @param jdbcTemplate template for the atomic UPSERT into {@code user_balances}
+     *                     (same DataSource as JPA → same tx as the caller)
+     */
     public LimitOrderBalanceWriter(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    /** Credit {@code amount} raw units of {@code tokenId} to {@code userId}; creates the row if absent. */
+    /**
+     * Credit {@code amount} raw units of {@code tokenId} to {@code userId};
+     * creates the row if absent. Runs inside the caller's transaction so the
+     * credit commits/rolls back atomically with the caller's status change.
+     * A non-positive amount is a no-op.
+     *
+     * @param userId  balance owner to credit
+     * @param tokenId token being credited
+     * @param amount  raw units to add (≤ 0 → no-op)
+     */
     public void credit(UUID userId, UUID tokenId, long amount) {
         if (amount <= 0) return;
         jdbcTemplate.update(CREDIT_SQL, userId, tokenId, amount);

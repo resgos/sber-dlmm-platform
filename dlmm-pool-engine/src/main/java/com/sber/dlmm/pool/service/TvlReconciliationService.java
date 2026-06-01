@@ -69,6 +69,11 @@ public class TvlReconciliationService {
     private final java.util.concurrent.ConcurrentMap<UUID, AtomicLong> driftYByPool =
             new java.util.concurrent.ConcurrentHashMap<>();
 
+    /**
+     * @param poolRepository    source of pools and their cached TVL rollups
+     * @param poolBinRepository runs the per-pool {@code SUM(reserve_x/y)} aggregate
+     * @param meterRegistry     registry the per-pool drift gauges are registered into
+     */
     public TvlReconciliationService(LiquidityPoolRepository poolRepository,
                                      PoolBinRepository poolBinRepository,
                                      MeterRegistry meterRegistry) {
@@ -77,6 +82,19 @@ public class TvlReconciliationService {
         this.meterRegistry = meterRegistry;
     }
 
+    /**
+     * Daily cron: for every pool, compare the cached {@code totalTvlX/Y} rollup
+     * against a fresh {@code SUM} of all its bin reserves, publish the absolute
+     * drift into per-pool Micrometer gauges, and WARN when the relative drift
+     * exceeds {@link #DRIFT_WARN_THRESHOLD}.
+     *
+     * <p>Read-only by design: it never auto-corrects the rollup, because a
+     * non-zero drift signals a real bug in a swap/add/remove code path that the
+     * operator should see and decide how to handle — silently clobbering the
+     * rollup would mask the defect. The gauges persist the last-run drift so
+     * it's queryable from Prometheus between cron runs. A tiny FLOOR-rounding
+     * drift is expected and stays well under the threshold.
+     */
     @Scheduled(cron = "${dlmm.pool.tvl-reconciliation-cron:0 34 3 * * *}")
     @Transactional(readOnly = true)
     public void reconcile() {
@@ -132,6 +150,12 @@ public class TvlReconciliationService {
                 pools.size(), drifted, DRIFT_WARN_THRESHOLD * 100);
     }
 
+    /**
+     * Format a drift ratio as a 4-dp percentage string for the WARN log.
+     *
+     * @param ratio drift fraction (e.g. {@code 0.001})
+     * @return the value ×100 formatted to 4 decimals (e.g. {@code "0.1000"})
+     */
     private static String formatPct(double ratio) {
         return String.format("%.4f", ratio * 100);
     }

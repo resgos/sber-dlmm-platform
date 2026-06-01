@@ -64,6 +64,14 @@ public class LimitOrderService {
     private final LimitOrderBalanceWriter balanceWriter;
     private final OutboxService outbox;
 
+    /**
+     * @param poolRepository     pool lookup + status check for placement
+     * @param orderRepository    limit-order persistence (+ idempotency lookup)
+     * @param tokenServiceClient escrow deduct on placement + symbol resolution
+     * @param userServiceClient  KYC + 115-ФЗ self-restriction gate
+     * @param balanceWriter      in-transaction refund credit on cancel
+     * @param outbox             transactional outbox for placed/cancelled events
+     */
     public LimitOrderService(LiquidityPoolRepository poolRepository,
                              LimitOrderRepository orderRepository,
                              TokenServiceClient tokenServiceClient,
@@ -78,6 +86,31 @@ public class LimitOrderService {
         this.outbox = outbox;
     }
 
+    /**
+     * Place a limit order, escrowing the input token at placement.
+     *
+     * <p>Idempotent on {@code idempotencyKey} (a repeat returns the already-placed
+     * order, rejecting a key reused by a different user). Validates pool ACTIVE,
+     * KYC, and the 115-ФЗ self-restriction gate, then a positive price and
+     * {@code amountIn ≥ 1}. SELL escrows X and will pay Y = in·price; BUY escrows
+     * Y and will pay X = in/price — the payout is pre-computed now (floored, via
+     * {@link #computeAmountOut}) and stored on the order so the watcher fill is a
+     * pure credit. The escrow {@link TokenServiceClient#deductBalance} is
+     * non-idempotent with no retry: on failure the transaction rolls back and no
+     * order row persists. A {@code LimitOrderPlaced} event is appended to the
+     * outbox in this transaction.
+     *
+     * @param req    order request (pool, side, amountIn, limitPrice, idempotency key)
+     * @param userId authenticated placer, whose input is escrowed
+     * @return the placed (or idempotently-existing) order, with token symbols
+     * @throws ForbiddenException          if a reused idempotency key belongs to
+     *                                     another user, or the caller isn't KYC-verified
+     * @throws PoolNotFoundException       if the pool does not exist
+     * @throws PoolNotActiveException      if the pool is not active
+     * @throws UserSelfRestrictedException if 115-ФЗ self-restriction is active
+     * @throws LimitOrderException         if price/amount are invalid or the output
+     *                                     rounds to zero / overflows
+     */
     @Transactional
     public LimitOrderResponse createLimitOrder(CreateLimitOrderRequest req, UUID userId) {
         // Idempotency: a repeat with the same key returns the already-placed order.
@@ -153,6 +186,23 @@ public class LimitOrderService {
         return toResponse(order);
     }
 
+    /**
+     * Cancel an OPEN order and refund the escrow.
+     *
+     * <p>Verifies ownership and OPEN status, then credits the escrowed input back
+     * via {@link LimitOrderBalanceWriter} in-transaction and flips the status to
+     * CANCELLED. The {@code saveAndFlush} forces the {@code @Version} check so a
+     * watcher fill that committed first wins the race — the refund rolls back and
+     * a clear "it just filled" error is raised instead of double-paying. A
+     * {@code LimitOrderCancelled} event is appended to the outbox.
+     *
+     * @param orderId order to cancel
+     * @param userId  authenticated owner
+     * @return the cancelled order, with token symbols
+     * @throws LimitOrderException if the order is missing, not OPEN, or it filled
+     *                             concurrently during cancel
+     * @throws ForbiddenException  if the order is not the caller's
+     */
     @Transactional
     public LimitOrderResponse cancelLimitOrder(UUID orderId, UUID userId) {
         LimitOrder order = orderRepository.findById(orderId)
@@ -183,6 +233,13 @@ public class LimitOrderService {
         return toResponse(order);
     }
 
+    /**
+     * List a user's orders, newest first, optionally filtered by status.
+     *
+     * @param userId owner whose orders to return
+     * @param status status filter, or {@code null} for all statuses
+     * @return the user's orders (with token symbols), most recent first
+     */
     @Transactional(readOnly = true)
     public List<LimitOrderResponse> getUserOrders(UUID userId, LimitOrderStatus status) {
         List<LimitOrder> orders = (status == null)
@@ -191,6 +248,14 @@ public class LimitOrderService {
         return toResponseList(orders);
     }
 
+    /**
+     * List a user's orders in a single pool, newest first — backs the per-pool
+     * order panel.
+     *
+     * @param userId owner whose orders to return
+     * @param poolId pool to filter by
+     * @return the user's orders in that pool (with token symbols), most recent first
+     */
     @Transactional(readOnly = true)
     public List<LimitOrderResponse> getUserPoolOrders(UUID userId, UUID poolId) {
         return toResponseList(orderRepository.findByUserIdAndPoolIdOrderByCreatedAtDesc(userId, poolId));
@@ -200,6 +265,12 @@ public class LimitOrderService {
      * Output amount (raw units) a fill would credit, floored. Package-private +
      * static so the watcher and tests share one definition. Throws if the order
      * would round to zero output or overflow a long.
+     *
+     * @param side     order side (SELL → Y = in·price; BUY → X = in/price)
+     * @param amountIn escrowed input (raw units)
+     * @param price    limit price (Y per X)
+     * @return floored output the fill will credit (≥ 1)
+     * @throws LimitOrderException if the output rounds to zero or exceeds {@code Long.MAX_VALUE}
      */
     static long computeAmountOut(LimitOrderSide side, long amountIn, BigDecimal price) {
         BigDecimal out = (side == LimitOrderSide.SELL)
@@ -215,12 +286,25 @@ public class LimitOrderService {
         return floored.longValueExact();
     }
 
+    /**
+     * Map one order to its API response, resolving the in/out token symbols.
+     *
+     * @param o the order
+     * @return the response with token symbols populated
+     */
     private LimitOrderResponse toResponse(LimitOrder o) {
         Map<UUID, TokenInfo> tokens = tokenServiceClient.getTokensByIds(
                 List.of(o.getTokenInId(), o.getTokenOutId()));
         return LimitOrderResponse.of(o, symbol(tokens, o.getTokenInId()), symbol(tokens, o.getTokenOutId()));
     }
 
+    /**
+     * Map a list of orders to responses, resolving all token symbols in ONE
+     * batch call (dedup'd across orders) rather than per order.
+     *
+     * @param orders the orders to map (may be empty)
+     * @return responses with token symbols populated (empty list if no orders)
+     */
     private List<LimitOrderResponse> toResponseList(List<LimitOrder> orders) {
         if (orders.isEmpty()) return List.of();
         Set<UUID> ids = new HashSet<>(orders.size() * 2);
@@ -234,11 +318,25 @@ public class LimitOrderService {
                 .toList();
     }
 
+    /**
+     * Look up a token's symbol in a pre-fetched map, tolerating a missing entry.
+     *
+     * @param tokens id → token-info map
+     * @param id     token id to resolve
+     * @return the symbol, or {@code null} if not present
+     */
     private static String symbol(Map<UUID, TokenInfo> tokens, UUID id) {
         TokenInfo t = tokens.get(id);
         return t == null ? null : t.symbol();
     }
 
+    /**
+     * Normalise a blank-or-null string to {@code null} so an empty idempotency
+     * key is treated as "absent" rather than a real key.
+     *
+     * @param s the candidate string
+     * @return {@code null} if {@code s} is null/blank, else {@code s}
+     */
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s;
     }

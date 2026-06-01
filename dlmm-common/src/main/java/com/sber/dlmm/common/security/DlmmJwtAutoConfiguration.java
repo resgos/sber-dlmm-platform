@@ -34,12 +34,32 @@ import org.springframework.context.annotation.Bean;
 })
 public class DlmmJwtAutoConfiguration {
 
+    /**
+     * The shared {@link JwtTokenProvider}, bound to the cluster-wide signing
+     * secret. {@code @ConditionalOnMissingBean} lets a service override it (e.g.
+     * user-service supplies its own issuing provider).
+     *
+     * @param secret the value of {@code dlmm.jwt.secret} (required — boot fails
+     *               if unset; length is validated by
+     *               {@code SecretValidationOnStartup})
+     * @return the singleton token provider
+     */
     @Bean
     @ConditionalOnMissingBean
     public JwtTokenProvider dlmmJwtTokenProvider(@Value("${dlmm.jwt.secret}") String secret) {
         return new JwtTokenProvider(secret);
     }
 
+    /**
+     * The inbound {@link JwtAuthenticationFilter}, wired with the token provider
+     * and whichever {@link JwtRevocationService} won (Redis-backed when
+     * available, otherwise the no-op below). Registering it as a bean lets each
+     * service insert it into its own {@code SecurityFilterChain}.
+     *
+     * @param provider the shared token provider
+     * @param revocationService the revocation denylist consulted per request
+     * @return the inbound JWT filter
+     */
     @Bean
     @ConditionalOnMissingBean
     public JwtAuthenticationFilter dlmmJwtAuthenticationFilter(JwtTokenProvider provider,
@@ -53,6 +73,9 @@ public class DlmmJwtAutoConfiguration {
      * already exists ({@link DlmmJwtRedisRevocationAutoConfiguration}
      * registers its Redis-backed variant first when Redis is on the
      * classpath, so this one is the actual fallback).
+     *
+     * @return a {@link NoopJwtRevocationService} used only when no Redis-backed
+     *         bean exists
      */
     @Bean
     @ConditionalOnMissingBean

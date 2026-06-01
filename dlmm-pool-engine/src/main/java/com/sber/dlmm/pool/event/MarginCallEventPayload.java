@@ -21,6 +21,18 @@ import java.util.UUID;
  * MARGIN_WARNING this is informational; for MARGIN_CALL it's an SLA target
  * for risk-committee post-mortem. Null tolerated for back-compat with
  * pre-5.10 stored events.
+ *
+ * @param eventId               unique id of this margin event (consumer dedup key)
+ * @param positionId            the LP position whose range is at risk
+ * @param userId                owner of the position (alert recipient)
+ * @param poolId                the pool the position belongs to
+ * @param eventType             margin severity — MARGIN_WARNING (informational) or MARGIN_CALL (action required)
+ * @param activeBinId           the pool's current active bin at emission time
+ * @param rangeMin              lower bound (inclusive) of the position's bin range
+ * @param rangeMax              upper bound (inclusive) of the position's bin range
+ * @param distanceFromBoundary  how many bins the active bin has drifted past the nearest range edge
+ * @param emittedAt             when the margin event was produced
+ * @param rebalanceDeadline     working-day-aware deadline (T+N) for the treasurer to rebalance; null for pre-5.10 events
  */
 public record MarginCallEventPayload(
         UUID eventId,

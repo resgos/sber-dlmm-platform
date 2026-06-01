@@ -41,8 +41,17 @@ import java.util.UUID;
 @Builder
 public class SpasiboOperation {
 
+    /**
+     * Kind of SberSpasibo operation this row records.
+     * {@code MINT} = points credited from the Spasibo BU webhook;
+     * {@code CONVERT} = user-initiated SSPAS → SRUB conversion.
+     */
     public enum OpType { MINT, CONVERT }
 
+    /**
+     * Terminal outcome of the operation. {@code COMPLETED} on success;
+     * {@code FAILED} when the flow errored (see {@link #errorMessage}).
+     */
     public enum Status { COMPLETED, FAILED }
 
     @Id
@@ -53,9 +62,11 @@ public class SpasiboOperation {
     @Column(name = "op_type", nullable = false, length = 20)
     private OpType opType;
 
+    /** User whose Spasibo/SRUB balance this operation moves. */
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
+    /** SberSpasibo points involved (integer point count, not a ×10⁴ amount). */
     @Column(nullable = false)
     private long points;
 
@@ -63,6 +74,8 @@ public class SpasiboOperation {
     @Column(name = "rub_amount")
     private Long rubAmount;
 
+    /** Platform-wide unique external reference; the idempotency anchor — a
+     *  replay of the same reference returns the existing row. */
     @Column(nullable = false, unique = true, length = 128)
     private String reference;
 
@@ -76,6 +89,11 @@ public class SpasiboOperation {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * JPA lifecycle callback fired before INSERT: defaults {@link #createdAt}
+     * to now and {@link #status} to {@link Status#COMPLETED} when the caller
+     * left them unset, so callers can persist a minimally-populated row.
+     */
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();

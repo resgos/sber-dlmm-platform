@@ -96,6 +96,10 @@ public class PoolProMetricsService {
             .expireAfterWrite(Duration.ofHours(1))
             .build();
 
+    /**
+     * @param priceRepository source of the daily-mean price series the
+     *                        vol/Sharpe/max-drawdown metrics are computed from
+     */
     public PoolProMetricsService(PoolPriceHistoryRepository priceRepository) {
         this.priceRepository = priceRepository;
     }
@@ -103,6 +107,7 @@ public class PoolProMetricsService {
     /**
      * Compute or fetch cached pro metrics for {@code poolId}.
      *
+     * @param poolId pool to summarise (null → unreliable empty result)
      * @return metrics with {@code isReliable=false} when the sample is
      *         too small or anything in the pipeline throws. Never null.
      */
@@ -119,11 +124,23 @@ public class PoolProMetricsService {
      * Drop the memoised value so the next call recomputes. Useful when
      * a price-oracle backfill lands and stakeholders want to see new
      * numbers before the TTL elapses.
+     *
+     * @param poolId pool whose cached metrics to evict (null → no-op)
      */
     public void invalidate(UUID poolId) {
         if (poolId != null) metricsCache.invalidate(poolId);
     }
 
+    /**
+     * Compute (uncached) the risk metrics for a pool from its 30-day daily-mean
+     * price series. Returns {@link ProMetricsDto#unreliable(int)} when fewer
+     * than {@link #MIN_RELIABLE_SAMPLE} points exist (annualisation amplifies
+     * noise below that) or when anything in the pipeline throws — the comparator
+     * page degrades to a missing cell rather than a 500.
+     *
+     * @param poolId pool to summarise
+     * @return computed metrics, or an unreliable result on a thin sample / error
+     */
     private ProMetricsDto computeUncached(UUID poolId) {
         try {
             List<DailyPrice> series = priceRepository.findDailyMeanPricesForPool(poolId, WINDOW_DAYS);
@@ -164,6 +181,9 @@ public class PoolProMetricsService {
      * fires, but the SQL aggregation could produce a zero on a corner
      * case (all prices for the day were null after filtering) and the
      * defensive skip costs nothing.
+     *
+     * @param prices ordered daily price series
+     * @return array of {@code prices.length - 1} simple returns (empty if &lt; 2 prices)
      */
     static double[] dailyReturns(double[] prices) {
         if (prices.length < 2) return new double[0];
@@ -185,6 +205,9 @@ public class PoolProMetricsService {
      *
      * <p>Returns 0 when fewer than 2 returns are available (no
      * dispersion to measure).
+     *
+     * @param returns daily simple returns
+     * @return annualised volatility (stddev × √365), or 0 for &lt; 2 returns
      */
     static double annualisedVolatility(double[] returns) {
         int n = returns.length;
@@ -206,6 +229,10 @@ public class PoolProMetricsService {
      * up, and a zero-vol Sharpe is mathematically undefined anyway.
      * A pool with constant price (or only one return point) gets a
      * zero Sharpe, which the UI tints amber ("no signal").
+     *
+     * @param returns    daily simple returns
+     * @param volatility annualised volatility (the denominator)
+     * @return the Sharpe ratio, or 0 when there are no returns or zero volatility
      */
     static double sharpeRatio(double[] returns, double volatility) {
         if (returns.length == 0) return 0.0;
@@ -222,6 +249,9 @@ public class PoolProMetricsService {
      *
      * <p>Returns 0 for monotonically-increasing series (no drawdown
      * ever observed) and for series of length &lt; 2.
+     *
+     * @param prices ordered daily price series
+     * @return worst observed peak-to-trough decline as a positive fraction
      */
     static double maxDrawdown(double[] prices) {
         if (prices.length < 2) return 0.0;
@@ -236,6 +266,13 @@ public class PoolProMetricsService {
         return maxDd;
     }
 
+    /**
+     * Arithmetic mean of an array, returning 0 for an empty array (so callers
+     * needn't guard the length).
+     *
+     * @param arr values to average
+     * @return the mean, or 0 when {@code arr} is empty
+     */
     private static double mean(double[] arr) {
         if (arr.length == 0) return 0.0;
         double sum = 0.0;

@@ -62,6 +62,12 @@ public class SpasiboService {
      * concurrent calls with the same reference may both pass the dedup check
      * but only one will succeed the unique-constraint insert; the loser is
      * retried and finds the winner's row on the second pass.
+     *
+     * @param userId    user to credit SSPAS to
+     * @param points    points earned; credited 1:1 as raw SSPAS units (must be &gt; 0)
+     * @param reference Spasibo BU event reference; the idempotency anchor (required)
+     * @return the existing operation on replay, otherwise the newly recorded MINT op
+     * @throws IllegalArgumentException if {@code points <= 0} or {@code reference} is blank
      */
     @Transactional
     public SpasiboOperation handleMintWebhook(UUID userId, long points, String reference) {
@@ -104,6 +110,13 @@ public class SpasiboService {
      * <p>Rate currently linear: rubAmount = points × conversionRate. For
      * tiered rates ("first 1000 points at 1.5×, then 1×") swap the rate
      * field for a rate-table lookup in Sprint 6+.
+     *
+     * @param userId    user whose SSPAS is burned and SRUB credited
+     * @param points    SSPAS points to convert (must be &gt; 0)
+     * @param reference client-supplied conversion reference; the idempotency anchor (required)
+     * @return the existing operation on replay, otherwise the newly recorded CONVERT op
+     * @throws IllegalArgumentException if {@code points <= 0} or {@code reference} is blank
+     * @throws com.sber.dlmm.common.exception.InsufficientBalanceException if the user lacks the SSPAS to burn
      */
     @Transactional
     public SpasiboOperation convertToRub(UUID userId, long points, String reference) {

@@ -53,6 +53,15 @@ public class TokenServiceClient {
     private final RestTemplate restTemplate;
     private final String tokenServiceUrl;
 
+    /**
+     * Builds the client with a 3s connect / 5s read timeout and installs the
+     * bearer-forwarding interceptor so inter-service calls carry the caller's
+     * JWT (without it the downstream filter would 403).
+     *
+     * @param tokenServiceUrl base URL of dlmm-token-service, injected from
+     *                        {@code dlmm.services.token-service.url}
+     * @param builder         Spring's {@link RestTemplateBuilder}
+     */
     public TokenServiceClient(@Value("${dlmm.services.token-service.url}") String tokenServiceUrl,
                               RestTemplateBuilder builder) {
         this.tokenServiceUrl = tokenServiceUrl;
@@ -64,8 +73,12 @@ public class TokenServiceClient {
     }
 
     /**
-     * POST /api/v1/tokens/internal/deduct.
+     * POST /api/v1/tokens/internal/deduct. Debits the user's balance of the
+     * given token. Wrapped in a Resilience4j circuit breaker + retry.
      *
+     * @param userId  user to debit
+     * @param tokenId token to debit
+     * @param amount  raw amount to deduct
      * @throws InsufficientBalanceException when token-service responds 400
      *         (we treat all 4xx on this endpoint as caller-side; the only
      *         expected 4xx is insufficient balance).
@@ -95,6 +108,10 @@ public class TokenServiceClient {
      * deduct is the dangerous case — caller (B2BSettlementService) must
      * mark the settlement FAILED with a loud diagnostic so an operator
      * can reconcile manually. Saga / compensating-action design is Sprint 5+.
+     *
+     * @param userId  user to credit
+     * @param tokenId token to credit
+     * @param amount  raw amount to credit
      */
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "creditFallback")
     @Retry(name = CB_NAME)
@@ -112,6 +129,14 @@ public class TokenServiceClient {
      * exception (insufficient balance) so callers see the correct error;
      * wraps unknown errors as IllegalStateException so the surrounding
      * B2B settlement transaction rolls back instead of silently passing.
+     *
+     * @param userId  user the deduct was for
+     * @param tokenId token the deduct was for
+     * @param amount  raw amount the deduct was for
+     * @param ex      the failure that triggered the fallback
+     * @throws InsufficientBalanceException if {@code ex} is one (re-thrown verbatim)
+     * @throws IllegalStateException        for any other failure, so the caller's
+     *         transaction rolls back rather than silently succeeding
      */
     @SuppressWarnings("unused")
     private void deductFallback(UUID userId, UUID tokenId, long amount, Throwable ex) {
@@ -125,6 +150,13 @@ public class TokenServiceClient {
      * Fallback for {@link #credit(UUID, UUID, long)}. Same pattern; credit
      * failure is the more dangerous case (already deducted, can't credit) so
      * the loud log entry is doubly important — an operator must reconcile.
+     *
+     * @param userId  user the credit was for
+     * @param tokenId token the credit was for
+     * @param amount  raw amount the credit was for
+     * @param ex      the failure that triggered the fallback
+     * @throws IllegalStateException always, after logging — surfaces the
+     *         failure to the caller (which flags the settlement for reconciliation)
      */
     @SuppressWarnings("unused")
     private void creditFallback(UUID userId, UUID tokenId, long amount, Throwable ex) {
@@ -133,6 +165,11 @@ public class TokenServiceClient {
         throw new IllegalStateException("Token service unavailable for credit: " + ex.getMessage(), ex);
     }
 
+    /**
+     * Builds JSON request headers for the internal deduct/credit POSTs.
+     *
+     * @return headers with {@code Content-Type: application/json}
+     */
     private static HttpHeaders jsonHeaders() {
         HttpHeaders h = new HttpHeaders();
         h.setContentType(MediaType.APPLICATION_JSON);
@@ -143,6 +180,8 @@ public class TokenServiceClient {
      * Copies the Authorization header from the currently-handling request
      * onto every outbound call. Quiet no-op if there's no servlet request
      * in scope (e.g. scheduled job — none exist yet but future-proof).
+     *
+     * @return an interceptor that forwards the inbound bearer token downstream
      */
     private static ClientHttpRequestInterceptor bearerForwardingInterceptor() {
         return (request, body, execution) -> {
@@ -164,6 +203,10 @@ public class TokenServiceClient {
     /**
      * Wire-compatible with token-service's {@code InternalBalanceRequest}.
      * Local copy so transaction-service doesn't depend on dlmm-token-service.
+     *
+     * @param userId  target user
+     * @param tokenId target token
+     * @param amount  raw amount to deduct/credit
      */
     public record InternalBalanceRequest(UUID userId, UUID tokenId, long amount) {}
 }

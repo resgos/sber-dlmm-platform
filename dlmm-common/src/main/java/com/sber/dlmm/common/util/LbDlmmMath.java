@@ -71,6 +71,7 @@ public final class LbDlmmMath {
 
     private static final MathContext MC = MathContext.DECIMAL128;
 
+    /** Non-instantiable static utility holder. */
     private LbDlmmMath() {}
 
     /**
@@ -82,6 +83,10 @@ public final class LbDlmmMath {
      * should round-down (FLOOR) the result, mirroring how the existing
      * {@code PoolBin.liquidity} long is treated.
      *
+     * @param reserveX token_x reserve of the bin (integer base units)
+     * @param reserveY token_y reserve of the bin (integer base units)
+     * @param binPrice the bin price, Y per 1 X; must be &gt; 0
+     * @return the bin's liquidity {@code L} in token_y units (fractional)
      * @throws IllegalArgumentException if {@code binPrice <= 0}
      */
     public static BigDecimal liquidity(long reserveX, long reserveY, BigDecimal binPrice) {
@@ -95,6 +100,11 @@ public final class LbDlmmMath {
     /**
      * Composition factor {@code c = reserveY / L}, always in {@code [0,1]}
      * by construction. Returns 0 when liquidity is zero (empty bin).
+     *
+     * @param reserveY  token_y reserve of the bin (integer base units)
+     * @param liquidity the bin's liquidity {@code L} (as from {@link #liquidity})
+     * @return {@code reserveY / L} in {@code [0,1]}; {@link BigDecimal#ZERO}
+     *         when {@code liquidity} is null or ≤ 0
      */
     public static BigDecimal compositionFactor(long reserveY, BigDecimal liquidity) {
         if (liquidity == null || liquidity.signum() <= 0) {
@@ -107,6 +117,14 @@ public final class LbDlmmMath {
      * Back out X reserves from {@code L, c, binPrice}:
      * {@code x = L · (1-c) / p}. Returned as long with FLOOR rounding
      * to match the on-disk integer reserve representation.
+     *
+     * @param liquidity        the bin's liquidity {@code L} (token_y units)
+     * @param compositionFactor the bin's composition factor {@code c} in {@code [0,1]}
+     * @param binPrice         the bin price, Y per 1 X; must be &gt; 0
+     * @return token_x reserve {@code x}, FLOOR-rounded to a whole base unit
+     * @throws IllegalArgumentException if {@code binPrice <= 0}
+     * @throws ArithmeticException      if the result has a non-zero fraction
+     *         after scaling or overflows {@code long} ({@code longValueExact})
      */
     public static long reserveX(BigDecimal liquidity, BigDecimal compositionFactor, BigDecimal binPrice) {
         if (binPrice == null || binPrice.signum() <= 0) {
@@ -120,7 +138,14 @@ public final class LbDlmmMath {
     }
 
     /**
-     * Back out Y reserves from {@code L, c}: {@code y = L · c}.
+     * Back out Y reserves from {@code L, c}: {@code y = L · c}. Returned as
+     * long with FLOOR rounding to match the on-disk integer representation.
+     *
+     * @param liquidity         the bin's liquidity {@code L} (token_y units)
+     * @param compositionFactor the bin's composition factor {@code c} in {@code [0,1]}
+     * @return token_y reserve {@code y}, FLOOR-rounded to a whole base unit
+     * @throws ArithmeticException if the result has a non-zero fraction after
+     *         scaling or overflows {@code long} ({@code longValueExact})
      */
     public static long reserveY(BigDecimal liquidity, BigDecimal compositionFactor) {
         return liquidity.multiply(compositionFactor, MC)

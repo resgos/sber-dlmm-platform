@@ -12,14 +12,57 @@ import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
+/**
+ * Kafka consumer that turns raw domain events into user-facing notifications.
+ *
+ * <p>This is the heart of the notification-service: it subscribes (under the single consumer
+ * group {@code dlmm-notification-service}) to three topics and dispatches each message to the
+ * right handler purely by inspecting the JSON's <em>shape</em> — events arrive as raw strings
+ * (see {@link com.sber.dlmm.notification.config.KafkaConfig}) and are parsed field-by-field
+ * with Jackson, so an unrecognized payload is simply ignored rather than failing the consumer.
+ *
+ * <p>Topics consumed:
+ * <ul>
+ *   <li>{@code pool-events} — swaps, liquidity adds and limit-order fills (shape-routed via
+ *       {@link #determinePoolEventType(JsonNode)}); only fills/swaps/adds yield a notification,
+ *       order-placed/cancelled siblings are intentionally dropped.</li>
+ *   <li>{@code fee-events} — fee claims → {@code FEE_ACCRUED} notification.</li>
+ *   <li>{@code user-events} — KYC approval plus margin-call/-warning events (the latter
+ *       re-routed through this topic so there is one notification entry-point per user).</li>
+ * </ul>
+ *
+ * <p><strong>Idempotency / dedup:</strong> handlers are not idempotent on their own — each
+ * accepted event creates a new {@code notifications} row. At-least-once delivery is bounded by
+ * the consumer committing offsets after a successful poll; on redelivery a duplicate
+ * notification could appear. This is tolerated as low-impact (a duplicated in-app message),
+ * and a schema-level dedup key remains an explicitly deferred improvement. Every handler wraps
+ * its work in try/catch and logs failures so a single poison message can never halt the
+ * partition.
+ *
+ * <p>User-facing copy is intentionally authored in Russian here (this service owns the wording);
+ * other services only publish the structured events. The constructor and logger are generated
+ * by Lombok ({@code @RequiredArgsConstructor}/{@code @Slf4j}).
+ */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class NotificationEventListener {
 
+    /** Service that persists the crafted notifications. */
     private final NotificationService notificationService;
+    /** Jackson mapper used to parse raw event JSON field-by-field (schema-tolerant). */
     private final ObjectMapper objectMapper;
 
+    /**
+     * Consumes the {@code pool-events} topic and fans out by inferred event type.
+     *
+     * <p>Parses the record value, classifies it via {@link #determinePoolEventType(JsonNode)}
+     * (swap / liquidity-add / limit-order-fill), and delegates to the matching handler;
+     * unrecognized types are logged at DEBUG and ignored. Any parsing/handling exception is
+     * caught and logged at ERROR so the listener keeps consuming subsequent records.
+     *
+     * @param record the raw Kafka record whose value is the event JSON
+     */
     @KafkaListener(topics = "pool-events", groupId = "dlmm-notification-service")
     public void handlePoolEvents(ConsumerRecord<String, String> record) {
         try {
@@ -37,6 +80,16 @@ public class NotificationEventListener {
         }
     }
 
+    /**
+     * Consumes the {@code fee-events} topic and notifies users that claimed accrued fees.
+     *
+     * <p>Recognizes a fee-claim by the presence of both {@code positionId} and {@code claimedX}
+     * fields; for those it extracts the user and claimed X/Y amounts and creates a
+     * {@code FEE_ACCRUED} notification, storing the raw event JSON as the payload. Other event
+     * shapes on this topic are silently skipped. Exceptions are caught and logged at ERROR.
+     *
+     * @param record the raw Kafka record whose value is the fee event JSON
+     */
     @KafkaListener(topics = "fee-events", groupId = "dlmm-notification-service")
     public void handleFeeEvents(ConsumerRecord<String, String> record) {
         try {
@@ -61,6 +114,19 @@ public class NotificationEventListener {
         }
     }
 
+    /**
+     * Consumes the {@code user-events} topic, which carries both KYC approvals and margin events.
+     *
+     * <p>Margin-call / margin-warning events from the pool-engine are deliberately routed here
+     * (one notification entry-point per user) and are distinguished by carrying {@code eventType}
+     * together with {@code rangeMin}/{@code rangeMax}; those are delegated to
+     * {@link #handleMarginEvent(JsonNode, String)} and processing returns early. Otherwise a
+     * record with {@code userId} + {@code email} is treated as a KYC-approved event and produces
+     * a {@code KYC_APPROVED} welcome notification (falling back to the name "User" when
+     * {@code fullName} is absent). Exceptions are caught and logged at ERROR.
+     *
+     * @param record the raw Kafka record whose value is the user/margin event JSON
+     */
     @KafkaListener(topics = "user-events", groupId = "dlmm-notification-service")
     public void handleUserEvents(ConsumerRecord<String, String> record) {
         try {
@@ -98,6 +164,18 @@ public class NotificationEventListener {
      * the user's notification panel. notification-service is the only
      * service writing to {@code notifications} table; pool-engine
      * publishes the raw event and we craft the user-facing message here.
+     *
+     * <p>Reads the position, active bin, range bounds, distance-from-boundary and optional
+     * rebalance deadline from the event, then composes a different Russian title/message for
+     * {@code MARGIN_CALL} (out of range — fees stop accruing) versus {@code MARGIN_WARNING}
+     * (approaching the boundary). The {@code eventType} field is mapped straight onto the
+     * {@link NotificationType} enum, so it must name a valid constant.
+     *
+     * @param node       parsed margin event JSON (must contain {@code eventType}, {@code userId},
+     *                   {@code positionId}, {@code activeBinId}, {@code rangeMin}, {@code rangeMax}
+     *                   and {@code distanceFromBoundary}; {@code rebalanceDeadline} is optional)
+     * @param rawPayload the original event JSON string, stored verbatim as the notification payload
+     * @throws IllegalArgumentException if {@code eventType} is not a valid {@link NotificationType}
      */
     private void handleMarginEvent(JsonNode node, String rawPayload) {
         String eventTypeStr = node.get("eventType").asText();
@@ -133,6 +211,21 @@ public class NotificationEventListener {
         log.info("Created {} notification for user={} position={}", type, userId, positionId);
     }
 
+    /**
+     * Infers which pool event a JSON payload represents by probing for its distinguishing fields.
+     *
+     * <p>Because {@code pool-events} carries several event types as untyped JSON, classification
+     * is done by field presence (there is no explicit type discriminator on these events):
+     * {@code limitOrderId} + {@code fillPrice} → a fill; {@code tokenInId} + {@code amountIn} +
+     * {@code fee} → a swap; {@code positionId} + {@code amountX} + {@code amountY} and <em>no</em>
+     * {@code fee} → a liquidity add. Order-placed/cancelled siblings (which lack {@code fillPrice})
+     * and anything else fall through to {@code "Unknown"} and are ignored by the caller — that is
+     * intentional, only fills/swaps/adds warrant a user notification.
+     *
+     * @param node the parsed pool-event JSON
+     * @return one of {@code "LimitOrderFilledEvent"}, {@code "SwapExecutedEvent"},
+     *         {@code "LiquidityAddedEvent"}, or {@code "Unknown"}
+     */
     private String determinePoolEventType(JsonNode node) {
         // Sprint 16 — limit-order fill (unique fields limitOrderId + fillPrice;
         // the Placed/Cancelled siblings lack fillPrice so they fall through to
@@ -149,6 +242,15 @@ public class NotificationEventListener {
         return "Unknown";
     }
 
+    /**
+     * Creates a {@code SWAP_COMPLETED} notification for an executed swap.
+     *
+     * <p>Extracts the user and the in/out amounts and records a Russian confirmation summarizing
+     * the trade, storing the event JSON as the payload.
+     *
+     * @param node parsed {@code SwapExecutedEvent} JSON (expects {@code userId}, {@code amountIn},
+     *             {@code amountOut})
+     */
     private void handleSwapExecuted(JsonNode node) {
         UUID userId = UUID.fromString(node.get("userId").asText());
         long amountIn = node.get("amountIn").asLong();
@@ -164,6 +266,16 @@ public class NotificationEventListener {
         log.info("Created swap notification for user {}", userId);
     }
 
+    /**
+     * Creates a notification confirming that liquidity was added to a pool.
+     *
+     * <p>Extracts the user, pool and deposited X/Y amounts and records a Russian confirmation,
+     * storing the event JSON as the payload. Categorized as {@code SYSTEM_ALERT} (there is no
+     * dedicated liquidity-add notification type).
+     *
+     * @param node parsed {@code LiquidityAddedEvent} JSON (expects {@code userId}, {@code poolId},
+     *             {@code amountX}, {@code amountY})
+     */
     private void handleLiquidityAdded(JsonNode node) {
         UUID userId = UUID.fromString(node.get("userId").asText());
         UUID poolId = UUID.fromString(node.get("poolId").asText());
@@ -184,6 +296,11 @@ public class NotificationEventListener {
      * Sprint 16 (Meteora parity) — a limit order filled (possibly long after it
      * was placed), so the user must be told. Reuses SWAP_COMPLETED (a fill is an
      * executed trade) to avoid a cross-service NotificationType enum change.
+     *
+     * <p>Creates a fixed Russian "limit order executed — funds credited" notification for the
+     * user, storing the event JSON as the payload.
+     *
+     * @param node parsed {@code LimitOrderFilledEvent} JSON (expects {@code userId})
      */
     private void handleLimitOrderFilled(JsonNode node) {
         UUID userId = UUID.fromString(node.get("userId").asText());

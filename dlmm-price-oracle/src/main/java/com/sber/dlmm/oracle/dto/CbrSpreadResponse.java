@@ -12,6 +12,13 @@ import java.time.LocalDateTime;
  * DLMM is cheaper than official. Treasury desk uses this to gauge
  * arbitrage / efficiency: a wide positive spread on a thin pool is a
  * liquidity-call signal.
+ *
+ * @param currency        currency code being compared (e.g. {@code "USD"})
+ * @param dlmmMarketRate  DLMM internal market price of the currency, in rubles (RUB)
+ * @param cbrOfficialRate CBR official rate of the currency, in rubles (RUB)
+ * @param spreadBps       signed DLMM-vs-CBR spread in basis points (100 bps = 1%); positive = DLMM above official, negative = below
+ * @param dlmmUpdatedAt   timestamp of the DLMM market rate
+ * @param cbrUpdatedAt    timestamp of the CBR official rate
  */
 public record CbrSpreadResponse(
         String currency,           // e.g. "USD"

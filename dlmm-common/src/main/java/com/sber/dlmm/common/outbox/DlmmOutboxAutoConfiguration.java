@@ -44,6 +44,14 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class DlmmOutboxAutoConfiguration {
 
+    /**
+     * The append-side bean domain code calls inside its business transaction.
+     *
+     * @param repository   outbox row repository
+     * @param objectMapper Jackson mapper for payload serialisation
+     * @param properties   outbox config (supplies the service-name tag)
+     * @return the singleton {@link OutboxService}
+     */
     @Bean
     public OutboxService outboxService(OutboxEventRepository repository,
                                        ObjectMapper objectMapper,
@@ -51,6 +59,14 @@ public class DlmmOutboxAutoConfiguration {
         return new OutboxService(repository, objectMapper, properties);
     }
 
+    /**
+     * The scheduled drain-side bean that ships this service's rows to Kafka.
+     *
+     * @param repository    outbox row repository
+     * @param kafkaTemplate Kafka producer used to publish payloads
+     * @param properties    outbox config (service name, batch size, timeouts, retention)
+     * @return the singleton {@link OutboxDispatcher}
+     */
     @Bean
     public OutboxDispatcher outboxDispatcher(OutboxEventRepository repository,
                                               KafkaTemplate<String, String> kafkaTemplate,

@@ -26,6 +26,13 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, UUID> 
     @Query("SELECT e FROM OutboxEvent e WHERE e.service = :service AND e.publishedAt IS NULL ORDER BY e.createdAt ASC")
     List<OutboxEvent> findUnpublishedForService(String service, Pageable pageable);
 
+    /**
+     * Counts this service's still-unpublished rows — used by the dispatcher's
+     * debug log to report the remaining backlog after a tick.
+     *
+     * @param service the owning service tag
+     * @return number of rows for {@code service} with {@code publishedAt IS NULL}
+     */
     long countByServiceAndPublishedAtIsNull(String service);
 
     /**

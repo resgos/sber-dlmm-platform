@@ -13,6 +13,26 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import com.sber.dlmm.common.security.JwtAuthenticationFilter;
 
+/**
+ * HTTP security wiring for token-service.
+ *
+ * <p>The service sits behind the gateway, which already validates the JWT and
+ * injects {@code X-User-*} headers. This config still re-establishes a Spring
+ * {@link org.springframework.security.core.Authentication} per request by
+ * placing the shared {@link JwtAuthenticationFilter} (auto-configured from
+ * dlmm-common) ahead of the username/password filter, so {@code @PreAuthorize}
+ * and the URL rules below have a populated security context to evaluate.
+ *
+ * <p><b>Authorization model:</b> stateless (no HTTP session), CSRF off (token
+ * auth, not cookies). Swagger and all actuator endpoints are public; the
+ * admin-only token-lifecycle mutations (create/mint/burn/pause/unpause) and
+ * arbitrary balance lookups require {@code ADMIN}/{@code SUPER_ADMIN}; every
+ * other request must be authenticated. Method-level rules are also enabled via
+ * {@link EnableMethodSecurity} for finer-grained {@code @PreAuthorize} checks
+ * on controllers.
+ *
+ * <p>Collaborators: {@link JwtAuthenticationFilter} (token → Authentication).
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -20,10 +40,25 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    /**
+     * @param jwtAuthenticationFilter shared filter (from dlmm-common) that turns a
+     *        validated Bearer token into a Spring {@code Authentication}; installed
+     *        into the chain by {@link #securityFilterChain(HttpSecurity)}
+     */
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
+    /**
+     * Builds the single {@link SecurityFilterChain} for the service: stateless
+     * sessions, CSRF disabled, the public allow-list + admin-role rules described
+     * on the class, and the JWT filter wired in before
+     * {@link UsernamePasswordAuthenticationFilter}.
+     *
+     * @param http Spring's mutable security builder for this chain
+     * @return the assembled filter chain bean
+     * @throws Exception if Spring Security fails to assemble the chain
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http

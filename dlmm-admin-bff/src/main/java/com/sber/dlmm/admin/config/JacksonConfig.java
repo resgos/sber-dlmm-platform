@@ -26,13 +26,29 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class JacksonConfig {
 
+    /** Raised number-length cap (chars) — 10x Jackson's 1000 default, comfortably above the ~1842-digit {@code currentPrice} the seed data produces. */
     private static final int MAX_NUMBER_LEN = 10_000;
 
+    /**
+     * Contributes a customizer that loosens Jackson's numeric-parsing limit on
+     * every {@link ObjectMapper} Spring Boot builds. Without it the dashboard's
+     * pool deserialization throws on pool-engine's outsized {@code currentPrice}
+     * and the pools list silently comes back empty (see class Javadoc).
+     *
+     * @return a {@link Jackson2ObjectMapperBuilderCustomizer} that applies the
+     *         relaxed {@link StreamReadConstraints} as a post-configure step
+     */
     @Bean
     public Jackson2ObjectMapperBuilderCustomizer relaxJacksonNumberLimits() {
         return builder -> builder.postConfigurer(this::applyConstraints);
     }
 
+    /**
+     * Post-configure hook: replaces the mapper's factory stream-read constraints
+     * with one that allows numbers up to {@link #MAX_NUMBER_LEN} characters.
+     *
+     * @param mapper the fully-built mapper to mutate in place
+     */
     private void applyConstraints(ObjectMapper mapper) {
         StreamReadConstraints constraints = StreamReadConstraints.builder()
                 .maxNumberLength(MAX_NUMBER_LEN)

@@ -21,6 +21,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableJpaRepositories(basePackages = {"com.sber.dlmm.transaction", "com.sber.dlmm.common.outbox", "com.sber.dlmm.common.audit"})
 public class DlmmTransactionServiceApplication {
 
+    /**
+     * JVM entry point — boots the Spring context for transaction-service
+     * (port 8085).
+     *
+     * @param args standard command-line arguments forwarded to Spring Boot
+     */
     public static void main(String[] args) {
         SpringApplication.run(DlmmTransactionServiceApplication.class, args);
     }

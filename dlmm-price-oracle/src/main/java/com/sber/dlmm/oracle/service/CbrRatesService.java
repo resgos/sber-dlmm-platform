@@ -78,6 +78,24 @@ public class CbrRatesService {
         }
     }
 
+    /**
+     * Fetches the current CBR rates and upserts one {@code PriceFeed} per
+     * wanted currency under a {@code CBR-*} symbol.
+     *
+     * <p>WHAT: for each configured currency it finds-or-creates the feed,
+     * computes the day-over-day percentage change against the previously
+     * stored price, sets both {@code currentPrice} and {@code twapPrice} to the
+     * official rate (CBR has no intraday TWAP — the daily fixing IS the
+     * reference), and stamps the update times.
+     *
+     * <p>WHY {@code @Transactional}: all feeds for a fetch commit together, so a
+     * failure midway doesn't leave a half-updated CBR snapshot. A currency CBR
+     * didn't return is logged and skipped rather than aborting the batch.
+     *
+     * @param trigger short label for logging the cause of this run (e.g.
+     *                {@code "scheduled"}, {@code "startup"})
+     * @return the number of currency feeds successfully persisted
+     */
     @Transactional
     public int fetchAndPersist(String trigger) {
         Set<String> wanted = parseCurrencies();
@@ -124,6 +142,16 @@ public class CbrRatesService {
         return persisted;
     }
 
+    /**
+     * Parses the configured {@code dlmm.cbr.currencies} CSV into a set of
+     * upper-cased CBR char-codes.
+     *
+     * <p>WHY a set: deduplicates and ignores blank entries so a sloppy config
+     * value like {@code "USD, ,usd , EUR"} still yields a clean
+     * {@code {USD, EUR}}.
+     *
+     * @return the distinct, trimmed, upper-cased currency codes to fetch
+     */
     private Set<String> parseCurrencies() {
         Set<String> set = new HashSet<>();
         for (String s : currenciesCsv.split(",")) {

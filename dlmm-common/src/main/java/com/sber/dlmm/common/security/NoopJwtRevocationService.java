@@ -22,6 +22,14 @@ public class NoopJwtRevocationService implements JwtRevocationService {
     private final AtomicBoolean warnedRevoke = new AtomicBoolean(false);
     private final AtomicBoolean warnedCheck = new AtomicBoolean(false);
 
+    /**
+     * Always reports "not revoked" — this service performs no denylist check.
+     * Logs a one-time WARN on the first call so an accidentally Redis-less
+     * deployment is visible in the logs rather than silently unprotected.
+     *
+     * @param jti the JWT ID (ignored)
+     * @return {@code false}, always
+     */
     @Override
     public boolean isRevoked(String jti) {
         if (warnedCheck.compareAndSet(false, true)) {
@@ -31,6 +39,16 @@ public class NoopJwtRevocationService implements JwtRevocationService {
         return false;
     }
 
+    /**
+     * No-op that does NOT throw — the token is not actually revoked. Logs a
+     * one-time WARN on first use. Deliberately silent (rather than fail-loud
+     * like the Redis impl) because this bean only loads where Redis is absent;
+     * the service that actually calls {@code revoke} (user-service logout) runs
+     * with Redis and gets {@link RedisJwtRevocationService} instead.
+     *
+     * @param jti the JWT ID that would be revoked (logged, then ignored)
+     * @param ttlSeconds the intended denylist lifetime (ignored)
+     */
     @Override
     public void revoke(String jti, long ttlSeconds) {
         if (warnedRevoke.compareAndSet(false, true)) {

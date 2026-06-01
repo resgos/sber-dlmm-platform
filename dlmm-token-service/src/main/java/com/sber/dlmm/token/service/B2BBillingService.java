@@ -85,6 +85,14 @@ public class B2BBillingService {
     /**
      * Generates invoices for the given period for all APPROVED issuers.
      * Public for manual triggering (admin endpoint) + tests.
+     *
+     * <p>Idempotent per {@code (issuer, periodStart)}: issuers already billed for
+     * the period are skipped, so a re-run never double-bills. The one-time listing
+     * fee is added only on an issuer's first-ever invoice. Prototype volume input
+     * is hard-wired to 0.
+     *
+     * @param period the calendar month to bill
+     * @return the number of invoices actually generated (skips not counted)
      */
     @Transactional
     public int generateInvoicesForPeriod(YearMonth period) {
@@ -116,9 +124,19 @@ public class B2BBillingService {
      * Pure computation — splits out for direct unit testing without JPA.
      * Visible static so tests don't need Spring context.
      *
-     * @param firstInvoice if true, listing fee is added
+     * <p>Builds the invoice from the issuer's tier: a one-time listing fee (first
+     * invoice only) + monthly retainer + a volume fee ({@code volume × bps / 10000}).
+     * The gross total is treated as VAT-inclusive, so {@code vat = gross × rate /
+     * (100 + rate)} (floor) and {@code net = gross - vat} — mirroring the #5.12
+     * b2b_settlements НДС convention. All money fields are raw SRUB units.
+     *
+     * @param issuer           issuer being billed (its tier drives every rate)
+     * @param periodStart      inclusive first day of the billed period
+     * @param periodEnd        inclusive last day of the billed period
+     * @param firstInvoice     if true, listing fee is added
      * @param periodVolumeSrub aggregate SRUB-equivalent volume on the
      *        issuer's tokens during the period; 0 in prototype
+     * @return an ISSUED invoice (unsaved) with listing/retainer/volume/gross/vat/net populated
      */
     public B2BInvoice computeInvoice(B2BIssuer issuer, LocalDate periodStart, LocalDate periodEnd,
                                        boolean firstInvoice, long periodVolumeSrub) {
@@ -144,6 +162,10 @@ public class B2BBillingService {
                 .build();
     }
 
+    /**
+     * @param t issuer tier
+     * @return the one-time listing fee for the tier, in raw SRUB units
+     */
     private long listingFeeFor(B2BIssuer.Tier t) {
         return switch (t) {
             case BASIC -> basicListingFee;
@@ -151,6 +173,10 @@ public class B2BBillingService {
             case ENTERPRISE -> enterpriseListingFee;
         };
     }
+    /**
+     * @param t issuer tier
+     * @return the monthly retainer fee for the tier, in raw SRUB units
+     */
     private long retainerFeeFor(B2BIssuer.Tier t) {
         return switch (t) {
             case BASIC -> basicRetainerFee;
@@ -158,6 +184,10 @@ public class B2BBillingService {
             case ENTERPRISE -> enterpriseRetainerFee;
         };
     }
+    /**
+     * @param t issuer tier
+     * @return the per-volume fee rate for the tier, in basis points
+     */
     private int volumeFeeBpsFor(B2BIssuer.Tier t) {
         return switch (t) {
             case BASIC -> basicVolumeFeeBps;
@@ -166,6 +196,10 @@ public class B2BBillingService {
         };
     }
 
+    /**
+     * @param issuerId issuer whose invoices to list
+     * @return the issuer's invoices, newest billing period first
+     */
     @Transactional(readOnly = true)
     public List<B2BInvoice> findByIssuer(UUID issuerId) {
         return invoiceRepository.findByIssuerIdOrderByPeriodStartDesc(issuerId);

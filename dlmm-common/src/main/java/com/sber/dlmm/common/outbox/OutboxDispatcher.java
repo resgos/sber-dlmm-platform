@@ -27,10 +27,18 @@ public class OutboxDispatcher {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxDispatcher.class);
 
+    /** Repository used to read unpublished rows and persist publish state. */
     private final OutboxEventRepository repository;
+    /** Kafka producer used to ship each row's payload. */
     private final KafkaTemplate<String, String> kafkaTemplate;
+    /** Outbox config: service name, batch size, send timeout, retention. */
     private final OutboxProperties properties;
 
+    /**
+     * @param repository    repository for unpublished rows + state updates
+     * @param kafkaTemplate Kafka producer used to publish payloads
+     * @param properties    outbox config (service name, batch size, timeouts, retention)
+     */
     public OutboxDispatcher(OutboxEventRepository repository,
                             KafkaTemplate<String, String> kafkaTemplate,
                             OutboxProperties properties) {
@@ -39,6 +47,18 @@ public class OutboxDispatcher {
         this.properties = properties;
     }
 
+    /**
+     * Scheduled tick: pulls up to {@code batch-size} of this service's
+     * unpublished rows (oldest first) and publishes each to its Kafka topic.
+     *
+     * <p>Runs in its own transaction. A successful send stamps
+     * {@link OutboxEvent#markPublished()}; a failure calls
+     * {@link OutboxEvent#recordFailure(String)} (bumping {@code attempts}) and
+     * leaves the row unpublished for the next tick — so a Kafka outage retries
+     * indefinitely rather than dropping events. Each send is bounded by
+     * {@code dlmm.outbox.send-timeout-sec}. Fires every
+     * {@code dlmm.outbox.dispatch-interval-ms} (default 500ms).
+     */
     @Scheduled(fixedDelayString = "${dlmm.outbox.dispatch-interval-ms:500}")
     @Transactional
     public void dispatch() {

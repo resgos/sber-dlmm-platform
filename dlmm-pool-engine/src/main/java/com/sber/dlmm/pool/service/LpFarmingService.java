@@ -43,6 +43,10 @@ public class LpFarmingService {
     private final PoolPositionRewardRepository rewardRepository;
     private final LimitOrderBalanceWriter balanceWriter;
 
+    /**
+     * @param rewardRepository per-position reward rows (accrual + claim)
+     * @param balanceWriter    in-transaction credit of accrual and claim payouts
+     */
     public LpFarmingService(PoolPositionRewardRepository rewardRepository,
                             LimitOrderBalanceWriter balanceWriter) {
         this.rewardRepository = rewardRepository;
@@ -58,6 +62,14 @@ public class LpFarmingService {
      * and can be large). Returns 0 for any non-positive input or empty bucket —
      * dust below one raw unit is dropped (floor), which keeps the sum of shares
      * ≤ emission so a pool can never over-distribute.
+     *
+     * @param emissionPerDay        emission slice to split (raw units; name is
+     *                              historical — the scheduler passes the already
+     *                              pro-rated cycle emission)
+     * @param positionLiquidity     this position's in-range liquidity shares
+     * @param totalInRangeLiquidity sum of all in-range positions' shares
+     * @return floored reward for this position (0 for any non-positive input;
+     *         the whole emission when it is the sole in-range LP)
      */
     public static long positionShare(long emissionPerDay, long positionLiquidity, long totalInRangeLiquidity) {
         if (emissionPerDay <= 0 || positionLiquidity <= 0 || totalInRangeLiquidity <= 0) return 0L;
@@ -72,6 +84,12 @@ public class LpFarmingService {
      * Add {@code share} raw reward units to a position's reward row, creating the
      * row on first accrual. Runs in its OWN transaction (separate bean from the
      * scheduler sweep) so one position's failure doesn't roll back the others.
+     *
+     * @param positionId    position earning the reward
+     * @param poolId        the position's pool (stamped on a new row)
+     * @param userId        the position's owner (stamped on a new row)
+     * @param rewardTokenId reward token (stamped on a new row)
+     * @param share         raw reward units to add (≤ 0 → no-op)
      */
     @Transactional
     public void accruePosition(UUID positionId, UUID poolId, UUID userId, UUID rewardTokenId, long share) {
@@ -96,6 +114,9 @@ public class LpFarmingService {
      * Build a user's reward summary: their total unclaimed + claimed reward and a
      * per-pool breakdown (one entry per pool the user has a reward row in, summed
      * over their positions). Read-only.
+     *
+     * @param userId user to summarise
+     * @return totals plus a per-pool reward breakdown
      */
     @Transactional(readOnly = true)
     public FarmRewardSummary getUserSummary(UUID userId) {
@@ -122,6 +143,9 @@ public class LpFarmingService {
      * and credit the reward token to the user's balance. Returns the total
      * credited (0 if nothing was pending). Idempotent under repeat calls: once
      * zeroed there is nothing left to claim, so a double-tap credits nothing.
+     *
+     * @param userId user claiming their accrued rewards
+     * @return total raw reward units credited (0 if nothing was pending)
      */
     @Transactional
     public long claim(UUID userId) {

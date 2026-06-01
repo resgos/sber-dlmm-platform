@@ -6,7 +6,18 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 /**
- * Sprint 9-DS-r4 (P2-13) — @EntityScan + @EnableJpaRepositories
+ * Spring Boot entry point for <b>dlmm-user-service</b> (port 8081) — the
+ * platform's identity and authentication authority. This service <b>issues</b>
+ * the JWTs that every other module validates: HS384-signed access tokens
+ * (~30&nbsp;min) and refresh tokens (7&nbsp;days), each carrying a {@code jti}
+ * for Redis-backed revocation on logout. It also owns password hashing
+ * (BCrypt), the KYC / platform-role model, organisation membership, 2FA and
+ * 115-FZ self-restriction.
+ *
+ * <p>The custom scan configuration below is load-bearing — the inline notes
+ * explain why the package set was widened beyond {@code com.sber.dlmm.user}.
+ *
+ * <p>Sprint 9-DS-r4 (P2-13) — @EntityScan + @EnableJpaRepositories
  * extended to include {@code com.sber.dlmm.common.audit} so the
  * relocated {@code AdminAuditLog} + repository (moved out of
  * user-service into dlmm-common) are still picked up.

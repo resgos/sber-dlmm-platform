@@ -13,6 +13,11 @@ import java.util.UUID;
  * {@code POST /swap/quote}. The {@code signature} is the user-bound
  * opaque token committed to the quote (currently JWT-subject hash).
  * If either is missing, validation fails before the service is called.
+ *
+ * @param quoteId   id of the quote to execute, as returned by {@code POST /swap/quote};
+ *                  looks up the stored {@link QuotedSwap}
+ * @param signature opaque user-bound token that must match the one committed to the
+ *                  quote; mismatches are rejected. Must be non-blank
  */
 public record SwapExecuteRequest(
         @NotNull UUID quoteId,

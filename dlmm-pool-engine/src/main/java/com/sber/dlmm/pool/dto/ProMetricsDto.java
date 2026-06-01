@@ -38,6 +38,16 @@ package com.sber.dlmm.pool.dto;
  * stddev). A user reading "Volatility: 2.34%" should be able to trust
  * the magnitude; showing it for 3 data points would mislead. The
  * frontend treats {@code !isReliable} as a render-the-dash signal.
+ *
+ * @param volatility30d  annualised stddev of daily log-returns, a decimal fraction
+ *                       (e.g. {@code 0.0234} = 2.34%); NOT a percent
+ * @param maxDrawdown30d worst peak-to-trough decline in the window, a positive
+ *                       decimal fraction (e.g. {@code 0.0567} = 5.67% drop)
+ * @param sharpe30d      Sharpe ratio (annualised mean ÷ annualised vol, rf = 0);
+ *                       dimensionless, can be negative
+ * @param sampleSize     number of daily price points used; caps at 30
+ * @param isReliable     false when {@code sampleSize < 10}, signalling the UI to hide
+ *                       the (then untrustworthy) numbers
  */
 public record ProMetricsDto(
         double volatility30d,
@@ -47,7 +57,13 @@ public record ProMetricsDto(
         boolean isReliable
 ) {
 
-    /** Sentinel for empty / unreliable result. Keeps callers from null-checks. */
+    /**
+     * Sentinel for an empty / unreliable result. Keeps callers from null-checks.
+     *
+     * @param sampleSize how many daily points were available (below the reliability
+     *                   threshold); echoed into the returned DTO
+     * @return a DTO with all metrics zeroed and {@code isReliable == false}
+     */
     public static ProMetricsDto unreliable(int sampleSize) {
         return new ProMetricsDto(0.0, 0.0, 0.0, sampleSize, false);
     }

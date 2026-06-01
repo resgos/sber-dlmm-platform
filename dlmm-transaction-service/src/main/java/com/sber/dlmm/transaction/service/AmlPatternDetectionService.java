@@ -44,6 +44,7 @@ public final class AmlPatternDetectionService {
     private static final long SPLIT_FLOOR = 500_000L;
     private static final long SPLIT_CEIL = 600_000L; // 115-ФЗ reportable threshold
 
+    /** Non-instantiable: this is a stateless holder of static detectors. */
     private AmlPatternDetectionService() {}
 
     /**
@@ -53,6 +54,16 @@ public final class AmlPatternDetectionService {
      *
      * <p>Caller should pre-filter to a single user's transactions ordered
      * by createdAt ascending.
+     *
+     * <p>Algorithm: bucket transactions by {@code amountIn}, then for each
+     * bucket with enough entries run a sliding 1h window over the sorted
+     * timestamps; the first window containing ≥ the threshold count fires a
+     * {@link AmlAlert.Pattern#ROUND_AMOUNT_REPEATS} MEDIUM alert.
+     *
+     * @param userTxs one user's transactions (zero/negative {@code amountIn}
+     *                rows are ignored)
+     * @return a {@link DetectionResult} for the matching cluster, or
+     *         {@link Optional#empty()} if the pattern does not fire
      */
     public static Optional<DetectionResult> detectRoundAmountRepeats(List<Transaction> userTxs) {
         if (userTxs.size() < ROUND_AMOUNT_MIN_REPEATS) return Optional.empty();
@@ -103,6 +114,10 @@ public final class AmlPatternDetectionService {
      * <p>For prototype, "inbound" = TRANSFER with non-null amountOut (we don't
      * distinguish deposit vs withdrawal in TRANSFER yet); "outbound" =
      * SWAP, TRANSFER, REMOVE_LIQUIDITY immediately following.
+     *
+     * @param userTxs one user's transactions in createdAt-ascending order
+     * @return a HIGH-severity {@link DetectionResult} for the first in→out
+     *         pair satisfying the window + ratio, or {@link Optional#empty()}
      */
     public static Optional<DetectionResult> detectFastInFastOut(List<Transaction> userTxs) {
         for (int i = 0; i < userTxs.size(); i++) {
@@ -138,6 +153,16 @@ public final class AmlPatternDetectionService {
      * and {@link #SPLIT_CEIL} (just under 115-ФЗ 600k ₽ reporting
      * threshold) where the user made multiple smaller transactions —
      * structuring proxy. Single-user input.
+     *
+     * <p>Requires ≥2 transactions in the bracket: a single ₽599 999 payment
+     * is just a payment, not structuring.
+     *
+     * @param userTxs one user's transactions (rows older than the 24h window,
+     *                or with non-positive {@code amountIn}, are ignored)
+     * @param now     reference "now" anchoring the trailing 24h window
+     * @return a HIGH-severity {@link DetectionResult} when the aggregate falls
+     *         in the [{@link #SPLIT_FLOOR}, {@link #SPLIT_CEIL}) bracket across
+     *         ≥2 transactions, otherwise {@link Optional#empty()}
      */
     public static Optional<DetectionResult> detectSubThresholdSplit(List<Transaction> userTxs, LocalDateTime now) {
         LocalDateTime windowStart = now.minus(SPLIT_WINDOW);
@@ -171,6 +196,14 @@ public final class AmlPatternDetectionService {
     /**
      * Detector result — caller (AmlScannerScheduler) translates to
      * a persisted {@link AmlAlert} row + outbox event.
+     *
+     * @param pattern           which detector fired
+     * @param severity          assigned alert severity
+     * @param windowStart       earliest transaction in the matched evidence
+     * @param windowEnd         latest transaction in the matched evidence
+     * @param transactionCount  number of transactions forming the evidence
+     * @param totalAmount       aggregate amount across the matched transactions
+     * @param evidenceJson      compact JSON snippet describing the evidence
      */
     public record DetectionResult(
             AmlAlert.Pattern pattern,

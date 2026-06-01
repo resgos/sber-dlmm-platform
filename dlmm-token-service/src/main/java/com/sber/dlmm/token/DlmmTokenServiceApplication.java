@@ -7,6 +7,21 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
+ * Spring Boot entry point for {@code dlmm-token-service} (port 8082) — the token
+ * catalog + balances service. It owns the token registry, per-user balances,
+ * internal deduct/credit used by pool-engine during swaps/liquidity, the YSRUB
+ * money-market, SberSpasibo loyalty, B2B issuer billing and custody fees.
+ *
+ * <p><b>Why the explicit scan lists below:</b> the service mixes its own beans
+ * with infrastructure that physically lives in the {@code dlmm-common} library,
+ * so the component/entity/repository scans are widened past the default
+ * {@code com.sber.dlmm.token} root. Removing any of these packages silently
+ * breaks wiring at boot (the failure modes are documented inline per annotation).
+ *
+ * <p><b>Amount-scale note (platform-wide #14):</b> token amounts handled by this
+ * service are raw integers where 1 token = 10000 raw units (4 platform decimals);
+ * prices, basis points and ratios are NOT scaled.
+ *
  * @EntityScan and @EnableJpaRepositories list the local package PLUS
  * com.sber.dlmm.common.outbox. The latter is the shared OutboxEvent +
  * OutboxEventRepository extracted in Sprint 3 #3.9. Without these
@@ -30,6 +45,14 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableJpaRepositories(basePackages = {"com.sber.dlmm.token", "com.sber.dlmm.common.outbox", "com.sber.dlmm.common.audit"})
 public class DlmmTokenServiceApplication {
 
+    /**
+     * Boots the Spring application context. Startup is gated by the shared
+     * {@code SecretValidationOnStartup} bean (from dlmm-common), so the process
+     * refuses to come up if {@code dlmm.jwt.secret} is missing or shorter than
+     * 32 bytes.
+     *
+     * @param args standard JVM/Spring command-line arguments (e.g. {@code --server.port})
+     */
     public static void main(String[] args) {
         SpringApplication.run(DlmmTokenServiceApplication.class, args);
     }

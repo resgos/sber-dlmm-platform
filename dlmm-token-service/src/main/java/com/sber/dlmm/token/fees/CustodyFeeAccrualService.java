@@ -37,6 +37,12 @@ public class CustodyFeeAccrualService {
     private final TokenRepository tokenRepository;
     private final OutboxService outbox;
 
+    /**
+     * @param userBalanceRepository balance reads/writes (deduct holder, credit treasury,
+     *                              advance the accrual watermark)
+     * @param tokenRepository       resolves token symbol for the audit event
+     * @param outbox                transactional outbox the audit event is appended to
+     */
     public CustodyFeeAccrualService(UserBalanceRepository userBalanceRepository,
                                     TokenRepository tokenRepository,
                                     OutboxService outbox) {
@@ -46,8 +52,27 @@ public class CustodyFeeAccrualService {
     }
 
     /**
-     * Accrue custody fee for one balance row. Returns the fee taken
-     * (0 if skipped). Each call is its own DB transaction.
+     * Accrue the custody fee for a single balance row, moving the fee from the
+     * holder to the treasury account, and emit a {@link CustodyFeeAccruedEvent}.
+     *
+     * <p>Runs in its own {@code REQUIRES_NEW} transaction so a failure here never
+     * rolls back sibling rows in the sweep. The fee is prorated over the elapsed
+     * whole days since the last accrual (capped at {@link #MAX_ACCRUAL_DAYS}) at
+     * {@code custodyBpsPerAnnum / 10000 / 365} of {@code available}; computed via
+     * {@link java.math.BigInteger} because post-scale raw balances overflow
+     * {@code long} when multiplied by bps × days. The accrual watermark is only
+     * advanced by the days actually charged (not to {@code now}) so the sub-day
+     * remainder carries forward and accrual stays lossless (#27).
+     *
+     * <p>Skipped (returns 0, no charge) when: the prorated fee floors to 0 (still
+     * advances the watermark so the row isn't re-evaluated every tick), the fee
+     * would meet/exceed the whole balance, or the deduct loses a write race.
+     *
+     * @param b                  the holder's balance row to accrue against
+     * @param now                wall-clock used as the accrual end instant
+     * @param custodyBpsPerAnnum annual custody rate in basis points (e.g. 5 = 0.05%/yr)
+     * @param treasuryUserId     account that receives the collected fee
+     * @return the fee actually taken in raw token units, or 0 if the row was skipped
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public long accrueOne(UserBalance b, LocalDateTime now, int custodyBpsPerAnnum,
@@ -133,7 +158,12 @@ public class CustodyFeeAccrualService {
         return fee;
     }
 
-    /** Audit payload for a custody-fee accrual. */
+    /**
+     * Audit payload for a single custody-fee accrual, appended to the outbox and
+     * drained to {@code token-events}. {@code feeAmount} is in raw token units
+     * (1 token = 10000 units); {@code bpsPerAnnum} and {@code daysAccrued} are
+     * unscaled scalars describing how the fee was derived.
+     */
     public record CustodyFeeAccruedEvent(
             UUID userId,
             UUID tokenId,

@@ -87,6 +87,12 @@ public class YieldDistributionScheduler {
     @Value("${dlmm.ysrub.yield-enabled:true}")
     private boolean enabled;
 
+    /**
+     * @param userBalanceRepository paged source of YSRUB holders to sweep
+     * @param accrualRepository     accrual-history reads (idempotency / audit)
+     * @param writer                separate bean performing each holder's
+     *                              {@code REQUIRES_NEW} credit (see {@link YieldAccrualWriter})
+     */
     public YieldDistributionScheduler(UserBalanceRepository userBalanceRepository,
                                        YsrubYieldAccrualRepository accrualRepository,
                                        YieldAccrualWriter writer) {
@@ -95,6 +101,19 @@ public class YieldDistributionScheduler {
         this.writer = writer;
     }
 
+    /**
+     * Daily YSRUB yield sweep (04:00 МСК by default). Pages through every YSRUB
+     * holder and credits each one a day's worth of yield via
+     * {@link YieldAccrualWriter#accrueForHolder} (each in its own transaction).
+     *
+     * <p>No-op when {@code dlmm.ysrub.yield-enabled=false}. Holders with a
+     * non-positive available balance are skipped. Paging (ordered by
+     * {@code userId}) keeps a large holder base from being loaded into one heap
+     * list; per-holder credits mutate {@code available} but never add/remove
+     * rows, so offset paging stays stable across the sweep. Per-holder failures
+     * are logged and swallowed so one bad row can't abort the daily run.
+     * Amounts are raw YSRUB units (1 token = 10000 units).
+     */
     @Scheduled(cron = "${dlmm.ysrub.yield-cron:0 0 4 * * *}")
     public void distributeYield() {
         if (!enabled) {
@@ -178,6 +197,13 @@ public class YieldDistributionScheduler {
         private final TokenRepository tokenRepository;
         private final OutboxService outbox;
 
+        /**
+         * @param userBalanceRepository credits the holder's YSRUB balance
+         * @param accrualRepository      idempotency check + append-only accrual record
+         * @param tokenRepository        bumps YSRUB {@code totalSupply}
+         * @param outbox                 retained collaborator for the accrual event
+         *                               (event publishing is a Sprint 9 follow-up)
+         */
         public YieldAccrualWriter(UserBalanceRepository userBalanceRepository,
                                    YsrubYieldAccrualRepository accrualRepository,
                                    TokenRepository tokenRepository,
@@ -188,6 +214,30 @@ public class YieldDistributionScheduler {
             this.outbox = outbox;
         }
 
+        /**
+         * Accrue and credit one holder's daily YSRUB yield in an isolated
+         * {@code REQUIRES_NEW} transaction (so one holder's failure can't roll
+         * back the daily sweep — that isolation is the whole reason this lives in
+         * a separate Spring bean).
+         *
+         * <p>Idempotent per {@code (userId, accrualDay)}: an existing accrual for
+         * the day short-circuits to 0 (a DB UNIQUE backs this too; the pre-check
+         * just avoids the wasted insert-then-fail). The yield is
+         * {@link #calculateYield(long, int, int) floor-computed}; a 0 yield (tiny
+         * principal) is skipped without error. Otherwise it credits the holder's
+         * YSRUB balance, bumps token {@code totalSupply}, and writes an
+         * append-only {@link YsrubYieldAccrual} record.
+         *
+         * @param userId       the YSRUB holder being credited
+         * @param principal    holder's YSRUB balance at accrual time (raw units; 1 token = 10000)
+         * @param day          the accrual day (idempotency key component)
+         * @param overnightBps CBR overnight rate in basis points (e.g. 1500 = 15% pa)
+         * @param spreadBps    platform spread in basis points (e.g. 30 = 0.3% pa)
+         * @return the yield credited in raw YSRUB units, or 0 if skipped (already
+         *         accrued today or floored to zero)
+         * @throws IllegalStateException if the credit finds no balance row, or the
+         *         YSRUB token row is missing
+         */
         @Transactional(propagation = Propagation.REQUIRES_NEW)
         public long accrueForHolder(UUID userId, long principal, LocalDate day,
                                      int overnightBps, int spreadBps) {

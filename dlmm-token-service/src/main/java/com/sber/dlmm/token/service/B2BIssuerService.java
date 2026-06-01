@@ -35,10 +35,20 @@ public class B2BIssuerService {
     private final B2BIssuerRepository issuerRepository;
 
     /**
-     * Idempotent-ish by INN. Re-registering with the same INN returns the
+     * Register a prospective corporate issuer in PENDING KYB state.
+     *
+     * <p>Idempotent-ish by INN. Re-registering with the same INN returns the
      * existing row (regardless of status) so corp client retries don't
      * duplicate. Production may want a stricter "PENDING duplicate =
      * error" rule depending on KYB SLA.
+     *
+     * @param inn          taxpayer number; the de-dup key
+     * @param legalName    registered legal entity name
+     * @param displayName  public-facing display name
+     * @param contactEmail KYB contact email
+     * @param contactPhone KYB contact phone
+     * @param tier         requested service tier; defaults to {@code BASIC} when null
+     * @return the existing issuer on INN match, otherwise the newly persisted row
      */
     @Transactional
     public B2BIssuer register(String inn, String legalName, String displayName,
@@ -63,6 +73,16 @@ public class B2BIssuerService {
         return saved;
     }
 
+    /**
+     * Approve an issuer's KYB, recording the reviewer + timestamp and clearing any
+     * prior rejection reason. Idempotent: a second approve on an already-APPROVED
+     * issuer is a no-op returning the unchanged row.
+     *
+     * @param issuerId   issuer to approve
+     * @param reviewerId admin who performed the review (stored for audit)
+     * @return the approved issuer row
+     * @throws IllegalArgumentException if no issuer exists for {@code issuerId}
+     */
     @Transactional
     public B2BIssuer approve(UUID issuerId, UUID reviewerId) {
         B2BIssuer issuer = mustFind(issuerId);
@@ -80,6 +100,17 @@ public class B2BIssuerService {
         return saved;
     }
 
+    /**
+     * Reject an issuer's KYB, recording reviewer, timestamp and reason. Unlike
+     * {@link #approve} this is not guarded — re-rejecting overwrites the prior
+     * reason/reviewer with the latest decision.
+     *
+     * @param issuerId   issuer to reject
+     * @param reviewerId admin who performed the review (stored for audit)
+     * @param reason     human-readable rejection reason
+     * @return the rejected issuer row
+     * @throws IllegalArgumentException if no issuer exists for {@code issuerId}
+     */
     @Transactional
     public B2BIssuer reject(UUID issuerId, UUID reviewerId, String reason) {
         B2BIssuer issuer = mustFind(issuerId);
@@ -93,21 +124,41 @@ public class B2BIssuerService {
         return saved;
     }
 
+    /**
+     * @return all issuers across every KYB status (admin listing)
+     */
     @Transactional(readOnly = true)
     public List<B2BIssuer> findAll() {
         return issuerRepository.findAll();
     }
 
+    /**
+     * @param status KYB status to filter by
+     * @return issuers in the given KYB status (e.g. the PENDING review queue)
+     */
     @Transactional(readOnly = true)
     public List<B2BIssuer> findByStatus(B2BIssuer.KybStatus status) {
         return issuerRepository.findByKybStatus(status);
     }
 
+    /**
+     * @param id issuer id
+     * @return the issuer
+     * @throws IllegalArgumentException if no issuer exists for {@code id}
+     */
     @Transactional(readOnly = true)
     public B2BIssuer findById(UUID id) {
         return mustFind(id);
     }
 
+    /**
+     * Loads an issuer or fails loudly — the single lookup-or-throw helper the
+     * mutating/read methods route through.
+     *
+     * @param id issuer id
+     * @return the issuer entity
+     * @throws IllegalArgumentException if no issuer exists for {@code id}
+     */
     private B2BIssuer mustFind(UUID id) {
         return issuerRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("B2B issuer not found: " + id));

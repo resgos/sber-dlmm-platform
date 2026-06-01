@@ -72,6 +72,12 @@ public class CustodyFeeJob {
     @Value("${dlmm.fees.custody-skip-holidays:true}")
     private boolean skipHolidays;
 
+    /**
+     * @param userBalanceRepository source of balance rows due for accrual
+     * @param accrual               per-row accrual bean (separate bean so its
+     *                              {@code REQUIRES_NEW} transaction actually fires)
+     * @param bankingCalendar       RU banking calendar used to skip non-business days
+     */
     public CustodyFeeJob(UserBalanceRepository userBalanceRepository,
                          CustodyFeeAccrualService accrual,
                          BankingCalendarService bankingCalendar) {
@@ -80,6 +86,18 @@ public class CustodyFeeJob {
         this.bankingCalendar = bankingCalendar;
     }
 
+    /**
+     * Scheduled custody-fee sweep. Fires on the configured cron (hourly at xx:05
+     * by default) but is effectively a no-op outside the first tick of each
+     * banking day: the per-row watermark check makes within-day re-ticks skip.
+     *
+     * <p>Flow: bail if the fee is disabled ({@code custody-bps-pa <= 0}); skip
+     * the whole tick on RU non-banking days (when enabled); then page through
+     * balances whose last accrual predates today's midnight cutoff, delegating
+     * each row to {@link CustodyFeeAccrualService#accrueOne} (its own transaction)
+     * so one bad row can't abort the sweep. Loops in batches until a short batch
+     * signals the queue is drained.
+     */
     @Scheduled(cron = "${dlmm.fees.custody-tick-cron:0 5 * * * *}")
     public void tick() {
         if (custodyBpsPerAnnum <= 0) return;

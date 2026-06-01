@@ -45,6 +45,13 @@ public class PoolEngineClient {
 
     private final WebClient webClient;
 
+    /**
+     * @param poolEngineUrl    pool-engine base URL, injected from
+     *                         {@code dlmm.services.pool-engine-url}
+     * @param webClientBuilder Spring's shared, bearer-forwarding builder (so the
+     *                         caller's {@code Authorization} header is propagated
+     *                         on every outbound pool-engine call)
+     */
     public PoolEngineClient(@Value("${dlmm.services.pool-engine-url}") String poolEngineUrl,
                              WebClient.Builder webClientBuilder) {
         this.webClient = webClientBuilder.baseUrl(poolEngineUrl).build();
@@ -53,6 +60,13 @@ public class PoolEngineClient {
     /**
      * GET /api/v1/pools/positions/count → {@code activePositions} value.
      * Returns 0 on circuit-open or fallback to keep the Dashboard rendering.
+     *
+     * <p>Wrapped by {@link CircuitBreaker}/{@link Retry} on {@code pool-engine};
+     * on CB-open or exhausted retries control passes to
+     * {@link #fetchActivePositionsCountFallback(Throwable)} which yields 0.
+     *
+     * @return the active-position count, or {@code 0} if the body or the
+     *         {@code activePositions} field is absent
      */
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "fetchActivePositionsCountFallback")
     @Retry(name = CB_NAME)
@@ -65,6 +79,14 @@ public class PoolEngineClient {
         return response == null ? 0L : toLong(response.get("activePositions"));
     }
 
+    /**
+     * Resilience4j fallback for {@link #fetchActivePositionsCount()}: invoked on
+     * CB-open or after retries are exhausted. Logs the cause and degrades to 0.
+     *
+     * @param ex the failure (or {@code CallNotPermittedException} when the
+     *           breaker is open) that triggered the fallback
+     * @return {@code 0L}
+     */
     @SuppressWarnings("unused")
     private long fetchActivePositionsCountFallback(Throwable ex) {
         log.warn("pool-engine /positions/count CB OPEN or call failed: {}. Returning 0.", ex.toString());
@@ -75,6 +97,16 @@ public class PoolEngineClient {
      * GET /api/v1/pools?page=0&size=N → page content list. Used by
      * Dashboard's pool aggregation (TVL, volume, fee totals).
      * Empty list on fallback so the rest of the dashboard renders.
+     *
+     * <p>HTTP-level errors (e.g. a 404 from a path typo) are swallowed inline to
+     * an empty page so they do <em>not</em> trip the breaker — only network /
+     * timeout failures count toward the CB and reach
+     * {@link #fetchPoolsPageFallback(int, Throwable)}.
+     *
+     * @param size page size to request (page index is always 0 — single
+     *             bounded fetch, not true pagination)
+     * @return the {@code content} list of the page, or an empty list on any
+     *         error / unexpected body shape
      */
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "fetchPoolsPageFallback")
     @Retry(name = CB_NAME)
@@ -100,6 +132,15 @@ public class PoolEngineClient {
                 : Collections.emptyList();
     }
 
+    /**
+     * Resilience4j fallback for {@link #fetchPoolsPage(int)} on CB-open /
+     * exhausted retries. Degrades to an empty list so the dashboard still
+     * renders (TVL/volume/fee totals simply sum to zero).
+     *
+     * @param size the requested page size (echoed for log correlation)
+     * @param ex   the failure that triggered the fallback
+     * @return an empty list
+     */
     @SuppressWarnings("unused")
     private List<Map<String, Object>> fetchPoolsPageFallback(int size, Throwable ex) {
         log.warn("pool-engine /pools page (size={}) CB OPEN or call failed: {}. Returning empty.",
@@ -113,6 +154,13 @@ public class PoolEngineClient {
      * history series. Empty map on fallback so the caller's
      * {@code extractList(map, ...)} reads short and the page renders
      * the rest of the analytics with whatever else came back.
+     *
+     * <p>Unlike {@link #fetchPoolsPage(int)} this does not swallow HTTP errors
+     * inline, so a downstream 5xx counts toward the breaker and routes to
+     * {@link #fetchPoolDetailFallback(java.util.UUID, Throwable)}.
+     *
+     * @param poolId id of the pool whose detail document to fetch
+     * @return the raw pool-detail map, or an empty map if the body is {@code null}
      */
     @CircuitBreaker(name = CB_NAME, fallbackMethod = "fetchPoolDetailFallback")
     @Retry(name = CB_NAME)
@@ -125,6 +173,14 @@ public class PoolEngineClient {
         return result == null ? Collections.emptyMap() : result;
     }
 
+    /**
+     * Resilience4j fallback for {@link #fetchPoolDetail(java.util.UUID)} on
+     * CB-open / exhausted retries. Degrades to an empty map.
+     *
+     * @param poolId the requested pool id (echoed for log correlation)
+     * @param ex     the failure that triggered the fallback
+     * @return an empty map
+     */
     @SuppressWarnings("unused")
     private Map<String, Object> fetchPoolDetailFallback(java.util.UUID poolId, Throwable ex) {
         log.warn("pool-engine /pools/{} CB OPEN or call failed: {}. Returning empty.",
@@ -132,6 +188,14 @@ public class PoolEngineClient {
         return Collections.emptyMap();
     }
 
+    /**
+     * Null-and-type-safe coercion of a JSON-decoded value to {@code long}.
+     * Used for numeric fields that Jackson may hand back as a boxed
+     * {@link Number} or a string.
+     *
+     * @param value the raw value from the response map (may be {@code null})
+     * @return the {@code long} value, or {@code 0L} if null or unparseable
+     */
     private static long toLong(Object value) {
         if (value == null) return 0L;
         if (value instanceof Number n) return n.longValue();

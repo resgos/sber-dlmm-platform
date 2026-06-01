@@ -174,6 +174,14 @@ public class AutoClaimScheduler {
         return new int[]{fired, errored, skipped};
     }
 
+    /**
+     * Per-position cooldown gate: returns {@code true} if this position had a SUCCESS
+     * fire within {@link #PER_POSITION_COOLDOWN}. Prevents the sweep from re-claiming the
+     * same position every tick (which would spam tiny credits and burn idempotency keys).
+     *
+     * @param positionId the position to check
+     * @return {@code true} if still cooling down; {@code false} if never fired or the cooldown has elapsed
+     */
     private boolean isOnCooldown(UUID positionId) {
         Optional<AutoClaimLog> latest = logRepository.findLatestSuccessForPosition(positionId);
         if (latest.isEmpty()) return false;
@@ -181,6 +189,15 @@ public class AutoClaimScheduler {
         return sinceLast.compareTo(PER_POSITION_COOLDOWN) < 0;
     }
 
+    /**
+     * Rolling-24h daily-cap gate: returns {@code true} once the user has reached their
+     * configured {@code dailyCap} of SUCCESS fires within {@link #DAILY_CAP_WINDOW}. A cap
+     * of {@code 0} means unlimited and short-circuits to {@code false}. This bounds how
+     * many automated money movements a user incurs per day.
+     *
+     * @param policy the user's policy (supplies the cap and the user id)
+     * @return {@code true} if the cap is set and already met or exceeded in the window
+     */
     private boolean isCappedToday(AutoClaimPolicy policy) {
         if (policy.getDailyCap() <= 0) return false; // 0 = unlimited
         LocalDateTime cutoff = LocalDateTime.now().minus(DAILY_CAP_WINDOW);
@@ -188,6 +205,19 @@ public class AutoClaimScheduler {
         return count >= policy.getDailyCap();
     }
 
+    /**
+     * Appends one row to {@code auto_claim_log} recording an attempt's outcome. This log
+     * is the source of truth for both the cooldown ({@link #isOnCooldown}) and the daily
+     * cap ({@link #isCappedToday}), so every fire — SUCCESS or FAILURE — must be written.
+     *
+     * @param userId       the policy owner
+     * @param positionId   the position the claim targeted
+     * @param poolId       the pool the position belongs to
+     * @param amountX      raw X claimed (0 on failure)
+     * @param amountY      raw Y claimed (0 on failure)
+     * @param status       {@link AutoClaimLog.Status#SUCCESS} or {@link AutoClaimLog.Status#FAILURE}
+     * @param errorMessage truncated failure reason, or {@code null} on success
+     */
     private void logFire(UUID userId, UUID positionId, UUID poolId,
                           long amountX, long amountY,
                           AutoClaimLog.Status status, String errorMessage) {
@@ -208,12 +238,27 @@ public class AutoClaimScheduler {
      * against double-fire if the scheduler runs faster than the
      * cooldown check in some edge case (e.g. ShedLock disabled, two
      * replicas overlap by a second). FeeService rejects duplicate keys.
+     *
+     * <p>The minute "bucket" ({@code epochMillis / 60_000}) is what makes two near-simultaneous
+     * ticks collide on the same key, so the second is refused rather than double-crediting.
+     *
+     * @param userId     the policy owner
+     * @param positionId the position being claimed
+     * @return a stable idempotency key string for this (user, position, minute)
      */
     private static String autoClaimIdempotencyKey(UUID userId, UUID positionId) {
         long bucket = System.currentTimeMillis() / 60_000L;
         return "auto:" + userId + ":" + positionId + ":" + bucket;
     }
 
+    /**
+     * Caps a string at {@code max} characters so a long exception message fits the
+     * {@code error_message} column. Null-safe.
+     *
+     * @param s   the string to bound (may be {@code null})
+     * @param max maximum length to keep
+     * @return {@code s} unchanged if short enough, its first {@code max} chars otherwise, or {@code null}
+     */
     private static String truncate(String s, int max) {
         if (s == null) return null;
         return s.length() <= max ? s : s.substring(0, max);

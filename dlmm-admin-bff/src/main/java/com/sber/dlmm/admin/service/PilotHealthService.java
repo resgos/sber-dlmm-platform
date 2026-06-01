@@ -37,6 +37,19 @@ public class PilotHealthService {
 
     private final JdbcTemplate jdbc;
 
+    /**
+     * Computes the pilot-health row for every org in one query, then derives the
+     * composite score, traffic-light flag, and CSM action list per org in Java.
+     *
+     * <p>The SQL left-joins three pre-aggregated sub-selects (30-day tx count,
+     * active-position count, 30-day fee sum) onto the org/member roster so a row
+     * is produced even for orgs with no activity (counts come back 0 via
+     * {@code COALESCE}). Scoring and suggestions are delegated to the package-
+     * visible static helpers {@link #computeScore} / {@link #suggestActions}.
+     *
+     * @return one {@link PilotHealth} per org, ordered by org name; an empty
+     *         list if the query fails (logged at WARN — never throws to caller)
+     */
     public List<PilotHealth> getAllPilotHealth() {
         String sql = """
                 SELECT
@@ -102,6 +115,18 @@ public class PilotHealthService {
         }
     }
 
+    /**
+     * Computes the 0–100 composite engagement score from the four signals, per
+     * the additive formula in the class Javadoc (30 recent-login + 25 tx-volume
+     * + 25 active-position + 20 fee-earning). Package-visible and static so it
+     * can be unit-tested directly.
+     *
+     * @param lastActive      most recent member login, or {@code null} if never
+     * @param txCount30d      transactions in the last 30 days
+     * @param activePositions count of active LP positions
+     * @param fees30d         fees collected in the last 30 days
+     * @return the summed score in the range 0–100
+     */
     static int computeScore(java.time.LocalDateTime lastActive,
                              int txCount30d, int activePositions, double fees30d) {
         int score = 0;
@@ -115,6 +140,18 @@ public class PilotHealthService {
         return score;
     }
 
+    /**
+     * Derives the list of suggested CSM actions (in Russian, shown verbatim in
+     * the dashboard) from the same four signals. Each unhealthy signal adds a
+     * specific nudge; a fully-healthy org gets a single "keep going" line so the
+     * list is never empty. Package-visible and static for direct unit testing.
+     *
+     * @param lastActive      most recent member login, or {@code null} if never
+     * @param txCount30d      transactions in the last 30 days
+     * @param activePositions count of active LP positions
+     * @param fees30d         fees collected in the last 30 days
+     * @return a non-empty, ordered list of suggested-action strings
+     */
     static List<String> suggestActions(java.time.LocalDateTime lastActive,
                                         int txCount30d, int activePositions, double fees30d) {
         List<String> actions = new ArrayList<>();

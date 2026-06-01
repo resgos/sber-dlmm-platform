@@ -24,18 +24,26 @@ public enum ApiTier {
     /** Enterprise tier — institutional + B2B issuers. 1000 rps sustained, 1500 burst. */
     ENTERPRISE(1000, 1500);
 
+    /** Sustained request rate (rps) — token-bucket replenish rate. */
     private final int replenishRate;
+    /** Maximum burst size (rps) — token-bucket capacity. */
     private final int burstCapacity;
 
+    /**
+     * @param replenishRate sustained requests-per-second for this tier
+     * @param burstCapacity  maximum burst requests-per-second for this tier
+     */
     ApiTier(int replenishRate, int burstCapacity) {
         this.replenishRate = replenishRate;
         this.burstCapacity = burstCapacity;
     }
 
+    /** @return the sustained rate limit (rps) for this tier. */
     public int getReplenishRate() {
         return replenishRate;
     }
 
+    /** @return the burst capacity (rps) for this tier. */
     public int getBurstCapacity() {
         return burstCapacity;
     }
@@ -44,6 +52,10 @@ public enum ApiTier {
      * Parses a JWT claim value safely — unknown / null / case mismatch
      * returns {@link #FREE} so legacy tokens never get rate-limit-elevated
      * by accident.
+     *
+     * @param raw the raw {@code tier} claim string (may be null/blank/any case)
+     * @return the matching tier, or {@link #FREE} if {@code raw} is
+     *         null, blank or not a recognised tier name
      */
     public static ApiTier fromClaim(String raw) {
         if (raw == null || raw.isBlank()) return FREE;

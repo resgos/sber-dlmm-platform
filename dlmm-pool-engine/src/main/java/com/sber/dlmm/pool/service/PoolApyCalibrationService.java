@@ -104,6 +104,10 @@ public class PoolApyCalibrationService {
             .expireAfterWrite(Duration.ofHours(1))
             .build();
 
+    /**
+     * @param positionRepository source of the active positions sampled to
+     *                           compute each pool's median realised fee APY
+     */
     public PoolApyCalibrationService(LpPositionRepository positionRepository) {
         this.positionRepository = positionRepository;
     }
@@ -112,8 +116,9 @@ public class PoolApyCalibrationService {
      * Median realised fee APY across eligible positions in {@code poolId}.
      *
      * <p>Returns the {@link #DEFAULT_TARGET_APY} when the sample is too
-     * small or anything throws. Never raises.
+     * small or anything throws. Never raises. Memoised per pool for 1h.
      *
+     * @param poolId pool to calibrate (null → default)
      * @return decimal fraction (e.g. {@code 0.08} for 8% APY)
      */
     public BigDecimal getPoolTargetApy(UUID poolId) {
@@ -131,11 +136,21 @@ public class PoolApyCalibrationService {
      * materially (large remove, big new position) and stakeholders
      * don't want to wait an hour. Not exposed via REST yet — would
      * be a Sprint-N admin-bff endpoint.
+     *
+     * @param poolId pool whose cached APY to evict (null → no-op)
      */
     public void invalidate(UUID poolId) {
         if (poolId != null) targetApyCache.invalidate(poolId);
     }
 
+    /**
+     * Compute (uncached) the median realised fee APY across the pool's eligible
+     * active positions, falling back to {@link #DEFAULT_TARGET_APY} when the
+     * sample is below {@link #MIN_SAMPLE_SIZE} or anything throws.
+     *
+     * @param poolId pool to calibrate
+     * @return the median APY fraction, or the default on a small/empty/failed sample
+     */
     private BigDecimal computeTargetApy(UUID poolId) {
         try {
             List<LpPosition> active = positionRepository.findByPoolIdAndIsActiveTrue(poolId);
@@ -171,6 +186,15 @@ public class PoolApyCalibrationService {
      * Per-position annualised realised fee yield, or {@code null} if the
      * position isn't a valid sample (too young, zero deposit, missing
      * created-at).
+     *
+     * <p>Computed as {@code (unclaimedFeeX+Y / initialDepositX+Y) × (365 /
+     * ageDays)} via a single {@link BigDecimal} pipeline so small ratios don't
+     * underflow. Positions younger than {@link #MIN_AGE_DAYS} are rejected to
+     * avoid noisy fees-per-day on a fresh position.
+     *
+     * @param p   position to measure
+     * @param now reference "now" (passed in so a whole sample shares one clock)
+     * @return the annualised fee-yield fraction, or {@code null} if not eligible
      */
     private static BigDecimal realisedApy(LpPosition p, LocalDateTime now) {
         if (p == null || p.getCreatedAt() == null) return null;
@@ -199,6 +223,9 @@ public class PoolApyCalibrationService {
      * input — caller owns the list and is fine with that. Small dataset
      * (caller bounded by {@code findByPoolIdAndIsActiveTrue} size),
      * no need for a streaming statistics library.
+     *
+     * @param values non-empty list of APY samples; sorted in place
+     * @return the median (averaging the two middle values for an even count)
      */
     static BigDecimal median(List<BigDecimal> values) {
         Collections.sort(values);
@@ -211,5 +238,12 @@ public class PoolApyCalibrationService {
         return lo.add(hi).divide(BigDecimal.valueOf(2), MC).setScale(18, RoundingMode.HALF_UP);
     }
 
+    /**
+     * Clamp a possibly-negative raw amount to ≥ 0 before it enters the yield
+     * sum, so a stray negative fee/deposit can't distort the median.
+     *
+     * @param v raw amount
+     * @return {@code v} if positive, else 0
+     */
     private static long safe(long v) { return Math.max(0L, v); }
 }

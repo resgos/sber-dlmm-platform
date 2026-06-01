@@ -33,6 +33,18 @@ public class AuditLogService {
      * and {@code targetId} are required — there's no "all audit log"
      * scan endpoint (we don't want to expose unbounded audit dumps via
      * a single GET).
+     *
+     * <p>The requested {@code limit} is clamped to the range 1–200 to bound the
+     * result set, and any query failure is swallowed (logged at WARN) so the
+     * activity sidebar degrades to empty rather than erroring the detail page.
+     *
+     * @param targetType the audited entity type (e.g. {@code "transaction"},
+     *                   {@code "pool"}, {@code "user"}); blank/null short-circuits
+     *                   to an empty list
+     * @param targetId   the audited entity id; blank/null short-circuits to empty
+     * @param limit      requested max rows; clamped to 1–200
+     * @return matching {@link AuditLogEntry} rows newest-first, or an empty list
+     *         on missing arguments or query failure
      */
     public List<AuditLogEntry> findByTarget(String targetType, String targetId, int limit) {
         if (targetType == null || targetType.isBlank() || targetId == null || targetId.isBlank()) {

@@ -25,13 +25,53 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Core pricing engine of the oracle: maintains the {@code price_feeds} table,
+ * its rolling {@code price_history}, and answers spot / TWAP / spread queries.
+ *
+ * <p>It blends three price sources into one uniform feed shape:
+ * <ul>
+ *   <li><b>Real external markets</b> ({@link #syncRealMarketPrices}, every 2
+ *       min) — crypto via CoinGecko, FX and precious metals via the Bank of
+ *       Russia, fetched through {@link MarketDataClient}. These are the
+ *       genuine "биржевые цены" surfaced in the UI.</li>
+ *   <li><b>Synthetic walk</b> ({@link #fetchPricesFromMoex}, every 15 s) — a
+ *       labelled ±2% random walk for MOEX equities/indices whose real ISS feed
+ *       is geo-blocked from this environment (anchored on {@link #INITIAL_PRICES}).</li>
+ *   <li><b>CBR official daily fixing</b> — written separately by
+ *       {@code CbrRatesService} under {@code CBR-*} symbols; consumed here only
+ *       to compute the market-vs-official spread ({@link #getCbrSpread}).</li>
+ * </ul>
+ *
+ * <p>Key invariants:
+ * <ul>
+ *   <li><b>Staleness → 503:</b> {@link #getPrice} and {@link #getTwapPrice}
+ *       refuse to serve a feed whose last update is older than
+ *       {@link #STALENESS_THRESHOLD_MS} (5 min), throwing
+ *       {@link OracleUnavailableException} so callers never trade on a frozen
+ *       price.</li>
+ *   <li><b>TWAP = mean of ticks:</b> the time-weighted price is the arithmetic
+ *       mean of {@code price_history} rows inside the trailing window
+ *       ({@link #TWAP_DEFAULT_PERIOD_MINUTES}); it falls back to the current
+ *       spot when the window holds no ticks.</li>
+ *   <li><b>Per-feed upsert:</b> a feed is identified by its (upper-cased)
+ *       asset symbol and updated in place, so each scheduler only ever owns the
+ *       symbols it writes — they never collide.</li>
+ * </ul>
+ *
+ * <p>All money math uses {@link #MC} (10 significant digits, HALF_UP) to keep
+ * ratios deterministic and avoid non-terminating {@link BigDecimal} divisions.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class PriceOracleService {
 
+    /** Max age of a feed before {@link #getPrice}/{@link #getTwapPrice} treat it as stale and 503. */
     private static final long STALENESS_THRESHOLD_MS = 5 * 60 * 1000L;
+    /** Default TWAP window (minutes) when the caller passes a non-positive period. */
     private static final int TWAP_DEFAULT_PERIOD_MINUTES = 15;
+    /** Shared rounding context (10 significant digits, HALF_UP) for all price/ratio math. */
     private static final MathContext MC = new MathContext(10, RoundingMode.HALF_UP);
 
     // Equity feeds — anchored on rough MOEX spot at branch time.
@@ -89,6 +129,20 @@ public class PriceOracleService {
     private final Random random = new Random();
     private final ConcurrentHashMap<String, BigDecimal> lastPrices = new ConcurrentHashMap<>();
 
+    /**
+     * Returns the current spot feed for a symbol, guarding against stale data.
+     *
+     * <p>WHY the staleness check: a price that stopped updating (dead feed,
+     * crashed scheduler) is more dangerous than no price at all, so we fail
+     * loudly with a 503 instead of returning a frozen number.
+     *
+     * @param assetSymbol asset symbol; matched case-insensitively (upper-cased
+     *                    before lookup)
+     * @return the feed mapped to a {@link PriceFeedResponse}
+     * @throws OracleUnavailableException if no feed exists for the symbol, or
+     *                                    the feed is older than the staleness
+     *                                    threshold
+     */
     @Transactional(readOnly = true)
     public PriceFeedResponse getPrice(String assetSymbol) {
         PriceFeed feed = priceFeedRepository.findByAssetSymbol(assetSymbol.toUpperCase())
@@ -99,6 +153,24 @@ public class PriceOracleService {
         return toResponse(feed);
     }
 
+    /**
+     * Computes the time-weighted average price over a trailing window as the
+     * arithmetic mean of recorded history ticks.
+     *
+     * <p>WHY a simple mean (not true integral-over-time TWAP): ticks are
+     * recorded at a roughly fixed cadence by the schedulers, so an unweighted
+     * average of the window's ticks is a faithful and cheaper approximation.
+     * When the window holds no ticks (e.g. a brand-new feed) we fall back to
+     * the current spot so the caller still gets a usable number.
+     *
+     * @param assetSymbol   asset symbol; matched case-insensitively
+     * @param periodMinutes trailing window in minutes; values {@code <= 0} fall
+     *                      back to {@link #TWAP_DEFAULT_PERIOD_MINUTES}
+     * @return the mean price over the window, or the current spot if the window
+     *         is empty
+     * @throws OracleUnavailableException if no feed exists for the symbol, or
+     *                                    the feed is stale
+     */
     @Transactional(readOnly = true)
     public BigDecimal getTwapPrice(String assetSymbol, int periodMinutes) {
         int period = periodMinutes > 0 ? periodMinutes : TWAP_DEFAULT_PERIOD_MINUTES;
@@ -123,6 +195,15 @@ public class PriceOracleService {
         return sum.divide(BigDecimal.valueOf(histories.size()), MC);
     }
 
+    /**
+     * Returns every known feed for dashboard/overview use.
+     *
+     * <p>WHY no staleness gate: this is a bulk listing, so a stale entry is
+     * surfaced with its last-updated timestamp rather than failing the whole
+     * response; consumers decide per-row how to treat age.
+     *
+     * @return all feeds mapped to {@link PriceFeedResponse}, possibly empty
+     */
     @Transactional(readOnly = true)
     public List<PriceFeedResponse> getAllPrices() {
         return priceFeedRepository.findAll().stream()
@@ -139,6 +220,12 @@ public class PriceOracleService {
      * <p>Currency lookup is by symbol: DLMM market is e.g. "USD",
      * "EUR", "CNY" (matches the existing mock feed symbols); CBR side
      * is prefixed "CBR-USD" etc.
+     *
+     * @param currency currency symbol, case-insensitive (e.g. {@code USD},
+     *                 {@code EUR}, {@code CNY})
+     * @return a spread payload; the {@code spread} field (and the missing
+     *         side's rate) is {@code null} when either the DLMM or CBR feed is
+     *         absent
      */
     @Transactional(readOnly = true)
     public com.sber.dlmm.oracle.dto.CbrSpreadResponse getCbrSpread(String currency) {
@@ -168,6 +255,12 @@ public class PriceOracleService {
      * Signed spread in basis points (100 bps = 1%). Positive =
      * DLMM market above CBR official, negative = below. Visible
      * for unit testing.
+     *
+     * @param dlmmRate the DLMM market rate (numerator side)
+     * @param cbrRate  the CBR official rate (denominator/reference side)
+     * @return the signed spread in basis points rounded to 2 dp, or
+     *         {@code null} when {@code cbrRate} is null or non-positive (can't
+     *         divide by it)
      */
     static BigDecimal computeSpreadBps(BigDecimal dlmmRate, BigDecimal cbrRate) {
         if (cbrRate == null || cbrRate.compareTo(BigDecimal.ZERO) <= 0) return null;
@@ -214,7 +307,26 @@ public class PriceOracleService {
         log.info("Real market prices synced: {} feeds (crypto/FX/metals)", updated);
     }
 
-    /** Upsert a price feed by symbol + record a TWAP tick. */
+    /**
+     * Upserts a price feed by symbol and appends a {@code price_history} tick.
+     *
+     * <p>WHAT: finds the existing feed (or builds a new one), overwrites its
+     * current price / source / 24h-change / timestamps, saves it, and records
+     * one history row so the TWAP recalculation has a sample.
+     *
+     * <p>WHY a guard on price: a missing or non-positive price from a flaky
+     * upstream is dropped silently so a bad fetch can't overwrite a good feed
+     * with garbage (the last good price simply remains).
+     *
+     * @param symbol    platform asset symbol to upsert (already in final form,
+     *                  e.g. {@code SBTC}, {@code SUSDT})
+     * @param price     latest price in RUB; {@code null} or {@code <= 0} is a
+     *                  no-op
+     * @param change24h 24-hour percentage change; {@code null} is stored as
+     *                  zero
+     * @param source    provenance label written to the feed (e.g.
+     *                  {@code COINGECKO}, {@code CBR-FX}, {@code CBR-METALS})
+     */
     private void upsertFeed(String symbol, BigDecimal price, BigDecimal change24h, String source) {
         if (price == null || price.signum() <= 0) return;
         long nowMs = System.currentTimeMillis();
@@ -240,7 +352,19 @@ public class PriceOracleService {
                 .build());
     }
 
-    /** Synthetic random-walk for MOEX equities/indices that have no reachable real feed. */
+    /**
+     * Synthetic random-walk for MOEX equities/indices that have no reachable
+     * real feed.
+     *
+     * <p>WHAT: every 15 s nudges each symbol in {@link #INITIAL_PRICES} by a
+     * ±1% step around its last value (floored just above zero), persists the
+     * feed under source {@code SYNTHETIC}, and appends a history tick.
+     *
+     * <p>WHY synthetic: MOEX ISS is geo-blocked from this environment, so the
+     * demo needs plausibly-moving equity/index prices. The {@code SYNTHETIC}
+     * source label makes clear these are not real market quotes. Runs in its
+     * own transaction so each cycle commits atomically.
+     */
     @Scheduled(fixedRate = 15_000)
     @Transactional
     public void fetchPricesFromMoex() {
@@ -296,6 +420,19 @@ public class PriceOracleService {
         log.debug("Mock MOEX prices updated for {} symbols", INITIAL_PRICES.size());
     }
 
+    /**
+     * Recomputes and stores the persisted {@code twapPrice} for every feed.
+     *
+     * <p>WHAT: every 60 s, for each feed averages its {@code price_history}
+     * ticks inside the trailing {@link #TWAP_DEFAULT_PERIOD_MINUTES} window and
+     * writes the mean back onto the feed; feeds with no ticks in the window are
+     * left untouched (their last good TWAP stands).
+     *
+     * <p>WHY precompute: storing the TWAP on the feed lets the common
+     * {@code GET /prices} listing expose it without an N+1 history scan per
+     * request; {@link #getTwapPrice} still computes on demand for arbitrary
+     * windows.
+     */
     @Scheduled(fixedRate = 60_000)
     @Transactional
     public void recalculateTwap() {
@@ -322,6 +459,18 @@ public class PriceOracleService {
         log.debug("TWAP recalculated for {} feeds", feeds.size());
     }
 
+    /**
+     * Throws if a feed has not been refreshed within the staleness threshold.
+     *
+     * <p>WHY: this is the single chokepoint that turns "the feed silently
+     * stopped updating" into an explicit 503 for spot/TWAP reads, so no caller
+     * can act on a frozen price. The message includes the actual age and the
+     * threshold to make on-call diagnosis quick.
+     *
+     * @param feed the feed to age-check
+     * @throws OracleUnavailableException if the feed's last update is older
+     *                                    than {@link #STALENESS_THRESHOLD_MS}
+     */
     private void checkStaleness(PriceFeed feed) {
         long ageMs = System.currentTimeMillis() - feed.getUpdatedAtEpochMs();
         if (ageMs > STALENESS_THRESHOLD_MS) {
@@ -331,6 +480,16 @@ public class PriceOracleService {
         }
     }
 
+    /**
+     * Maps a {@link PriceFeed} entity to its API DTO.
+     *
+     * <p>WHY a dedicated mapper: keeps the JPA entity out of the controller's
+     * serialization path and gives one place to control which fields are
+     * exposed.
+     *
+     * @param feed the persisted feed
+     * @return the corresponding {@link PriceFeedResponse}
+     */
     private PriceFeedResponse toResponse(PriceFeed feed) {
         return new PriceFeedResponse(
                 feed.getId(),

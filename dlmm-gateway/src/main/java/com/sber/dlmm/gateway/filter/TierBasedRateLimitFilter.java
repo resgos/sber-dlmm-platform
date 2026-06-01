@@ -101,6 +101,30 @@ public class TierBasedRateLimitFilter implements GlobalFilter, Ordered {
     private final MeterRegistry meterRegistry;
     private final Map<String, Counter> perRouteCounters = new ConcurrentHashMap<>();
 
+    /**
+     * Wires the tier→limiter lookup table and pre-registers the
+     * tier×outcome Prometheus counters.
+     *
+     * <p>The three {@link RedisRateLimiter} beans are injected by qualifier
+     * (they share a type, so {@code @Qualifier} disambiguates which bucket is
+     * which) and folded into an immutable {@code Map<ApiTier, RedisRateLimiter>}
+     * so {@link #filter} can pick a limiter by tier in O(1). The allowed/
+     * throttled counters are eagerly built for every {@link ApiTier} here —
+     * rather than lazily in the request path — so the reactive hot path is a
+     * bare {@code counter.increment()} with no map insertion under load.
+     *
+     * @param tierKeyResolver       the {@code @Primary} tier-aware key
+     *                              resolver from {@code RateLimitConfig}; yields
+     *                              the {@code "{userId-or-ip}:{tier}"} Redis
+     *                              bucket key
+     * @param freeRateLimiter       FREE-tier limiter bean (10 rps / 15 burst)
+     * @param proRateLimiter        PRO-tier limiter bean (100 rps / 150 burst)
+     * @param enterpriseRateLimiter ENTERPRISE-tier limiter bean
+     *                              (1000 rps / 1500 burst)
+     * @param meterRegistry         Micrometer registry the throttle counters
+     *                              (both the tier×outcome family here and the
+     *                              lazy per-route family) register into
+     */
     public TierBasedRateLimitFilter(@Qualifier("tierKeyResolver") KeyResolver tierKeyResolver,
                                      @Qualifier("freeRateLimiter") RedisRateLimiter freeRateLimiter,
                                      @Qualifier("proRateLimiter") RedisRateLimiter proRateLimiter,
@@ -146,6 +170,40 @@ public class TierBasedRateLimitFilter implements GlobalFilter, Ordered {
                         .register(meterRegistry));
     }
 
+    /**
+     * Applies the per-tier Redis token-bucket limit to the current request.
+     *
+     * <p>Runs at order -50, i.e. <em>after</em> {@link JwtValidationFilter}
+     * (-100) has validated the JWT and stamped the trusted
+     * {@code X-Api-Tier} header — this filter trusts that header and never
+     * re-parses the token. Flow:
+     * <ol>
+     *   <li>skip auth/actuator paths ({@link #shouldSkip}) and the public-data
+     *       routes ({@code /api/v1/public/**}) — they carry no tier and are
+     *       throttled (if at all) by the IP-keyed resolver on their own
+     *       route, so they fall straight through here;</li>
+     *   <li>map {@code X-Api-Tier} → {@link ApiTier} (defaulting via
+     *       {@link ApiTier#fromClaim}) and look up that tier's limiter;</li>
+     *   <li>resolve the bucket key, call {@link RedisRateLimiter#isAllowed},
+     *       and on success forward the chain, incrementing the allowed
+     *       counters; on failure short-circuit with {@code 429 TOO_MANY_
+     *       REQUESTS} and increment the throttled counters.</li>
+     * </ol>
+     * Either way it copies the limiter's {@code X-RateLimit-*} headers onto the
+     * response and adds {@code X-Tier-Limit} (tier + replenish rate) for client
+     * and analytics attribution. The route id is resolved from the Spring
+     * Cloud Gateway {@code GATEWAY_ROUTE_ATTR} purely for the per-route
+     * observability tag (Sprint 14 NEW-2); the rate-limit bucket family itself
+     * is still the single {@code "global"} key per (user, tier).
+     *
+     * @param exchange the current server exchange; its request supplies the
+     *                 path and tier header, its response receives the rate-
+     *                 limit headers (and the 429 status when throttled)
+     * @param chain    the downstream gateway filter chain, invoked only when
+     *                 the request is within its tier's quota
+     * @return a {@link Mono} completing when the request has been forwarded
+     *         (allowed) or the 429 response has been written (throttled)
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
@@ -204,10 +262,34 @@ public class TierBasedRateLimitFilter implements GlobalFilter, Ordered {
                         }));
     }
 
+    /**
+     * Tests whether the path is exempt from tier-based throttling.
+     *
+     * <p>Uses {@link AntPathMatcher} against {@link #SKIP_PATHS} (auth login/
+     * register/refresh and {@code /actuator/**}). These endpoints either
+     * precede login (so no tier exists yet) or are operational, and must stay
+     * reachable; the list intentionally mirrors {@link JwtValidationFilter}'s
+     * own skip list so the two filters agree on what "unauthenticated" means.
+     *
+     * @param path the request URI path
+     * @return {@code true} if the path matches a skip pattern and should not be
+     *         rate-limited by this filter
+     */
     private boolean shouldSkip(String path) {
         return SKIP_PATHS.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
     }
 
+    /**
+     * Orders this filter just after JWT validation.
+     *
+     * <p>{@code -50} is greater (later) than {@link JwtValidationFilter}'s
+     * {@code -100} but still negative, so it runs <em>after</em> the trusted
+     * {@code X-Api-Tier} header has been injected yet <em>before</em> the
+     * request is proxied downstream — exactly where throttling must happen so
+     * a rejected request never reaches an upstream service.
+     *
+     * @return {@code -50}
+     */
     @Override
     public int getOrder() {
         // After JwtValidationFilter (-100), before downstream proxying.

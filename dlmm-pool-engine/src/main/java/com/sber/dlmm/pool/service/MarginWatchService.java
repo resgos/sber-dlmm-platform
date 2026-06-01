@@ -72,6 +72,13 @@ public class MarginWatchService {
      * <p>{@code distanceFromBoundary} returned alongside is signed:
      * negative = bins OUTSIDE the nearest boundary (magnitude = how far out),
      * positive = bins INSIDE (magnitude = safety margin).
+     *
+     * @param activeBin       the pool's current active bin id
+     * @param rangeMin        inclusive lower bin of the position's range
+     * @param rangeMax        inclusive upper bin of the position's range
+     * @param warningDistance bins-from-boundary at/under which a still-in-range
+     *                        position earns a {@code MARGIN_WARNING}
+     * @return the event to emit (empty = no alert) plus the signed distance
      */
     public static EvaluationResult decideEvent(int activeBin, int rangeMin, int rangeMax,
                                                 int warningDistance) {
@@ -102,6 +109,18 @@ public class MarginWatchService {
      * by the scheduler. Each call commits in its own short transaction so
      * one bad position can't roll back a sweep.
      *
+     * <p>Runs {@link #decideEvent}; if an alert is warranted and the same alert
+     * type hasn't fired for this position within {@code cooldown} (distinct
+     * types fire independently — a CALL after a WARNING is not suppressed), it
+     * persists a {@link MarginCallEvent} and appends a notification to the
+     * outbox (so the alert survives a notification-service/Kafka outage). The
+     * payload's rebalance deadline is computed via the banking calendar so the
+     * treasurer gets a working-day-aware date.
+     *
+     * @param position        the LP position to evaluate
+     * @param pool            its pool (supplies the current active bin)
+     * @param warningDistance bins-from-boundary threshold for a warning
+     * @param cooldown        dedup window suppressing a repeat of the same event type
      * @return true if an event was emitted, false if skipped (no trigger
      *         or cooldown active).
      */

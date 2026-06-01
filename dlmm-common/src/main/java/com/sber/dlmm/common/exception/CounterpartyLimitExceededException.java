@@ -6,6 +6,9 @@ package com.sber.dlmm.common.exception;
  * liquidity_pools). Caller sees HTTP 400 with code COUNTERPARTY_LIMIT_EXCEEDED.
  */
 public class CounterpartyLimitExceededException extends DlmmException {
+    /**
+     * @param message human-readable detail (typically the requested nominal vs. the per-pool cap) surfaced in the error body
+     */
     public CounterpartyLimitExceededException(String message) {
         super(message, "COUNTERPARTY_LIMIT_EXCEEDED", 400);
     }

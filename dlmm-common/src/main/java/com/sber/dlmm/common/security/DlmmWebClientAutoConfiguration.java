@@ -21,6 +21,14 @@ import org.springframework.web.reactive.function.client.WebClient;
 @ConditionalOnClass(WebClient.class)
 public class DlmmWebClientAutoConfiguration {
 
+    /**
+     * Adds {@link BearerTokenForwardingFilter} to every {@code WebClient.Builder}
+     * Spring builds, so inter-service calls inherit the caller's {@code Bearer}
+     * token automatically. A {@link WebClientCustomizer} applies to all builders
+     * without each call site opting in.
+     *
+     * @return the customizer that installs the bearer-forwarding exchange filter
+     */
     @Bean
     public WebClientCustomizer dlmmBearerForwardingCustomizer() {
         return builder -> builder.filter(BearerTokenForwardingFilter.create());

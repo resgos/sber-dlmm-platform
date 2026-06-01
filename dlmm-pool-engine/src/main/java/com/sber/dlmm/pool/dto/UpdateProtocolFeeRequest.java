@@ -11,6 +11,9 @@ import jakarta.validation.constraints.NotNull;
  * verdict: ≤5% stays within internal-clearing reg-frame; >5% would
  * require broker-dealer registration). The {@code @Max(5)} bound is
  * the hard safety — admin UI should add a softer warning above 3%.
+ *
+ * @param protocolFeePct protocol's share of collected fees, as a whole percent
+ *                       (0–5); NOT scaled. 0 disables the protocol fee. Required
  */
 public record UpdateProtocolFeeRequest(
         @NotNull @Min(0) @Max(5) Integer protocolFeePct

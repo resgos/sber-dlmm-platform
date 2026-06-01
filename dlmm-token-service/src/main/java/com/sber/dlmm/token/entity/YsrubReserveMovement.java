@@ -25,6 +25,12 @@ import java.util.UUID;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class YsrubReserveMovement {
 
+    /**
+     * Reserve flow direction. {@code DEPOSIT} = mint (SRUB enters the
+     * reserve, YSRUB credited to the user); {@code WITHDRAWAL} = burn
+     * (the reverse). Persisted as its {@code name()} string and matched
+     * by the native-SQL reserve-total aggregate in the repository.
+     */
     public enum Direction { DEPOSIT, WITHDRAWAL }
 
     @Id
@@ -38,9 +44,12 @@ public class YsrubReserveMovement {
     @Column(nullable = false, length = 20)
     private Direction direction;
 
+    /** SRUB moved into/out of the reserve (raw ×10⁴ units). */
     @Column(name = "srub_amount", nullable = false)
     private long srubAmount;
 
+    /** YSRUB credited/debited to the user (raw ×10⁴ units); equals
+     *  {@link #srubAmount} at the 1:1 ratio shipped in Sprint 9. */
     @Column(name = "ysrub_amount", nullable = false)
     private long ysrubAmount;
 
@@ -54,6 +63,12 @@ public class YsrubReserveMovement {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /**
+     * JPA lifecycle callback fired before INSERT: stamps {@link #createdAt}
+     * and defaults {@link #ratioMicro} to {@code 1_000_000} (the 1:1
+     * conversion) when the caller left it at its {@code 0} default, so a
+     * movement is never persisted with a meaningless zero ratio.
+     */
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();

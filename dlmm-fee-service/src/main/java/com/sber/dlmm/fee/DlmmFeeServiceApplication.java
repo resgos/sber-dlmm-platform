@@ -32,6 +32,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableJpaRepositories(basePackages = {"com.sber.dlmm.fee", "com.sber.dlmm.common.audit"})
 public class DlmmFeeServiceApplication {
 
+    /**
+     * Boots the fee-service Spring application context (port 8084).
+     *
+     * @param args standard JVM command-line arguments, forwarded to Spring Boot
+     */
     public static void main(String[] args) {
         SpringApplication.run(DlmmFeeServiceApplication.class, args);
     }

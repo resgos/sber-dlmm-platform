@@ -69,6 +69,7 @@ public final class OneCExchangeFormatter {
 
     private static final String PLATFORM_SENDER = "DLMM Platform";
 
+    /** Non-instantiable: stateless formatter exposed via static methods. */
     private OneCExchangeFormatter() {}
 
     /**
@@ -127,6 +128,16 @@ public final class OneCExchangeFormatter {
         return sb.toString();
     }
 
+    /**
+     * Appends one {@code СекцияДокумент} … {@code КонецДокумента} block for a
+     * single transaction. The anchor (requester) account is placed on the
+     * payer or payee side according to the transaction's direction; the other
+     * side is a derived stub (pool or treasury).
+     *
+     * @param sb            buffer being built
+     * @param t             transaction to render as one document
+     * @param anchorAccount the requester's stub account (one side of every row)
+     */
     private static void appendDocument(StringBuilder sb, Transaction t, String anchorAccount) {
         sb.append("СекцияДокумент=Платежное поручение").append(LINE_SEP);
         sb.append("Номер=").append(shortenTxNumber(t.getId())).append(LINE_SEP);
@@ -152,6 +163,16 @@ public final class OneCExchangeFormatter {
         sb.append("КонецДокумента").append(LINE_SEP);
     }
 
+    /**
+     * Classifies a transaction type as outbound (money leaves the anchor
+     * account) or inbound, which decides payer/payee placement and which
+     * amount field is reported. Null defaults to outbound (conservative).
+     *
+     * @param type transaction type, possibly {@code null}
+     * @return {@code true} for SWAP / ADD_LIQUIDITY / TRANSFER / BURN /
+     *         WITHDRAW (and null); {@code false} for REMOVE_LIQUIDITY /
+     *         CLAIM_FEE / MINT / DEPOSIT
+     */
     private static boolean isOutbound(TransactionType type) {
         if (type == null) return true;
         return switch (type) {
@@ -169,6 +190,10 @@ public final class OneCExchangeFormatter {
      * are stored as bare longs (token-native units) — for the report we
      * present them as-is with .00, since accountant ETL maps the
      * DLMM unit to whatever subaccount they choose.
+     *
+     * @param t transaction whose amount to format
+     * @return the amount as a {@code NNN.00} string (amount-in for outbound,
+     *         amount-out for inbound, falling back to fee if both are null)
      */
     private static String formatAmount(Transaction t) {
         // Prefer amount_in for outbound, amount_out for inbound to match the
@@ -178,6 +203,14 @@ public final class OneCExchangeFormatter {
         return amount + ".00";
     }
 
+    /**
+     * Builds the {@code НазначениеПлатежа} (payment purpose) free-text line,
+     * embedding tx id, type, and optionally pool / fee / idempotency key.
+     * Strips CR/LF because 1С rejects line breaks inside a field value.
+     *
+     * @param t transaction to describe
+     * @return a single-line, line-break-free purpose string
+     */
     private static String paymentPurpose(Transaction t) {
         StringBuilder p = new StringBuilder(256);
         p.append("DLMM tx:").append(t.getId());
@@ -196,11 +229,22 @@ public final class OneCExchangeFormatter {
      * (20 digits, sub-account encoding) arrive with the SBBOL integration
      * (Sprint 5 #5.13). For now accountant sees "DLMM-USR-A3F8C912" and
      * uses 1С free-text matching.
+     *
+     * @param userId user to derive the stub account from
+     * @return {@code DLMM-USR-} + the uppercased first 8 chars of the UUID
      */
     static String stubAccount(UUID userId) {
         return "DLMM-USR-" + userId.toString().substring(0, 8).toUpperCase();
     }
 
+    /**
+     * Derives the counterparty stub account for a transaction: a pool account
+     * when the row has a pool, otherwise the shared treasury label.
+     *
+     * @param t transaction to derive the counter account from
+     * @return {@code DLMM-POOL-<prefix>} when a pool is present, else
+     *         {@code DLMM-TREASURY}
+     */
     private static String stubCounterAccount(Transaction t) {
         if (t.getPoolId() != null) {
             return "DLMM-POOL-" + t.getPoolId().toString().substring(0, 8).toUpperCase();
@@ -211,6 +255,10 @@ public final class OneCExchangeFormatter {
     /**
      * 1С doc number — 6-digit recommendation but accepts up to 11.
      * Use first 11 chars of the UUID (no dashes) for uniqueness.
+     *
+     * @param id transaction id, possibly {@code null}
+     * @return the uppercased first 11 dash-free chars of the UUID, or
+     *         {@code "000000"} when {@code id} is null
      */
     static String shortenTxNumber(UUID id) {
         if (id == null) return "000000";

@@ -13,6 +13,17 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import com.sber.dlmm.common.security.JwtAuthenticationFilter;
 
+/**
+ * Spring Security configuration for pool-engine. Establishes stateless,
+ * JWT-based authentication (no sessions, CSRF off) and declares which
+ * pool-engine endpoints are public versus authenticated.
+ *
+ * <p>Although the gateway already validates JWTs, every downstream service
+ * re-validates independently via the shared {@link JwtAuthenticationFilter}
+ * (from {@code dlmm-common}) so a service is never reachable without a valid
+ * token even on internal paths. {@code @EnableMethodSecurity} additionally
+ * enables annotation-based method authorization.
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -20,10 +31,27 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    /**
+     * @param jwtAuthenticationFilter shared filter (from {@code dlmm-common}) that validates the bearer
+     *                                token and builds the Spring {@code Authentication}; inserted into the chain below
+     */
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
+    /**
+     * Builds the HTTP security filter chain. Disables CSRF and sessions
+     * (stateless API), permits Swagger, all actuator endpoints, the public
+     * read endpoints (pool reads, swap quote, add-liquidity preview, and the
+     * {@code /api/v1/public/**} tier) without auth, requires authentication for
+     * everything else, and installs the JWT filter ahead of the username/
+     * password filter. See the inline notes for the rationale behind each
+     * permit-all rule.
+     *
+     * @param http the {@link HttpSecurity} builder provided by Spring
+     * @return the configured {@link SecurityFilterChain}
+     * @throws Exception if the chain cannot be built
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http

@@ -14,6 +14,16 @@ import com.sber.dlmm.common.exception.DlmmException;
  */
 public class TwoFactorException extends DlmmException {
 
+    /**
+     * Private base constructor — instances are created only through the named
+     * static factories below, which fix the message / error code / HTTP status
+     * for each distinct 2FA failure. Keeps construction self-documenting at the
+     * call site and prevents ad-hoc codes.
+     *
+     * @param message    human-readable detail rendered into the error body
+     * @param errorCode  stable machine code (e.g. {@code TWO_FACTOR_INVALID_CODE})
+     * @param httpStatus the HTTP status {@code GlobalExceptionHandler} should return
+     */
     private TwoFactorException(String message, String errorCode, int httpStatus) {
         super(message, errorCode, httpStatus);
     }

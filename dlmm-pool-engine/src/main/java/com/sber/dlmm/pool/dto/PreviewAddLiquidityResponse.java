@@ -38,6 +38,30 @@ import java.util.List;
  *       chips ("out of range", "high concentration", etc.). Empty array
  *       when everything looks fine.
  * </ul>
+ *
+ * @param tvlBeforeX          current pool X reserve before the add, raw integer at
+ *                            10⁻⁴ scale
+ * @param tvlBeforeY          current pool Y reserve before the add, raw integer at
+ *                            10⁻⁴ scale
+ * @param tvlAfterX           projected pool X reserve after the add, raw integer at
+ *                            10⁻⁴ scale
+ * @param tvlAfterY           projected pool Y reserve after the add, raw integer at
+ *                            10⁻⁴ scale
+ * @param tvlSharePct         this position's share of post-add TVL, as a percent
+ *                            (e.g. {@code 1.5} = 1.5%); NOT scaled
+ * @param inRange             true iff the active bin falls within the requested range
+ *                            (out-of-range adds earn no fees until price enters it)
+ * @param priceImpactBps      estimated price shift from the add, in basis points
+ *                            (1 bp = 0.01%); NOT scaled. 0 for in-range adds
+ * @param depositedX          X-token amount that would be deposited, raw integer at
+ *                            10⁻⁴ scale
+ * @param depositedY          Y-token amount that would be deposited, raw integer at
+ *                            10⁻⁴ scale
+ * @param binAllocations      per-bin breakdown of the projected deposit
+ * @param estimatedFeesPerDayY rough daily fee projection in Y-token units, raw
+ *                            integer at 10⁻⁴ scale; 0 when the pool has no recent volume
+ * @param warnings            human-readable advisory strings for the UI; empty when
+ *                            nothing is amiss
  */
 public record PreviewAddLiquidityResponse(
         long tvlBeforeX,

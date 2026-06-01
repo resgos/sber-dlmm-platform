@@ -40,6 +40,25 @@ public class SwapEventOhlcvConsumer {
     private final ObjectMapper objectMapper;
     private final OhlcvAggregator aggregator;
 
+    /**
+     * Consumes one {@code pool-events} message and feeds a swap tick into the
+     * OHLCV aggregator.
+     *
+     * <p>WHAT: tolerates both envelope shapes ({@code {eventType, payload}} and
+     * a bare payload), ignores anything that isn't a {@code SwapExecuted}
+     * event, then extracts {@code poolId}, an execution {@code price} (falling
+     * back to {@code amountOut / amountIn} when {@code executionPrice} is
+     * absent), {@code amountIn} and the event time, and calls
+     * {@link OhlcvAggregator#record}.
+     *
+     * <p>WHY swallow all parse errors with a WARN: a single malformed or
+     * unexpected payload must not wedge the Kafka poll loop and block every
+     * subsequent message on the partition — the chart store prefers a dropped
+     * tick over a stalled consumer.
+     *
+     * @param message raw JSON payload delivered from the {@code pool-events}
+     *                topic
+     */
     @KafkaListener(topics = "pool-events", groupId = "dlmm-price-oracle-ohlcv")
     public void onPoolEvent(String message) {
         try {
@@ -98,6 +117,14 @@ public class SwapEventOhlcvConsumer {
      * payload without a timestamp still contributes a candle (just
      * in the wrong minute if there's clock skew between producer
      * and consumer).
+     *
+     * <p>Accepts either a numeric epoch (auto-detecting millis vs seconds by
+     * magnitude) or an ISO-8601 {@link LocalDateTime} string, trying the
+     * candidate fields in order.
+     *
+     * @param payload the swap event payload to read the timestamp from
+     * @return the event time in epoch seconds, or the current wall-clock time
+     *         (epoch seconds) if no usable timestamp field is present
      */
     private static long parseEventTimestamp(JsonNode payload) {
         for (String field : new String[]{"timestamp", "createdAt", "executedAt"}) {

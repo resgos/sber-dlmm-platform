@@ -9,6 +9,12 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Persistence for {@link MarginCallEvent} — the audit/alert trail written when
+ * an LP position approaches or leaves its bin range. Used by
+ * {@code MarginWatchService} for cooldown de-duplication and by the user-ui
+ * risk-alerts view.
+ */
 @Repository
 public interface MarginCallEventRepository extends JpaRepository<MarginCallEvent, UUID> {
 
@@ -20,6 +26,10 @@ public interface MarginCallEventRepository extends JpaRepository<MarginCallEvent
      *
      * <p>Spring Data derived query — {@code findTopBy...OrderByCreatedAtDesc}
      * is portable across Hibernate 6.x without needing JPQL LIMIT support.
+     *
+     * @param positionId position to look up
+     * @param eventType  event severity to match (MARGIN_WARNING / MARGIN_CALL)
+     * @return the most recent matching event, or empty if none yet
      */
     Optional<MarginCallEvent> findTopByPositionIdAndEventTypeOrderByCreatedAtDesc(
             UUID positionId, NotificationType eventType);
@@ -28,6 +38,10 @@ public interface MarginCallEventRepository extends JpaRepository<MarginCallEvent
      * Listing for the user-ui "Risk alerts" tab (Sprint 5+). Bounded query —
      * caller passes a {@code since} cutoff so we don't accidentally load
      * a year of history.
+     *
+     * @param userId user whose alerts to count
+     * @param since  exclusive lower bound on {@code createdAt}
+     * @return number of the user's events strictly after {@code since}
      */
     long countByUserIdAndCreatedAtAfter(UUID userId, LocalDateTime since);
 }

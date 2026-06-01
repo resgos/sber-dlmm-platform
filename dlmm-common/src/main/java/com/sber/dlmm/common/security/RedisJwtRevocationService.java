@@ -25,10 +25,26 @@ public class RedisJwtRevocationService implements JwtRevocationService {
 
     private final StringRedisTemplate redis;
 
+    /**
+     * @param redis the shared string Redis template used for denylist reads/writes
+     */
     public RedisJwtRevocationService(StringRedisTemplate redis) {
         this.redis = redis;
     }
 
+    /**
+     * Checks whether a {@code jti} is on the revocation denylist.
+     *
+     * <p><b>Fail-open</b> by design: a {@code null}/blank {@code jti} (legacy
+     * tokens predating AU-3) and any Redis error both return {@code false}
+     * ("not revoked"). A Redis outage therefore degrades to "no revocation
+     * enforcement" rather than locking every user out — the accepted gap is a
+     * short outage window, not a permanent bypass (Sprint 8 AU-3). Contrast with
+     * {@link #revoke(String, long)}, which fails loud.
+     *
+     * @param jti the JWT ID claim to test; {@code null}/blank ⇒ not revoked
+     * @return {@code true} only if a denylist entry definitively exists
+     */
     @Override
     public boolean isRevoked(String jti) {
         if (jti == null || jti.isBlank()) return false;
@@ -44,6 +60,22 @@ public class RedisJwtRevocationService implements JwtRevocationService {
         }
     }
 
+    /**
+     * Writes a denylist entry for {@code jti} that auto-expires after
+     * {@code ttlSeconds}, so Redis evicts it exactly when the token would have
+     * expired (no cleanup job).
+     *
+     * <p><b>Fail-loud</b> (opposite of {@link #isRevoked(String)}): if the Redis
+     * write fails, this throws so the logout endpoint can surface a 500 rather
+     * than silently leaving a "logged-out" token usable. A blank {@code jti} is
+     * refused with a warning; a non-positive TTL is skipped (the token has
+     * already expired, so there is nothing to deny).
+     *
+     * @param jti the JWT ID to revoke; blank values are ignored
+     * @param ttlSeconds denylist lifetime — MUST be ≥ the token's remaining
+     *                   lifetime or the revocation leaks; ≤ 0 is a no-op
+     * @throws IllegalStateException if the Redis write fails
+     */
     @Override
     public void revoke(String jti, long ttlSeconds) {
         if (jti == null || jti.isBlank()) {

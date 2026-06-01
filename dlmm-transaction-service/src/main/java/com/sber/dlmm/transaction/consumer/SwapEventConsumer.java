@@ -55,6 +55,15 @@ public class SwapEventConsumer {
      * We parse the envelope, then the payload. SwapExecutedEvent is in
      * dlmm-pool-engine package — no compile-time dependency from
      * transaction-service, so we map by field name with Jackson.
+     *
+     * <p>Non-SwapExecuted messages are ignored. Already-persisted swaps are
+     * skipped via the dual dedup keys (idempotencyKey + poolEngineTxId); a lost
+     * race on either UNIQUE constraint is caught as a duplicate. The method
+     * deliberately swallows all exceptions (logs, never rethrows) so a single
+     * malformed message can't become a poison pill that stalls the partition.
+     *
+     * @param message the raw JSON string delivered from the {@code pool-events}
+     *                topic (outbox envelope, or a bare payload)
      */
     @KafkaListener(topics = "pool-events", groupId = "dlmm-transaction-service-swaps")
     @Transactional

@@ -24,10 +24,21 @@ public class DownstreamHealthIndicator implements HealthIndicator {
 
     private static final Duration PROBE_TIMEOUT = Duration.ofSeconds(3);
 
+    /** Human label for this downstream (e.g. "token-service"); shown in health details. */
     private final String name;
+    /** Base URL of the downstream whose {@code /actuator/health} is probed. */
     private final String baseUrl;
+    /** Dedicated, filter-free client used only for the anonymous probe. */
     private final WebClient webClient;
 
+    /**
+     * Creates a health contributor for one downstream service. Builds a
+     * dedicated {@link WebClient} (see inline note) rather than reusing the
+     * app-wide builder, so the probe carries no inbound Authorization header.
+     *
+     * @param name    label reported under {@code service} in the health detail
+     * @param baseUrl downstream base URL; {@code /actuator/health} is appended
+     */
     public DownstreamHealthIndicator(String name, String baseUrl) {
         this.name = name;
         this.baseUrl = baseUrl;
@@ -40,6 +51,19 @@ public class DownstreamHealthIndicator implements HealthIndicator {
         this.webClient = WebClient.builder().baseUrl(baseUrl).build();
     }
 
+    /**
+     * Probes the downstream's {@code /actuator/health} once.
+     *
+     * <p>Returns {@link Health#up()} if a (non-null) response body comes back
+     * within {@link #PROBE_TIMEOUT}; otherwise {@link Health#down()} — both with
+     * {@code service}/{@code url} details, and DOWN additionally carrying a
+     * {@code reason} (timeout/no-response) or the exception. The downstream's
+     * own UP/DOWN payload is not parsed: any timely reply counts as reachable.
+     * Errors are swallowed into DOWN so this contributor never throws into the
+     * aggregate health endpoint.
+     *
+     * @return UP when the downstream answered in time, DOWN otherwise
+     */
     @Override
     public Health health() {
         try {
