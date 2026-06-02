@@ -266,14 +266,29 @@ public class FeeService {
         }
         feeAccrualRepository.saveAll(unclaimedAccruals);
 
-        // Keep the position's DISPLAYED unclaimed fees (lp_positions — pool-engine's
-        // table, same shared DB) in sync with the claim ledger. A claim settles ALL of
-        // the position's unclaimed accruals above, so its displayed unclaimed is now 0.
-        // Without this the Positions page kept showing phantom fees after an auto/manual
-        // claim, and a re-claim then returned 0 ("забор комиссии не получилось"). Runs on
-        // both the quote-only and standard paths (before the branch), in this txn.
+        // Keep the position's DISPLAYED unclaimed fees in sync with the claim ledger.
+        // The Positions page (pool-engine getUserPositions) shows
+        //     lp_positions.unclaimed_fee_x/y  +  a LIVE delta computed from each bin's
+        //     fee_growth_* MINUS the position's last_fee_growth_* snapshot.
+        // A claim settles ALL of the position's accruals, so BOTH parts must drop to 0:
+        //   • reset the stored unclaimed_fee_x/y columns; and
+        //   • advance the snapshot to MAX(bin fee_growth) over the position's bins, which
+        //     zeroes the live delta (getUserPositions clamps a non-positive delta to 0).
+        // Without the snapshot advance the page kept showing the live delta after a claim
+        // — the claim button stayed enabled and a re-claim paid 0 ("кнопка активна после
+        // забора / даёт забрать ещё раз"). Same shared DB, same txn; runs on both the
+        // quote-only and standard paths. (The single-snapshot model is simplistic — see
+        // task #34; MAX is the minimal single value that zeroes the multi-bin delta.)
         jdbcTemplate.update(
-                "UPDATE lp_positions SET unclaimed_fee_x = 0, unclaimed_fee_y = 0 WHERE id = ?",
+                "UPDATE lp_positions AS p SET " +
+                "  unclaimed_fee_x = 0, unclaimed_fee_y = 0, " +
+                "  last_fee_growth_x = COALESCE((SELECT MAX(b.fee_growth_x) FROM position_bins pb " +
+                "      JOIN pool_bins b ON b.pool_id = p.pool_id AND b.bin_id = pb.bin_id " +
+                "      WHERE pb.position_id = p.id), p.last_fee_growth_x), " +
+                "  last_fee_growth_y = COALESCE((SELECT MAX(b.fee_growth_y) FROM position_bins pb " +
+                "      JOIN pool_bins b ON b.pool_id = p.pool_id AND b.bin_id = pb.bin_id " +
+                "      WHERE pb.position_id = p.id), p.last_fee_growth_y) " +
+                "WHERE p.id = ?",
                 request.positionId());
 
         Map<UUID, Long> claimedByToken = unclaimedAccruals.stream()
