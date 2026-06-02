@@ -50,4 +50,21 @@ public class PositionBin {
     /** This position's share of the bin's liquidity (pro-rata basis for fees/withdrawals); not a token amount. */
     @Column(name = "liquidity_shares", nullable = false)
     private long liquidityShares;
+
+    /**
+     * Meteora-style PER-BIN fee-growth checkpoint (token X), 1e9 fixed-point
+     * ({@link com.sber.dlmm.common.util.BinMath#FEE_GROWTH_SCALE}). Snapshot of
+     * THIS bin's {@code pool_bins.fee_growth_x} at the moment the position
+     * entered the bin. The bin's owed X-fee is
+     * {@code feeFromGrowth(poolBin.feeGrowthX - feeGrowthCheckpointX, liquidityShares)};
+     * a claim advances the checkpoint to the bin's current growth so the next
+     * delta starts from zero. Supersedes the single position-wide
+     * {@code LpPosition.lastFeeGrowthX} snapshot.
+     */
+    @Column(name = "fee_growth_checkpoint_x", nullable = false)
+    private long feeGrowthCheckpointX;
+
+    /** Per-bin fee-growth checkpoint (token Y), 1e9 fixed-point. See {@link #feeGrowthCheckpointX}. */
+    @Column(name = "fee_growth_checkpoint_y", nullable = false)
+    private long feeGrowthCheckpointY;
 }

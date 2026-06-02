@@ -308,11 +308,25 @@ public class LiquidityService {
             poolBin.setCompositionFactor(BinMath.compositionFactor(poolBin.getReserveY(), poolBin.getLiquidity()));
             poolBinRepository.save(poolBin);
 
-            // Create PositionBin
+            // Create PositionBin — stamp THIS bin's current fee-growth as the
+            // per-bin checkpoint (Meteora model). The bin's owed fee is later
+            // feeFromGrowth(poolBin.feeGrowth - checkpoint, shares); entering now
+            // means zero owed until the next swap moves this bin's growth.
+            //
+            // INVARIANT: addLiquidity always creates a NEW position (positionId is a
+            // fresh UUID, see top of method), so this position has no pre-existing
+            // shares in this bin — the checkpoint is a clean entry snapshot. If a
+            // top-up path is ever added (adding to an EXISTING position's bin), it
+            // MUST first settle the existing shares' owed fee
+            // (feeFromGrowth(growth - oldCheckpoint, oldShares) -> unclaimed_fee) and
+            // only then bump shares + reset the checkpoint — otherwise the new shares
+            // would retroactively claim fees accrued before they were deposited.
             PositionBin posBin = PositionBin.builder()
                     .positionId(positionId)
                     .binId(binId)
                     .liquidityShares(binLiquidity)
+                    .feeGrowthCheckpointX(poolBin.getFeeGrowthX())
+                    .feeGrowthCheckpointY(poolBin.getFeeGrowthY())
                     .build();
             positionBins.add(posBin);
 
@@ -343,18 +357,14 @@ public class LiquidityService {
         // Save position bins
         positionBinRepository.saveAll(positionBins);
 
-        // 7. Create LpPosition
-        // Get current feeGrowth from the active bin (or first bin in range) for snapshot
+        // 7. Create LpPosition.
+        // Fee tracking is now PER BIN — see PositionBin.feeGrowthCheckpointX/Y stamped
+        // in the loop above. The position-wide lastFeeGrowthX/Y snapshot is DEPRECATED
+        // and kept at 0 only because the column still exists; no money path reads it
+        // anymore (getUserPositions, removeLiquidity and the fee claim all use the
+        // per-bin checkpoint). Do NOT reintroduce a single-snapshot computation here.
         long lastFeeGrowthX = 0;
         long lastFeeGrowthY = 0;
-        poolBinRepository.findByPoolIdAndBinId(pool.getId(), activeBinId).ifPresent(ab -> {
-            // Snapshot is taken at position creation time — stored in a mutable holder
-        });
-        PoolBin activeBin = poolBinRepository.findByPoolIdAndBinId(pool.getId(), activeBinId).orElse(null);
-        if (activeBin != null) {
-            lastFeeGrowthX = activeBin.getFeeGrowthX();
-            lastFeeGrowthY = activeBin.getFeeGrowthY();
-        }
 
         LpPosition position = LpPosition.builder()
                 .id(positionId)
@@ -667,12 +677,14 @@ public class LiquidityService {
             long amountX = poolBin.getReserveX() * binShareToRemove / poolBin.getLiquidity();
             long amountY = poolBin.getReserveY() * binShareToRemove / poolBin.getLiquidity();
 
-            // 4. Calculate accrued fees (proportional to removed share)
-            // feeGrowth is per-unit-of-liquidity, scaled by FEE_GROWTH_SCALE;
-            // feeFromGrowth multiplies by the removed share and divides the
-            // scale back out (clamping a negative delta to 0).
-            long feeX = BinMath.feeFromGrowth(poolBin.getFeeGrowthX() - position.getLastFeeGrowthX(), binShareToRemove);
-            long feeY = BinMath.feeFromGrowth(poolBin.getFeeGrowthY() - position.getLastFeeGrowthY(), binShareToRemove);
+            // 4. Settle ALL accrued fees for this bin (Meteora: a remove claims the
+            // position's full pending fees, not just the removed proportion). Compute
+            // against this bin's PER-BIN checkpoint on the FULL shares held here, then
+            // advance the checkpoint below so they can't be re-counted. feeGrowth is
+            // per-unit-of-liquidity (FEE_GROWTH_SCALE); feeFromGrowth multiplies by
+            // shares and divides the scale back out, clamping a non-positive delta to 0.
+            long feeX = BinMath.feeFromGrowth(poolBin.getFeeGrowthX() - posBin.getFeeGrowthCheckpointX(), posBin.getLiquidityShares());
+            long feeY = BinMath.feeFromGrowth(poolBin.getFeeGrowthY() - posBin.getFeeGrowthCheckpointY(), posBin.getLiquidityShares());
             feeX = Math.max(feeX, 0);
             feeY = Math.max(feeY, 0);
 
@@ -683,12 +695,17 @@ public class LiquidityService {
             poolBin.setCompositionFactor(BinMath.compositionFactor(poolBin.getReserveY(), poolBin.getLiquidity()));
             poolBinRepository.save(poolBin);
 
-            // 3d. Update PositionBin
+            // 3d. Update PositionBin. The full accrued fee was just paid above, so
+            // advance this bin's checkpoint to its current growth — the surviving
+            // shares show owed=0 immediately after and accrue afresh from here. (A
+            // fully-removed bin is deleted, so its checkpoint is moot.)
             long remainingShares = posBin.getLiquidityShares() - binShareToRemove;
             if (remainingShares <= 0) {
                 binsToRemove.add(posBin);
             } else {
                 posBin.setLiquidityShares(remainingShares);
+                posBin.setFeeGrowthCheckpointX(poolBin.getFeeGrowthX());
+                posBin.setFeeGrowthCheckpointY(poolBin.getFeeGrowthY());
                 positionBinRepository.save(posBin);
             }
 
@@ -747,12 +764,8 @@ public class LiquidityService {
         position.setInitialDepositX(position.getInitialDepositX() * remainingBps / 10_000);
         position.setInitialDepositY(position.getInitialDepositY() * remainingBps / 10_000);
 
-        // Update fee growth snapshot to current
-        PoolBin activeBin = poolBinRepository.findByPoolIdAndBinId(pool.getId(), pool.getActiveBinId()).orElse(null);
-        if (activeBin != null) {
-            position.setLastFeeGrowthX(activeBin.getFeeGrowthX());
-            position.setLastFeeGrowthY(activeBin.getFeeGrowthY());
-        }
+        // (Fee-growth checkpoints are advanced PER BIN inside the loop above; the
+        // deprecated position-wide lastFeeGrowth snapshot is no longer maintained.)
 
         // 7. Close position if 100%
         if (percentageBps == 10_000) {
@@ -826,9 +839,15 @@ public class LiquidityService {
                 currentValueX += valueX;
                 currentValueY += valueY;
 
-                // Calculate unclaimed fees
-                long feeX = BinMath.feeFromGrowth(poolBin.getFeeGrowthX() - pos.getLastFeeGrowthX(), pb.getLiquidityShares());
-                long feeY = BinMath.feeFromGrowth(poolBin.getFeeGrowthY() - pos.getLastFeeGrowthY(), pb.getLiquidityShares());
+                // Calculate unclaimed fees against THIS bin's per-bin checkpoint
+                // (Meteora model): owed = feeFromGrowth(bin growth - the position's
+                // checkpoint in this bin, the position's shares in this bin). Each bin
+                // is measured from where the position entered it — no single
+                // position-wide snapshot (which under/over-counted bins away from the
+                // active price). feeFromGrowth floors and clamps a non-positive delta
+                // to 0; the extra Math.max is belt-and-suspenders.
+                long feeX = BinMath.feeFromGrowth(poolBin.getFeeGrowthX() - pb.getFeeGrowthCheckpointX(), pb.getLiquidityShares());
+                long feeY = BinMath.feeFromGrowth(poolBin.getFeeGrowthY() - pb.getFeeGrowthCheckpointY(), pb.getLiquidityShares());
                 unclaimedFeeX += Math.max(feeX, 0);
                 unclaimedFeeY += Math.max(feeY, 0);
 

@@ -2,6 +2,7 @@ package com.sber.dlmm.fee.service;
 
 import com.sber.dlmm.common.dto.PageResponse;
 import com.sber.dlmm.common.exception.IdempotencyConflictException;
+import com.sber.dlmm.common.util.BinMath;
 import com.sber.dlmm.fee.dto.ClaimFeesRequest;
 import com.sber.dlmm.fee.dto.ClaimFeesResponse;
 import com.sber.dlmm.fee.dto.FeeAccrualDto;
@@ -16,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -117,10 +120,41 @@ public class FeeService {
     public FeesSummaryResponse getUserFeesSummary(UUID userId) {
         log.debug("Getting fee summary for user: {}", userId);
 
-        List<FeeAccrual> allAccruals = feeAccrualRepository.findByUserId(userId);
+        // CLAIMED history: fee_accruals is now write-on-claim only, so every row here is
+        // a past payout. Group the claimed amount per pool, per token.
+        Map<UUID, Map<UUID, Long>> claimedByPoolToken = new LinkedHashMap<>();
+        for (FeeAccrual a : feeAccrualRepository.findByUserId(userId)) {
+            claimedByPoolToken
+                    .computeIfAbsent(a.getPoolId(), k -> new HashMap<>())
+                    .merge(a.getTokenId(), a.getAmount(), Long::sum);
+        }
 
-        Map<UUID, List<FeeAccrual>> byPool = allAccruals.stream()
-                .collect(Collectors.groupingBy(FeeAccrual::getPoolId, LinkedHashMap::new, Collectors.toList()));
+        // UNCLAIMED owed: computed live from pool-engine per-bin fee growth (the single
+        // source of truth), per pool, split by the pool's real X/Y token ids. numeric +
+        // floor mirrors BinMath.feeFromGrowth exactly and avoids long overflow on the
+        // per-bin product. Each row: [poolId, tokenXId, tokenYId, owedX, owedY].
+        List<Object[]> owedRows = jdbcTemplate.query(
+                "SELECT p.pool_id, lp.token_x_id, lp.token_y_id, " +
+                "  COALESCE(SUM(floor(GREATEST(b.fee_growth_x - pb.fee_growth_checkpoint_x,0)::numeric " +
+                "      * pb.liquidity_shares / 1000000000)),0)::bigint AS owed_x, " +
+                "  COALESCE(SUM(floor(GREATEST(b.fee_growth_y - pb.fee_growth_checkpoint_y,0)::numeric " +
+                "      * pb.liquidity_shares / 1000000000)),0)::bigint AS owed_y " +
+                "FROM lp_positions p " +
+                "JOIN position_bins pb ON pb.position_id = p.id " +
+                "JOIN pool_bins b ON b.pool_id = p.pool_id AND b.bin_id = pb.bin_id " +
+                "JOIN liquidity_pools lp ON lp.id = p.pool_id " +
+                "WHERE p.is_active AND p.user_id = ? " +
+                "GROUP BY p.pool_id, lp.token_x_id, lp.token_y_id",
+                (rs, n) -> new Object[]{ rs.getObject("pool_id"), rs.getObject("token_x_id"),
+                        rs.getObject("token_y_id"), rs.getLong("owed_x"), rs.getLong("owed_y") },
+                userId);
+        Map<UUID, long[]> owedByPool = new LinkedHashMap<>();          // poolId -> [owedX, owedY]
+        Map<UUID, UUID[]> tokensByPool = new LinkedHashMap<>();        // poolId -> [tokenXId, tokenYId]
+        for (Object[] r : owedRows) {
+            UUID poolId = (UUID) r[0];
+            owedByPool.put(poolId, new long[]{ ((Number) r[3]).longValue(), ((Number) r[4]).longValue() });
+            tokensByPool.put(poolId, new UUID[]{ (UUID) r[1], (UUID) r[2] });
+        }
 
         List<PoolFeeSummary> poolSummaries = new ArrayList<>();
         long totalUnclaimedX = 0;
@@ -128,40 +162,46 @@ public class FeeService {
         long totalEarnedX = 0;
         long totalEarnedY = 0;
 
-        for (Map.Entry<UUID, List<FeeAccrual>> entry : byPool.entrySet()) {
-            UUID poolId = entry.getKey();
-            List<FeeAccrual> poolAccruals = entry.getValue();
+        Set<UUID> pools = new LinkedHashSet<>();
+        pools.addAll(owedByPool.keySet());
+        pools.addAll(claimedByPoolToken.keySet());
 
-            Map<UUID, long[]> tokenTotals = new HashMap<>();
-            for (FeeAccrual accrual : poolAccruals) {
-                long[] totals = tokenTotals.computeIfAbsent(accrual.getTokenId(), k -> new long[2]);
-                totals[0] += accrual.getAmount();
-                if (!accrual.isClaimed()) {
-                    totals[1] += accrual.getAmount();
-                }
+        for (UUID poolId : pools) {
+            UUID[] toks = tokensByPool.get(poolId);
+            Map<UUID, Long> claimed = claimedByPoolToken.getOrDefault(poolId, Map.of());
+            UUID tokenXId;
+            UUID tokenYId;
+            if (toks != null) {
+                tokenXId = toks[0];
+                tokenYId = toks[1];
+            } else {
+                // Pool with claimed history but no active position — best-effort labels.
+                List<UUID> ids = new ArrayList<>(claimed.keySet());
+                tokenXId = ids.isEmpty() ? null : ids.get(0);
+                tokenYId = ids.size() > 1 ? ids.get(1) : null;
             }
 
-            List<UUID> tokenIds = new ArrayList<>(tokenTotals.keySet());
-            UUID tokenXId = tokenIds.isEmpty() ? null : tokenIds.get(0);
-            UUID tokenYId = tokenIds.size() > 1 ? tokenIds.get(1) : null;
-
-            long totalEarnedFeeX = tokenXId != null ? tokenTotals.get(tokenXId)[0] : 0;
-            long totalEarnedFeeY = tokenYId != null ? tokenTotals.get(tokenYId)[0] : 0;
-            long unclaimedFeeX = tokenXId != null ? tokenTotals.get(tokenXId)[1] : 0;
-            long unclaimedFeeY = tokenYId != null ? tokenTotals.get(tokenYId)[1] : 0;
+            long[] owed = owedByPool.getOrDefault(poolId, new long[]{0, 0});
+            long unclaimedFeeX = owed[0];
+            long unclaimedFeeY = owed[1];
+            long claimedX = tokenXId != null ? claimed.getOrDefault(tokenXId, 0L) : 0;
+            long claimedY = tokenYId != null ? claimed.getOrDefault(tokenYId, 0L) : 0;
+            // earned = already-claimed (history) + still-owed (live per-bin).
+            long earnedFeeX = claimedX + unclaimedFeeX;
+            long earnedFeeY = claimedY + unclaimedFeeY;
 
             totalUnclaimedX += unclaimedFeeX;
             totalUnclaimedY += unclaimedFeeY;
-            totalEarnedX += totalEarnedFeeX;
-            totalEarnedY += totalEarnedFeeY;
+            totalEarnedX += earnedFeeX;
+            totalEarnedY += earnedFeeY;
 
             poolSummaries.add(new PoolFeeSummary(
                     poolId,
                     poolId.toString(),
                     unclaimedFeeX,
                     unclaimedFeeY,
-                    totalEarnedFeeX,
-                    totalEarnedFeeY,
+                    earnedFeeX,
+                    earnedFeeY,
                     BigDecimal.ZERO
             ));
         }
@@ -171,6 +211,38 @@ public class FeeService {
 
         return new FeesSummaryResponse(userId, poolSummaries, totalUnclaimedX, totalUnclaimedY,
                 totalEarnedX, totalEarnedY, totalClaimed, totalUnclaimed);
+    }
+
+    /**
+     * A position's currently-OWED (unclaimed) fees, computed live from pool-engine's
+     * per-bin fee growth — the single source of truth used by the claim and the summary.
+     * Drives the auto-claim scheduler's work discovery (fee_accruals no longer holds
+     * unclaimed rows).
+     */
+    public record PositionOwed(UUID positionId, UUID poolId, long owedX, long owedY) {}
+
+    /**
+     * Per-position unclaimed owed for a user's ACTIVE positions, computed from per-bin
+     * fee growth (numeric + floor mirrors {@link BinMath#feeFromGrowth} and avoids long
+     * overflow on the per-bin product) plus the stored {@code unclaimed_fee} column.
+     * Positions with zero owed are included; callers filter as needed.
+     */
+    @Transactional(readOnly = true)
+    public List<PositionOwed> getUnclaimedOwedByPosition(UUID userId) {
+        return jdbcTemplate.query(
+                "SELECT p.id, p.pool_id, " +
+                "  (COALESCE(SUM(floor(GREATEST(b.fee_growth_x - pb.fee_growth_checkpoint_x,0)::numeric " +
+                "      * pb.liquidity_shares / 1000000000)),0) + p.unclaimed_fee_x)::bigint AS owed_x, " +
+                "  (COALESCE(SUM(floor(GREATEST(b.fee_growth_y - pb.fee_growth_checkpoint_y,0)::numeric " +
+                "      * pb.liquidity_shares / 1000000000)),0) + p.unclaimed_fee_y)::bigint AS owed_y " +
+                "FROM lp_positions p " +
+                "JOIN position_bins pb ON pb.position_id = p.id " +
+                "JOIN pool_bins b ON b.pool_id = p.pool_id AND b.bin_id = pb.bin_id " +
+                "WHERE p.is_active AND p.user_id = ? " +
+                "GROUP BY p.id, p.pool_id, p.unclaimed_fee_x, p.unclaimed_fee_y",
+                (rs, n) -> new PositionOwed((UUID) rs.getObject("id"), (UUID) rs.getObject("pool_id"),
+                        rs.getLong("owed_x"), rs.getLong("owed_y")),
+                userId);
     }
 
     /**
@@ -197,13 +269,18 @@ public class FeeService {
      * {@link FeeClaimedEvent}. This is the money path — read the body alongside the
      * class-level money-safety invariants.
      *
-     * <p><b>Flow.</b> (1) If an idempotency key is supplied, reserve it; reject with
-     * {@link IdempotencyConflictException} if already seen, and register a
-     * rollback-only release so a failed attempt can be retried. (2) Load this user's
-     * unclaimed accruals for the position; return a zero response if there are none.
-     * (3) Flip them to {@code claimed} and persist. (4) Credit balances and emit the
-     * event. Steps 3–4 share one transaction, so a credit failure rolls the claim back
-     * and the fees stay unclaimed (never marked-paid-but-unpaid).
+     * <p><b>Flow (Meteora per-bin single source of truth).</b> (1) If an idempotency
+     * key is supplied, reserve it; reject with {@link IdempotencyConflictException} if
+     * already seen, and register a rollback-only release so a failed attempt can be
+     * retried. (2) Compute owed live from pool-engine's per-bin fee growth:
+     * {@code stored unclaimed_fee + Σ feeFromGrowth(pool_bins.fee_growth -
+     * position_bins.fee_growth_checkpoint, shares)} — exactly what the Positions page
+     * displays; return a zero response if owed is 0. (3) Advance each bin's checkpoint
+     * to the measured growth and zero the stored column (settle). (4) Credit balances,
+     * write a {@code claimed=true} history row to {@code fee_accruals}, and emit the
+     * event. Steps 3–4 share one transaction, so a credit failure rolls the settle back
+     * and the fees stay claimable (never settled-but-unpaid). A re-claim then measures
+     * owed=0 — structurally no double credit.
      *
      * <p>Sprint 16 (Meteora parity) — {@code quoteOnly} consolidates the claim into
      * the pool's quote token (Y): the X-fee is converted at the pool's current
@@ -250,102 +327,139 @@ public class FeeService {
             }
         }
 
-        List<FeeAccrual> unclaimedAccruals = feeAccrualRepository.findByPositionId(request.positionId()).stream()
-                .filter(a -> !a.isClaimed())
-                .filter(a -> a.getUserId().equals(userId))
-                .toList();
+        // ── Per-bin owed: pool-engine fee growth is the SINGLE SOURCE OF TRUTH ──
+        // owed = stored unclaimed_fee + Σ feeFromGrowth(pool_bins.fee_growth -
+        // position_bins.fee_growth_checkpoint, shares) — EXACTLY what getUserPositions
+        // displays, so a claim pays what the Positions page shows. fee_accruals is no
+        // longer the source; it is written below purely as claim history.
+        LocalDateTime now = LocalDateTime.now();
 
-        if (unclaimedAccruals.isEmpty()) {
+        // Position row: owner (you may only claim your own), pool, and the stored
+        // unclaimed column (0 under the per-bin model, folded in for completeness).
+        Map<String, Object> posRow;
+        try {
+            posRow = jdbcTemplate.queryForMap(
+                    "SELECT pool_id, user_id, unclaimed_fee_x, unclaimed_fee_y FROM lp_positions WHERE id = ?",
+                    request.positionId());
+        } catch (EmptyResultDataAccessException notFound) {
+            return new ClaimFeesResponse(request.positionId(), 0, 0, null, null);
+        }
+        if (!userId.equals(posRow.get("user_id"))) {
+            return new ClaimFeesResponse(request.positionId(), 0, 0, null, null);
+        }
+        UUID poolId = (UUID) posRow.get("pool_id");
+        long owedX = ((Number) posRow.get("unclaimed_fee_x")).longValue();
+        long owedY = ((Number) posRow.get("unclaimed_fee_y")).longValue();
+
+        // Per-bin growth vs this position's per-bin checkpoint (mirrors getUserPositions).
+        // Each row: [binId, growthX, growthY, checkpointX, checkpointY, shares].
+        List<long[]> bins = jdbcTemplate.query(
+                "SELECT pb.bin_id, b.fee_growth_x, b.fee_growth_y, " +
+                "       pb.fee_growth_checkpoint_x, pb.fee_growth_checkpoint_y, pb.liquidity_shares " +
+                "FROM position_bins pb " +
+                "JOIN lp_positions p ON p.id = pb.position_id " +
+                "JOIN pool_bins b ON b.pool_id = p.pool_id AND b.bin_id = pb.bin_id " +
+                "WHERE pb.position_id = ?",
+                (rs, n) -> new long[]{ rs.getLong(1), rs.getLong(2), rs.getLong(3),
+                                       rs.getLong(4), rs.getLong(5), rs.getLong(6) },
+                request.positionId());
+        for (long[] r : bins) {
+            owedX += BinMath.feeFromGrowth(r[1] - r[3], r[5]);
+            owedY += BinMath.feeFromGrowth(r[2] - r[4], r[5]);
+        }
+
+        if (owedX <= 0 && owedY <= 0) {
             return new ClaimFeesResponse(request.positionId(), 0, 0, null, null);
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        for (FeeAccrual accrual : unclaimedAccruals) {
-            accrual.setClaimed(true);
-            accrual.setClaimedAt(now);
+        // Resolve the pool's token ids + price BEFORE settling, so we never advance
+        // checkpoints (and thereby lose the fees) for a position we can't credit.
+        PoolXY pool = lookupPoolXY(poolId);
+        if (pool == null) {
+            log.warn("Pool {} not readable for claim on position {} — skipping settle", poolId, request.positionId());
+            return new ClaimFeesResponse(request.positionId(), 0, 0, null, null);
         }
-        feeAccrualRepository.saveAll(unclaimedAccruals);
+        UUID tokenXId = pool.tokenXId();
+        UUID tokenYId = pool.tokenYId();
 
-        // Keep the position's DISPLAYED unclaimed fees in sync with the claim ledger.
-        // The Positions page (pool-engine getUserPositions) shows
-        //     lp_positions.unclaimed_fee_x/y  +  a LIVE delta computed from each bin's
-        //     fee_growth_* MINUS the position's last_fee_growth_* snapshot.
-        // A claim settles ALL of the position's accruals, so BOTH parts must drop to 0:
-        //   • reset the stored unclaimed_fee_x/y columns; and
-        //   • advance the snapshot to MAX(bin fee_growth) over the position's bins, which
-        //     zeroes the live delta (getUserPositions clamps a non-positive delta to 0).
-        // Without the snapshot advance the page kept showing the live delta after a claim
-        // — the claim button stayed enabled and a re-claim paid 0 ("кнопка активна после
-        // забора / даёт забрать ещё раз"). Same shared DB, same txn; runs on both the
-        // quote-only and standard paths. (The single-snapshot model is simplistic — see
-        // task #34; MAX is the minimal single value that zeroes the multi-bin delta.)
+        // Settle: advance each bin's checkpoint to the growth we just MEASURED (explicit
+        // values, NOT a fresh subquery — a swap landing mid-claim keeps its increment for
+        // the next claim instead of being lost), and zero the stored column. Same txn as
+        // the credit below, so a credit failure rolls this back and fees stay claimable;
+        // a re-claim then measures owed=0 (structurally no double credit).
+        List<Object[]> advance = new ArrayList<>(bins.size());
+        for (long[] r : bins) {
+            advance.add(new Object[]{ r[1], r[2], request.positionId(), (int) r[0] });
+        }
+        if (!advance.isEmpty()) {
+            jdbcTemplate.batchUpdate(
+                    "UPDATE position_bins SET fee_growth_checkpoint_x = ?, fee_growth_checkpoint_y = ? " +
+                    "WHERE position_id = ? AND bin_id = ?",
+                    advance);
+        }
         jdbcTemplate.update(
-                "UPDATE lp_positions AS p SET " +
-                "  unclaimed_fee_x = 0, unclaimed_fee_y = 0, " +
-                "  last_fee_growth_x = COALESCE((SELECT MAX(b.fee_growth_x) FROM position_bins pb " +
-                "      JOIN pool_bins b ON b.pool_id = p.pool_id AND b.bin_id = pb.bin_id " +
-                "      WHERE pb.position_id = p.id), p.last_fee_growth_x), " +
-                "  last_fee_growth_y = COALESCE((SELECT MAX(b.fee_growth_y) FROM position_bins pb " +
-                "      JOIN pool_bins b ON b.pool_id = p.pool_id AND b.bin_id = pb.bin_id " +
-                "      WHERE pb.position_id = p.id), p.last_fee_growth_y) " +
-                "WHERE p.id = ?",
+                "UPDATE lp_positions SET unclaimed_fee_x = 0, unclaimed_fee_y = 0 WHERE id = ?",
                 request.positionId());
 
-        Map<UUID, Long> claimedByToken = unclaimedAccruals.stream()
-                .collect(Collectors.groupingBy(FeeAccrual::getTokenId, Collectors.summingLong(FeeAccrual::getAmount)));
-
-        UUID poolId = unclaimedAccruals.get(0).getPoolId();
-
         // Quote-only — convert the X-fee to the quote token (Y) and credit one token.
-        PoolXY pool = quoteOnly ? lookupPoolXY(poolId) : null;
-        if (quoteOnly && pool != null) {
+        if (quoteOnly) {
             try {
-                long claimedX = claimedByToken.getOrDefault(pool.tokenXId(), 0L);
-                long claimedY = claimedByToken.getOrDefault(pool.tokenYId(), 0L);
-                long totalY = quoteOnlyTotalY(claimedX, claimedY, pool.price());
+                long totalY = quoteOnlyTotalY(owedX, owedY, pool.price());
                 if (totalY > 0) {
-                    tokenServiceClient.credit(userId, pool.tokenYId(), totalY);
+                    tokenServiceClient.credit(userId, tokenYId, totalY);
                 }
+                writeClaimHistory(request.positionId(), poolId, userId, tokenYId, totalY, now);
                 kafkaTemplate.send(FEE_EVENTS_TOPIC, request.positionId().toString(),
-                        new FeeClaimedEvent(request.positionId(), userId, poolId, 0, totalY, null, pool.tokenYId(), now));
-                log.info("Claimed fees quote-only for position {}: {} of token {}", request.positionId(), totalY, pool.tokenYId());
-                return new ClaimFeesResponse(request.positionId(), 0, totalY, null, pool.tokenYId());
+                        new FeeClaimedEvent(request.positionId(), userId, poolId, 0, totalY, null, tokenYId, now));
+                log.info("Claimed fees (quote-only, per-bin) position {}: {} of token {}",
+                        request.positionId(), totalY, tokenYId);
+                return new ClaimFeesResponse(request.positionId(), 0, totalY, null, tokenYId);
             } catch (ArithmeticException overflow) {
-                // Conversion overflowed a long (absurd for real fee sizes) — fall
-                // back to the standard split credit below so the claim still settles.
+                // Conversion overflowed a long (absurd for real fee sizes) — fall back
+                // to the standard split credit below so the claim still settles.
                 log.warn("Quote-only conversion overflowed for position {}, using split credit", request.positionId());
             }
         }
 
-        // Standard path — credit every accrued token (nothing dropped), and label
-        // X/Y by the pool's REAL token ids. HashMap.keySet() order is hash-order, so
-        // the legacy get(0)/get(1) could swap the X/Y labels on the event + response
-        // (balances were always correct; only the reported sides could be inverted).
-        for (Map.Entry<UUID, Long> e : claimedByToken.entrySet()) {
-            if (e.getValue() != null && e.getValue() > 0) {
-                tokenServiceClient.credit(userId, e.getKey(), e.getValue());
-            }
+        // Standard split credit — pay each owed leg to its real token, label X/Y by the
+        // pool's real token ids, and record claim-history rows for fee history/summary.
+        if (owedX > 0) {
+            tokenServiceClient.credit(userId, tokenXId, owedX);
         }
-
-        PoolXY labelPool = (pool != null) ? pool : lookupPoolXY(poolId);
-        UUID tokenXId;
-        UUID tokenYId;
-        if (labelPool != null) {
-            tokenXId = labelPool.tokenXId();
-            tokenYId = labelPool.tokenYId();
-        } else {
-            List<UUID> tokenIds = new ArrayList<>(claimedByToken.keySet());
-            tokenXId = tokenIds.isEmpty() ? null : tokenIds.get(0);
-            tokenYId = tokenIds.size() > 1 ? tokenIds.get(1) : null;
+        if (owedY > 0) {
+            tokenServiceClient.credit(userId, tokenYId, owedY);
         }
-        long claimedX = tokenXId != null ? claimedByToken.getOrDefault(tokenXId, 0L) : 0;
-        long claimedY = tokenYId != null ? claimedByToken.getOrDefault(tokenYId, 0L) : 0;
+        writeClaimHistory(request.positionId(), poolId, userId, tokenXId, owedX, now);
+        writeClaimHistory(request.positionId(), poolId, userId, tokenYId, owedY, now);
 
         kafkaTemplate.send(FEE_EVENTS_TOPIC, request.positionId().toString(),
-                new FeeClaimedEvent(request.positionId(), userId, poolId, claimedX, claimedY, tokenXId, tokenYId, now));
-        log.info("Published FeeClaimedEvent for position: {}", request.positionId());
+                new FeeClaimedEvent(request.positionId(), userId, poolId, owedX, owedY, tokenXId, tokenYId, now));
+        log.info("Claimed fees (per-bin) position {}: X={} Y={}", request.positionId(), owedX, owedY);
 
-        return new ClaimFeesResponse(request.positionId(), claimedX, claimedY, tokenXId, tokenYId);
+        return new ClaimFeesResponse(request.positionId(), owedX, owedY, tokenXId, tokenYId);
+    }
+
+    /**
+     * Records a CLAIMED ({@code claimed=true}) fee-accrual history row so the fee
+     * history endpoint, the {@code totalClaimed} summary and the CLAIM_FEE transaction
+     * keep working under the per-bin model — where {@code fee_accruals} is no longer the
+     * claim SOURCE, only an audit trail of what was paid out. No-op for a missing token
+     * or non-positive amount. Shares the caller's transaction.
+     */
+    private void writeClaimHistory(UUID positionId, UUID poolId, UUID userId, UUID tokenId, long amount, LocalDateTime when) {
+        if (tokenId == null || amount <= 0) {
+            return;
+        }
+        feeAccrualRepository.save(FeeAccrual.builder()
+                .positionId(positionId)
+                .poolId(poolId)
+                .userId(userId)
+                .tokenId(tokenId)
+                .amount(amount)
+                .claimed(true)
+                .accruedAt(when)
+                .claimedAt(when)
+                .build());
     }
 
     /**

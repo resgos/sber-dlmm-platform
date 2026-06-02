@@ -165,6 +165,12 @@ CREATE TABLE IF NOT EXISTS position_bins (
     position_id UUID NOT NULL,
     bin_id INT NOT NULL,
     liquidity_shares BIGINT NOT NULL DEFAULT 0,
+    -- Meteora per-bin fee-growth checkpoint (1e9 fixed-point): this bin's
+    -- pool_bins.fee_growth_* at position entry. owed = feeFromGrowth(
+    -- pool_bins.fee_growth - fee_growth_checkpoint, liquidity_shares).
+    -- Mirrors Liquibase changeset 014.
+    fee_growth_checkpoint_x BIGINT NOT NULL DEFAULT 0,
+    fee_growth_checkpoint_y BIGINT NOT NULL DEFAULT 0,
     PRIMARY KEY (position_id, bin_id)
 );
 

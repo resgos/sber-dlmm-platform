@@ -116,21 +116,24 @@ public class AutoClaimScheduler {
             return new int[]{0, 0, 0};
         }
 
-        // Read unclaimed accruals, group by position.
-        List<FeeAccrual> unclaimed = feeAccrualRepository.findByUserIdAndClaimedFalse(policy.getUserId());
-        if (unclaimed.isEmpty()) return new int[]{0, 0, 0};
-
-        Map<UUID, List<FeeAccrual>> byPosition = unclaimed.stream()
-                .collect(Collectors.groupingBy(FeeAccrual::getPositionId));
+        // Find positions with fees OWED, computed live from pool-engine per-bin fee
+        // growth (the single source of truth). fee_accruals is no longer an unclaimed
+        // ledger, so the old findByUserIdAndClaimedFalse would always be empty — the
+        // sweep would silently never fire. Owed = Σ feeFromGrowth(growth - checkpoint).
+        List<FeeService.PositionOwed> owedPositions = feeService.getUnclaimedOwedByPosition(policy.getUserId());
+        if (owedPositions.isEmpty()) return new int[]{0, 0, 0};
 
         Set<String> skipPools = AutoClaimPolicyService.splitSkipPoolIds(policy.getSkipPoolIds())
                 .stream().collect(Collectors.toUnmodifiableSet());
 
         int fired = 0, errored = 0, skipped = 0;
-        for (Map.Entry<UUID, List<FeeAccrual>> entry : byPosition.entrySet()) {
-            UUID positionId = entry.getKey();
-            List<FeeAccrual> accruals = entry.getValue();
-            UUID poolId = accruals.get(0).getPoolId();
+        for (FeeService.PositionOwed po : owedPositions) {
+            UUID positionId = po.positionId();
+            UUID poolId = po.poolId();
+            long total = po.owedX() + po.owedY();
+            if (total <= 0) {
+                continue; // nothing owed on this position right now
+            }
 
             if (skipPools.contains(poolId.toString())) {
                 skipped++;
@@ -140,7 +143,6 @@ public class AutoClaimScheduler {
                 skipped++;
                 continue;
             }
-            long total = accruals.stream().mapToLong(FeeAccrual::getAmount).sum();
             if (BigDecimal.valueOf(total).compareTo(policy.getThresholdAmount()) < 0) {
                 skipped++;
                 continue;

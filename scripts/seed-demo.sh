@@ -29,7 +29,9 @@ DB="${DB_NAME:-dlmm}"
 DBU="${DB_USER:-dlmm}"
 DBPW="${DB_PASSWORD:-}"
 
-# Ordered post-entrypoint seeds (05-12). 06 & 08 DIVIDE → must run exactly once.
+# Ordered post-entrypoint seeds (05-12, 14). 06 & 08 DIVIDE → must run exactly once.
+# 13 is a retired no-op (replaced by the per-bin fee model) — not listed. 14 seeds
+# per-bin fee growth so the demo has claimable fees; idempotent (forced SET).
 SEEDS=(
   05-seed-volume-refresh
   06-seed-tvl-rescale
@@ -39,6 +41,7 @@ SEEDS=(
   10-seed-reconcile-bin-invariant
   11-seed-rescale-amounts-1e4
   12-seed-farming-rewards
+  14-seed-bin-fee-growth
 )
 
 psqlq() { docker exec -i -e PGPASSWORD="$DBPW" "$PG" psql -U "$DBU" -d "$DB" "$@"; }
@@ -49,10 +52,11 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$PG"; then
   exit 1
 fi
 
-# 1) wait until Liquibase has built the schema (a table the services create at boot)
-echo "▶ waiting for the Liquibase-managed schema (lp_positions) …"
+# 1) wait until Liquibase has built the schema — including the per-bin fee-growth
+#    checkpoint columns (changeset 014) that 14-seed-bin-fee-growth needs.
+echo "▶ waiting for the Liquibase-managed schema (position_bins.fee_growth_checkpoint) …"
 for i in $(seq 1 60); do
-  if [ "$(psqlq -tAc "select to_regclass('public.lp_positions') is not null" 2>/dev/null | tr -d '[:space:]')" = "t" ]; then
+  if [ "$(psqlq -tAc "select exists(select 1 from information_schema.columns where table_name='position_bins' and column_name='fee_growth_checkpoint_x')" 2>/dev/null | tr -d '[:space:]')" = "t" ]; then
     echo "  schema ready"
     break
   fi

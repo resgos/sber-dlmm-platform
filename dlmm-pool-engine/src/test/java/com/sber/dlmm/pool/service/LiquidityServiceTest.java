@@ -389,6 +389,41 @@ class LiquidityServiceTest {
                     () -> liquidityService.addLiquidity(req, USER_ID));
             verify(tokenServiceClient, never()).deductBalance(any(), any(), anyLong());
         }
+
+        // ── Meteora per-bin fee model ────────────────────────────────────
+        @Test
+        @DisplayName("stamps each PositionBin's per-bin fee-growth checkpoint at the bin's current growth")
+        void stampsPerBinFeeGrowthCheckpoint() {
+            mockCommonDependencies();
+            when(poolRepository.findById(POOL_ID)).thenReturn(Optional.of(pool));
+            // Bin 5 already accrued fee growth; a position entering now must checkpoint
+            // THAT value (so it earns nothing for the past). New bins start at 0.
+            PoolBin existing5 = PoolBin.builder()
+                    .poolId(POOL_ID).binId(5).price(BigDecimal.ONE)
+                    .liquidity(1_000_000).reserveX(500_000).reserveY(500_000)
+                    .compositionFactor(new BigDecimal("0.5"))
+                    .totalFeeX(0).totalFeeY(0).feeGrowthX(12_345).feeGrowthY(67_890)
+                    .build();
+            when(poolBinRepository.findByPoolIdAndBinId(eq(POOL_ID), anyInt()))
+                    .thenAnswer(inv -> inv.getArgument(1, Integer.class).equals(5)
+                            ? Optional.of(existing5) : Optional.empty());
+
+            AddLiquidityRequest req = new AddLiquidityRequest(
+                    POOL_ID, 500_000, 500_000, 3, 7, LiquidityStrategy.SPOT, "stamp-key");
+            liquidityService.addLiquidity(req, USER_ID);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<PositionBin>> captor = ArgumentCaptor.forClass(List.class);
+            verify(positionBinRepository).saveAll(captor.capture());
+            List<PositionBin> saved = captor.getValue();
+
+            PositionBin bin5 = saved.stream().filter(pb -> pb.getBinId() == 5).findFirst().orElseThrow();
+            assertEquals(12_345L, bin5.getFeeGrowthCheckpointX(), "checkpoint X = bin's current fee growth");
+            assertEquals(67_890L, bin5.getFeeGrowthCheckpointY(), "checkpoint Y = bin's current fee growth");
+
+            PositionBin bin3 = saved.stream().filter(pb -> pb.getBinId() == 3).findFirst().orElseThrow();
+            assertEquals(0L, bin3.getFeeGrowthCheckpointX(), "a freshly-created bin starts at 0 growth");
+        }
     }
 
     // ── removeLiquidity ─────────────────────────────────────────

@@ -4,7 +4,6 @@ import com.sber.dlmm.fee.dto.ClaimFeesRequest;
 import com.sber.dlmm.fee.dto.ClaimFeesResponse;
 import com.sber.dlmm.fee.entity.AutoClaimLog;
 import com.sber.dlmm.fee.entity.AutoClaimPolicy;
-import com.sber.dlmm.fee.entity.FeeAccrual;
 import com.sber.dlmm.fee.repository.AutoClaimLogRepository;
 import com.sber.dlmm.fee.repository.AutoClaimPolicyRepository;
 import com.sber.dlmm.fee.repository.FeeAccrualRepository;
@@ -28,12 +27,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Sprint 12 G-16 — pins the AutoClaimScheduler contract:
- *   - enabled policy with eligible accruals → claim fires + SUCCESS log
+ * Sprint 12 G-16 — pins the AutoClaimScheduler contract. Updated for the Meteora
+ * per-bin fee model: the scheduler now discovers work from
+ * {@link FeeService#getUnclaimedOwedByPosition} (owed computed live from pool-engine
+ * per-bin fee growth) instead of the retired unclaimed {@code fee_accruals} ledger.
+ *   - enabled policy with owed ≥ threshold → claim fires + SUCCESS log
  *   - disabled policy → no claim, no log
  *   - per-position 1h cooldown honoured via auto_claim_log
  *   - dailyCap honoured (count successes in 24h ≥ cap → no fire)
- *   - threshold gate (sum < threshold → no fire)
+ *   - threshold gate (owedX+owedY < threshold → no fire)
  *   - skipPoolIds honoured
  *   - claim failure logs FAILURE without throwing
  */
@@ -49,7 +51,6 @@ class AutoClaimSchedulerTest {
     private static final UUID POSITION_ID = UUID.randomUUID();
     private static final UUID POOL_ID = UUID.randomUUID();
     private static final UUID TOKEN_X = UUID.randomUUID();
-    private static final UUID TOKEN_Y = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
@@ -61,11 +62,11 @@ class AutoClaimSchedulerTest {
     }
 
     @Test
-    void enabledPolicy_withEligibleAccruals_firesClaim_and_logsSuccess() {
+    void enabledPolicy_withEligibleOwed_firesClaim_and_logsSuccess() {
         AutoClaimPolicy policy = enabledPolicy(USER_ID, BigDecimal.valueOf(500), 20, "");
         when(policyRepo.findByEnabledTrue()).thenReturn(List.of(policy));
-        when(feeAccrualRepo.findByUserIdAndClaimedFalse(USER_ID)).thenReturn(List.of(
-                accrual(POSITION_ID, POOL_ID, TOKEN_X, 800)
+        when(feeService.getUnclaimedOwedByPosition(USER_ID)).thenReturn(List.of(
+                owed(POSITION_ID, POOL_ID, 800, 0)
         ));
         when(logRepo.findLatestSuccessForPosition(POSITION_ID)).thenReturn(Optional.empty());
         when(logRepo.countSuccessByUserSince(eq(USER_ID), any(LocalDateTime.class))).thenReturn(0L);
@@ -102,8 +103,8 @@ class AutoClaimSchedulerTest {
     void cooldown_honoured_recentSuccess_skipsFire() {
         AutoClaimPolicy policy = enabledPolicy(USER_ID, BigDecimal.valueOf(500), 20, "");
         when(policyRepo.findByEnabledTrue()).thenReturn(List.of(policy));
-        when(feeAccrualRepo.findByUserIdAndClaimedFalse(USER_ID)).thenReturn(List.of(
-                accrual(POSITION_ID, POOL_ID, TOKEN_X, 800)
+        when(feeService.getUnclaimedOwedByPosition(USER_ID)).thenReturn(List.of(
+                owed(POSITION_ID, POOL_ID, 800, 0)
         ));
         // Most recent SUCCESS was 30 minutes ago → still on cooldown.
         AutoClaimLog recent = AutoClaimLog.builder()
@@ -128,8 +129,8 @@ class AutoClaimSchedulerTest {
     void cooldown_expired_oldSuccess_allowsFire() {
         AutoClaimPolicy policy = enabledPolicy(USER_ID, BigDecimal.valueOf(500), 20, "");
         when(policyRepo.findByEnabledTrue()).thenReturn(List.of(policy));
-        when(feeAccrualRepo.findByUserIdAndClaimedFalse(USER_ID)).thenReturn(List.of(
-                accrual(POSITION_ID, POOL_ID, TOKEN_X, 800)
+        when(feeService.getUnclaimedOwedByPosition(USER_ID)).thenReturn(List.of(
+                owed(POSITION_ID, POOL_ID, 800, 0)
         ));
         AutoClaimLog old = AutoClaimLog.builder()
                 .userId(USER_ID).positionId(POSITION_ID).poolId(POOL_ID)
@@ -151,10 +152,8 @@ class AutoClaimSchedulerTest {
     void dailyCap_reached_skipsAllFiresForUser() {
         AutoClaimPolicy policy = enabledPolicy(USER_ID, BigDecimal.valueOf(500), 5, "");
         when(policyRepo.findByEnabledTrue()).thenReturn(List.of(policy));
-        when(feeAccrualRepo.findByUserIdAndClaimedFalse(USER_ID)).thenReturn(List.of(
-                accrual(POSITION_ID, POOL_ID, TOKEN_X, 800)
-        ));
-        // 24h count >= cap → policy is capped, scheduler returns early.
+        // 24h count >= cap → policy is capped, scheduler returns early (before
+        // even discovering owed work).
         when(logRepo.countSuccessByUserSince(eq(USER_ID), any(LocalDateTime.class))).thenReturn(5L);
 
         scheduler.tick();
@@ -167,8 +166,8 @@ class AutoClaimSchedulerTest {
     void dailyCap_zero_means_unlimited_and_doesNotShortCircuit() {
         AutoClaimPolicy policy = enabledPolicy(USER_ID, BigDecimal.valueOf(500), 0, "");
         when(policyRepo.findByEnabledTrue()).thenReturn(List.of(policy));
-        when(feeAccrualRepo.findByUserIdAndClaimedFalse(USER_ID)).thenReturn(List.of(
-                accrual(POSITION_ID, POOL_ID, TOKEN_X, 800)
+        when(feeService.getUnclaimedOwedByPosition(USER_ID)).thenReturn(List.of(
+                owed(POSITION_ID, POOL_ID, 800, 0)
         ));
         when(logRepo.findLatestSuccessForPosition(POSITION_ID)).thenReturn(Optional.empty());
         // countSuccessByUserSince might return any number — cap=0 means
@@ -185,10 +184,9 @@ class AutoClaimSchedulerTest {
     void belowThreshold_doesNotFire() {
         AutoClaimPolicy policy = enabledPolicy(USER_ID, BigDecimal.valueOf(10_000), 20, "");
         when(policyRepo.findByEnabledTrue()).thenReturn(List.of(policy));
-        when(feeAccrualRepo.findByUserIdAndClaimedFalse(USER_ID)).thenReturn(List.of(
-                accrual(POSITION_ID, POOL_ID, TOKEN_X, 500),
-                accrual(POSITION_ID, POOL_ID, TOKEN_Y, 400)
-                // sum = 900 < threshold 10_000
+        // owedX+owedY = 900 < threshold 10_000
+        when(feeService.getUnclaimedOwedByPosition(USER_ID)).thenReturn(List.of(
+                owed(POSITION_ID, POOL_ID, 500, 400)
         ));
         when(logRepo.findLatestSuccessForPosition(POSITION_ID)).thenReturn(Optional.empty());
         when(logRepo.countSuccessByUserSince(eq(USER_ID), any(LocalDateTime.class))).thenReturn(0L);
@@ -202,8 +200,8 @@ class AutoClaimSchedulerTest {
     void skipPoolIds_honoured() {
         AutoClaimPolicy policy = enabledPolicy(USER_ID, BigDecimal.valueOf(500), 20, POOL_ID.toString());
         when(policyRepo.findByEnabledTrue()).thenReturn(List.of(policy));
-        when(feeAccrualRepo.findByUserIdAndClaimedFalse(USER_ID)).thenReturn(List.of(
-                accrual(POSITION_ID, POOL_ID, TOKEN_X, 800)
+        when(feeService.getUnclaimedOwedByPosition(USER_ID)).thenReturn(List.of(
+                owed(POSITION_ID, POOL_ID, 800, 0)
         ));
         when(logRepo.countSuccessByUserSince(eq(USER_ID), any(LocalDateTime.class))).thenReturn(0L);
 
@@ -216,8 +214,8 @@ class AutoClaimSchedulerTest {
     void claimFailure_logsFailure_andDoesNotPropagate() {
         AutoClaimPolicy policy = enabledPolicy(USER_ID, BigDecimal.valueOf(500), 20, "");
         when(policyRepo.findByEnabledTrue()).thenReturn(List.of(policy));
-        when(feeAccrualRepo.findByUserIdAndClaimedFalse(USER_ID)).thenReturn(List.of(
-                accrual(POSITION_ID, POOL_ID, TOKEN_X, 800)
+        when(feeService.getUnclaimedOwedByPosition(USER_ID)).thenReturn(List.of(
+                owed(POSITION_ID, POOL_ID, 800, 0)
         ));
         when(logRepo.findLatestSuccessForPosition(POSITION_ID)).thenReturn(Optional.empty());
         when(logRepo.countSuccessByUserSince(eq(USER_ID), any(LocalDateTime.class))).thenReturn(0L);
@@ -237,7 +235,7 @@ class AutoClaimSchedulerTest {
     void emptyEnabledPolicies_doesNothing_quietly() {
         when(policyRepo.findByEnabledTrue()).thenReturn(List.of());
         scheduler.tick();
-        verify(feeAccrualRepo, never()).findByUserIdAndClaimedFalse(any());
+        verify(feeService, never()).getUnclaimedOwedByPosition(any());
         verify(feeService, never()).claimFees(any(), any());
     }
 
@@ -253,16 +251,7 @@ class AutoClaimSchedulerTest {
                 .build();
     }
 
-    private static FeeAccrual accrual(UUID positionId, UUID poolId, UUID tokenId, long amount) {
-        return FeeAccrual.builder()
-                .id(UUID.randomUUID())
-                .positionId(positionId)
-                .poolId(poolId)
-                .userId(USER_ID)
-                .tokenId(tokenId)
-                .amount(amount)
-                .claimed(false)
-                .accruedAt(LocalDateTime.now().minusMinutes(5))
-                .build();
+    private static FeeService.PositionOwed owed(UUID positionId, UUID poolId, long owedX, long owedY) {
+        return new FeeService.PositionOwed(positionId, poolId, owedX, owedY);
     }
 }

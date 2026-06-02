@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+        Meteora-style PER-BIN fee-growth checkpoints.
+
+        Until now an LP position carried a SINGLE last_fee_growth_x/y snapshot
+        (the active bin's value at create/claim time), but every bin accrues
+        fee-growth independently. Computing each bin's owed fee against one
+        position-wide snapshot under/over-counts the bins away from active and
+        forced hacks (the claim path advanced the snapshot to MAX(bin growth)
+        just to zero the display).
+
+        This adds a PER-BIN checkpoint to position_bins:
+        fee_growth_checkpoint_x/y is the bin's fee_growth at the moment the
+        position entered that bin, so
+            owed(bin) = feeFromGrowth(pool_bins.fee_growth
+                                      - position_bins.fee_growth_checkpoint,
+                                      liquidity_shares).
+        pool-engine becomes the single source of truth for fees; a claim settles
+        by advancing each checkpoint to the bin's current growth. Display
+        (getUserPositions) then equals the claimable amount exactly.
+
+        Backfill 0 for existing rows (reconciled by the 14-seed / one-time sync,
+        which advances stale checkpoints to the bins' current growth).
+        Mirrored in docker/init-db.sql for fresh deploys.
+    -->
+    <changeSet id="014-add-fee-growth-checkpoint-to-position-bins" author="dlmm-platform">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <tableExists tableName="position_bins"/>
+                <not><columnExists tableName="position_bins" columnName="fee_growth_checkpoint_x"/></not>
+            </and>
+        </preConditions>
+
+        <addColumn tableName="position_bins">
+            <column name="fee_growth_checkpoint_x" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="fee_growth_checkpoint_y" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

@@ -18,5 +18,6 @@
     <include file="011-add-initial-deposit-to-lp-positions.xml" relativeToChangelogFile="true"/>
     <include file="012-create-limit-orders-table.xml" relativeToChangelogFile="true"/>
     <include file="013-create-farming-tables.xml" relativeToChangelogFile="true"/>
+    <include file="014-add-fee-growth-checkpoint-to-position-bins.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
