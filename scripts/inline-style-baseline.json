@@ -1615,13 +1615,13 @@
   },
   {
     "file": "dlmm-user-ui/src/components/PoolAddLiquidityPanel.tsx",
-    "line": 403,
+    "line": 405,
     "match": "fontSize: 10",
     "snippet": "style={{ borderRadius: 'var(--radius-pill)', fontSize: 10, padding: '0 6px', lin"
   },
   {
     "file": "dlmm-user-ui/src/components/PoolAddLiquidityPanel.tsx",
-    "line": 585,
+    "line": 587,
     "match": "fontSize: 10",
     "snippet": "style={{ color: 'var(--sber-green)', fontSize: 10, fontWeight: 600 }}>"
   },
@@ -1663,13 +1663,13 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/LiquidityPage.tsx",
-    "line": 249,
+    "line": 251,
     "match": "fontSize: 15",
     "snippet": "style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-"
   },
   {
     "file": "dlmm-user-ui/src/pages/LiquidityPage.tsx",
-    "line": 363,
+    "line": 365,
     "match": "fontSize: 24",
     "snippet": "style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--colo"
   },
@@ -1693,13 +1693,13 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/PoolDetailPage.tsx",
-    "line": 587,
+    "line": 588,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, color: 'var(--text-muted)' }}>незабранные</div>"
   },
   {
     "file": "dlmm-user-ui/src/pages/PositionsPage.tsx",
-    "line": 710,
+    "line": 712,
     "match": "fontSize: 24",
     "snippet": "style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--colo"
   },
@@ -1735,31 +1735,31 @@
   },
   {
     "file": "dlmm-user-ui/src/pages/SimpleTradePage.tsx",
-    "line": 643,
+    "line": 690,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 425,
+    "line": 426,
     "match": "fontSize: 11",
     "snippet": "style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 441,
+    "line": 442,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 613,
+    "line": 614,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10 }}>"
   },
   {
     "file": "dlmm-user-ui/src/pages/SwapPage.tsx",
-    "line": 644,
+    "line": 645,
     "match": "fontSize: 10",
     "snippet": "style={{ fontSize: 10, marginRight: 4 }} />"
   },

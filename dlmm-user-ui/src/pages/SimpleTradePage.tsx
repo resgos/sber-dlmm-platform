@@ -325,6 +325,26 @@ export default function SimpleTradePage() {
     !addLiquidityMutation.isPending
   const canRemove = !!removePositionId && !removeMutation.isPending
 
+  // SM-01 — decode the add-liquidity "black box": current price, the actual
+  // price band the ±10-bin default covers, the deposit's value, the pool fee
+  // the position earns and the rough pool share. Recomputes as amounts change.
+  const lpBreakdown = useMemo(() => {
+    if (!selectedLpPool) return null
+    const price = selectedLpPool.currentPrice ?? 0
+    const ratio = 1 + (selectedLpPool.binStep ?? 0) / 10_000
+    const factor = ratio > 1 ? Math.pow(ratio, SIMPLE_BIN_HALF_RANGE) : 1
+    const priceLow = price > 0 && factor > 0 ? price / factor : 0
+    const priceHigh = price * factor
+    const rangePct = (factor - 1) * 100
+    const ax = lpAmountX ?? 0
+    const ay = lpAmountY ?? 0
+    const depositY = ax * price + ay // total deposit valued in token Y (SRUB)
+    const poolY = (selectedLpPool.totalTvlX ?? 0) * price + (selectedLpPool.totalTvlY ?? 0)
+    const share = depositY > 0 && poolY + depositY > 0 ? (depositY / (poolY + depositY)) * 100 : 0
+    const feePct = (selectedLpPool.baseFeeBps ?? 0) / 100
+    return { price, priceLow, priceHigh, rangePct, depositY, share, feePct, hasAmount: ax > 0 || ay > 0 }
+  }, [selectedLpPool, lpAmountX, lpAmountY])
+
   const tradeCtaLabel = (() => {
     if (!selectedAsset) return 'Выберите актив'
     if (!assetPool) return 'Нет рынка для актива'
@@ -586,12 +606,40 @@ export default function SimpleTradePage() {
                         value={lpAmountY} onChange={(v) => setLpAmountY(v)} min={0} controls={false} />
                     </div>
 
-                    <div className="sber-simple-note">
-                      <InfoCircleOutlined style={{ color: 'var(--brand-primary)' }} />
-                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                        по базовым настройкам (диапазон ±{SIMPLE_BIN_HALF_RANGE} бинов вокруг цены)
-                      </Text>
-                    </div>
+                    {lpBreakdown && (
+                      <div className="sber-simple-breakdown">
+                        <span className="sber-simple-breakdown__title">
+                          <InfoCircleOutlined /> Что произойдёт
+                        </span>
+                        <div className="sber-simple-breakdown__row">
+                          <span>Текущая цена</span>
+                          <b>1 {selectedLpPool.tokenXSymbol} ≈ {formatCompact(lpBreakdown.price)} {selectedLpPool.tokenYSymbol}</b>
+                        </div>
+                        {lpBreakdown.hasAmount && (
+                          <div className="sber-simple-breakdown__row">
+                            <span>Вы вносите</span>
+                            <b>{formatCompact(lpAmountX ?? 0)} {selectedLpPool.tokenXSymbol} + {formatCompact(lpAmountY ?? 0)} {selectedLpPool.tokenYSymbol} ≈ {formatCompact(lpBreakdown.depositY)} {selectedLpPool.tokenYSymbol}</b>
+                          </div>
+                        )}
+                        <div className="sber-simple-breakdown__row">
+                          <span>Рабочий диапазон цены</span>
+                          <b>{formatCompact(lpBreakdown.priceLow)} – {formatCompact(lpBreakdown.priceHigh)} {selectedLpPool.tokenYSymbol} (~±{Math.round(lpBreakdown.rangePct)}%)</b>
+                        </div>
+                        <div className="sber-simple-breakdown__row">
+                          <span>Комиссия пула</span>
+                          <b>{lpBreakdown.feePct.toFixed(2)}% с каждого обмена</b>
+                        </div>
+                        {lpBreakdown.share > 0 && (
+                          <div className="sber-simple-breakdown__row">
+                            <span>Ваша доля в пуле</span>
+                            <b>≈ {lpBreakdown.share < 0.01 ? '<0.01' : lpBreakdown.share.toFixed(2)}%</b>
+                          </div>
+                        )}
+                        <span className="sber-simple-breakdown__hint">
+                          Токены кладутся в пул в диапазоне ±{SIMPLE_BIN_HALF_RANGE} ценовых шагов вокруг текущей цены. Пока цена внутри диапазона — они зарабатывают комиссию с каждого обмена. Выйдет за диапазон — позиция временно перестанет торговать и снова заработает, когда цена вернётся. Забрать можно в любой момент — вкладка «Забрать».
+                        </span>
+                      </div>
+                    )}
                   </>
                 )}
 
