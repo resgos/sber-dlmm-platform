@@ -2,11 +2,14 @@ package com.sber.dlmm.common.outbox;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.internals.RecordHeader;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -71,8 +74,17 @@ public class OutboxDispatcher {
         int failed = 0;
         for (OutboxEvent event : batch) {
             try {
-                kafkaTemplate
-                        .send(event.getTopic(), event.getAggregateId(), event.getPayload())
+                // Carry the row's event_type as a Kafka header so consumers can
+                // tell apart same-shape payloads — e.g. LiquidityAdded vs
+                // LiquidityRemoved, whose JSON bodies are identical. Additive:
+                // existing consumers that read only the value are unaffected,
+                // and the partition key (aggregateId) is preserved.
+                ProducerRecord<String, String> record = new ProducerRecord<>(
+                        event.getTopic(), null, event.getAggregateId(), event.getPayload(),
+                        List.of(new RecordHeader("eventType",
+                                (event.getEventType() == null ? "" : event.getEventType())
+                                        .getBytes(StandardCharsets.UTF_8))));
+                kafkaTemplate.send(record)
                         .get(properties.getSendTimeoutSec(), TimeUnit.SECONDS);
                 event.markPublished();
                 sent++;
