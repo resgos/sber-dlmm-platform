@@ -18,6 +18,7 @@ import TokenChip from '@/components/TokenChip'
 import TokenSelect from '@/components/TokenSelect'
 import { rowButtonProps } from '@/lib/a11y'
 import PoolPriceChart from '@/components/PoolPriceChart'
+import PartialFillNotice from '@/components/PartialFillNotice'
 import { bpsToPercent } from '@/utils/format'
 import { TokenPairChip } from '@/components/sber'
 import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
@@ -456,6 +457,8 @@ export default function SwapPage() {
           )}
 
           <Divider style={{ margin: '4px 0' }} />
+
+          <PartialFillNotice fillable={quote?.amountIn} requested={amountIn} symbol={tokenInSymbol} />
 
           <Button
             type="primary"

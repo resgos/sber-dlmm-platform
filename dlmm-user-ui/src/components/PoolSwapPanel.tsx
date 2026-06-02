@@ -4,6 +4,7 @@ import { ArrowDownOutlined, ThunderboltFilled, SwapOutlined } from '@ant-design/
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, balances } from '@/api/services'
 import type { Pool, TokenBalance, SwapQuote } from '@/api/types'
+import PartialFillNotice, { isPartialFill } from './PartialFillNotice'
 import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
 import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
@@ -83,7 +84,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       idempotencyKey: uuid(),
     }),
     onSuccess: () => {
-      setSuccess(`Обмен выполнен: ${formatTokenAmount(amountIn, tokenInSym)} → ${formatTokenAmount(quote?.amountOut, tokenOutSym)}`)
+      setSuccess(`Обмен выполнен: ${formatTokenAmount(quote?.amountIn ?? amountIn, tokenInSym)} → ${formatTokenAmount(quote?.amountOut, tokenOutSym)}`)
       setError(null)
       setAmountIn(null)
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
@@ -107,6 +108,12 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       : quote.priceImpact < 2 ? 'var(--color-warning-amber)' : 'var(--color-negative)'
 
   const insufficient = amountIn != null && inBalance != null && amountIn > inBalance.available
+
+  // Partial fill — the pool can't absorb the whole input, so the backend quote
+  // consumes only quote.amountIn (≤ typed) and the rest doesn't fit. See
+  // PartialFillNotice; the flag also drives the CTA label below.
+  const fillable = quote?.amountIn ?? null
+  const partialFill = isPartialFill(fillable, amountIn)
 
   const body = (
     <>
@@ -271,6 +278,11 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
         />
       )}
 
+      {/* Partial-fill / limited-liquidity warning (shared component). */}
+      {!insufficient && (
+        <PartialFillNotice fillable={fillable} requested={amountIn} symbol={tokenInSym} />
+      )}
+
       <Button
         type="primary"
         block
@@ -288,6 +300,8 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
           ? 'Ждём котировку…'
           : insufficient
           ? `Недостаточно ${tokenInSym}`
+          : partialFill && fillable != null
+          ? `Обменять ${formatTokenAmount(fillable, tokenInSym, { compact: true })}`
           : `Обменять ${formatTokenAmount(amountIn, tokenInSym, { compact: true })}`}
       </Button>
     </>

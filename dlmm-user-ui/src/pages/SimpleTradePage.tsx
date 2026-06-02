@@ -10,6 +10,7 @@ import { tokens, pools, balances } from '@/api/services'
 import type { Token, Pool, TokenBalance, Position } from '@/api/types'
 import TokenChip from '@/components/TokenChip'
 import TokenSelect from '@/components/TokenSelect'
+import PartialFillNotice from '@/components/PartialFillNotice'
 import { rowButtonProps } from '@/lib/a11y'
 import { TokenPairChip } from '@/components/sber'
 import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
@@ -501,6 +502,9 @@ export default function SimpleTradePage() {
               <Alert type="error" showIcon message={tradeError} closable
                 onClose={() => setTradeError(null)} style={{ borderRadius: 'var(--radius-md)' }} />
             )}
+
+            <PartialFillNotice fillable={quote?.amountIn} requested={amount} symbol={tokenInSymbol}
+              style={{ borderRadius: 'var(--radius-md)' }} />
 
             <Button
               block
