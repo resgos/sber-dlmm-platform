@@ -266,6 +266,16 @@ public class FeeService {
         }
         feeAccrualRepository.saveAll(unclaimedAccruals);
 
+        // Keep the position's DISPLAYED unclaimed fees (lp_positions — pool-engine's
+        // table, same shared DB) in sync with the claim ledger. A claim settles ALL of
+        // the position's unclaimed accruals above, so its displayed unclaimed is now 0.
+        // Without this the Positions page kept showing phantom fees after an auto/manual
+        // claim, and a re-claim then returned 0 ("забор комиссии не получилось"). Runs on
+        // both the quote-only and standard paths (before the branch), in this txn.
+        jdbcTemplate.update(
+                "UPDATE lp_positions SET unclaimed_fee_x = 0, unclaimed_fee_y = 0 WHERE id = ?",
+                request.positionId());
+
         Map<UUID, Long> claimedByToken = unclaimedAccruals.stream()
                 .collect(Collectors.groupingBy(FeeAccrual::getTokenId, Collectors.summingLong(FeeAccrual::getAmount)));
 
