@@ -483,7 +483,7 @@ export default function PoolDetailPage() {
               first, then where the depth is. */}
           <ExternalPriceRef baseSymbol={refBaseSymbol} internalPriceRub={refBasePriceRub} />
           <div style={{ marginBottom: 16 }}>
-            <PoolPriceChart poolId={pool.id} quoteSymbol={pool.tokenYSymbol} />
+            <PoolPriceChart poolId={pool.id} quoteSymbol={pool.tokenYSymbol} currentPrice={pool.currentPrice} />
           </div>
           <Card
             className="sber-card"

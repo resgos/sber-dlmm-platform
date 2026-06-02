@@ -57,6 +57,14 @@ interface PoolPriceChartProps {
   quoteSymbol: string
   /** Slim layout for embedding (Swap page). Default false = full chart. */
   compact?: boolean
+  /**
+   * The pool's live (market-synced) price. When the stored OHLCV seed has
+   * drifted far from it — e.g. a seed flat at 300000 while the market-synced
+   * price is 143316 — the whole series is re-anchored to this value so the
+   * chart shows today's real price level, not a stale seed. No-op when the
+   * candles already track the live price (factor ≈ 1).
+   */
+  currentPrice?: number
 }
 
 type ChartKind = 'candles' | 'line'
@@ -70,6 +78,7 @@ export default function PoolPriceChart({
   poolId,
   quoteSymbol,
   compact = false,
+  currentPrice,
 }: PoolPriceChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -110,9 +119,32 @@ export default function PoolPriceChart({
   // so degenerate one-price-per-bar candles render as real green/red candles
   // instead of flat dashes. connectCandles preserves closes/volumes/times, so
   // line mode + the change chip stay correct.
+  // Re-anchor a stale seed series to the live (market-synced) price: when the
+  // newest stored candle has drifted >10% from the pool's current price, scale
+  // every candle by currentPrice/newestClose so the chart ends at today's real
+  // price. A uniform scale leaves ratios untouched, so the shape AND the %
+  // change chip stay correct. No-op (factor ≈ 1) once real swap candles track
+  // the live price.
+  const anchoredRaw = useMemo(() => {
+    const data = raw ?? []
+    if (!currentPrice || currentPrice <= 0 || data.length === 0) return data
+    const newest = data.reduce((a, b) => (b.time > a.time ? b : a), data[0])
+    const newestClose = newest?.close ?? 0
+    if (newestClose <= 0) return data
+    const factor = currentPrice / newestClose
+    if (Math.abs(factor - 1) < 0.1) return data
+    return data.map((c) => ({
+      ...c,
+      open: c.open * factor,
+      high: c.high * factor,
+      low: c.low * factor,
+      close: c.close * factor,
+    }))
+  }, [raw, currentPrice])
+
   const candles = useMemo(
-    () => connectCandles(aggregateCandles(raw ?? [], tf.bucketSec)),
-    [raw, tf.bucketSec],
+    () => connectCandles(aggregateCandles(anchoredRaw, tf.bucketSec)),
+    [anchoredRaw, tf.bucketSec],
   )
 
   const hasData = candles.length > 0

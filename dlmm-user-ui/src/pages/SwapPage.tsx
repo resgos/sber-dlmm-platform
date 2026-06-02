@@ -662,7 +662,7 @@ function SwapInfoPanel({
           pair. Same internal /ohlcv data as PoolDetailPage, slim variant.
           Only when a direct pool exists (no pool ⇒ no candles to show). */}
       {pool && (
-        <PoolPriceChart poolId={pool.id} quoteSymbol={pool.tokenYSymbol} compact />
+        <PoolPriceChart poolId={pool.id} quoteSymbol={pool.tokenYSymbol} compact currentPrice={pool.currentPrice} />
       )}
 
       {/* Pool stats */}
