@@ -211,6 +211,70 @@ public class SwapService {
     }
 
     /**
+     * Outcome of filling a single bin (one Meteora per-bin swap step).
+     *
+     * @param consumedGross gross input consumed from the bin (incl. fee), raw units
+     * @param fee           fee taken on this bin's fill, raw units
+     * @param netAmountIn   net input that entered the bin's reserve (gross − fee)
+     * @param amountOut     output token produced, raw units
+     * @param crossed       {@code true} if the bin was FULLY drained → advance to the next bin
+     */
+    record BinFill(long consumedGross, long fee, long netAmountIn, long amountOut, boolean crossed) {}
+
+    /** A bin with no usable output reserve — skip it (advance without filling). */
+    private static final BinFill SKIP_BIN = new BinFill(0, 0, 0, 0, true);
+
+    /**
+     * Fill ONE bin, Meteora-style — the single source of per-bin swap math shared by
+     * {@link #quote} and {@link #swapTransactional}, so the preview can never diverge
+     * from execution.
+     *
+     * <p><b>Full crossing</b> (the swap is larger than the bin): the trader receives
+     * the bin's ENTIRE output reserve. The net input that drains it is rounded UP
+     * ({@code reserveY/price} for X→Y, {@code reserveX·price} for Y→X) so the LP is
+     * never shorted, and the fee is EXCLUSIVE — added on top of that net
+     * ({@link FeeCalculator#calculateSwapFeeExclusive}). This is the fix vs the old
+     * code, which treated {@code reserveOut/price} as the gross and skimmed an
+     * inclusive fee out of it, leaving ~fee% of every crossed bin undrained (so the
+     * trader was shorted on multi-bin swaps).
+     *
+     * <p><b>Partial (final) bin</b> (the swap fits inside the bin): the remaining
+     * input is the gross and the fee is INCLUSIVE ({@link FeeCalculator#calculateSwapFee}),
+     * the output FLOOR-rounded — matching Meteora's last-bin path.
+     *
+     * @return the {@link BinFill}; {@link #SKIP_BIN} when the bin can give no output
+     */
+    static BinFill fillBin(boolean swapXtoY, long reserveX, long reserveY, BigDecimal price,
+                           long remaining, int baseFeeBps, int volatilityAccumulator, int binStep) {
+        long reserveOut = swapXtoY ? reserveY : reserveX;
+        if (reserveOut <= 0 || price == null || price.signum() <= 0 || remaining <= 0) {
+            return SKIP_BIN;
+        }
+        // NET input that FULLY drains this bin's output reserve, rounded UP (CEIL) so
+        // the LP is never shorted — the house never rounds in the user's favour.
+        long netToDrain = swapXtoY
+                ? BigDecimal.valueOf(reserveY).divide(price, 0, RoundingMode.CEILING).longValue()
+                : BigDecimal.valueOf(reserveX).multiply(price, MC).setScale(0, RoundingMode.CEILING).longValue();
+        if (netToDrain <= 0) {
+            return SKIP_BIN;
+        }
+        long feeToDrain = FeeCalculator.calculateSwapFeeExclusive(netToDrain, baseFeeBps, volatilityAccumulator, binStep);
+        long grossToDrain = netToDrain + feeToDrain;
+
+        if (remaining >= grossToDrain) {
+            // Full crossing — the trader gets the whole bin reserve out.
+            return new BinFill(grossToDrain, feeToDrain, netToDrain, reserveOut, true);
+        }
+        // Partial (final) bin — inclusive fee skimmed from the remaining input.
+        long fee = FeeCalculator.calculateSwapFee(remaining, baseFeeBps, volatilityAccumulator, binStep);
+        long net = remaining - fee;
+        long out = swapXtoY
+                ? BigDecimal.valueOf(net).multiply(price, MC).setScale(0, RoundingMode.FLOOR).longValue()
+                : BigDecimal.valueOf(net).divide(price, 0, RoundingMode.FLOOR).longValue();
+        return new BinFill(remaining, fee, net, out, false);
+    }
+
+    /**
      * Price a swap without executing it — a pure, read-only dry run of the bin
      * walk that returns expected output, fee, bins crossed, execution price and
      * price impact.
@@ -287,55 +351,24 @@ public class SwapService {
                         currentBinId, pool.getActiveBinId());
             }
 
-            // Calculate max amount of input token this bin can absorb
-            long maxAmountIn;
-            if (swapXtoY) {
-                // Swapping X for Y: bin gives out Y, limited by bin.reserveY
-                // maxAmountIn (in X) = bin.reserveY / price
-                maxAmountIn = BigDecimal.valueOf(bin.getReserveY())
-                        .divide(binPrice, 0, RoundingMode.FLOOR).longValue();
-            } else {
-                // Swapping Y for X: bin gives out X, limited by bin.reserveX
-                // maxAmountIn (in Y) = bin.reserveX * price
-                maxAmountIn = BigDecimal.valueOf(bin.getReserveX())
-                        .multiply(binPrice, MC)
-                        .setScale(0, RoundingMode.FLOOR).longValue();
-            }
+            // Meteora per-bin fill — the SAME math swapTransactional executes (via
+            // fillBin), so this dry-run can't diverge from the real swap.
+            BinFill fill = fillBin(swapXtoY, bin.getReserveX(), bin.getReserveY(), binPrice,
+                    remainingAmountIn, pool.getBaseFeeBps(), pool.getVolatilityAccumulator(), pool.getBinStep());
 
-            if (maxAmountIn <= 0) {
-                // Sprint 9-DS-r3 — flipped per canonical DLMM (see above).
+            if (fill.consumedGross() <= 0) {
+                // Bin gives no output — skip it. Sprint 9-DS-r3 canonical DLMM direction.
                 currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
                 continue;
             }
 
-            long actualAmountIn = Math.min(remainingAmountIn, maxAmountIn);
+            totalAmountOut += fill.amountOut();
+            totalFee += fill.fee();
+            remainingAmountIn -= fill.consumedGross();
 
-            // Calculate fee
-            long fee = FeeCalculator.calculateSwapFee(actualAmountIn, pool.getBaseFeeBps(),
-                    pool.getVolatilityAccumulator(), pool.getBinStep());
-            long netAmountIn = actualAmountIn - fee;
-
-            // Calculate output
-            long amountOut;
-            if (swapXtoY) {
-                // amountOut (Y) = netAmountIn * price
-                amountOut = BigDecimal.valueOf(netAmountIn)
-                        .multiply(binPrice, MC)
-                        .setScale(0, RoundingMode.FLOOR).longValue();
-            } else {
-                // amountOut (X) = netAmountIn / price
-                amountOut = BigDecimal.valueOf(netAmountIn)
-                        .divide(binPrice, 0, RoundingMode.FLOOR).longValue();
-            }
-
-            totalAmountOut += amountOut;
-            totalFee += fee;
-            remainingAmountIn -= actualAmountIn;
-
-            // If bin is exhausted, move to next.
-            // Sprint 9-DS-r3 — flipped per canonical DLMM (see above).
-            if (actualAmountIn >= maxAmountIn) {
+            // Fully-drained bin → move to the next (canonical DLMM direction).
+            if (fill.crossed()) {
                 currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
             }
@@ -590,39 +623,20 @@ public class SwapService {
                         currentBinId, pool.getActiveBinId());
             }
 
-            // Max input this bin can absorb
-            long maxAmountIn;
-            if (swapXtoY) {
-                maxAmountIn = BigDecimal.valueOf(bin.getReserveY())
-                        .divide(binPrice, 0, RoundingMode.FLOOR).longValue();
-            } else {
-                maxAmountIn = BigDecimal.valueOf(bin.getReserveX())
-                        .multiply(binPrice, MC)
-                        .setScale(0, RoundingMode.FLOOR).longValue();
-            }
+            // Meteora per-bin fill — shared with quote() via fillBin (preview == execution).
+            BinFill fill = fillBin(swapXtoY, bin.getReserveX(), bin.getReserveY(), binPrice,
+                    remainingAmountIn, pool.getBaseFeeBps(), pool.getVolatilityAccumulator(), pool.getBinStep());
 
-            if (maxAmountIn <= 0) {
+            if (fill.consumedGross() <= 0) {
                 // Sprint 9-DS-r3 — flipped per canonical DLMM (see above).
                 currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
                 continue;
             }
 
-            long actualAmountIn = Math.min(remainingAmountIn, maxAmountIn);
-
-            long fee = FeeCalculator.calculateSwapFee(actualAmountIn, pool.getBaseFeeBps(),
-                    pool.getVolatilityAccumulator(), pool.getBinStep());
-            long netAmountIn = actualAmountIn - fee;
-
-            long amountOut;
-            if (swapXtoY) {
-                amountOut = BigDecimal.valueOf(netAmountIn)
-                        .multiply(binPrice, MC)
-                        .setScale(0, RoundingMode.FLOOR).longValue();
-            } else {
-                amountOut = BigDecimal.valueOf(netAmountIn)
-                        .divide(binPrice, 0, RoundingMode.FLOOR).longValue();
-            }
+            long netAmountIn = fill.netAmountIn();
+            long amountOut = fill.amountOut();
+            long fee = fill.fee();
 
             // 2a. Atomically update bin reserves
             if (swapXtoY) {
@@ -671,13 +685,13 @@ public class SwapService {
 
             totalAmountOut += amountOut;
             totalFee += fee;
-            remainingAmountIn -= actualAmountIn;
+            remainingAmountIn -= fill.consumedGross();
 
             // Track last bin with liquidity
             lastActiveBinId = currentBinId;
 
-            // Sprint 9-DS-r3 — direction flipped (see top of loop).
-            if (actualAmountIn >= maxAmountIn) {
+            // Fully-drained bin → advance (canonical DLMM direction).
+            if (fill.crossed()) {
                 currentBinId = swapXtoY ? currentBinId - 1 : currentBinId + 1;
                 binsCrossed++;
             }

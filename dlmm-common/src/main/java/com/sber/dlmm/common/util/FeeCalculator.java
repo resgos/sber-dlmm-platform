@@ -117,6 +117,38 @@ public final class FeeCalculator {
     }
 
     /**
+     * EXCLUSIVE swap fee: the fee charged <em>on top of</em> a net amount, such that
+     * the fee is {@code feeBps} of the resulting gross ({@code net + fee}). Mirrors
+     * Meteora's {@code compute_fee(amount)} (the bin-crossing path): when a swap
+     * crosses a bin it drains the bin's full output reserve, so {@code net} is the
+     * exact input that enters the bin and the fee is added over and above it —
+     * {@code fee = net · feeBps / (10000 − feeBps)} — instead of being skimmed out of
+     * a fixed gross (that {@code inclusive} form is {@link #calculateSwapFee}, used
+     * only for the final partial bin).
+     *
+     * <p>Identity: with {@code gross = net + fee}, {@code fee == floor(gross·feeBps/10000)}
+     * up to ±1 unit, so the LP receives the full bin reserve and the fee rate over the
+     * gross matches the displayed rate. FLOOR-rounded like the rest of the engine;
+     * {@code feeBps ≤ MAX_FEE_BPS (1000)} so the {@code 10000 − feeBps} denominator is
+     * always ≥ 9000 (never zero/negative). {@link BigInteger} guards the multiply.
+     *
+     * @param netAmount            the net input that will enter the bin (≤ 0 ⇒ fee 0)
+     * @param baseFeeBps           pool's base fee in bps
+     * @param volatilityAccumulator current VA (raw bin count)
+     * @param binStep              bin step in bps
+     * @return the fee to add on top of {@code netAmount}, in base units, FLOOR-rounded
+     */
+    public static long calculateSwapFeeExclusive(long netAmount, int baseFeeBps, int volatilityAccumulator, int binStep) {
+        if (netAmount <= 0) return 0;
+        long feeBps = totalFeeBps(baseFeeBps, volatilityAccumulator, binStep);
+        if (feeBps <= 0) return 0;
+        return BigInteger.valueOf(netAmount)
+                .multiply(BigInteger.valueOf(feeBps))
+                .divide(BigInteger.valueOf(10_000L - feeBps))
+                .longValueExact();
+    }
+
+    /**
      * Total fee rate in bps = base + variable, capped at {@link #MAX_FEE_BPS} (M-3).
      * Shared by {@code calculateSwapFee} and the pool's displayed "current dynamic
      * fee" so the charged fee and the shown fee can never diverge. Summed as
