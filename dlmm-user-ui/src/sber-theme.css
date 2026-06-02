@@ -2758,7 +2758,10 @@ a:focus-visible {
 .sber-market-ticker__chg.is-up { color: var(--plasma-success); }
 .sber-market-ticker__chg.is-down { color: var(--color-negative); }
 @media (max-width: 480px) {
-  .sber-market-ticker { grid-template-columns: 1fr 1fr; }
+  /* Phones: one full-width card per row. Forcing two columns here clipped the
+     right column off-screen — the price ("5 076 852 ₽", white-space:nowrap)
+     can't shrink below half the viewport, so the grid blew past the edge. */
+  .sber-market-ticker { grid-template-columns: 1fr; }
 }
 
 /* SK-03 — Сберкот «погладь меня»: pet wiggle + milestone hearts. */
