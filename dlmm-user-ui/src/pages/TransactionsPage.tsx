@@ -4,8 +4,8 @@ import { DownloadOutlined, FilterOutlined, ReloadOutlined, SwapOutlined } from '
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
-import { transactions, tokens as tokensApi, pools as poolsApi } from '@/api/services'
-import type { Transaction, TxType, TxStatus, TransactionFilters, Token, Pool } from '@/api/types'
+import { transactions } from '@/api/services'
+import type { Transaction, TxType, TxStatus, TransactionFilters } from '@/api/types'
 import dayjs from 'dayjs'
 import { TokenPairChip } from '@/components/sber'
 import { formatTokenAmount } from '@/lib/format'
@@ -48,28 +48,9 @@ export default function TransactionsPage() {
     queryFn: () => transactions.getMyTransactions(page, pageSize, filters),
   })
 
-  // Sprint 9 — Transaction DTO carries tokenInId / tokenOutId / poolId but
-  // no symbols, so a swap was rendering as "Обмен / 104 037 396 / 107 755 701"
-  // with no hint of which pair was traded. Pull the (cached) tokens and
-  // pools catalogues and join client-side.
-  const { data: tokenPage } = useQuery({
-    queryKey: ['tokens'],
-    queryFn: () => tokensApi.getTokens(0, 200),
-  })
-  const { data: poolPage } = useQuery({
-    queryKey: ['pools', 0, 100],
-    queryFn: () => poolsApi.getPools(0, 100),
-  })
-  const symbolByTokenId = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const t of tokenPage?.content ?? []) m.set(t.id, t.symbol)
-    return m
-  }, [tokenPage])
-  const pairByPoolId = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const p of poolPage?.content ?? []) m.set(p.id, `${p.tokenXSymbol}/${p.tokenYSymbol}`)
-    return m
-  }, [poolPage])
+  // Sprint 9 / Audit B3 — the transaction read API now returns self-describing
+  // labels (tokenInSymbol / tokenOutSymbol / poolName), so the columns render
+  // straight from the row. No client-side tokens/pools catalogue join needed.
 
   const handleDateChange = (_: unknown, dateStrings: [string, string]) => {
     setFilters((prev) => ({
@@ -200,17 +181,13 @@ export default function TransactionsPage() {
             title: t('transactions.table.pair'),
             key: 'pair',
             render: (_: unknown, r: Transaction) => {
-              // Audit B3 — prefer backend-resolved labels (self-describing API);
-              // fall back to the client token/pool catalogue join.
-              const inSym = r.tokenInSymbol ?? (r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null)
-              const outSym = r.tokenOutSymbol ?? (r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null)
-              if (inSym || outSym) return <TokenPairChip x={inSym} y={outSym} />
-              if (r.poolId) {
-                const pair = r.poolName ?? pairByPoolId.get(r.poolId)
-                if (pair) {
-                  const [px, py] = pair.split('/')
-                  return <TokenPairChip x={px} y={py} />
-                }
+              // Audit B3 — backend-resolved, self-describing labels.
+              if (r.tokenInSymbol || r.tokenOutSymbol) {
+                return <TokenPairChip x={r.tokenInSymbol} y={r.tokenOutSymbol} />
+              }
+              if (r.poolName) {
+                const [px, py] = r.poolName.split('/')
+                return <TokenPairChip x={px} y={py} />
               }
               return <Text type="secondary">—</Text>
             },
@@ -223,7 +200,7 @@ export default function TransactionsPage() {
             align: 'right' as const,
             render: (v: number | null, r: Transaction) => (
               <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                {formatTokenAmount(v, r.tokenInId ? symbolByTokenId.get(r.tokenInId) : undefined)}
+                {formatTokenAmount(v, r.tokenInSymbol)}
               </span>
             ),
           },
@@ -233,7 +210,7 @@ export default function TransactionsPage() {
             align: 'right' as const,
             render: (v: number | null, r: Transaction) => (
               <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                {formatTokenAmount(v, r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : undefined)}
+                {formatTokenAmount(v, r.tokenOutSymbol)}
               </span>
             ),
           },
@@ -243,7 +220,7 @@ export default function TransactionsPage() {
             align: 'right' as const,
             render: (v: number | null, r: Transaction) => (
               <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                {formatTokenAmount(v, r.tokenInId ? symbolByTokenId.get(r.tokenInId) : undefined, { maxFractionDigits: 6 })}
+                {formatTokenAmount(v, r.tokenInSymbol, { maxFractionDigits: 6 })}
               </span>
             ),
           },

@@ -116,11 +116,6 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
     },
   })
 
-  const flipDirection = () => {
-    setDirection((d) => (d === 'XtoY' ? 'YtoX' : 'XtoY'))
-    setAmountIn(null)
-  }
-
   const priceImpactColour =
     !quote?.priceImpact ? undefined
       : quote.priceImpact < 0.5 ? 'var(--sber-green)'
@@ -243,15 +238,26 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
         </div>
       </div>
 
-      {/* Flip */}
-      <div style={{ display: 'flex', justifyContent: 'center', margin: '-2px 0' }}>
-        <Button
-          shape="circle"
-          icon={<ArrowDownOutlined />}
-          onClick={flipDirection}
-          size="small"
-          aria-label={t('swap.swapDirection')}
-        />
+      {/* In→out flow indicator. The Buy/Sell Segmented above already owns the
+          direction state, so this is a plain non-interactive arrow separator,
+          not a second flip control. */}
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '-2px 0' }} aria-hidden="true">
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 24,
+            height: 24,
+            borderRadius: '50%',
+            background: 'var(--surface-1, #F9FAFB)',
+            border: '1px solid var(--border-light)',
+            color: 'var(--text-secondary)',
+            fontSize: 'var(--text-xs)',
+          }}
+        >
+          <ArrowDownOutlined />
+        </span>
       </div>
 
       {/* Out side */}

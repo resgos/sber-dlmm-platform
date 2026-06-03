@@ -87,7 +87,7 @@ export function formatTokenAmount(
  */
 export function formatPercent(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
-  return `${value.toLocaleString(numLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`
+  return `${value.toFixed(digits)}%`
 }
 
 /**
