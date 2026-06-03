@@ -190,11 +190,13 @@ export default function TransactionsPage() {
             title: 'Пара / направление',
             key: 'pair',
             render: (_: unknown, r: Transaction) => {
-              const inSym = r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null
-              const outSym = r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null
+              // Audit B3 — prefer backend-resolved labels (self-describing API);
+              // fall back to the client token/pool catalogue join.
+              const inSym = r.tokenInSymbol ?? (r.tokenInId ? symbolByTokenId.get(r.tokenInId) : null)
+              const outSym = r.tokenOutSymbol ?? (r.tokenOutId ? symbolByTokenId.get(r.tokenOutId) : null)
               if (inSym || outSym) return <TokenPairChip x={inSym} y={outSym} />
               if (r.poolId) {
-                const pair = pairByPoolId.get(r.poolId)
+                const pair = r.poolName ?? pairByPoolId.get(r.poolId)
                 if (pair) {
                   const [px, py] = pair.split('/')
                   return <TokenPairChip x={px} y={py} />

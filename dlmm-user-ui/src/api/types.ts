@@ -312,6 +312,11 @@ export interface Transaction {
   createdAt: string
   updatedAt: string
   confirmedAt: string | null
+  // Audit B3 — backend-resolved, self-describing labels. May be null on a lookup
+  // miss, in which case the page falls back to its token/pool catalogue join.
+  tokenInSymbol?: string | null
+  tokenOutSymbol?: string | null
+  poolName?: string | null
 }
 
 export interface TransactionFilters {

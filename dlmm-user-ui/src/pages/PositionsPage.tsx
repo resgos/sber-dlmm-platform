@@ -466,8 +466,12 @@ export default function PositionsPage() {
               key: 'pool',
               width: 220,
               render: (_: unknown, r: Position) => {
+                // Audit B3 — prefer the backend-resolved symbols (now self-describing);
+                // fall back to the pool-catalogue join, then to a short id.
                 const pool = poolById.get(r.poolId)
-                if (pool) return <TokenPairChip x={pool.tokenXSymbol} y={pool.tokenYSymbol} />
+                const x = r.tokenXSymbol || pool?.tokenXSymbol
+                const y = r.tokenYSymbol || pool?.tokenYSymbol
+                if (x && y) return <TokenPairChip x={x} y={y} />
                 return <Text type="secondary">{t('positions.table.poolFallback', { id: r.poolId.slice(0, 6) })}</Text>
               },
             },
