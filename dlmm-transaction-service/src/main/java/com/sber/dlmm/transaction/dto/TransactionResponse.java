@@ -36,6 +36,9 @@ import java.util.UUID;
  * @param confirmedAt   when the row reached CONFIRMED, or null
  * @param reviewedAt    when an admin marked the row reviewed, or null if not reviewed
  * @param reviewedBy    admin user id who marked it reviewed, or null
+ * @param tokenInSymbol  display symbol of {@code tokenInId} (audit B3; null on miss)
+ * @param tokenOutSymbol display symbol of {@code tokenOutId} (audit B3; null on miss)
+ * @param poolName       pool pair label "TX/TY" for {@code poolId} (audit B3; null on miss)
  */
 public record TransactionResponse(
     UUID id,
@@ -61,5 +64,10 @@ public record TransactionResponse(
     // admin POSTs /transactions/{id}/review. Surfaces to admin-bff
     // so its suspicious-detection can skip reviewed rows.
     LocalDateTime reviewedAt,
-    UUID reviewedBy
+    UUID reviewedBy,
+    // Audit B3 — self-describing labels so the read API doesn't expose only raw
+    // UUIDs (each null on a lookup miss; the UI keeps a catalogue-join fallback).
+    String tokenInSymbol,
+    String tokenOutSymbol,
+    String poolName
 ) {}

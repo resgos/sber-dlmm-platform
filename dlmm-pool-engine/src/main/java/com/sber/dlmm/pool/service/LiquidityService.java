@@ -816,6 +816,31 @@ public class LiquidityService {
         List<LpPosition> positions = positionRepository.findByUserIdAndIsActiveTrue(userId);
         List<PositionResponse> responses = new ArrayList<>();
 
+        // Audit B3 — resolve each pool's token symbols once (batched) so the
+        // response is self-describing; the UI no longer has to join the pool
+        // catalogue to label a position. Best-effort: any miss leaves the symbol
+        // null and the UI falls back to its catalogue join.
+        java.util.Map<UUID, LiquidityPool> poolById = new java.util.HashMap<>();
+        for (LiquidityPool p : poolRepository.findAllById(
+                positions.stream().map(LpPosition::getPoolId).distinct().toList())) {
+            poolById.put(p.getId(), p);
+        }
+        java.util.Map<UUID, String> symbolByToken = new java.util.HashMap<>();
+        try {
+            java.util.Set<UUID> tokenIds = new java.util.HashSet<>();
+            for (LiquidityPool p : poolById.values()) {
+                tokenIds.add(p.getTokenXId());
+                tokenIds.add(p.getTokenYId());
+            }
+            if (!tokenIds.isEmpty()) {
+                tokenServiceClient.getTokensByIds(tokenIds).forEach((id, info) -> {
+                    if (info != null) symbolByToken.put(id, info.symbol());
+                });
+            }
+        } catch (RuntimeException ignored) {
+            // best-effort: symbols stay null, UI falls back to its catalogue join
+        }
+
         for (LpPosition pos : positions) {
             List<PositionBin> posBins = positionBinRepository.findByPositionId(pos.getId());
             long currentValueX = 0;
@@ -854,6 +879,7 @@ public class LiquidityService {
                 binAllocations.add(new BinAllocation(pb.getBinId(), valueX, valueY, pb.getLiquidityShares()));
             }
 
+            LiquidityPool posPool = poolById.get(pos.getPoolId());
             responses.add(new PositionResponse(
                     pos.getId(), pos.getUserId(), pos.getPoolId(),
                     pos.getBinRangeMin(), pos.getBinRangeMax(), pos.getStrategy(),
@@ -867,7 +893,10 @@ public class LiquidityService {
                     pos.getInitialDepositX(),
                     pos.getInitialDepositY(),
                     pos.isActive(), pos.getCreatedAt(), pos.getClosedAt(),
-                    binAllocations));
+                    binAllocations,
+                    // Audit B3 — self-describing token symbols (null on lookup miss).
+                    posPool != null ? symbolByToken.get(posPool.getTokenXId()) : null,
+                    posPool != null ? symbolByToken.get(posPool.getTokenYId()) : null));
         }
 
         return responses;

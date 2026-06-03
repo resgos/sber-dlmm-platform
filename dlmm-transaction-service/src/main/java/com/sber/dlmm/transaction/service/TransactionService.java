@@ -55,6 +55,8 @@ import java.util.UUID;
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
+    /** Audit B3 — resolves token symbols + pool pair label for the read DTO. */
+    private final TxLabelResolver txLabelResolver;
 
     /**
      * Creates a ledger row without a pool-engine origin reference — the
@@ -459,7 +461,11 @@ public class TransactionService {
                 tx.getConfirmedAt(),
                 // Sprint 9-DS-r4 (P2-12) — Mark-reviewed state.
                 tx.getReviewedAt(),
-                tx.getReviewedBy()
+                tx.getReviewedBy(),
+                // Audit B3 — resolved, self-describing labels (best-effort, cached).
+                txLabelResolver.tokenSymbol(tx.getTokenInId()),
+                txLabelResolver.tokenSymbol(tx.getTokenOutId()),
+                txLabelResolver.poolPair(tx.getPoolId())
         );
     }
 }

@@ -42,6 +42,9 @@ import java.util.UUID;
  * @param closedAt             when the position was fully closed, or {@code null} if
  *                             still open
  * @param binAllocations       per-bin breakdown of the position's reserves and shares
+ * @param tokenXSymbol         display symbol of the pool's X token (audit B3 — so the
+ *                             API is self-describing; null if the lookup missed)
+ * @param tokenYSymbol         display symbol of the pool's Y token (audit B3; null on miss)
  */
 public record PositionResponse(
         UUID id,
@@ -64,6 +67,8 @@ public record PositionResponse(
         boolean isActive,
         LocalDateTime createdAt,
         LocalDateTime closedAt,
-        List<BinAllocation> binAllocations
+        List<BinAllocation> binAllocations,
+        String tokenXSymbol,
+        String tokenYSymbol
 ) {
 }
