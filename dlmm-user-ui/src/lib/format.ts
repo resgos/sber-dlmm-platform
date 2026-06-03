@@ -3,33 +3,42 @@
 // pattern that was scattered across TransactionsPage / PoolsPage /
 // DashboardPage. Centralising means one truth for thresholds + suffixes.
 
+import i18n from '@/i18n'
+
 /**
  * Compact decimal formatter — used for "1.5K", "2.4M", "3.7B" style
  * shortenings on KPI tiles, pool reserves, transaction volumes.
  *
- * Russian locale uses тыс/млн/млрд/трлн/квд suffixes. Below 1 000 the
- * value is returned as-is with grouping. The fractional digit count
- * shrinks as the unit grows (big numbers don't need cents).
+ * Locale-aware (audit B8/B10): EN shows K/M/B/T, RU shows тыс/млн/млрд/трлн/квд.
+ * Below 10 000 the value is returned as-is with locale grouping. The fractional
+ * digit count shrinks as the unit grows (big numbers don't need cents). Reads the
+ * active i18n language; a language flip re-formats on the next render.
  */
 export function formatCompact(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  const en = i18n.language === 'en'
+  const locale = en ? 'en-US' : 'ru-RU'
+  const sep = en ? '' : ' '
+  const s = en
+    ? { quad: 'Q', tril: 'T', bil: 'B', mil: 'M', thou: 'K' }
+    : { quad: 'квд', tril: 'трлн', bil: 'млрд', mil: 'млн', thou: 'тыс' }
   const abs = Math.abs(value)
   if (abs >= 1_000_000_000_000_000) {
-    return `${(value / 1_000_000_000_000_000).toFixed(2)} квд`
+    return `${(value / 1_000_000_000_000_000).toFixed(2)}${sep}${s.quad}`
   }
   if (abs >= 1_000_000_000_000) {
-    return `${(value / 1_000_000_000_000).toFixed(2)} трлн`
+    return `${(value / 1_000_000_000_000).toFixed(2)}${sep}${s.tril}`
   }
   if (abs >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(2)} млрд`
+    return `${(value / 1_000_000_000).toFixed(2)}${sep}${s.bil}`
   }
   if (abs >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(2)} млн`
+    return `${(value / 1_000_000).toFixed(2)}${sep}${s.mil}`
   }
   if (abs >= 10_000) {
-    return `${(value / 1_000).toFixed(1)} тыс`
+    return `${(value / 1_000).toFixed(1)}${sep}${s.thou}`
   }
-  return value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
+  return value.toLocaleString(locale, { maximumFractionDigits: 2 })
 }
 
 /**
