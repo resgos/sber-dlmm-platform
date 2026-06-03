@@ -20,7 +20,7 @@ const numLocale = (): string => (i18n.language === 'en' ? 'en-US' : 'ru-RU')
 export function formatCompact(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
   const en = i18n.language === 'en'
-  const locale = en ? 'en-US' : 'ru-RU'
+  const locale = numLocale()
   const sep = en ? '' : ' '
   const s = en
     ? { quad: 'Q', tril: 'T', bil: 'B', mil: 'M', thou: 'K' }
@@ -119,6 +119,30 @@ export function exchangeRatePair(
     forward: `1 ${symIn} ≈ ${formatRateValue(amountOut / amountIn)} ${symOut}`,
     reverse: `1 ${symOut} ≈ ${formatRateValue(amountIn / amountOut)} ${symIn}`,
   }
+}
+
+/**
+ * Orient a swap quote so the PRIMARY (forward) rate is always the BASE asset's
+ * price — quote per base, e.g. "1 SETH ≈ 137 336 SRUB" — regardless of buy/sell
+ * direction. `baseSym` is the STABLE base of the pair (the non-quote / asset
+ * leg, derived from the pool), so the headline never inverts when the user
+ * flips Buy↔Sell or pays the other leg. Delegates to {@link exchangeRatePair}
+ * with the base leg pinned to the "1 X ≈ …" slot; `reverse` is the inverse.
+ * Falls back to raw in/out orientation only when `baseSym` is unknown.
+ */
+export function baseAnchoredRate(
+  amountIn: number | null | undefined,
+  amountOut: number | null | undefined,
+  symIn: string | null | undefined,
+  symOut: string | null | undefined,
+  baseSym: string | null | undefined,
+): { forward: string; reverse: string } | null {
+  // If the IN leg is NOT the base (i.e. we're paying the quote to buy the base),
+  // swap the args so the base still lands in the forward "1 X ≈ …" slot.
+  const inIsBase = !baseSym || symIn === baseSym
+  return inIsBase
+    ? exchangeRatePair(amountIn, amountOut, symIn, symOut)
+    : exchangeRatePair(amountOut, amountIn, symOut, symIn)
 }
 
 /**

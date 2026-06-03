@@ -141,8 +141,10 @@ export interface OhlcvCandle {
 export interface Position {
   id: string
   poolId: string
-  tokenXSymbol: string
-  tokenYSymbol: string
+  // Backend resolves these best-effort (audit B3) and returns null on a token
+  // lookup miss; consumers must guard (PositionsPage falls back to the catalogue).
+  tokenXSymbol: string | null
+  tokenYSymbol: string | null
   binRangeMin: number
   binRangeMax: number
   strategy: LiquidityStrategy

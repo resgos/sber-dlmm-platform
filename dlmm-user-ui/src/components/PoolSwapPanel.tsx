@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { pools, balances } from '@/api/services'
 import type { Pool, TokenBalance, SwapQuote } from '@/api/types'
 import PartialFillNotice, { isPartialFill } from './PartialFillNotice'
-import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
+import { formatCompact, formatTokenAmount, baseAnchoredRate } from '@/lib/format'
 import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
 
@@ -281,14 +281,9 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       {quote && !quoteLoading && (
         <div style={{ padding: '8px 12px', background: 'var(--surface-1, #F9FAFB)', borderRadius: 'var(--radius-sm)', marginBottom: 12 }}>
           {(() => {
-            // Always surface the PRICE (quote per base — e.g. ₽ per SETH) as the
-            // primary rate, even when buying. Orienting by in/out would otherwise
-            // show the unintuitive "1 ₽ ≈ 0,0000073 SETH" on a buy; the price of
-            // the base asset is what users read. Base = the non-SRUB leg.
-            const quoteSym = baseIsX ? pool.tokenYSymbol : pool.tokenXSymbol
-            const baseAmt = side === 'sell' ? quote.amountIn : quote.amountOut
-            const quoteAmt = side === 'sell' ? quote.amountOut : quote.amountIn
-            const r = exchangeRatePair(baseAmt, quoteAmt, baseSym, quoteSym)
+            // Headline rate = the base asset's price (quote per base, e.g. ₽ per
+            // SETH), pinned to the stable base so it never inverts on Buy↔Sell.
+            const r = baseAnchoredRate(quote.amountIn, quote.amountOut, tokenInSym, tokenOutSym, baseSym)
             return (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '4px 0', fontSize: 'var(--text-xs)', borderBottom: '1px solid var(--border-light)' }}>
                 <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('swap.quote.rate')}</Text>

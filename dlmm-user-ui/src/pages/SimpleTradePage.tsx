@@ -14,7 +14,7 @@ import TokenSelect from '@/components/TokenSelect'
 import PartialFillNotice from '@/components/PartialFillNotice'
 import { rowButtonProps } from '@/lib/a11y'
 import { TokenPairChip } from '@/components/sber'
-import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
+import { formatCompact, formatTokenAmount, baseAnchoredRate } from '@/lib/format'
 import { apiErrorMessage } from '@/lib/apiError'
 import { celebrateSberkot } from '@/components/sberkot/events'
 import { uuid } from '../lib/uuid'
@@ -470,7 +470,9 @@ export default function SimpleTradePage() {
                   </Text>
                 </div>
                 {(() => {
-                  const r = exchangeRatePair(quote.amountIn, quote.amountOut, tokenInSymbol, tokenOutSymbol)
+                  // Base = the picked asset (non-SRUB), so the rate reads as the
+                  // asset's price (₽ per SETH) on BOTH Buy and Sell, not inverted.
+                  const r = baseAnchoredRate(quote.amountIn, quote.amountOut, tokenInSymbol, tokenOutSymbol, selectedAsset?.symbol)
                   return r ? (
                     <div className="sber-simple-est__row" style={{ alignItems: 'flex-start' }}>
                       <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('swap.simple.rate')}</Text>

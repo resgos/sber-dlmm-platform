@@ -21,7 +21,7 @@ import PoolPriceChart from '@/components/PoolPriceChart'
 import PartialFillNotice from '@/components/PartialFillNotice'
 import { bpsToPercent } from '@/utils/format'
 import { TokenPairChip } from '@/components/sber'
-import { formatCompact, formatTokenAmount, exchangeRatePair } from '@/lib/format'
+import { formatCompact, formatTokenAmount, baseAnchoredRate } from '@/lib/format'
 import { apiErrorMessage } from '@/lib/apiError'
 import { uuid } from '../lib/uuid'
 
@@ -415,13 +415,13 @@ export default function SwapPage() {
               <div className="sber-swap-quote__row">
                 <Text type="secondary">{t('swap.quote.rate')}</Text>
                 {(() => {
-                  // Show the base asset's price (₽ per SETH) as the primary rate
-                  // even when buying (paying SRUB) — orient the base (non-SRUB leg)
-                  // into the "1 X ≈ …" slot. Consistent with the pool swap panel.
-                  const buyingBase = tokenInSymbol === 'SRUB'
-                  const r = buyingBase
-                    ? exchangeRatePair(quote.amountOut, quote.amountIn, tokenOutSymbol, tokenInSymbol)
-                    : exchangeRatePair(quote.amountIn, quote.amountOut, tokenInSymbol, tokenOutSymbol)
+                  // Headline rate = base asset's price; base = the pool's non-SRUB
+                  // leg (stable across the flip AND correct for non-SRUB-quote pairs,
+                  // unlike the old `tokenIn==='SRUB'` heuristic).
+                  const baseSym = selectedPool
+                    ? (selectedPool.tokenXSymbol !== 'SRUB' ? selectedPool.tokenXSymbol : selectedPool.tokenYSymbol)
+                    : tokenInSymbol
+                  const r = baseAnchoredRate(quote.amountIn, quote.amountOut, tokenInSymbol, tokenOutSymbol, baseSym)
                   return (
                     <div style={{ textAlign: 'right' }}>
                       <Text strong style={{ fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r?.forward ?? '—'}</Text>
@@ -539,6 +539,11 @@ function SwapInfoPanel({
   onPickPair,
 }: SwapInfoPanelProps) {
   const { t } = useTranslation()
+  // Base asset (pool's non-SRUB leg) so the info-panel rate is base-anchored,
+  // consistent with the main swap card's headline (not an inverted in/out rate).
+  const infoBaseSym = pool
+    ? (pool.tokenXSymbol !== 'SRUB' ? pool.tokenXSymbol : pool.tokenYSymbol)
+    : tokenIn?.symbol
   // Sprint 9-DS-r2 — empty-state used to be a single tiny "Готовы к
   // обмену?" card that left half the column blank. Replace it with a
   // useful "Топ пулов по ликвидности" mini-list so the user gets
@@ -755,11 +760,11 @@ function SwapInfoPanel({
 
             <InfoRow
               label={t('swap.info.effectiveRate')}
-              value={exchangeRatePair(quote.amountIn, quote.amountOut, tokenIn.symbol, tokenOut.symbol)?.forward ?? '—'}
+              value={baseAnchoredRate(quote.amountIn, quote.amountOut, tokenIn.symbol, tokenOut.symbol, infoBaseSym)?.forward ?? '—'}
             />
             <InfoRow
               label={t('swap.info.reverseRate')}
-              value={exchangeRatePair(quote.amountIn, quote.amountOut, tokenIn.symbol, tokenOut.symbol)?.reverse ?? '—'}
+              value={baseAnchoredRate(quote.amountIn, quote.amountOut, tokenIn.symbol, tokenOut.symbol, infoBaseSym)?.reverse ?? '—'}
             />
             <InfoRow
               label={t('swap.info.priceImpact')}
