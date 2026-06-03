@@ -5,6 +5,9 @@
 
 import i18n from '@/i18n'
 
+/** Active number locale — en-US grouping (1,234.5) in EN, ru-RU (1 234,5) in RU. */
+const numLocale = (): string => (i18n.language === 'en' ? 'en-US' : 'ru-RU')
+
 /**
  * Compact decimal formatter — used for "1.5K", "2.4M", "3.7B" style
  * shortenings on KPI tiles, pool reserves, transaction volumes.
@@ -48,7 +51,7 @@ export function formatCompact(value: number | null | undefined): string {
 export function formatRub(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '— ₽'
   if (Math.abs(value) < 10_000) {
-    return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽`
+    return `${value.toLocaleString(numLocale(), { maximumFractionDigits: 2 })} ₽`
   }
   return `${formatCompact(value)} ₽`
 }
@@ -74,7 +77,7 @@ export function formatTokenAmount(
   if (compact && abs >= 10_000) {
     body = formatCompact(value)
   } else {
-    body = value.toLocaleString('ru-RU', { maximumFractionDigits: maxFractionDigits })
+    body = value.toLocaleString(numLocale(), { maximumFractionDigits: maxFractionDigits })
   }
   return symbol ? `${body} ${symbol}` : body
 }
@@ -84,7 +87,7 @@ export function formatTokenAmount(
  */
 export function formatPercent(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—'
-  return `${value.toFixed(digits)}%`
+  return `${value.toLocaleString(numLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`
 }
 
 /**
@@ -95,9 +98,9 @@ export function formatPercent(value: number | null | undefined, digits = 2): str
  */
 export function formatRateValue(v: number): string {
   if (!Number.isFinite(v) || v <= 0) return '—'
-  if (v >= 1000) return v.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
-  if (v >= 1) return v.toLocaleString('ru-RU', { maximumFractionDigits: 4 })
-  return Number(v.toPrecision(4)).toLocaleString('ru-RU', { maximumFractionDigits: 20 })
+  if (v >= 1000) return v.toLocaleString(numLocale(), { maximumFractionDigits: 2 })
+  if (v >= 1) return v.toLocaleString(numLocale(), { maximumFractionDigits: 4 })
+  return Number(v.toPrecision(4)).toLocaleString(numLocale(), { maximumFractionDigits: 20 })
 }
 
 /**

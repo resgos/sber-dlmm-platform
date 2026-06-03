@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { Table, Tag, Typography, Space, Select, DatePicker, Button } from 'antd'
 import { DownloadOutlined, FilterOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import { transactions, tokens as tokensApi, pools as poolsApi } from '@/api/services'
 import type { Transaction, TxType, TxStatus, TransactionFilters, Token, Pool } from '@/api/types'
 import dayjs from 'dayjs'
@@ -12,34 +14,31 @@ import { exportToCsv } from '@/lib/csvExport'
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
 
-const txTypeLabels: Record<string, { text: string; color: string }> = {
-  SWAP: { text: 'Обмен', color: 'blue' },
-  ADD_LIQUIDITY: { text: 'Добавление ликвидности', color: 'green' },
-  REMOVE_LIQUIDITY: { text: 'Удаление ликвидности', color: 'orange' },
-  CLAIM_FEE: { text: 'Получение комиссий', color: 'gold' },
-  TRANSFER: { text: 'Перевод', color: 'purple' },
-  MINT: { text: 'Выпуск', color: 'cyan' },
-  BURN: { text: 'Сжигание', color: 'red' },
+// Sprint 8 C-4 (rest) — visible labels resolved at render via i18n; only the
+// tag colour stays as static config here. CSV export (a downloaded file, not
+// the UI) reads the same labels through i18n.t so the file matches the screen.
+const txTypeColors: Record<string, string> = {
+  SWAP: 'blue',
+  ADD_LIQUIDITY: 'green',
+  REMOVE_LIQUIDITY: 'orange',
+  CLAIM_FEE: 'gold',
+  TRANSFER: 'purple',
+  MINT: 'cyan',
+  BURN: 'red',
 }
 
-const statusLabels: Record<string, { text: string; color: string }> = {
-  PENDING: { text: 'Ожидание', color: 'processing' },
-  CONFIRMED: { text: 'Подтверждена', color: 'success' },
-  FAILED: { text: 'Ошибка', color: 'error' },
-  CANCELLED: { text: 'Отменена', color: 'default' },
+const statusColors: Record<string, string> = {
+  PENDING: 'processing',
+  CONFIRMED: 'success',
+  FAILED: 'error',
+  CANCELLED: 'default',
 }
 
-const txTypeOptions = Object.entries(txTypeLabels).map(([key, val]) => ({
-  label: val.text,
-  value: key,
-}))
-
-const statusOptions = Object.entries(statusLabels).map(([key, val]) => ({
-  label: val.text,
-  value: key,
-}))
+const txTypeLabel = (key: string) => i18n.t(`transactions.txType.${key}`, { defaultValue: key })
+const statusLabel = (key: string) => i18n.t(`transactions.txStatus.${key}`, { defaultValue: key })
 
 export default function TransactionsPage() {
+  const { t } = useTranslation()
   const [page, setPage] = useState(0)
   const [filters, setFilters] = useState<TransactionFilters>({})
   const pageSize = 20
@@ -86,15 +85,26 @@ export default function TransactionsPage() {
     setPage(0)
   }
 
+  const txTypeOptions = useMemo(
+    () => Object.keys(txTypeColors).map((key) => ({ label: txTypeLabel(key), value: key })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [i18n.language],
+  )
+  const statusOptions = useMemo(
+    () => Object.keys(statusColors).map((key) => ({ label: statusLabel(key), value: key })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [i18n.language],
+  )
+
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
-      <Title level={4} className="sber-page-title">История транзакций</Title>
+      <Title level={4} className="sber-page-title">{t('transactions.title')}</Title>
 
       {/* Filters */}
       <Space wrap>
         <Select
           style={{ width: 200 }}
-          placeholder="Тип транзакции"
+          placeholder={t('transactions.filters.txTypePlaceholder')}
           allowClear
           options={txTypeOptions}
           value={filters.txType}
@@ -102,7 +112,7 @@ export default function TransactionsPage() {
         />
         <Select
           style={{ width: 160 }}
-          placeholder="Статус"
+          placeholder={t('transactions.filters.statusPlaceholder')}
           allowClear
           options={statusOptions}
           value={filters.status}
@@ -111,10 +121,10 @@ export default function TransactionsPage() {
         <RangePicker
           onChange={handleDateChange}
           format="YYYY-MM-DD"
-          placeholder={['Дата от', 'Дата до']}
+          placeholder={[t('transactions.filters.dateFrom'), t('transactions.filters.dateTo')]}
         />
-        <Button icon={<ReloadOutlined />} onClick={() => refetch()}>Обновить</Button>
-        <Button onClick={handleReset}>Сбросить</Button>
+        <Button icon={<ReloadOutlined />} onClick={() => refetch()}>{t('transactions.filters.refresh')}</Button>
+        <Button onClick={handleReset}>{t('transactions.filters.reset')}</Button>
         {/* QW-1 (Batch #4) — CSV export of the currently-filtered page.
             Exports the page the user is looking at, not all data — keeps
             the helper sync, and matches user expectation ("download what
@@ -129,8 +139,8 @@ export default function TransactionsPage() {
               rows,
               [
                 { header: 'Дата', accessor: (r: Transaction) => dayjs(r.createdAt).format('YYYY-MM-DD HH:mm:ss') },
-                { header: 'Тип', accessor: (r) => txTypeLabels[r.txType]?.text ?? r.txType },
-                { header: 'Статус', accessor: (r) => statusLabels[r.status]?.text ?? r.status },
+                { header: 'Тип', accessor: (r) => txTypeLabel(r.txType) },
+                { header: 'Статус', accessor: (r) => statusLabel(r.status) },
                 { header: 'Пул ID', accessor: (r) => r.poolId ?? '' },
                 { header: 'Token In ID', accessor: (r) => r.tokenInId ?? '' },
                 { header: 'Token Out ID', accessor: (r) => r.tokenOutId ?? '' },
@@ -160,11 +170,11 @@ export default function TransactionsPage() {
           total: data?.totalElements || 0,
           onChange: (p) => setPage(p - 1),
           showSizeChanger: false,
-          showTotal: (total) => `Всего ${total} транзакций`,
+          showTotal: (total) => t('transactions.pagination.totalCount', { count: total }),
         }}
         columns={[
           {
-            title: 'Дата',
+            title: t('transactions.table.date'),
             dataIndex: 'createdAt',
             width: 150,
             render: (d: string) => (
@@ -174,12 +184,12 @@ export default function TransactionsPage() {
             ),
           },
           {
-            title: 'Тип',
+            title: t('transactions.table.type'),
             dataIndex: 'txType',
             width: 180,
-            render: (t: string) => {
-              const cfg = txTypeLabels[t] || { text: t, color: 'default' }
-              return <Tag color={cfg.color}>{cfg.text}</Tag>
+            render: (type: string) => {
+              const color = txTypeColors[type] || 'default'
+              return <Tag color={color}>{txTypeLabel(type)}</Tag>
             },
           },
           {
@@ -187,7 +197,7 @@ export default function TransactionsPage() {
             // turned it from "transaction list" into "list of random
             // numbers". Show the pool pair (from poolId) for liquidity
             // ops, or "tokenIn → tokenOut" for swaps + transfers.
-            title: 'Пара / направление',
+            title: t('transactions.table.pair'),
             key: 'pair',
             render: (_: unknown, r: Transaction) => {
               // Audit B3 — prefer backend-resolved labels (self-describing API);
@@ -208,7 +218,7 @@ export default function TransactionsPage() {
           {
             // Sprint 9-DS — switched amount columns to formatTokenAmount
             // (compact above 10k). Same data, half the visual noise.
-            title: 'Сумма входа',
+            title: t('transactions.table.amountIn'),
             dataIndex: 'amountIn',
             align: 'right' as const,
             render: (v: number | null, r: Transaction) => (
@@ -218,7 +228,7 @@ export default function TransactionsPage() {
             ),
           },
           {
-            title: 'Сумма выхода',
+            title: t('transactions.table.amountOut'),
             dataIndex: 'amountOut',
             align: 'right' as const,
             render: (v: number | null, r: Transaction) => (
@@ -228,7 +238,7 @@ export default function TransactionsPage() {
             ),
           },
           {
-            title: 'Комиссия',
+            title: t('transactions.table.fee'),
             dataIndex: 'feeAmount',
             align: 'right' as const,
             render: (v: number | null, r: Transaction) => (
@@ -238,12 +248,12 @@ export default function TransactionsPage() {
             ),
           },
           {
-            title: 'Статус',
+            title: t('transactions.table.status'),
             dataIndex: 'status',
             width: 140,
             render: (s: string) => {
-              const cfg = statusLabels[s] || { text: s, color: 'default' }
-              return <Tag color={cfg.color}>{cfg.text}</Tag>
+              const color = statusColors[s] || 'default'
+              return <Tag color={color}>{statusLabel(s)}</Tag>
             },
           },
         ]}

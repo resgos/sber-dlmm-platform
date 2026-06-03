@@ -665,6 +665,7 @@ export default function PositionsPage() {
       {feeHistory?.content && feeHistory.content.length > 0 && (
         <Card className="sber-card" title={<Text strong>{t('positions.feeHistory.title')}</Text>}>
           <Table
+            scroll={{ x: 'max-content' }}
             className="sber-table"
             dataSource={feeHistory.content}
             rowKey="id"

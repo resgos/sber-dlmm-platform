@@ -1343,7 +1343,11 @@ body {
   position: fixed;
   right: var(--space-5);
   bottom: var(--space-5);
-  z-index: 1000;
+  /* B10 — below AntD modals/drawers (z-index 1000) so the floating mascot never
+     overlays a dialog or the mobile nav drawer; it still floats above page
+     content (header/sider are ≤100). The dock is pointer-events:none, so it
+     never blocks clicks — only the FAB/bubble themselves are interactive. */
+  z-index: 900;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1351,6 +1355,11 @@ body {
   pointer-events: none;
 }
 .sberkot-dock > * { pointer-events: auto; }
+/* B10 — on narrower viewports the right-hand action panel (swap/liquidity CTA)
+   sits closer to the corner, so tuck the mascot in a little to reduce overlap. */
+@media (max-width: 1280px) {
+  .sberkot-fab { transform: scale(0.82); transform-origin: bottom right; }
+}
 
 .sberkot-fab {
   position: relative; /* anchor for the pet hearts */

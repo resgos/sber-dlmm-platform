@@ -12,6 +12,8 @@ import {
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import { users, balances, pools as poolsApi, fees, transactions as txApi } from '@/api/services'
 import { authStore } from '@/store/authStore'
 import { uiPrefStore } from '@/store/uiPrefStore'
@@ -32,20 +34,13 @@ dayjs.locale('ru')
 
 const { Title, Text } = Typography
 
-// Sprint 9 — same labels as the rest of the user-ui tx tables, kept
-// inline here so the activity feed renders without pulling in a
-// shared module just for two consts.
-const txTypeLabel: Record<string, string> = {
-  SWAP: 'Обмен',
-  ADD_LIQUIDITY: 'Добавление',
-  REMOVE_LIQUIDITY: 'Удаление',
-  CLAIM_FEE: 'Комиссии',
-  TRANSFER: 'Перевод',
-  MINT: 'Выпуск',
-  BURN: 'Сжигание',
-}
+// Sprint 9 — same labels as the rest of the user-ui tx tables, resolved
+// via i18n (reuses the shared dashboard.txType.* short labels) so the
+// activity feed stays in sync with the active language.
+const txTypeLabel = (key: string) => i18n.t(`dashboard.txType.${key}`, { defaultValue: key })
 
 export default function ProfilePage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [form] = Form.useForm()
   const uiPrefs = useSyncExternalStore(uiPrefStore.subscribe, uiPrefStore.getSnapshot)
@@ -65,11 +60,11 @@ export default function ProfilePage() {
     mutationFn: (values: { firstName: string; lastName: string }) =>
       users.updateMe(values),
     onSuccess: () => {
-      message.success('Профиль обновлён')
+      message.success(t('profile.edit.updateSuccess'))
       queryClient.invalidateQueries({ queryKey: ['me'] })
     },
     onError: (err: any) => {
-      message.error(err?.response?.data?.message || 'Ошибка обновления профиля')
+      message.error(err?.response?.data?.message || t('profile.edit.updateError'))
     },
   })
 
@@ -123,7 +118,7 @@ export default function ProfilePage() {
 
   return (
     <Space direction="vertical" size={24} style={{ width: '100%' }}>
-      <Title level={4} className="sber-page-title">Профиль</Title>
+      <Title level={4} className="sber-page-title">{t('profile.title')}</Title>
 
       <Row gutter={[24, 24]}>
       <Col xs={24} lg={14}>
@@ -150,14 +145,14 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>Статус верификации (KYC)</Text>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>{t('profile.kyc.label')}</Text>
           <KycStatusBadge status={kycStatus} large />
         </div>
 
         {kycStatus === 'PENDING' && (
           <Alert
-            message="Ваша заявка на верификацию находится на рассмотрении"
-            description="Обычно проверка занимает 1-2 рабочих дня. После верификации вам будут доступны все функции платформы."
+            message={t('profile.kyc.pendingTitle')}
+            description={t('profile.kyc.pendingBody')}
             type="info"
             showIcon
             style={{ borderRadius: 'var(--radius-sm)' }}
@@ -165,8 +160,8 @@ export default function ProfilePage() {
         )}
         {kycStatus === 'NOT_SUBMITTED' && (
           <Alert
-            message="Верификация не пройдена"
-            description="Для доступа к торговле и управлению ликвидностью необходимо пройти KYC верификацию."
+            message={t('profile.kyc.notSubmittedTitle')}
+            description={t('profile.kyc.notSubmittedBody')}
             type="warning"
             showIcon
             style={{ borderRadius: 'var(--radius-sm)' }}
@@ -174,8 +169,8 @@ export default function ProfilePage() {
         )}
         {kycStatus === 'REJECTED' && (
           <Alert
-            message="Верификация отклонена"
-            description="Ваша заявка на верификацию была отклонена. Пожалуйста, свяжитесь с поддержкой."
+            message={t('profile.kyc.rejectedTitle')}
+            description={t('profile.kyc.rejectedBody')}
             type="error"
             showIcon
             style={{ borderRadius: 'var(--radius-sm)' }}
@@ -200,7 +195,7 @@ export default function ProfilePage() {
       <SelfRestrictionPanel />
 
       {/* Edit form */}
-      <Card className="sber-card" title={<Text strong>Редактирование профиля</Text>}>
+      <Card className="sber-card" title={<Text strong>{t('profile.edit.title')}</Text>}>
         <Form
           form={form}
           layout="vertical"
@@ -212,22 +207,22 @@ export default function ProfilePage() {
         >
           <Form.Item
             name="firstName"
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Имя</span>}
-            rules={[{ required: true, message: 'Введите имя' }]}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('profile.edit.firstName')}</span>}
+            rules={[{ required: true, message: t('profile.edit.firstNameRequired') }]}
           >
-            <Input placeholder="Иван" style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
+            <Input placeholder={t('profile.edit.firstNamePlaceholder')} style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
           </Form.Item>
 
           <Form.Item
             name="lastName"
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Фамилия</span>}
-            rules={[{ required: true, message: 'Введите фамилию' }]}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('profile.edit.lastName')}</span>}
+            rules={[{ required: true, message: t('profile.edit.lastNameRequired') }]}
           >
-            <Input placeholder="Иванов" style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
+            <Input placeholder={t('profile.edit.lastNamePlaceholder')} style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
           </Form.Item>
 
           <Form.Item
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Электронная почта</span>}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('profile.edit.email')}</span>}
           >
             <Input value={user?.email} disabled style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
           </Form.Item>
@@ -239,19 +234,19 @@ export default function ProfilePage() {
             loading={updateMutation.isPending}
             style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
           >
-            Сохранить
+            {t('profile.edit.submit')}
           </Button>
         </Form>
       </Card>
 
       {/* Account info */}
-      <Card className="sber-card" title={<Text strong>Информация об аккаунте</Text>}>
+      <Card className="sber-card" title={<Text strong>{t('profile.info.title')}</Text>}>
         <Descriptions bordered column={1} size="small">
-          <Descriptions.Item label="ID пользователя">
+          <Descriptions.Item label={t('profile.info.userId')}>
             <Text copyable={{ text: user?.id }}>{user?.id}</Text>
           </Descriptions.Item>
-          <Descriptions.Item label="Роль">{user?.role || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Дата регистрации">
+          <Descriptions.Item label={t('profile.info.role')}>{user?.role || '—'}</Descriptions.Item>
+          <Descriptions.Item label={t('profile.info.createdAt')}>
             {user?.createdAt ? dayjs(user.createdAt).format('DD.MM.YYYY HH:mm') : '—'}
           </Descriptions.Item>
         </Descriptions>
@@ -275,13 +270,13 @@ export default function ProfilePage() {
         items={[
           {
             key: 'overview',
-            label: <Space size={6}><DashboardOutlined />Обзор</Space>,
+            label: <Space size={6}><DashboardOutlined />{t('profile.tabs.overview')}</Space>,
             children: (
               <Space direction="vertical" size={24} style={{ width: '100%' }}>
 
         <Card
           className="sber-card"
-          title={<Text strong>Сводка по аккаунту</Text>}
+          title={<Text strong>{t('profile.summary.title')}</Text>}
           styles={{ body: { padding: 0 } }}
         >
           <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-light)' }}>
@@ -295,7 +290,7 @@ export default function ProfilePage() {
               </div>
               <div>
                 <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block' }}>
-                  Стоимость портфеля
+                  {t('profile.summary.portfolioValue')}
                 </Text>
                 <Text strong style={{ fontSize: 'var(--text-lg)', fontVariantNumeric: 'tabular-nums' }}>
                   {formatRub(totalRub)}
@@ -309,13 +304,13 @@ export default function ProfilePage() {
             borderBottom: '1px solid var(--border-light)',
           }}>
             <div style={{ padding: 14, borderRight: '1px solid var(--border-light)' }}>
-              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Активов в кошельке</Text>
+              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('profile.summary.assetsHeld')}</Text>
               <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                 {tokensHeld}
               </div>
             </div>
             <div style={{ padding: 14 }}>
-              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Активных позиций</Text>
+              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('profile.summary.activePositions')}</Text>
               <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--sber-green)', fontVariantNumeric: 'tabular-nums' }}>
                 {activePositionCount}
               </div>
@@ -323,14 +318,14 @@ export default function ProfilePage() {
           </div>
 
           <div style={{ padding: 14 }}>
-            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Заработано на ликвидности</Text>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('profile.summary.earnedOnLiquidity')}</Text>
             <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--sber-green)', fontVariantNumeric: 'tabular-nums' }}>
               {formatRub(totalEarned)}
             </div>
             {feeSummary && feeSummary.totalUnclaimed > 0 && (
               <Tag color="green" style={{ marginTop: 6, borderRadius: 'var(--radius-pill)' }}>
                 <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
-                {formatRub(feeSummary.totalUnclaimed)} к получению
+                {t('profile.summary.toClaim', { amount: formatRub(feeSummary.totalUnclaimed) })}
               </Tag>
             )}
           </div>
@@ -341,14 +336,14 @@ export default function ProfilePage() {
           title={
             <Space>
               <HistoryOutlined style={{ color: 'var(--text-secondary)' }} />
-              <Text strong>Последняя активность</Text>
+              <Text strong>{t('profile.activity.title')}</Text>
             </Space>
           }
           styles={{ body: { padding: 0 } }}
         >
           {!recentTx?.content?.length ? (
             <div style={{ padding: 18 }}>
-              <Text type="secondary">Активности пока нет</Text>
+              <Text type="secondary">{t('profile.activity.empty')}</Text>
             </div>
           ) : (
             <Space direction="vertical" size={0} style={{ width: '100%' }}>
@@ -365,7 +360,7 @@ export default function ProfilePage() {
                 >
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>
-                      {txTypeLabel[tx.txType] ?? tx.txType}
+                      {txTypeLabel(tx.txType)}
                     </div>
                     <div style={{
                       fontSize: 'var(--text-xs)',
@@ -379,7 +374,7 @@ export default function ProfilePage() {
                     color={tx.status === 'CONFIRMED' ? 'success' : tx.status === 'FAILED' ? 'error' : 'processing'}
                     style={{ borderRadius: 'var(--radius-pill)', padding: '0 10px', marginInlineEnd: 0 }}
                   >
-                    {tx.status === 'CONFIRMED' ? 'Исполнена' : tx.status === 'FAILED' ? 'Ошибка' : tx.status}
+                    {tx.status === 'CONFIRMED' ? t('profile.activity.executed') : tx.status === 'FAILED' ? t('profile.activity.failed') : tx.status}
                   </Tag>
                 </div>
               ))}
@@ -392,7 +387,7 @@ export default function ProfilePage() {
           },
           {
             key: 'security',
-            label: <Space size={6}><SafetyOutlined />Безопасность</Space>,
+            label: <Space size={6}><SafetyOutlined />{t('profile.tabs.security')}</Space>,
             children: (
               <Space direction="vertical" size={24} style={{ width: '100%' }}>
                 {/* Sprint 11 G-20 — 2FA TOTP settings. Frontend MVP — verify
@@ -404,19 +399,19 @@ export default function ProfilePage() {
           },
           {
             key: 'settings',
-            label: <Space size={6}><SettingOutlined />Настройки</Space>,
+            label: <Space size={6}><SettingOutlined />{t('profile.tabs.settings')}</Space>,
             children: (
               <Space direction="vertical" size={24} style={{ width: '100%' }}>
                 {/* S14-03 — simple-mode toggle. Hides advanced sidebar items
                     (Ребаланс, Команда) for users who prefer a cleaner UX.
                     Persisted to localStorage via uiPrefStore. */}
-                <Card className="sber-card" title={<Text strong>Режим интерфейса</Text>}>
+                <Card className="sber-card" title={<Text strong>{t('profile.settings.interfaceModeTitle')}</Text>}>
                   <Space direction="vertical" size={8} style={{ width: '100%' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div>
-                        <Text strong style={{ display: 'block' }}>Простой режим</Text>
+                        <Text strong style={{ display: 'block' }}>{t('profile.settings.simpleMode')}</Text>
                         <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                          Скрывает расширенные пункты меню (Ребаланс, Команда)
+                          {t('profile.settings.simpleModeHint')}
                         </Text>
                       </div>
                       <Switch
