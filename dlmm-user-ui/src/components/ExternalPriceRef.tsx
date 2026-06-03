@@ -1,5 +1,6 @@
 import { Card, Typography, Space, Tag, Tooltip } from 'antd'
 import { GlobalOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { useExternalRef } from '@/lib/externalPrice'
 import { formatRub } from '@/lib/format'
 
@@ -22,6 +23,7 @@ export default function ExternalPriceRef({
   /** Internal pool price of 1 base token, expressed in SRUB. */
   internalPriceRub: number
 }) {
+  const { t } = useTranslation()
   const ref = useExternalRef(baseSymbol)
   if (!ref || !(internalPriceRub > 0)) return null
 
@@ -29,6 +31,7 @@ export default function ExternalPriceRef({
   const positive = delta >= 0
   const absDelta = Math.abs(delta)
   const deltaColor = absDelta < 2 ? 'green' : absDelta < 10 ? 'orange' : 'red'
+  const deltaStr = `${positive ? '+' : ''}${delta.toFixed(2)}`
 
   return (
     <Card
@@ -42,7 +45,7 @@ export default function ExternalPriceRef({
           <GlobalOutlined style={{ color: 'var(--sber-violet, #6E5BFF)' }} />
           <div style={{ lineHeight: 1.25 }}>
             <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block' }}>
-              Внешний ориентир · {ref.source}
+              {t('poolDetail.externalRef.label')} · {ref.source}
             </Text>
             <Text strong style={{ fontVariantNumeric: 'tabular-nums', fontSize: 'var(--text-md)' }}>
               {formatRub(ref.priceRub)}
@@ -50,13 +53,17 @@ export default function ExternalPriceRef({
           </div>
         </Space>
         <Tooltip
-          title={`Внутренняя цена пула ${formatRub(internalPriceRub)} отклоняется от реального рынка (${ref.source}) на ${positive ? '+' : ''}${delta.toFixed(2)}%. Большое отклонение = возможность арбитража.`}
+          title={t('poolDetail.externalRef.tooltip', {
+            internal: formatRub(internalPriceRub),
+            source: ref.source,
+            delta: deltaStr,
+          })}
         >
           <Tag
             color={deltaColor}
             style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', fontVariantNumeric: 'tabular-nums' }}
           >
-            {positive ? <RiseOutlined /> : <FallOutlined />} {positive ? '+' : ''}{delta.toFixed(2)}% к рынку
+            {positive ? <RiseOutlined /> : <FallOutlined />} {t('poolDetail.externalRef.deviationTag', { delta: deltaStr })}
           </Tag>
         </Tooltip>
       </Space>

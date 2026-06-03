@@ -1,5 +1,6 @@
 import { Card, Tabs } from 'antd'
 import { PlusOutlined, SwapOutlined, AimOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import type { Pool } from '@/api/types'
 import PoolAddLiquidityPanel from './PoolAddLiquidityPanel'
 import PoolSwapPanel from './PoolSwapPanel'
@@ -63,6 +64,7 @@ export default function PoolActionTabs({
   pickedPrice,
   externalRange,
 }: PoolActionTabsProps) {
+  const { t } = useTranslation()
   const controlled = activeTab != null
   return (
     <Card
@@ -87,7 +89,7 @@ export default function PoolActionTabs({
             label: (
               <span>
                 <PlusOutlined style={{ marginRight: 6 }} />
-                Добавить ликвидность
+                {t('poolDetail.tabs.add')}
               </span>
             ),
             children: (
@@ -99,7 +101,7 @@ export default function PoolActionTabs({
             label: (
               <span>
                 <SwapOutlined style={{ marginRight: 6 }} />
-                Обменять
+                {t('poolDetail.tabs.swap')}
               </span>
             ),
             children: <PoolSwapPanel pool={pool} embedded pickedPrice={pickedPrice} />,
@@ -109,7 +111,7 @@ export default function PoolActionTabs({
             label: (
               <span>
                 <AimOutlined style={{ marginRight: 6 }} />
-                Лимит
+                {t('poolDetail.tabs.limit')}
               </span>
             ),
             children: <LimitOrdersPanel pool={pool} />,
@@ -119,7 +121,7 @@ export default function PoolActionTabs({
             label: (
               <span>
                 <ThunderboltOutlined style={{ marginRight: 6 }} />
-                Zap
+                {t('poolDetail.tabs.zap')}
               </span>
             ),
             children: <PoolZapPanel pool={pool} />,

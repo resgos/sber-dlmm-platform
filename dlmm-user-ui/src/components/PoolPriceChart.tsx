@@ -6,6 +6,7 @@ import {
   BarChartOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import {
   createChart,
   ColorType,
@@ -80,6 +81,7 @@ export default function PoolPriceChart({
   compact = false,
   currentPrice,
 }: PoolPriceChartProps) {
+  const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const priceSeriesRef = useRef<ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | null>(null)
@@ -307,8 +309,8 @@ export default function PoolPriceChart({
       size="small"
       value={timeframe}
       onChange={(v) => setTimeframe(v)}
-      options={TIMEFRAMES.map((t) => ({ label: t.label, value: t.key }))}
-      aria-label="Таймфрейм графика"
+      options={TIMEFRAMES.map((tfOpt) => ({ label: tfOpt.label, value: tfOpt.key }))}
+      aria-label={t('poolDetail.chart.timeframeAria')}
     />
   )
 
@@ -318,10 +320,10 @@ export default function PoolPriceChart({
       value={chartKind}
       onChange={(v) => setChartKind(v)}
       options={[
-        { label: <BarChartOutlined aria-hidden />, value: 'candles', title: 'Свечи' },
-        { label: <LineChartOutlined aria-hidden />, value: 'line', title: 'Линия' },
+        { label: <BarChartOutlined aria-hidden />, value: 'candles', title: t('poolDetail.chart.kindCandles') },
+        { label: <LineChartOutlined aria-hidden />, value: 'line', title: t('poolDetail.chart.kindLine') },
       ]}
-      aria-label="Тип графика"
+      aria-label={t('poolDetail.chart.kindAria')}
     />
   )
 
@@ -334,14 +336,14 @@ export default function PoolPriceChart({
         <Space size={8} wrap>
           <AreaChartOutlined style={{ color: 'var(--viz-external)' }} aria-hidden />
           <Text strong style={compact ? { fontSize: 'var(--text-sm)' } : undefined}>
-            Цена ({quoteSymbol})
+            {t('poolDetail.chart.title', { quote: quoteSymbol })}
           </Text>
           {!compact && (
             <Tag
               style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}
               color="default"
             >
-              внутренние данные
+              {t('poolDetail.chart.internalDataTag')}
             </Tag>
           )}
           {lastClose != null && changePct != null && (
@@ -387,7 +389,7 @@ export default function PoolPriceChart({
         >
           <Spin />
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-            Загрузка свечей…
+            {t('poolDetail.chart.loading')}
           </Text>
         </div>
       ) : isError ? (
@@ -395,8 +397,8 @@ export default function PoolPriceChart({
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
             <Space direction="vertical" size={4}>
-              <Text type="secondary">Не удалось загрузить данные графика</Text>
-              <a onClick={() => refetch()}>Повторить</a>
+              <Text type="secondary">{t('poolDetail.chart.loadError')}</Text>
+              <a onClick={() => refetch()}>{t('poolDetail.chart.retry')}</a>
             </Space>
           }
           style={{ padding: compact ? 'var(--space-5) 0' : '40px 0' }}
@@ -409,7 +411,7 @@ export default function PoolPriceChart({
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
             <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
-              Недостаточно данных для графика — появятся после сделок
+              {t('poolDetail.chart.noData')}
             </Text>
           }
           style={{ padding: compact ? 'var(--space-5) 0' : '40px 0' }}
@@ -421,7 +423,7 @@ export default function PoolPriceChart({
               type="info"
               showIcon
               banner
-              message="Мало сделок — график пока разрежен. Точки появятся по мере реальных обменов."
+              message={t('poolDetail.chart.sparse')}
               style={{
                 marginBottom: 'var(--space-3)',
                 borderRadius: 'var(--radius-sm)',
@@ -442,19 +444,23 @@ export default function PoolPriceChart({
               }}
             >
               <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                {candles.length}{' '}
-                {chartKind === 'candles' ? 'свечей' : 'точек'} · {tf.label} ·{' '}
-                по реальным сделкам пула
+                {t('poolDetail.chart.footerMeta', {
+                  timeframe: tf.label,
+                  countLabel:
+                    chartKind === 'candles'
+                      ? t('poolDetail.chart.candlesCount', { count: candles.length })
+                      : t('poolDetail.chart.pointsCount', { count: candles.length }),
+                })}
               </Text>
               <Segmented<'on' | 'off'>
                 size="small"
                 value={showVolume ? 'on' : 'off'}
                 onChange={(v) => setShowVolume(v === 'on')}
                 options={[
-                  { label: <AreaChartOutlined aria-hidden />, value: 'on', title: 'Объём' },
-                  { label: 'Без объёма', value: 'off' },
+                  { label: <AreaChartOutlined aria-hidden />, value: 'on', title: t('poolDetail.chart.volumeOn') },
+                  { label: t('poolDetail.chart.volumeOff'), value: 'off' },
                 ]}
-                aria-label="Показывать объём"
+                aria-label={t('poolDetail.chart.volumeAria')}
               />
             </div>
           )}

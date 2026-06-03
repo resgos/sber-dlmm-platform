@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Typography, Space, InputNumber, Button, Alert, Tag, Tooltip, Slider, Segmented } from 'antd'
 import { PlusOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { pools, balances } from '@/api/services'
 import type { Pool, LiquidityStrategy } from '@/api/types'
 import { formatCompact, formatRub } from '@/lib/format'
@@ -77,6 +78,7 @@ const STRATEGIES: { value: LiquidityStrategy; label: string }[] = [
 ]
 
 export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalRange }: PoolAddLiquidityPanelProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [strategy, setStrategy] = useState<LiquidityStrategy>('SPOT')
   // Sprint 16 (Meteora parity) — single-sided liquidity mode (BOTH / only X / only Y).
@@ -129,7 +131,7 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
         idempotencyKey: uuid(),
       }),
     onSuccess: () => {
-      setSuccess('Ликвидность успешно добавлена')
+      setSuccess(t('poolDetail.addLiq.addSuccess'))
       setError(null)
       setAmountX(null)
       setAmountY(null)
@@ -139,7 +141,7 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
       setTimeout(() => setSuccess(null), 5000)
     },
     onError: (err: any) => {
-      setError(apiErrorMessage(err, 'Ошибка при добавлении ликвидности'))
+      setError(apiErrorMessage(err, t('poolDetail.addLiq.addErrorFallback')))
     },
   })
 
@@ -237,7 +239,7 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
       {/* Amount + single-sided mode (Sprint 16, Meteora parity) */}
       <div>
         <Text type="secondary" style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
-          Сумма
+          {t('poolDetail.addLiq.amount')}
         </Text>
         <Segmented
           block
@@ -253,17 +255,17 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
             else { setBinMin(pool.activeBinId - 10); setBinMax(pool.activeBinId + 10) }
           }}
           options={[
-            { label: 'Обе стороны', value: 'BOTH' },
-            { label: `Только ${pool.tokenXSymbol}`, value: 'X' },
-            { label: `Только ${pool.tokenYSymbol}`, value: 'Y' },
+            { label: t('poolDetail.addLiq.sideBoth'), value: 'BOTH' },
+            { label: t('poolDetail.addLiq.sideOnly', { sym: pool.tokenXSymbol }), value: 'X' },
+            { label: t('poolDetail.addLiq.sideOnly', { sym: pool.tokenYSymbol }), value: 'Y' },
           ]}
           style={{ margin: '8px 0' }}
         />
         {side !== 'BOTH' && (
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 8 }}>
             {side === 'X'
-              ? `Односторонняя: ${pool.tokenXSymbol} встанет в бины ВЫШЕ активного — как заявки на продажу.`
-              : `Односторонняя: ${pool.tokenYSymbol} встанет в бины НИЖЕ активного — как заявки на покупку.`}
+              ? t('poolDetail.addLiq.singleSidedX', { sym: pool.tokenXSymbol })
+              : t('poolDetail.addLiq.singleSidedY', { sym: pool.tokenYSymbol })}
           </Text>
         )}
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
@@ -289,7 +291,7 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
       {/* Strategy with Meteora-style icon buttons */}
       <div>
         <Text type="secondary" style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
-          Стратегия
+          {t('poolDetail.addLiq.strategy')}
         </Text>
         <div
           style={{
@@ -337,7 +339,7 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
-            Диапазон цен
+            {t('poolDetail.addLiq.priceRange')}
           </Text>
           <Space size={6}>
             {[5, 10, 20].map((width) => (
@@ -379,7 +381,7 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
           <div>
-            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Мин бин</Text>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('poolDetail.addLiq.minBin')}</Text>
             <InputNumber
               value={binMin}
               onChange={(v) => setBinMin(v)}
@@ -388,7 +390,7 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
             />
           </div>
           <div>
-            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Макс бин</Text>
+            <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('poolDetail.addLiq.maxBin')}</Text>
             <InputNumber
               value={binMax}
               onChange={(v) => setBinMax(v)}
@@ -398,12 +400,12 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
           </div>
         </div>
         <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-          Активный бин: <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{pool.activeBinId}</span>
+          {t('poolDetail.addLiq.activeBin')}: <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{pool.activeBinId}</span>
           {totalBins > 0 && (
             <>
               {' · '}
               <Tag color="default" style={{ borderRadius: 'var(--radius-pill)', fontSize: 10, padding: '0 6px', lineHeight: '16px' }}>
-                {totalBins} бин{totalBins === 1 ? '' : totalBins < 5 ? 'а' : 'ов'}
+                {t('poolDetail.addLiq.binsCount', { count: totalBins })}
               </Tag>
             </>
           )}
@@ -426,9 +428,9 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
             <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-              Ваш капитал
+              {t('poolDetail.addLiq.capital')}
               {pool.tokenYSymbol !== 'SRUB' && (
-                <Tooltip title={`В единицах ${pool.tokenYSymbol}. Для не-SRUB пар без отдельной FX-конвертации.`}>
+                <Tooltip title={t('poolDetail.addLiq.capitalTooltip', { sym: pool.tokenYSymbol })}>
                   {' '}
                   <InfoCircleOutlined style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }} />
                 </Tooltip>
@@ -440,8 +442,8 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
             <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-              Учёт позиции ({totalBins} × {COST_PER_BIN_RUB} ₽)
-              <Tooltip title="Оценочная стоимость учёта позиции в бухгалтерии пула. Замена реальной формулы — в Sprint 10 после аудита 1С.">
+              {t('poolDetail.addLiq.bookkeeping', { bins: totalBins, cost: COST_PER_BIN_RUB })}
+              <Tooltip title={t('poolDetail.addLiq.bookkeepingTooltip')}>
                 {' '}
                 <InfoCircleOutlined style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }} />
               </Tooltip>
@@ -450,8 +452,8 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
             <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-              Комиссия протокола на вход
-              <Tooltip title="Protocol fee на DLMM применяется к свопам, а не к вводу ликвидности. Поэтому всегда 0 на этом шаге.">
+              {t('poolDetail.addLiq.protocolFee')}
+              <Tooltip title={t('poolDetail.addLiq.protocolFeeTooltip')}>
                 {' '}
                 <InfoCircleOutlined style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }} />
               </Tooltip>
@@ -470,8 +472,8 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
           {addPriceImpactPct != null && addPriceImpactPct > 0.05 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                Влияние на цену пула
-                <Tooltip title="Если ваш ввод смещает пропорцию активного бина, цена пула сдвигается. Чем больше относительно TVL — тем больший сдвиг. Свыше 2% — рекомендуется разбить ввод на несколько частей.">
+                {t('poolDetail.addLiq.priceImpact')}
+                <Tooltip title={t('poolDetail.addLiq.priceImpactTooltip')}>
                   {' '}
                   <InfoCircleOutlined style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }} />
                 </Tooltip>
@@ -499,7 +501,7 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
               borderTop: '1px solid var(--border-light)',
             }}
           >
-            <Text strong style={{ fontSize: 'var(--text-xs)' }}>Итого стоимость создания</Text>
+            <Text strong style={{ fontSize: 'var(--text-xs)' }}>{t('poolDetail.addLiq.totalCost')}</Text>
             <Text strong style={{ fontSize: 'var(--text-xs)', color: 'var(--sber-green)', fontVariantNumeric: 'tabular-nums' }}>
               {formatRub(totalCostRub)}
             </Text>
@@ -518,10 +520,10 @@ export default function PoolAddLiquidityPanel({ pool, onPreviewChange, externalR
         onClick={() => addMutation.mutate()}
       >
         {(needX && !amountX) || (needY && !amountY)
-          ? 'Введите сумму'
+          ? t('poolDetail.addLiq.ctaEnterAmount')
           : !binMin || !binMax || binMax <= binMin
-          ? 'Укажите диапазон'
-          : 'Добавить ликвидность'}
+          ? t('poolDetail.addLiq.ctaSetRange')
+          : t('poolDetail.addLiq.ctaAdd')}
       </Button>
     </Space>
   )
@@ -555,6 +557,7 @@ function BinRangeSlider({
   binMax: number | null
   onChange: (min: number, max: number) => void
 }) {
+  const { t } = useTranslation()
   const RANGE = 50
   const sliderMin = activeBinId - RANGE
   const sliderMax = activeBinId + RANGE
@@ -585,7 +588,7 @@ function BinRangeSlider({
           [activeBinId]: {
             label: (
               <span style={{ color: 'var(--sber-green)', fontSize: 10, fontWeight: 600 }}>
-                ★ {currentPrice ? fmt(currentPrice) : 'актив'}
+                ★ {currentPrice ? fmt(currentPrice) : t('poolDetail.addLiq.sliderActiveFallback')}
               </span>
             ),
             style: { color: 'var(--sber-green)' },
@@ -622,6 +625,7 @@ function AmountField({
   onChange: (v: number | null) => void
   available: number
 }) {
+  const { t } = useTranslation()
   return (
     <div
       style={{
@@ -636,7 +640,7 @@ function AmountField({
         </Tag>
         <Space size={4}>
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-            Доступно: {formatCompact(available)}
+            {t('poolDetail.addLiq.available', { amount: formatCompact(available) })}
           </Text>
           <Button
             type="link"

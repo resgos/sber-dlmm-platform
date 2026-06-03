@@ -119,12 +119,12 @@ export default function PoolDetailPage() {
   const claimMutation = useMutation({
     mutationFn: (positionId: string) => fees.claimFees({ positionId }),
     onSuccess: () => {
-      message.success('Комиссии забраны')
+      message.success(t('poolDetail.myPositions.feesClaimed'))
       queryClient.invalidateQueries({ queryKey: ['myPositions'] })
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
       queryClient.invalidateQueries({ queryKey: ['myFeeSummary'] })
     },
-    onError: (e: any) => message.error(e?.response?.data?.message || 'Не удалось забрать комиссии'),
+    onError: (e: any) => message.error(e?.response?.data?.message || t('poolDetail.myPositions.claimErrorFallback')),
   })
 
   // Sprint 9-DS-r4 (P1-8) — one-click rebalance state. Disables the
@@ -174,7 +174,7 @@ export default function PoolDetailPage() {
   }, [pool, poolPositions])
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
-  if (error || !pool) return <Alert message="Пул не найден" type="error" showIcon />
+  if (error || !pool) return <Alert message={t('poolDetail.notFound')} type="error" showIcon />
 
   const dynamicFeeRaised = pool.currentDynamicFeeBps > pool.baseFeeBps
   const tvlRub = pool.tokenYSymbol === 'SRUB'
@@ -247,25 +247,20 @@ export default function PoolDetailPage() {
     if (oorPositions.length === 0) return
 
     Modal.confirm({
-      title: `Ребалансировать ${oorPositions.length} позиций?`,
+      title: t('poolDetail.rebalanceAll.title', { count: oorPositions.length }),
       width: 520,
       content: (
         <Space direction="vertical" size={8}>
           <Text>
-            Каждая позиция вне диапазона будет последовательно закрыта,
-            а затем заново открыта с тем же объёмом капитала, той же
-            стратегией и шириной диапазона, но вокруг текущей цены
-            (бин <code>{pool.activeBinId}</code>).
+            {t('poolDetail.rebalanceAll.body', { binId: pool.activeBinId })}
           </Text>
           <Text type="warning" style={{ fontSize: 'var(--text-xs)' }}>
-            Операция последовательная — если что-то сломается на
-            половине, ранее перенесённые позиции остаются перенесёнными.
-            Не закрывайте вкладку до завершения.
+            {t('poolDetail.rebalanceAll.warning')}
           </Text>
         </Space>
       ),
-      okText: `Перенести ${oorPositions.length}`,
-      cancelText: 'Отмена',
+      okText: t('poolDetail.rebalanceAll.okText', { count: oorPositions.length }),
+      cancelText: t('common.cancel'),
       onOk: async () => {
         setRebalancing(true)
         let done = 0
@@ -305,14 +300,17 @@ export default function PoolDetailPage() {
               done++
             } catch (e: any) {
               message.error(
-                `Не удалось перенести позицию ${pos.id.slice(0, 6)}…: ${
-                  e?.response?.data?.message || 'ошибка'
-                }. Перенесено ${done} из ${oorPositions.length}.`,
+                t('poolDetail.rebalanceAll.failure', {
+                  id: pos.id.slice(0, 6),
+                  error: e?.response?.data?.message || t('poolDetail.rebalanceAll.errorWord'),
+                  done,
+                  total: oorPositions.length,
+                }),
               )
               return
             }
           }
-          message.success(`Перенесено позиций: ${done}`)
+          message.success(t('poolDetail.rebalanceAll.moved', { count: done }))
         } finally {
           setRebalancing(false)
           queryClient.invalidateQueries({ queryKey: ['myPositions'] })
@@ -331,7 +329,7 @@ export default function PoolDetailPage() {
         onClick={() => navigate('/pools')}
         style={{ padding: 0, color: 'var(--text-secondary)' }}
       >
-        К списку пулов
+        {t('poolDetail.backToPools')}
       </Button>
 
       <Card
@@ -358,20 +356,20 @@ export default function PoolDetailPage() {
                 {dynamicFeeRaised && (
                   <Tag color="orange" style={{ marginInlineEnd: 0 }}>
                     <ThunderboltFilled style={{ marginRight: 4 }} />
-                    комиссия повышена
+                    {t('poolDetail.feeRaisedBadge')}
                   </Tag>
                 )}
               </Space>
               <div style={{ marginTop: 8 }}>
                 <Space size={16} wrap>
                   <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
-                    Шаг бина: <strong style={{ color: 'var(--text-primary)' }}>{bpsToPercent(pool.binStep)}</strong>
+                    {t('poolDetail.binStep')}: <strong style={{ color: 'var(--text-primary)' }}>{bpsToPercent(pool.binStep)}</strong>
                   </Text>
                   <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
-                    Базовая комиссия: <strong style={{ color: 'var(--text-primary)' }}>{bpsToPercent(pool.baseFeeBps)}</strong>
+                    {t('poolDetail.baseFee')}: <strong style={{ color: 'var(--text-primary)' }}>{bpsToPercent(pool.baseFeeBps)}</strong>
                   </Text>
                   <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
-                    Создан: <strong style={{ color: 'var(--text-primary)' }}>{dayjs(pool.createdAt).format('DD.MM.YYYY')}</strong>
+                    {t('poolDetail.createdAt')}: <strong style={{ color: 'var(--text-primary)' }}>{dayjs(pool.createdAt).format('DD.MM.YYYY')}</strong>
                   </Text>
                 </Space>
               </div>
@@ -389,22 +387,22 @@ export default function PoolDetailPage() {
       <KpiRow
         tiles={[
           {
-            label: 'TVL пула',
+            label: t('poolDetail.kpi.tvl'),
             value: formatRub(tvlRub),
             sub: `${formatCompact(pool.totalTvlX)} ${pool.tokenXSymbol} + ${formatCompact(pool.totalTvlY)} ${pool.tokenYSymbol}`,
             icon: <DollarOutlined style={{ color: 'var(--sber-green)' }} />,
             accent: 'var(--sber-green)',
           },
           {
-            label: 'Объём за 24ч',
+            label: t('poolDetail.kpi.volume24h'),
             value: formatCompact(pool.volume24h ?? 0),
-            sub: 'свопов за сутки',
+            sub: t('poolDetail.kpi.volume24hSub'),
             icon: <RiseOutlined style={{ color: '#296AE3' }} />,
           },
           {
-            label: 'Расч. APY',
+            label: t('poolDetail.kpi.apy'),
             value: pool.estimatedApy > 0 ? `${pool.estimatedApy.toFixed(2)}%` : '—',
-            sub: pool.estimatedApy > 0 ? 'для LP-провайдеров' : 'недостаточно данных',
+            sub: pool.estimatedApy > 0 ? t('poolDetail.kpi.apyForLp') : t('poolDetail.kpi.apyNoData'),
             icon: <PercentageOutlined style={{ color: '#9B59B6' }} />,
             accent: pool.estimatedApy > 0 ? 'var(--sber-green)' : undefined,
           },
@@ -412,7 +410,7 @@ export default function PoolDetailPage() {
           // hero + bin chart) with "Моя доля". Meteora-style: tells the LP
           // how big a slice of the pool they own.
           {
-            label: 'Моя доля',
+            label: t('poolDetail.kpi.myShare'),
             value: poolPositions.length === 0
               ? '—'
               : sharePct < 0.01
@@ -424,12 +422,11 @@ export default function PoolDetailPage() {
             // "N позиций · 5M ₽" wrapped mid-word when the share was
             // <0,01%).
             sub: poolPositions.length === 0 ? (
-              'у вас нет позиций'
+              t('poolDetail.kpi.myShareEmpty')
             ) : (
               <div style={{ lineHeight: 1.3 }}>
                 <div style={{ whiteSpace: 'nowrap' }}>
-                  {poolPositions.length} позиц
-                  {poolPositions.length === 1 ? 'ия' : poolPositions.length < 5 ? 'ии' : 'ий'}
+                  {t('poolDetail.kpi.positions', { count: poolPositions.length })}
                 </div>
                 <div style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                   {formatCompact(myShareValueRub)} ₽
@@ -451,8 +448,8 @@ export default function PoolDetailPage() {
           strategy + bin-width. Was a navigate to /liquidity. */}
       {outOfRangeCount > 0 && (
         <Alert
-          message={`${outOfRangeCount} ваших позиций — вне диапазона цены`}
-          description="Позиция вне диапазона не получает комиссий. Нажмите «Ребаланс», чтобы перенести её к текущей цене с тем же объёмом капитала и той же стратегией."
+          message={t('poolDetail.outOfRange.title', { count: outOfRangeCount })}
+          description={t('poolDetail.outOfRange.description')}
           type="warning"
           showIcon
           icon={<WarningOutlined />}
@@ -464,7 +461,7 @@ export default function PoolDetailPage() {
               onClick={confirmRebalanceAll}
               style={{ borderRadius: 'var(--radius-sm)' }}
             >
-              Ребаланс ({outOfRangeCount})
+              {t('poolDetail.outOfRange.cta', { count: outOfRangeCount })}
             </Button>
           }
           style={{ borderRadius: 'var(--radius-md)' }}
@@ -490,10 +487,10 @@ export default function PoolDetailPage() {
             style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
             title={
               <Space size={8}>
-                <Text strong>Распределение ликвидности</Text>
+                <Text strong>{t('poolDetail.liquidityDist.title')}</Text>
                 {userBinRanges.length > 0 && (
                   <Tag color="purple" style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>
-                    ваши бины подсвечены
+                    {t('poolDetail.liquidityDist.yourBinsTag')}
                   </Tag>
                 )}
               </Space>
@@ -530,7 +527,7 @@ export default function PoolDetailPage() {
               title={
                 <Space size={8}>
                   <PieChartOutlined style={{ color: '#9333EA' }} />
-                  <Text strong>Мои позиции в этом пуле</Text>
+                  <Text strong>{t('poolDetail.myPositions.title')}</Text>
                   <Tag style={{ borderRadius: 'var(--radius-pill)' }}>{poolPositions.length}</Tag>
                 </Space>
               }
@@ -542,7 +539,7 @@ export default function PoolDetailPage() {
                   onClick={() => navigate(`/pools/${id}/liquidity`)}
                   style={{ borderRadius: 'var(--radius-sm)' }}
                 >
-                  Добавить
+                  {t('poolDetail.myPositions.addButton')}
                 </Button>
               }
               styles={{ body: { padding: 0 } }}
@@ -569,12 +566,12 @@ export default function PoolDetailPage() {
                           <Tag color="blue" style={{ marginRight: 0 }}>{p.strategy}</Tag>
                           {outOfRange && (
                             <Tag color="orange" style={{ marginRight: 0 }} icon={<WarningOutlined />}>
-                              вне диапазона
+                              {t('poolDetail.myPositions.outOfRangeTag')}
                             </Tag>
                           )}
                         </Space>
                         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', marginTop: 2, fontFamily: 'JetBrains Mono, monospace' }}>
-                          бины {p.binRangeMin} — {p.binRangeMax}
+                          {t('poolDetail.myPositions.bins', { from: p.binRangeMin, to: p.binRangeMax })}
                         </div>
                       </div>
                       <div style={{ minWidth: 0, flex: '1 1 200px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -585,10 +582,10 @@ export default function PoolDetailPage() {
                               {' · '}
                               +{formatTokenAmount(p.unclaimedFeeY, pool.tokenYSymbol, { compact: true })}
                             </div>
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>незабранные</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t('poolDetail.myPositions.unclaimed')}</div>
                           </>
                         ) : (
-                          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>нет комиссий к получению</Text>
+                          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('poolDetail.myPositions.noFeesYet')}</Text>
                         )}
                       </div>
                       <Space size={6}>
@@ -601,7 +598,7 @@ export default function PoolDetailPage() {
                           loading={claimMutation.isPending && claimMutation.variables === p.id}
                           onClick={() => claimMutation.mutate(p.id)}
                         >
-                          Забрать
+                          {t('poolDetail.myPositions.claimButton')}
                         </Button>
                         <Button
                           size="small"
@@ -609,7 +606,7 @@ export default function PoolDetailPage() {
                           icon={<DeleteOutlined />}
                           onClick={() => navigate(`/pools/${id}/liquidity`)}
                         >
-                          Снять
+                          {t('poolDetail.myPositions.removeButton')}
                         </Button>
                       </Space>
                     </div>
@@ -655,39 +652,39 @@ export default function PoolDetailPage() {
           items={[
             {
               key: 'params',
-              label: 'Параметры пула',
+              label: t('poolDetail.params.title'),
               children: (
                 <Row gutter={[16, 16]}>
                   <Col xs={24} md={12}>
-                    <ProfileRow label="Шаг цены между бинами" value={bpsToPercent(pool.binStep)} />
+                    <ProfileRow label={t('poolDetail.params.binStepLabel')} value={bpsToPercent(pool.binStep)} />
                     <ProfileRow
-                      label="Базовая комиссия"
+                      label={t('poolDetail.params.baseFee')}
                       value={bpsToPercent(pool.baseFeeBps)}
                     />
                     <ProfileRow
-                      label="Текущая комиссия"
-                      value={`${bpsToPercent(pool.currentDynamicFeeBps)}${dynamicFeeRaised ? ' (повышена)' : ''}`}
+                      label={t('poolDetail.params.currentFee')}
+                      value={`${bpsToPercent(pool.currentDynamicFeeBps)}${dynamicFeeRaised ? ` ${t('poolDetail.params.currentFeeRaised')}` : ''}`}
                     />
                     <ProfileRow
-                      label="Текущая цена"
+                      label={t('poolDetail.params.currentPrice')}
                       value={`${pool.currentPrice.toLocaleString('ru-RU', { maximumFractionDigits: 6 })} ${pool.tokenYSymbol}/${pool.tokenXSymbol}`}
                     />
                   </Col>
                   <Col xs={24} md={12}>
                     <ProfileRow
-                      label={`Резерв ${pool.tokenXSymbol}`}
+                      label={t('poolDetail.params.reserve', { symbol: pool.tokenXSymbol })}
                       value={formatTokenAmount(pool.totalTvlX, pool.tokenXSymbol, { compact: true })}
                     />
                     <ProfileRow
-                      label={`Резерв ${pool.tokenYSymbol}`}
+                      label={t('poolDetail.params.reserve', { symbol: pool.tokenYSymbol })}
                       value={formatTokenAmount(pool.totalTvlY, pool.tokenYSymbol, { compact: true })}
                     />
                     <ProfileRow
-                      label={`Комиссии собрано в ${pool.tokenXSymbol}`}
+                      label={t('poolDetail.params.feesCollected', { symbol: pool.tokenXSymbol })}
                       value={formatTokenAmount(pool.totalFeesCollectedX, pool.tokenXSymbol, { compact: true })}
                     />
                     <ProfileRow
-                      label={`Комиссии собрано в ${pool.tokenYSymbol}`}
+                      label={t('poolDetail.params.feesCollected', { symbol: pool.tokenYSymbol })}
                       value={formatTokenAmount(pool.totalFeesCollectedY, pool.tokenYSymbol, { compact: true })}
                     />
                   </Col>
