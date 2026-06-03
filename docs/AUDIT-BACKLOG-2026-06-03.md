@@ -45,7 +45,7 @@ Kafka/ClickHouse/Ignite».
 | # | Замечание (источник) | Severity | Разбор / действие | Статус |
 |---|---|---|---|---|
 | **B1** | **timestamps `created_at > confirmed_at`** (Arch P0-2) | P0 | Реально: 1844 строки (сид исторических свопов ставит `created_at=now`, `confirmed_at`=историческое). Инвариант `created<=updated<=confirmed` нарушен. | **ФИКС сейчас** (`16-seed`) |
-| **B2** | **сырые units + tokenX/tokenY в нотификациях** (Ouroboros High3, Arch P1-6/P1-8) | P0 | Сообщения нотификаций показывают `25755836810000`, `tokenX/tokenY` вместо `25 755 836,81 SRUB`. Нужен formatter (÷10⁴) + символы в notification-service. | Бэклог-фикс (next) |
+| **B2** | **сырые units + tokenX/tokenY в нотификациях** (Ouroboros High3, Arch P1-6/P1-8) | P0 | Сообщения нотификаций показывали `25755836810000`, `tokenX/tokenY`. Добавлен `NotificationFormatter` (÷10⁴, RU-группировка, символы из `tokens`/`liquidity_pools`); все 4 хэндлера (swap/fee/liquidity/margin) переведены на человекочитаемый формат. Проверено вживую: событие → `Своп выполнен: 6 846 150 SRUB → 500 SETH`. | **✅ ФИКС** (`NotificationFormatter` + listener; 3 теста) |
 | **B3** | **UUID/tokenX-tokenY в API** позиций/транзакций (Arch P1-8) | P1 | `poolName=UUID`, `tokenXId=UUID`. Нужен view-model с символами/именами (UI уже частично джойнит каталог пулов — #2 готов для своп/тх). | Бэклог-фикс |
 | **B4** | **APY/fees = 0** (Arch P1-7, Ouroboros Med8) | P1 | `estimatedApyPct=0` при ненулевом TVL. PoolApyCalibration есть (#28), но summary/часть отдаёт 0. Проверить расчёт + «—» вместо 0.00%. | Бэклог-фикс |
 | **B5** | **health/swagger → SPA fallback** (Arch P1-9) | P1 | `/actuator/health`, `/v3/api-docs`, `/swagger-ui` отдают HTML фронта; `/api/v1/health` 404. Роутинг gateway/nginx. | Бэклог-фикс |

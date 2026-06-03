@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sber.dlmm.common.enums.NotificationType;
 import com.sber.dlmm.notification.service.NotificationService;
+import com.sber.dlmm.notification.service.NotificationFormatter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -52,6 +53,8 @@ public class NotificationEventListener {
     private final NotificationService notificationService;
     /** Jackson mapper used to parse raw event JSON field-by-field (schema-tolerant). */
     private final ObjectMapper objectMapper;
+    /** Renders raw amounts + token ids into human copy (symbols, ×10⁴ scale) — audit B2. */
+    private final NotificationFormatter formatter;
 
     /**
      * Consumes the {@code pool-events} topic and fans out by inferred event type.
@@ -99,12 +102,23 @@ public class NotificationEventListener {
                 UUID userId = UUID.fromString(node.get("userId").asText());
                 long claimedX = node.get("claimedX").asLong();
                 long claimedY = node.get("claimedY").asLong();
+                String tokenXId = textOrNull(node, "tokenXId");
+                String tokenYId = textOrNull(node, "tokenYId");
+
+                // Audit B2 — human amounts + token symbols (only the legs actually paid).
+                StringBuilder legs = new StringBuilder();
+                if (claimedX > 0) legs.append(formatter.amountWithSymbol(claimedX, tokenXId));
+                if (claimedY > 0) {
+                    if (legs.length() > 0) legs.append(" + ");
+                    legs.append(formatter.amountWithSymbol(claimedY, tokenYId));
+                }
+                if (legs.length() == 0) legs.append("0");
 
                 notificationService.createNotification(
                         userId,
                         NotificationType.FEE_ACCRUED,
                         "Комиссии забраны",
-                        String.format("Комиссии забраны: %d tokenX + %d tokenY", claimedX, claimedY),
+                        "Комиссии забраны: " + legs,
                         record.value()
                 );
                 log.info("Created fee claimed notification for user {}", userId);
@@ -255,12 +269,17 @@ public class NotificationEventListener {
         UUID userId = UUID.fromString(node.get("userId").asText());
         long amountIn = node.get("amountIn").asLong();
         long amountOut = node.get("amountOut").asLong();
+        String tokenInId = textOrNull(node, "tokenInId");
+        String tokenOutId = textOrNull(node, "tokenOutId");
 
+        // Audit B2 — human amounts + token symbols instead of raw integers.
         notificationService.createNotification(
                 userId,
                 NotificationType.SWAP_COMPLETED,
                 "Своп выполнен",
-                String.format("Своп выполнен: %d вход → %d выход", amountIn, amountOut),
+                String.format("Своп выполнен: %s → %s",
+                        formatter.amountWithSymbol(amountIn, tokenInId),
+                        formatter.amountWithSymbol(amountOut, tokenOutId)),
                 node.toString()
         );
         log.info("Created swap notification for user {}", userId);
@@ -282,14 +301,24 @@ public class NotificationEventListener {
         long amountX = node.get("amountX").asLong();
         long amountY = node.get("amountY").asLong();
 
+        // Audit B2 — pool pair label + human amounts + symbols (the event carries no
+        // token ids, so resolve the pool's X/Y symbols once from the shared catalog).
+        String[] sym = formatter.poolTokenSymbols(poolId.toString());
         notificationService.createNotification(
                 userId,
                 NotificationType.SYSTEM_ALERT,
                 "Ликвидность добавлена",
-                String.format("Ликвидность добавлена в пул %s: %d tokenX + %d tokenY", poolId, amountX, amountY),
+                String.format("Ликвидность добавлена в пул %s/%s: %s %s + %s %s",
+                        sym[0], sym[1],
+                        formatter.amount(amountX), sym[0], formatter.amount(amountY), sym[1]),
                 node.toString()
         );
         log.info("Created liquidity added notification for user {}", userId);
+    }
+
+    /** Reads a string field, returning {@code null} when absent or JSON null. */
+    private static String textOrNull(JsonNode node, String field) {
+        return node.has(field) && !node.get(field).isNull() ? node.get(field).asText() : null;
     }
 
     /**
