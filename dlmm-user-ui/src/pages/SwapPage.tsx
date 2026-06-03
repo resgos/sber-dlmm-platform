@@ -415,7 +415,13 @@ export default function SwapPage() {
               <div className="sber-swap-quote__row">
                 <Text type="secondary">Курс</Text>
                 {(() => {
-                  const r = exchangeRatePair(quote.amountIn, quote.amountOut, tokenInSymbol, tokenOutSymbol)
+                  // Show the base asset's price (₽ per SETH) as the primary rate
+                  // even when buying (paying SRUB) — orient the base (non-SRUB leg)
+                  // into the "1 X ≈ …" slot. Consistent with the pool swap panel.
+                  const buyingBase = tokenInSymbol === 'SRUB'
+                  const r = buyingBase
+                    ? exchangeRatePair(quote.amountOut, quote.amountIn, tokenOutSymbol, tokenInSymbol)
+                    : exchangeRatePair(quote.amountIn, quote.amountOut, tokenInSymbol, tokenOutSymbol)
                   return (
                     <div style={{ textAlign: 'right' }}>
                       <Text strong style={{ fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r?.forward ?? '—'}</Text>

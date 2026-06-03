@@ -276,7 +276,14 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       {quote && !quoteLoading && (
         <div style={{ padding: '8px 12px', background: 'var(--surface-1, #F9FAFB)', borderRadius: 'var(--radius-sm)', marginBottom: 12 }}>
           {(() => {
-            const r = exchangeRatePair(quote.amountIn, quote.amountOut, tokenInSym, tokenOutSym)
+            // Always surface the PRICE (quote per base — e.g. ₽ per SETH) as the
+            // primary rate, even when buying. Orienting by in/out would otherwise
+            // show the unintuitive "1 ₽ ≈ 0,0000073 SETH" on a buy; the price of
+            // the base asset is what users read. Base = the non-SRUB leg.
+            const quoteSym = baseIsX ? pool.tokenYSymbol : pool.tokenXSymbol
+            const baseAmt = side === 'sell' ? quote.amountIn : quote.amountOut
+            const quoteAmt = side === 'sell' ? quote.amountOut : quote.amountIn
+            const r = exchangeRatePair(baseAmt, quoteAmt, baseSym, quoteSym)
             return (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '4px 0', fontSize: 'var(--text-xs)', borderBottom: '1px solid var(--border-light)' }}>
                 <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Курс</Text>
