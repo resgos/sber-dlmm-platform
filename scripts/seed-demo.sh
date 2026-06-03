@@ -29,10 +29,11 @@ DB="${DB_NAME:-dlmm}"
 DBU="${DB_USER:-dlmm}"
 DBPW="${DB_PASSWORD:-}"
 
-# Ordered post-entrypoint seeds (05-12, 14, 15). 06 & 08 DIVIDE → must run exactly once.
+# Ordered post-entrypoint seeds (05-12, 14, 15, 16). 06 & 08 DIVIDE → run exactly once.
 # 13 is a retired no-op (replaced by the per-bin fee model) — not listed. 14 seeds
 # per-bin fee growth so the demo has claimable fees; 15 fixes pools whose active bin
-# drifted below their Y liquidity (broke sells). Both idempotent (forced SET).
+# drifted below their Y liquidity (broke sells); 16 restores the tx timestamp
+# invariant created<=updated<=confirmed. All idempotent.
 SEEDS=(
   05-seed-volume-refresh
   06-seed-tvl-rescale
@@ -44,6 +45,7 @@ SEEDS=(
   12-seed-farming-rewards
   14-seed-bin-fee-growth
   15-seed-fix-active-bin
+  16-seed-fix-tx-timestamps
 )
 
 psqlq() { docker exec -i -e PGPASSWORD="$DBPW" "$PG" psql -U "$DBU" -d "$DB" "$@"; }
