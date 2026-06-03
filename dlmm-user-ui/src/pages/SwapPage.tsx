@@ -268,8 +268,12 @@ export default function SwapPage() {
   }, [poolList])
 
   const pickPair = (p: Pool) => {
-    setTokenInId(p.tokenYSymbol === 'SRUB' ? p.tokenYId : p.tokenXId)
-    setTokenOutId(p.tokenYSymbol === 'SRUB' ? p.tokenXId : p.tokenYId)
+    // Default to SELLING the base asset (the non-SRUB side) — consistent with the
+    // pool swap panel. The headline rate then reads as the intuitive price
+    // (₽ per SETH) and matches the expected "продажа" framing instead of opening
+    // on a purchase. The flip control still lets the user buy.
+    setTokenInId(p.tokenYSymbol === 'SRUB' ? p.tokenXId : p.tokenYId)
+    setTokenOutId(p.tokenYSymbol === 'SRUB' ? p.tokenYId : p.tokenXId)
   }
 
   return (

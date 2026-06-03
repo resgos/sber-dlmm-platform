@@ -67,7 +67,9 @@ export default function SimpleTradePage() {
   const queryClient = useQueryClient()
 
   // ── Buy/Sell card state ────────────────────────────────────────────
-  const [side, setSide] = useState<Side>('buy')
+  // Default to Продать the asset — consistent with the pool/standalone swap
+  // panels; the user flagged that the trade surfaces opened on a purchase.
+  const [side, setSide] = useState<Side>('sell')
   const [assetId, setAssetId] = useState<string>('')
   const [amount, setAmount] = useState<number | null>(null)
   const [tradeError, setTradeError] = useState<string | null>(null)
