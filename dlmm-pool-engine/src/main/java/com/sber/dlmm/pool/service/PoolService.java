@@ -68,7 +68,6 @@ public class PoolService {
     private final PoolBinRepository poolBinRepository;
     private final TokenServiceClient tokenServiceClient;
     private final OutboxService outbox;
-    private final PoolApyCalibrationService apyCalibrationService;
 
     /**
      * @param poolRepository     pool-row persistence (catalogue, status, fee
@@ -78,20 +77,15 @@ public class PoolService {
      *                           symbols (single + batch) for responses
      * @param outbox             transactional outbox used to publish
      *                           {@code PoolCreated} atomically with the insert
-     * @param apyCalibrationService realised-APY calibration used as the headline
-     *                           APY fallback when a funded pool has no recent
-     *                           24h volume (audit B4)
      */
     public PoolService(LiquidityPoolRepository poolRepository,
                        PoolBinRepository poolBinRepository,
                        TokenServiceClient tokenServiceClient,
-                       OutboxService outbox,
-                       PoolApyCalibrationService apyCalibrationService) {
+                       OutboxService outbox) {
         this.poolRepository = poolRepository;
         this.poolBinRepository = poolBinRepository;
         this.tokenServiceClient = tokenServiceClient;
         this.outbox = outbox;
-        this.apyCalibrationService = apyCalibrationService;
     }
 
     /**
@@ -458,22 +452,21 @@ public class PoolService {
      * Estimate the pool's fee APY from recent activity:
      * {@code (volume24h × feeBps/10000 × 365) / totalTvl × 100}.
      *
-     * <p>This is the fee-yield headline only (no impermanent-loss term). A truly
-     * empty pool (no TVL) advertises 0%. A funded pool whose 24h fee-yield rounds
-     * to 0.00% (no or negligible recent volume) falls back to its calibrated
-     * median <em>realised</em> fee APY ({@link PoolApyCalibrationService}) rather
-     * than collapsing to 0.00% — audit B4: the seeded volume ages out of the 24h
-     * window after ~24h (and can be tiny next to a large TVL), which otherwise
-     * zeroed the headline on still-funded pools. {@code totalTvl} sums
-     * the X and Y rollups (the engine's existing mixed-unit convention); a
-     * canonical single-unit measure is a future refactor.
+     * <p>Fee-yield headline only (no impermanent-loss term). An empty pool (no
+     * TVL) advertises 0%. A funded pool with no/negligible 24h volume — the seeded
+     * volume ages out of the 24h window after ~24h (audit B4) — falls back to a
+     * per-pool MODEL estimate: ~3.3% of TVL traded per day (the volume seed's
+     * turnover floor) at the pool's current fee tier, so the figure varies by fee
+     * rather than collapsing to 0.00% or a uniform default (the earlier calibration
+     * fallback rendered every sparse pool an identical 20% — code review).
+     * {@code totalTvl} sums the X and Y rollups (the engine's mixed-unit convention).
      *
      * @param pool          pool to score
      * @param dynamicFeeBps the fee rate to assume (normally
      *                      {@link #calculateDynamicFee(LiquidityPool)})
-     * @return estimated APY as a percentage (2 dp): the 24h fee-yield when there
-     *         is recent volume, the calibrated realised APY when a funded pool is
-     *         momentarily idle, or zero for an empty pool
+     * @return estimated APY as a percentage (2 dp): the live 24h fee-yield when
+     *         there is recent volume, a per-pool fee-tier model estimate when a
+     *         funded pool is idle, or zero for an empty pool
      */
     private BigDecimal calculateEstimatedApy(LiquidityPool pool, int dynamicFeeBps) {
         long totalTvl = pool.getTotalTvlX() + pool.getTotalTvlY();
@@ -493,18 +486,21 @@ public class PoolService {
                     .multiply(BigDecimal.valueOf(100))
                     .setScale(2, RoundingMode.HALF_UP);
         }
-        // A funded pool whose 24h estimate rounds to 0.00% (no or negligible
-        // recent volume — the seeded volume ages out of the 24h window after
-        // ~24h, and even live volume can be tiny next to a large TVL) still has a
-        // realised fee yield. Fall back to the calibrated median realised APY
-        // (decimal fraction ×100; Caffeine-cached, never raises) so the headline
-        // doesn't collapse to 0.00% on a still-funded pool — audit B4.
-        if (spotApy.signum() == 0) {
-            return apyCalibrationService.getPoolTargetApy(pool.getId())
-                    .multiply(BigDecimal.valueOf(100))
-                    .setScale(2, RoundingMode.HALF_UP);
+        if (spotApy.signum() > 0) {
+            return spotApy;
         }
-        return spotApy;
+        // No recent volume → a per-pool model estimate, so a funded pool reads
+        // neither 0.00% (audit B4) NOR a synthetic flat default (the calibration
+        // fallback collapsed every sparse pool to a uniform 20% — code review):
+        // assume ~3.3% of TVL traded per day (the same turnover floor the volume
+        // seed applies) at THIS pool's current fee tier. Varies per pool by fee
+        // (base + volatility surcharge); never a uniform number. Fee-yield only.
+        return BigDecimal.valueOf(dynamicFeeBps)
+                .divide(BigDecimal.valueOf(10_000), 18, RoundingMode.HALF_UP) // fee fraction
+                .multiply(new BigDecimal("0.0333"))                          // ≈ TVL/30 daily turnover
+                .multiply(BigDecimal.valueOf(365))
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     /**
