@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Card, Typography, Space, InputNumber, Button, Spin, Alert, Tag, Tooltip, message } from 'antd'
-import { ArrowDownOutlined, ThunderboltFilled, SwapOutlined } from '@ant-design/icons'
+import { Card, Typography, Space, InputNumber, Button, Spin, Alert, Tag, Tooltip, message, Segmented } from 'antd'
+import { ArrowDownOutlined, ArrowUpOutlined, ThunderboltFilled, SwapOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { pools, balances } from '@/api/services'
 import type { Pool, TokenBalance, SwapQuote } from '@/api/types'
@@ -45,12 +45,26 @@ const SLIPPAGE = 0.5 // %
 
 export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: PoolSwapPanelProps) {
   const queryClient = useQueryClient()
-  const [direction, setDirection] = useState<'XtoY' | 'YtoX'>(
-    pool.tokenYSymbol === 'SRUB' ? 'YtoX' : 'XtoY',
-  )
+  // Base asset = the non-SRUB side of the pair (X unless X itself is SRUB); the
+  // swap is framed as Buy/Sell of THAT asset. Default to SELLING the base so the
+  // headline rate reads as the intuitive price (₽ per SETH) and matches the
+  // expected "продажа" framing — the user flagged that the pool swap opened on a
+  // SETH *purchase* with no visible buy/sell control. The explicit toggle below
+  // lets the user switch to Buy.
+  const baseIsX = pool.tokenXSymbol !== 'SRUB'
+  const baseSym = baseIsX ? pool.tokenXSymbol : pool.tokenYSymbol
+  const sellDir: 'XtoY' | 'YtoX' = baseIsX ? 'XtoY' : 'YtoX' // base → quote
+  const buyDir: 'XtoY' | 'YtoX' = baseIsX ? 'YtoX' : 'XtoY'  // quote → base
+  const [direction, setDirection] = useState<'XtoY' | 'YtoX'>(sellDir)
   const [amountIn, setAmountIn] = useState<number | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const side: 'buy' | 'sell' = direction === sellDir ? 'sell' : 'buy'
+  const setSide = (s: 'buy' | 'sell') => {
+    setDirection(s === 'sell' ? sellDir : buyDir)
+    setAmountIn(null)
+  }
 
   const tokenInId = direction === 'XtoY' ? pool.tokenXId : pool.tokenYId
   const tokenOutId = direction === 'XtoY' ? pool.tokenYId : pool.tokenXId
@@ -117,6 +131,21 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
 
   const body = (
     <>
+      {/* Explicit Buy/Sell of the base asset — the panel used to open on a
+          neutral flip with no side label, so "покупка или продажа?" was unclear
+          (and it silently defaulted to a purchase). Mirrors the Simple-mode
+          toggle; defaults to Продать. */}
+      <Segmented
+        block
+        value={side}
+        onChange={(v) => setSide(v as 'buy' | 'sell')}
+        options={[
+          { value: 'buy', label: <span style={{ color: 'var(--viz-up)' }}><ArrowUpOutlined /> Купить {baseSym}</span> },
+          { value: 'sell', label: <span style={{ color: 'var(--viz-down)' }}><ArrowDownOutlined /> Продать {baseSym}</span> },
+        ]}
+        style={{ marginBottom: 12 }}
+      />
+
       {/* OB-01 — order-book pick reference. The swap is market, so this
           is a hint ("вы выбрали этот уровень в стакане"), not a limit. */}
       {pickedPrice != null && pickedPrice > 0 && (
