@@ -68,6 +68,7 @@ public class PoolService {
     private final PoolBinRepository poolBinRepository;
     private final TokenServiceClient tokenServiceClient;
     private final OutboxService outbox;
+    private final PoolApyCalibrationService apyCalibrationService;
 
     /**
      * @param poolRepository     pool-row persistence (catalogue, status, fee
@@ -77,15 +78,20 @@ public class PoolService {
      *                           symbols (single + batch) for responses
      * @param outbox             transactional outbox used to publish
      *                           {@code PoolCreated} atomically with the insert
+     * @param apyCalibrationService realised-APY calibration used as the headline
+     *                           APY fallback when a funded pool has no recent
+     *                           24h volume (audit B4)
      */
     public PoolService(LiquidityPoolRepository poolRepository,
                        PoolBinRepository poolBinRepository,
                        TokenServiceClient tokenServiceClient,
-                       OutboxService outbox) {
+                       OutboxService outbox,
+                       PoolApyCalibrationService apyCalibrationService) {
         this.poolRepository = poolRepository;
         this.poolBinRepository = poolBinRepository;
         this.tokenServiceClient = tokenServiceClient;
         this.outbox = outbox;
+        this.apyCalibrationService = apyCalibrationService;
     }
 
     /**
@@ -452,31 +458,53 @@ public class PoolService {
      * Estimate the pool's fee APY from recent activity:
      * {@code (volume24h × feeBps/10000 × 365) / totalTvl × 100}.
      *
-     * <p>This is the fee-yield headline only (no impermanent-loss term). It
-     * deliberately returns {@code 0} when there is no TVL or no 24h volume so an
-     * idle/empty pool advertises 0% rather than a divide-by-zero or a stale
-     * number. {@code totalTvl} sums the X and Y rollups (the engine's existing
-     * mixed-unit convention); a canonical single-unit measure is a future
-     * refactor.
+     * <p>This is the fee-yield headline only (no impermanent-loss term). A truly
+     * empty pool (no TVL) advertises 0%. A funded pool whose 24h fee-yield rounds
+     * to 0.00% (no or negligible recent volume) falls back to its calibrated
+     * median <em>realised</em> fee APY ({@link PoolApyCalibrationService}) rather
+     * than collapsing to 0.00% — audit B4: the seeded volume ages out of the 24h
+     * window after ~24h (and can be tiny next to a large TVL), which otherwise
+     * zeroed the headline on still-funded pools. {@code totalTvl} sums
+     * the X and Y rollups (the engine's existing mixed-unit convention); a
+     * canonical single-unit measure is a future refactor.
      *
      * @param pool          pool to score
      * @param dynamicFeeBps the fee rate to assume (normally
      *                      {@link #calculateDynamicFee(LiquidityPool)})
-     * @return estimated APY as a percentage (2 dp), or zero when inputs are zero
+     * @return estimated APY as a percentage (2 dp): the 24h fee-yield when there
+     *         is recent volume, the calibrated realised APY when a funded pool is
+     *         momentarily idle, or zero for an empty pool
      */
     private BigDecimal calculateEstimatedApy(LiquidityPool pool, int dynamicFeeBps) {
         long totalTvl = pool.getTotalTvlX() + pool.getTotalTvlY();
-        if (totalTvl == 0 || pool.getVolume24h() == 0) {
+        // Truly empty pool — no liquidity, no yield to advertise.
+        if (totalTvl == 0) {
             return BigDecimal.ZERO;
         }
-        BigDecimal dailyFeeRevenue = BigDecimal.valueOf(pool.getVolume24h())
-                .multiply(BigDecimal.valueOf(dynamicFeeBps))
-                .divide(BigDecimal.valueOf(10_000), 18, RoundingMode.HALF_UP);
-        BigDecimal annualFeeRevenue = dailyFeeRevenue.multiply(BigDecimal.valueOf(365));
-        return annualFeeRevenue
-                .divide(BigDecimal.valueOf(totalTvl), 18, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100))
-                .setScale(2, RoundingMode.HALF_UP);
+        // Live 24h fee-yield estimate (stays 0 when there is no recent volume).
+        BigDecimal spotApy = BigDecimal.ZERO;
+        if (pool.getVolume24h() > 0) {
+            BigDecimal dailyFeeRevenue = BigDecimal.valueOf(pool.getVolume24h())
+                    .multiply(BigDecimal.valueOf(dynamicFeeBps))
+                    .divide(BigDecimal.valueOf(10_000), 18, RoundingMode.HALF_UP);
+            BigDecimal annualFeeRevenue = dailyFeeRevenue.multiply(BigDecimal.valueOf(365));
+            spotApy = annualFeeRevenue
+                    .divide(BigDecimal.valueOf(totalTvl), 18, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100))
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+        // A funded pool whose 24h estimate rounds to 0.00% (no or negligible
+        // recent volume — the seeded volume ages out of the 24h window after
+        // ~24h, and even live volume can be tiny next to a large TVL) still has a
+        // realised fee yield. Fall back to the calibrated median realised APY
+        // (decimal fraction ×100; Caffeine-cached, never raises) so the headline
+        // doesn't collapse to 0.00% on a still-funded pool — audit B4.
+        if (spotApy.signum() == 0) {
+            return apyCalibrationService.getPoolTargetApy(pool.getId())
+                    .multiply(BigDecimal.valueOf(100))
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+        return spotApy;
     }
 
     /**
