@@ -116,12 +116,19 @@ export default function PoolsPage() {
   // Sprint 15 perf — staleTime=30s eliminates the refetch storm when user
   // navigates Pools → Detail → back. Pool listings are slow-changing
   // (status + TVL update every 10s server-side); 30s client cache is well
-  // within product tolerance. Combined with PoolDetailPage's
-  // initialData-from-cache hop, the user sees the pool grid + detail page
-  // instantly on revisit, no spinner.
+  // within product tolerance.
+  //
+  // Pagination is CLIENT-SIDE (filter + sort + slice below), so the catalogue is
+  // fetched ONCE under a FIXED key — `page` must NOT be threaded into the backend
+  // request. The old `getPools(page, pageSize*4)` asked the backend for page N
+  // (size 48); opening client page 2 therefore requested an out-of-range backend
+  // page for a 22-pool catalogue, which came back empty → the 2nd page went
+  // blank. Fetch page 0 / size 100 (covers the demo with headroom and shares the
+  // ['pools',0,100] cache with the Positions/Transactions catalogue join).
+  // Server-side paging is a future concern only if the catalogue exceeds 100.
   const { data, isLoading } = useQuery({
-    queryKey: ['pools', page],
-    queryFn: () => pools.getPools(page, pageSize * 4), // grab a wider page; we filter client-side
+    queryKey: ['pools', 0, 100],
+    queryFn: () => pools.getPools(0, 100),
     staleTime: 30_000,
   })
 
