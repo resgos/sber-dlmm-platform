@@ -103,7 +103,7 @@ export default function SwapPage() {
       setTimeout(() => setSwapSuccess(false), 5000)
     },
     onError: (err: unknown) => {
-      setSwapError(apiErrorMessage(err, 'Ошибка при выполнении обмена'))
+      setSwapError(apiErrorMessage(err, t('swap.alerts.errorFallback')))
     },
   })
 
@@ -142,7 +142,7 @@ export default function SwapPage() {
   const slippageMenu = (
     <div style={{ padding: 4, minWidth: 240 }}>
       <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 8 }}>
-        Допуск проскальзывания
+        {t('swap.slippageTitle')}
       </Text>
       <Space size={6} style={{ marginBottom: 8 }}>
         {SLIPPAGE_OPTIONS.map((opt) => (
@@ -157,7 +157,7 @@ export default function SwapPage() {
         ))}
         <InputNumber
           size="small"
-          placeholder="свой"
+          placeholder={t('swap.slippageCustom')}
           style={{ width: 80 }}
           min={0.01}
           max={50}
@@ -188,7 +188,7 @@ export default function SwapPage() {
         {opts.showBalance && inBalance && (
           <Space size={6} style={{ alignItems: 'center' }}>
             <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-              Доступно:{' '}
+              {t('swap.available')}:{' '}
               <Text strong style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
                 {inBalance.available.toLocaleString('ru-RU')}
               </Text>
@@ -239,12 +239,12 @@ export default function SwapPage() {
           onChange={opts.onSelectToken}
           tokens={tokenSelItems}
           excludeId={opts.excludeId}
-          placeholder="Токен"
+          placeholder={t('swap.tokenPlaceholder')}
         />
         <InputNumber
           className="sber-swap-amount"
           placeholder="0.0"
-          aria-label={opts.readOnly ? 'Сумма, которую вы получите' : 'Сумма, которую вы отдаёте'}
+          aria-label={opts.readOnly ? t('swap.info.amountOutAria') : t('swap.info.amountInAria')}
           value={opts.value}
           onChange={opts.onValueChange}
           min={0}
@@ -303,7 +303,7 @@ export default function SwapPage() {
             aria-haspopup="dialog"
             style={{ borderRadius: 'var(--radius-sm)' }}
           >
-            Скольжение {effectiveSlippage}%
+            {t('swap.slippageButton', { value: effectiveSlippage })}
           </Button>
         </Popover>
       </div>
@@ -324,7 +324,7 @@ export default function SwapPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <Space size={6}>
               <ThunderboltFilled style={{ color: 'var(--sber-green)' }} />
-              <Text strong style={{ fontSize: 'var(--text-sm)' }}>Популярные пары:</Text>
+              <Text strong style={{ fontSize: 'var(--text-sm)' }}>{t('swap.popularPairs')}</Text>
             </Space>
             {popularPairs.map((p) => (
               <Button
@@ -365,7 +365,7 @@ export default function SwapPage() {
       <Card className="sber-swap-card" styles={{ body: { padding: 0 } }}>
         <div className="sber-swap-card__body">
           {renderBox({
-            label: 'Вы отдаёте',
+            label: t('swap.from'),
             selectedTokenId: tokenInId,
             onSelectToken: setTokenInId,
             excludeId: tokenOutId,
@@ -379,14 +379,14 @@ export default function SwapPage() {
               type="button"
               className="sber-swap-flip__btn"
               onClick={handleSwapDirection}
-              aria-label="Поменять направление"
+              aria-label={t('swap.swapDirection')}
             >
               <ArrowDownOutlined />
             </button>
           </div>
 
           {renderBox({
-            label: 'Вы получаете',
+            label: t('swap.to'),
             selectedTokenId: tokenOutId,
             onSelectToken: setTokenOutId,
             excludeId: tokenInId,
@@ -402,18 +402,18 @@ export default function SwapPage() {
               pool will execute the trade. */}
           {quoteLoading && (
             <div className="sber-swap-quote sber-swap-quote--loading">
-              <Spin size="small" /> <Text type="secondary">Расчёт маршрута…</Text>
+              <Spin size="small" /> <Text type="secondary">{t('swap.quote.loading')}</Text>
             </div>
           )}
           {quote && !quoteLoading && (
             <div
               className="sber-swap-quote"
               role="region"
-              aria-label="Параметры обмена"
+              aria-label={t('swap.quote.regionLabel')}
               aria-live="polite"
             >
               <div className="sber-swap-quote__row">
-                <Text type="secondary">Курс</Text>
+                <Text type="secondary">{t('swap.quote.rate')}</Text>
                 {(() => {
                   // Show the base asset's price (₽ per SETH) as the primary rate
                   // even when buying (paying SRUB) — orient the base (non-SRUB leg)
@@ -432,8 +432,8 @@ export default function SwapPage() {
               </div>
               <div className="sber-swap-quote__row">
                 <Text type="secondary">
-                  Влияние на цену{' '}
-                  <Tooltip title="Разница между текущей рыночной ценой пула и фактической ценой исполнения вашего обмена. Большие свопы съедают bin-ликвидность → impact растёт. Норма: < 1%; > 5% = пересмотрите размер.">
+                  {t('swap.quote.priceImpact')}{' '}
+                  <Tooltip title={t('swap.quote.priceImpactTooltip')}>
                     <InfoCircleOutlined style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 4 }} />
                   </Tooltip>
                 </Text>
@@ -451,10 +451,10 @@ export default function SwapPage() {
                 <div className="sber-swap-quote__route">
                   <Tag color="green" style={{ borderRadius: 'var(--radius-pill)', padding: '2px 10px' }}>
                     <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
-                    через пул {selectedPool.tokenXSymbol}/{selectedPool.tokenYSymbol}
+                    {t('swap.quote.route', { pair: `${selectedPool.tokenXSymbol}/${selectedPool.tokenYSymbol}` })}
                   </Tag>
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                    комиссия {bpsToPercent(selectedPool.baseFeeBps)} · допуск {effectiveSlippage}%
+                    {t('swap.quote.feeAndTolerance', { fee: bpsToPercent(selectedPool.baseFeeBps), tolerance: effectiveSlippage })}
                   </Text>
                 </div>
               )}
@@ -538,6 +538,7 @@ function SwapInfoPanel({
   popularPairs,
   onPickPair,
 }: SwapInfoPanelProps) {
+  const { t } = useTranslation()
   // Sprint 9-DS-r2 — empty-state used to be a single tiny "Готовы к
   // обмену?" card that left half the column blank. Replace it with a
   // useful "Топ пулов по ликвидности" mini-list so the user gets
@@ -568,10 +569,10 @@ function SwapInfoPanel({
                 <InfoCircleOutlined />
               </div>
               <div>
-                <Text strong style={{ fontSize: 'var(--text-base)' }}>Готовы к обмену?</Text>
+                <Text strong style={{ fontSize: 'var(--text-base)' }}>{t('swap.info.ready')}</Text>
                 <div>
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                    Выберите пару — увидите маршрут и влияние на цену
+                    {t('swap.info.readyHint')}
                   </Text>
                 </div>
               </div>
@@ -594,14 +595,14 @@ function SwapInfoPanel({
                 fontWeight: 500,
               }}
             >
-              Топ пулов по ликвидности
+              {t('swap.info.topPools')}
             </Text>
             <div style={{ marginTop: 10 }}>
               {popularPairs.map((p, i) => (
                 <div
                   key={p.id}
                   onClick={() => onPickPair(p)}
-                  {...rowButtonProps(() => onPickPair(p), `Выбрать пул ${p.tokenXSymbol} / ${p.tokenYSymbol}`)}
+                  {...rowButtonProps(() => onPickPair(p), t('swap.info.pickPoolAria', { pair: `${p.tokenXSymbol} / ${p.tokenYSymbol}` }))}
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -656,15 +657,15 @@ function SwapInfoPanel({
               <Space size={6} wrap>
                 <Tag color="green" style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>
                   <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
-                  активный пул
+                  {t('swap.info.activePool')}
                 </Tag>
                 <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                  шаг {bpsToPercent(pool.binStep)} · комиссия {bpsToPercent(pool.baseFeeBps)}
+                  {t('swap.info.stepFee', { step: bpsToPercent(pool.binStep), fee: bpsToPercent(pool.baseFeeBps) })}
                 </Text>
               </Space>
             ) : (
               <Text type="warning" style={{ fontSize: 'var(--text-xs)' }}>
-                Прямого пула для этой пары нет
+                {t('swap.info.noDirectPool')}
               </Text>
             )}
           </Space>
@@ -686,12 +687,12 @@ function SwapInfoPanel({
           styles={{ body: { padding: 16 } }}
         >
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
-            Параметры пула
+            {t('swap.info.poolParams')}
           </Text>
           <div style={{ marginTop: 10 }}>
             <InfoRow
               icon={<DollarOutlined style={{ color: 'var(--sber-green)' }} />}
-              label="Текущая цена"
+              label={t('swap.info.currentPrice')}
               // Sprint 9-DS-r4 (CI fix) — defensive ?? 0 in case the
               // pool list payload omits currentPrice (older API,
               // partial response, test fixtures without the field).
@@ -702,17 +703,17 @@ function SwapInfoPanel({
             />
             <InfoRow
               icon={<FundOutlined style={{ color: '#296AE3' }} />}
-              label="Резерв"
+              label={t('swap.info.reserve')}
               value={`${formatCompact(pool.totalTvlX)} ${pool.tokenXSymbol} · ${formatCompact(pool.totalTvlY)} ${pool.tokenYSymbol}`}
             />
             <InfoRow
               icon={<RiseOutlined style={{ color: '#9B59B6' }} />}
-              label="Объём 24ч"
+              label={t('swap.info.volume24h')}
               value={formatCompact(pool.volume24h ?? 0)}
             />
             <InfoRow
               icon={<PercentageOutlined style={{ color: 'var(--sber-green)' }} />}
-              label="Расч. APY"
+              label={t('swap.info.estApy')}
               value={pool.estimatedApy > 0 ? `${pool.estimatedApy.toFixed(2)}%` : '—'}
               last
             />
@@ -728,12 +729,12 @@ function SwapInfoPanel({
           styles={{ body: { padding: 16 } }}
         >
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500 }}>
-            Предварительный расчёт
+            {t('swap.info.preview')}
           </Text>
           <div style={{ marginTop: 12 }}>
             <Row gutter={[8, 8]}>
               <Col span={12}>
-                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Вы отдаёте</Text>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('swap.info.youGive')}</Text>
                 <Tooltip title={`${amountIn.toLocaleString('ru-RU')} ${tokenIn.symbol}`}>
                   <div style={{ fontSize: 'var(--text-md)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                     {formatTokenAmount(amountIn, tokenIn.symbol, { compact: true, maxFractionDigits: 4 })}
@@ -741,7 +742,7 @@ function SwapInfoPanel({
                 </Tooltip>
               </Col>
               <Col span={12} style={{ textAlign: 'right' }}>
-                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Получите</Text>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('swap.info.youReceive')}</Text>
                 <Tooltip title={`${quote.amountOut.toLocaleString('ru-RU')} ${tokenOut.symbol}`}>
                   <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: 'var(--sber-green-deep)', fontVariantNumeric: 'tabular-nums' }}>
                     {formatTokenAmount(quote.amountOut, tokenOut.symbol, { compact: true, maxFractionDigits: 4 })}
@@ -753,15 +754,15 @@ function SwapInfoPanel({
             <Divider style={{ margin: '12px 0' }} />
 
             <InfoRow
-              label="Эффективный курс"
+              label={t('swap.info.effectiveRate')}
               value={exchangeRatePair(quote.amountIn, quote.amountOut, tokenIn.symbol, tokenOut.symbol)?.forward ?? '—'}
             />
             <InfoRow
-              label="Обратный курс"
+              label={t('swap.info.reverseRate')}
               value={exchangeRatePair(quote.amountIn, quote.amountOut, tokenIn.symbol, tokenOut.symbol)?.reverse ?? '—'}
             />
             <InfoRow
-              label="Влияние на цену"
+              label={t('swap.info.priceImpact')}
               value={quote.priceImpact != null ? `${quote.priceImpact.toFixed(2)}%` : '—'}
               valueColour={
                 quote.priceImpact == null
@@ -772,11 +773,11 @@ function SwapInfoPanel({
               }
             />
             <InfoRow
-              label="Комиссия пула"
+              label={t('swap.info.poolFee')}
               value={formatTokenAmount(quote.fee, tokenIn.symbol, { compact: true, maxFractionDigits: 6 })}
             />
             <InfoRow
-              label={`Мин. к получению (${effectiveSlippage}%)`}
+              label={t('swap.info.minReceivedSlip', { value: effectiveSlippage })}
               value={formatTokenAmount(minAmountOut, tokenOut.symbol, { compact: true, maxFractionDigits: 4 })}
               last
             />

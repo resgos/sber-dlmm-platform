@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Card, Typography, Space, InputNumber, Button, Spin, Alert, Tag, Tooltip, message, Segmented } from 'antd'
 import { ArrowDownOutlined, ArrowUpOutlined, ThunderboltFilled, SwapOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { pools, balances } from '@/api/services'
 import type { Pool, TokenBalance, SwapQuote } from '@/api/types'
 import PartialFillNotice, { isPartialFill } from './PartialFillNotice'
@@ -44,6 +45,7 @@ interface PoolSwapPanelProps {
 const SLIPPAGE = 0.5 // %
 
 export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: PoolSwapPanelProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   // Base asset = the non-SRUB side of the pair (X unless X itself is SRUB); the
   // swap is framed as Buy/Sell of THAT asset. Default to SELLING the base so the
@@ -98,7 +100,10 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       idempotencyKey: uuid(),
     }),
     onSuccess: () => {
-      setSuccess(`Обмен выполнен: ${formatTokenAmount(quote?.amountIn ?? amountIn, tokenInSym)} → ${formatTokenAmount(quote?.amountOut, tokenOutSym)}`)
+      setSuccess(t('swap.panel.done', {
+        from: formatTokenAmount(quote?.amountIn ?? amountIn, tokenInSym),
+        to: formatTokenAmount(quote?.amountOut, tokenOutSym),
+      }))
       setError(null)
       setAmountIn(null)
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
@@ -107,7 +112,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       setTimeout(() => setSuccess(null), 5000)
     },
     onError: (err: unknown) => {
-      setError(apiErrorMessage(err, 'Не удалось выполнить обмен'))
+      setError(apiErrorMessage(err, t('swap.panel.doneFallback')))
     },
   })
 
@@ -140,8 +145,8 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
         value={side}
         onChange={(v) => setSide(v as 'buy' | 'sell')}
         options={[
-          { value: 'buy', label: <span style={{ color: 'var(--viz-up)' }}><ArrowUpOutlined /> Купить {baseSym}</span> },
-          { value: 'sell', label: <span style={{ color: 'var(--viz-down)' }}><ArrowDownOutlined /> Продать {baseSym}</span> },
+          { value: 'buy', label: <span style={{ color: 'var(--viz-up)' }}><ArrowUpOutlined /> {t('swap.side.buyAsset', { sym: baseSym })}</span> },
+          { value: 'sell', label: <span style={{ color: 'var(--viz-down)' }}><ArrowDownOutlined /> {t('swap.side.sellAsset', { sym: baseSym })}</span> },
         ]}
         style={{ marginBottom: 12 }}
       />
@@ -164,7 +169,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
           }}
         >
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-            Уровень из стакана
+            {t('swap.panel.obLevel')}
           </Text>
           <Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
             {pickedPrice.toLocaleString('ru-RU', { maximumFractionDigits: 6 })} {pool.tokenYSymbol}/{pool.tokenXSymbol}
@@ -203,11 +208,11 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Вы отдаёте</Text>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('swap.from')}</Text>
           {inBalance && (
             <Space size={4}>
               <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                Доступно: {formatCompact(inBalance.available)}
+                {t('swap.available')}: {formatCompact(inBalance.available)}
               </Text>
               <Button
                 type="link"
@@ -245,7 +250,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
           icon={<ArrowDownOutlined />}
           onClick={flipDirection}
           size="small"
-          aria-label="Поменять направление"
+          aria-label={t('swap.swapDirection')}
         />
       </div>
 
@@ -260,7 +265,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
         }}
       >
         <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 6 }}>
-          Вы получаете
+          {t('swap.to')}
         </Text>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Tag color="blue" style={{ borderRadius: 'var(--radius-pill)', padding: '4px 12px', margin: 0, fontWeight: 600 }}>
@@ -286,7 +291,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
             const r = exchangeRatePair(baseAmt, quoteAmt, baseSym, quoteSym)
             return (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '4px 0', fontSize: 'var(--text-xs)', borderBottom: '1px solid var(--border-light)' }}>
-                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Курс</Text>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('swap.quote.rate')}</Text>
                 <div style={{ textAlign: 'right' }}>
                   <Text strong style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r?.forward ?? '—'}</Text>
                   {r && <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r.reverse}</Text>}
@@ -295,19 +300,19 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
             )
           })()}
           <Row
-            label="Влияние на цену"
+            label={t('swap.quote.priceImpact')}
             value={`${quote.priceImpact.toFixed(2)}%`}
             colour={priceImpactColour}
           />
-          <Row label="Комиссия" value={formatTokenAmount(quote.fee, tokenInSym, { compact: true })} />
-          <Row label={`Мин. (slip ${SLIPPAGE}%)`} value={formatTokenAmount(minAmountOut, tokenOutSym, { compact: true })} last />
+          <Row label={t('swap.quote.fee')} value={formatTokenAmount(quote.fee, tokenInSym, { compact: true })} />
+          <Row label={t('swap.quote.minSlip', { value: SLIPPAGE })} value={formatTokenAmount(minAmountOut, tokenOutSym, { compact: true })} last />
         </div>
       )}
 
       {/* Insufficient warning */}
       {insufficient && (
         <Alert
-          message={`Недостаточно ${tokenInSym} — доступно ${formatCompact(inBalance?.available ?? 0)}`}
+          message={t('swap.panel.insufficientAlert', { sym: tokenInSym, available: formatCompact(inBalance?.available ?? 0) })}
           type="warning"
           showIcon
           style={{ marginBottom: 12, borderRadius: 'var(--radius-sm)' }}
@@ -329,16 +334,16 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
         onClick={() => swapMutation.mutate()}
       >
         {!amountIn
-          ? 'Введите сумму'
+          ? t('swap.cta.enterAmount')
           : quoteLoading
-          ? 'Расчёт котировки…'
+          ? t('swap.cta.calcQuote')
           : !quote
-          ? 'Ждём котировку…'
+          ? t('swap.cta.waitQuote')
           : insufficient
-          ? `Недостаточно ${tokenInSym}`
+          ? t('swap.cta.insufficient', { sym: tokenInSym })
           : partialFill && fillable != null
-          ? `Обменять ${formatTokenAmount(fillable, tokenInSym, { compact: true })}`
-          : `Обменять ${formatTokenAmount(amountIn, tokenInSym, { compact: true })}`}
+          ? t('swap.cta.swapAmount', { amount: formatTokenAmount(fillable, tokenInSym, { compact: true }) })
+          : t('swap.cta.swapAmount', { amount: formatTokenAmount(amountIn, tokenInSym, { compact: true }) })}
       </Button>
     </>
   )
@@ -357,12 +362,12 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       title={
         <Space size={8}>
           <SwapOutlined style={{ color: 'var(--sber-green)' }} />
-          <Text strong>Быстрый обмен</Text>
+          <Text strong>{t('swap.panel.title')}</Text>
         </Space>
       }
       extra={
         <Tag color="default" style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>
-          допуск {SLIPPAGE}%
+          {t('swap.panel.toleranceTag', { value: SLIPPAGE })}
         </Tag>
       }
     >

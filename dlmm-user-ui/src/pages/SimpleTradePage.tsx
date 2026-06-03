@@ -6,6 +6,7 @@ import {
   ArrowUpOutlined, ArrowDownOutlined, PlusOutlined, ThunderboltFilled, InfoCircleOutlined, ExportOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { tokens, pools, balances } from '@/api/services'
 import type { Token, Pool, TokenBalance, Position } from '@/api/types'
 import TokenChip from '@/components/TokenChip'
@@ -64,6 +65,7 @@ type Side = 'buy' | 'sell'
 type LpMode = 'add' | 'remove'
 
 export default function SimpleTradePage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   // ── Buy/Sell card state ────────────────────────────────────────────
@@ -200,13 +202,13 @@ export default function SimpleTradePage() {
     onSuccess: () => {
       celebrateSberkot(
         side === 'buy'
-          ? `Куплено: ${selectedAsset?.symbol} 🎉`
-          : `Продано: ${selectedAsset?.symbol} 🎉`,
+          ? t('swap.simple.boughtCelebrate', { sym: selectedAsset?.symbol })
+          : t('swap.simple.soldCelebrate', { sym: selectedAsset?.symbol }),
       )
       setTradeSuccess(
         side === 'buy'
-          ? `Куплено: ${selectedAsset?.symbol}`
-          : `Продано: ${selectedAsset?.symbol}`,
+          ? t('swap.simple.bought', { sym: selectedAsset?.symbol })
+          : t('swap.simple.sold', { sym: selectedAsset?.symbol }),
       )
       setTradeError(null)
       setAmount(null)
@@ -215,7 +217,7 @@ export default function SimpleTradePage() {
       setTimeout(() => setTradeSuccess(null), 5000)
     },
     onError: (err: unknown) => {
-      setTradeError(apiErrorMessage(err, 'Не удалось выполнить операцию'))
+      setTradeError(apiErrorMessage(err, t('swap.simple.tradeErrorFallback')))
     },
   })
 
@@ -242,8 +244,8 @@ export default function SimpleTradePage() {
       })
     },
     onSuccess: () => {
-      celebrateSberkot('Ликвидность добавлена 🌱')
-      setLpSuccess('Ликвидность добавлена по базовым настройкам')
+      celebrateSberkot(t('swap.simple.addCelebrate'))
+      setLpSuccess(t('swap.simple.addSuccess'))
       setLpError(null)
       setLpAmountX(null)
       setLpAmountY(null)
@@ -253,7 +255,7 @@ export default function SimpleTradePage() {
       setTimeout(() => setLpSuccess(null), 5000)
     },
     onError: (err: unknown) => {
-      setLpError(apiErrorMessage(err, 'Не удалось добавить ликвидность'))
+      setLpError(apiErrorMessage(err, t('swap.simple.addErrorFallback')))
     },
   })
 
@@ -275,8 +277,8 @@ export default function SimpleTradePage() {
     }),
     onSuccess: () => {
       const poolId = selectedRemovePosition?.poolId
-      celebrateSberkot(`Забрано ${removePercent}% — средства на балансе 💰`)
-      setRemoveSuccess(`Забрано ${removePercent}% ликвидности`)
+      celebrateSberkot(t('swap.simple.removeCelebrate', { percent: removePercent }))
+      setRemoveSuccess(t('swap.simple.removeSuccess', { percent: removePercent }))
       setRemoveError(null)
       setRemovePositionId('')
       setRemovePercent(100)
@@ -289,7 +291,7 @@ export default function SimpleTradePage() {
       setTimeout(() => setRemoveSuccess(null), 5000)
     },
     onError: (err: unknown) => {
-      setRemoveError(apiErrorMessage(err, 'Не удалось забрать ликвидность'))
+      setRemoveError(apiErrorMessage(err, t('swap.simple.removeErrorFallback')))
     },
   })
 
@@ -315,7 +317,7 @@ export default function SimpleTradePage() {
     const x = pool?.tokenXSymbol
     const y = pool?.tokenYSymbol
     return {
-      label: x && y ? `${x} / ${y}` : `позиция ${p.id.slice(0, 6)}…`,
+      label: x && y ? `${x} / ${y}` : t('swap.simple.positionFallback', { id: p.id.slice(0, 6) }),
       value: p.id,
       x,
       y,
@@ -349,21 +351,21 @@ export default function SimpleTradePage() {
   }, [selectedLpPool, lpAmountX, lpAmountY])
 
   const tradeCtaLabel = (() => {
-    if (!selectedAsset) return 'Выберите актив'
-    if (!assetPool) return 'Нет рынка для актива'
-    if (!amount) return 'Введите сумму'
-    if (tradeMutation.isPending) return side === 'buy' ? 'Покупка…' : 'Продажа…'
-    return side === 'buy' ? `Купить ${selectedAsset.symbol}` : `Продать ${selectedAsset.symbol}`
+    if (!selectedAsset) return t('swap.simple.ctaSelectAsset')
+    if (!assetPool) return t('swap.simple.ctaNoMarket')
+    if (!amount) return t('swap.simple.ctaEnterAmount')
+    if (tradeMutation.isPending) return side === 'buy' ? t('swap.simple.ctaBuying') : t('swap.simple.ctaSelling')
+    return side === 'buy' ? t('swap.simple.ctaBuy', { sym: selectedAsset.symbol }) : t('swap.simple.ctaSell', { sym: selectedAsset.symbol })
   })()
 
   return (
     <div className="sber-simple-page">
       <div className="sber-simple-head">
         <Title level={4} className="sber-page-title" style={{ marginBottom: 'var(--space-1)' }}>
-          Простой режим
+          {t('swap.simple.pageTitle')}
         </Title>
         <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
-          Купить, продать или управлять ликвидностью — без бинов и стратегий. Всё по базовым настройкам.
+          {t('swap.simple.pageSubtitle')}
         </Text>
       </div>
 
@@ -376,7 +378,7 @@ export default function SimpleTradePage() {
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
             <div>
               <Text strong style={{ fontSize: 'var(--text-md)', display: 'block', marginBottom: 'var(--space-3)' }}>
-                Купить или продать
+                {t('swap.simple.buyOrSell')}
               </Text>
               <Segmented<Side>
                 block
@@ -389,7 +391,7 @@ export default function SimpleTradePage() {
                     value: 'buy',
                     label: (
                       <span className="sber-simple-side__opt" style={{ color: 'var(--viz-up)' }}>
-                        <ArrowUpOutlined /> Купить
+                        <ArrowUpOutlined /> {t('swap.simple.buy')}
                       </span>
                     ),
                   },
@@ -397,7 +399,7 @@ export default function SimpleTradePage() {
                     value: 'sell',
                     label: (
                       <span className="sber-simple-side__opt" style={{ color: 'var(--viz-down)' }}>
-                        <ArrowDownOutlined /> Продать
+                        <ArrowDownOutlined /> {t('swap.simple.sell')}
                       </span>
                     ),
                   },
@@ -407,25 +409,25 @@ export default function SimpleTradePage() {
 
             <div>
               <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-2)' }}>
-                Актив
+                {t('swap.simple.asset')}
               </Text>
               <TokenSelect
                 value={assetId}
                 onChange={(v) => { setAssetId(v); setAmount(null); setTradeError(null) }}
                 tokens={assetSelItems}
-                placeholder="Выберите токен"
+                placeholder={t('swap.simple.assetPlaceholder')}
               />
             </div>
 
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
                 <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                  Сумма{tokenInSymbol ? ` (${tokenInSymbol})` : ''}
+                  {tokenInSymbol ? t('swap.simple.amountWithSym', { sym: tokenInSymbol }) : t('swap.simple.amount')}
                 </Text>
                 {inBalance && (
                   <Space size={6}>
                     <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                      Доступно:{' '}
+                      {t('swap.available')}:{' '}
                       <Text strong style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
                         {formatCompact(inBalance.available)}
                       </Text>
@@ -445,7 +447,7 @@ export default function SimpleTradePage() {
                 size="large"
                 style={{ width: '100%' }}
                 placeholder="0.00"
-                aria-label="Сумма сделки"
+                aria-label={t('swap.simple.amountAria')}
                 value={amount}
                 onChange={(v) => setAmount(v)}
                 min={0}
@@ -456,13 +458,13 @@ export default function SimpleTradePage() {
             {/* One-line estimate. No slippage/route controls in Simple. */}
             {quoteLoading && (
               <div className="sber-simple-est sber-simple-est--loading">
-                <Spin size="small" /> <Text type="secondary">Расчёт…</Text>
+                <Spin size="small" /> <Text type="secondary">{t('swap.simple.calculating')}</Text>
               </div>
             )}
             {quote && !quoteLoading && tokenOutSymbol && (
               <div className="sber-simple-est" aria-live="polite">
                 <div className="sber-simple-est__row">
-                  <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>Вы получите ≈</Text>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>{t('swap.simple.youReceiveApprox')}</Text>
                   <Text strong style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
                     {formatTokenAmount(quote.amountOut, tokenOutSymbol, { compact: true, maxFractionDigits: 4 })}
                   </Text>
@@ -471,7 +473,7 @@ export default function SimpleTradePage() {
                   const r = exchangeRatePair(quote.amountIn, quote.amountOut, tokenInSymbol, tokenOutSymbol)
                   return r ? (
                     <div className="sber-simple-est__row" style={{ alignItems: 'flex-start' }}>
-                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Курс</Text>
+                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('swap.simple.rate')}</Text>
                       <div style={{ textAlign: 'right' }}>
                         <Text style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r.forward}</Text>
                         <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{r.reverse}</Text>
@@ -480,7 +482,7 @@ export default function SimpleTradePage() {
                   ) : null
                 })()}
                 <div className="sber-simple-est__row">
-                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Комиссия пула</Text>
+                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('swap.simple.poolFee')}</Text>
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
                     {formatTokenAmount(quote.fee, tokenInSymbol, { compact: true, maxFractionDigits: 6 })}
                   </Text>
@@ -492,7 +494,7 @@ export default function SimpleTradePage() {
               <Alert
                 type="warning"
                 showIcon
-                message={`Для ${selectedAsset.symbol} нет активного рынка к ${BASE_SYMBOL}`}
+                message={t('swap.simple.noMarket', { sym: selectedAsset.symbol, base: BASE_SYMBOL })}
                 style={{ borderRadius: 'var(--radius-md)' }}
               />
             )}
@@ -521,7 +523,7 @@ export default function SimpleTradePage() {
             </Button>
 
             <Text type="secondary" style={{ fontSize: 'var(--text-xs)', textAlign: 'center', display: 'block' }}>
-              Рыночная сделка к {BASE_SYMBOL}. Допуск проскальзывания {SIMPLE_SLIPPAGE_PCT}% применяется автоматически.
+              {t('swap.simple.marketNote', { base: BASE_SYMBOL, slippage: SIMPLE_SLIPPAGE_PCT })}
             </Text>
           </Space>
         </Card>
@@ -534,7 +536,7 @@ export default function SimpleTradePage() {
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
             <div>
               <Text strong style={{ fontSize: 'var(--text-md)', display: 'block', marginBottom: 'var(--space-3)' }}>
-                Ликвидность
+                {t('swap.simple.liquidity')}
               </Text>
               <Segmented<LpMode>
                 block
@@ -542,8 +544,8 @@ export default function SimpleTradePage() {
                 value={lpMode}
                 onChange={(v) => { setLpMode(v); setLpError(null); setRemoveError(null) }}
                 options={[
-                  { value: 'add', label: <span className="sber-simple-side__opt"><PlusOutlined /> Добавить</span> },
-                  { value: 'remove', label: <span className="sber-simple-side__opt"><ExportOutlined /> Забрать</span> },
+                  { value: 'add', label: <span className="sber-simple-side__opt"><PlusOutlined /> {t('swap.simple.lpAdd')}</span> },
+                  { value: 'remove', label: <span className="sber-simple-side__opt"><ExportOutlined /> {t('swap.simple.lpRemove')}</span> },
                 ]}
               />
             </div>
@@ -552,18 +554,18 @@ export default function SimpleTradePage() {
             {lpMode === 'add' && (
               <>
                 <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                  Базовые настройки — зарабатывайте на комиссиях без выбора диапазона.
+                  {t('swap.simple.addNote')}
                 </Text>
 
                 <div>
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-2)' }}>
-                    Пул
+                    {t('swap.simple.pool')}
                   </Text>
                   <Select
                     size="large"
                     style={{ width: '100%' }}
-                    aria-label="Пул"
-                    placeholder="Выберите пул"
+                    aria-label={t('swap.simple.poolAria')}
+                    placeholder={t('swap.simple.poolPlaceholder')}
                     value={lpPoolId || undefined}
                     onChange={(v) => { setLpPoolId(v); setLpAmountX(null); setLpAmountY(null); setLpError(null) }}
                     options={lpPoolOptions}
@@ -584,14 +586,14 @@ export default function SimpleTradePage() {
                         {lpBalanceX && (
                           <Space size={6}>
                             <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                              Доступно: {formatCompact(lpBalanceX.available)}
+                              {t('swap.available')}: {formatCompact(lpBalanceX.available)}
                             </Text>
                             <Button type="link" size="small" style={{ padding: '0 var(--space-1)', fontSize: 'var(--text-xs)', height: 'auto' }}
                               onClick={() => setLpAmountX(lpBalanceX.available)}>MAX</Button>
                           </Space>
                         )}
                       </div>
-                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00" aria-label={`Количество ${selectedLpPool.tokenXSymbol}`}
+                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00" aria-label={t('swap.simple.amountOfAria', { sym: selectedLpPool.tokenXSymbol })}
                         value={lpAmountX} onChange={(v) => setLpAmountX(v)} min={0} controls={false} />
                     </div>
 
@@ -601,48 +603,48 @@ export default function SimpleTradePage() {
                         {lpBalanceY && (
                           <Space size={6}>
                             <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                              Доступно: {formatCompact(lpBalanceY.available)}
+                              {t('swap.available')}: {formatCompact(lpBalanceY.available)}
                             </Text>
                             <Button type="link" size="small" style={{ padding: '0 var(--space-1)', fontSize: 'var(--text-xs)', height: 'auto' }}
                               onClick={() => setLpAmountY(lpBalanceY.available)}>MAX</Button>
                           </Space>
                         )}
                       </div>
-                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00" aria-label={`Количество ${selectedLpPool.tokenYSymbol}`}
+                      <InputNumber size="large" style={{ width: '100%' }} placeholder="0.00" aria-label={t('swap.simple.amountOfAria', { sym: selectedLpPool.tokenYSymbol })}
                         value={lpAmountY} onChange={(v) => setLpAmountY(v)} min={0} controls={false} />
                     </div>
 
                     {lpBreakdown && (
                       <div className="sber-simple-breakdown">
                         <span className="sber-simple-breakdown__title">
-                          <InfoCircleOutlined /> Что произойдёт
+                          <InfoCircleOutlined /> {t('swap.simple.whatHappens')}
                         </span>
                         <div className="sber-simple-breakdown__row">
-                          <span>Текущая цена</span>
+                          <span>{t('swap.simple.lpCurrentPrice')}</span>
                           <b>1 {selectedLpPool.tokenXSymbol} ≈ {formatCompact(lpBreakdown.price)} {selectedLpPool.tokenYSymbol}</b>
                         </div>
                         {lpBreakdown.hasAmount && (
                           <div className="sber-simple-breakdown__row">
-                            <span>Вы вносите</span>
+                            <span>{t('swap.simple.youDeposit')}</span>
                             <b>{formatCompact(lpAmountX ?? 0)} {selectedLpPool.tokenXSymbol} + {formatCompact(lpAmountY ?? 0)} {selectedLpPool.tokenYSymbol} ≈ {formatCompact(lpBreakdown.depositY)} {selectedLpPool.tokenYSymbol}</b>
                           </div>
                         )}
                         <div className="sber-simple-breakdown__row">
-                          <span>Рабочий диапазон цены</span>
+                          <span>{t('swap.simple.workingRange')}</span>
                           <b>{formatCompact(lpBreakdown.priceLow)} – {formatCompact(lpBreakdown.priceHigh)} {selectedLpPool.tokenYSymbol} (~±{Math.round(lpBreakdown.rangePct)}%)</b>
                         </div>
                         <div className="sber-simple-breakdown__row">
-                          <span>Комиссия пула</span>
-                          <b>{lpBreakdown.feePct.toFixed(2)}% с каждого обмена</b>
+                          <span>{t('swap.simple.poolFeeLp')}</span>
+                          <b>{t('swap.simple.perSwap', { value: lpBreakdown.feePct.toFixed(2) })}</b>
                         </div>
                         {lpBreakdown.share > 0 && (
                           <div className="sber-simple-breakdown__row">
-                            <span>Ваша доля в пуле</span>
+                            <span>{t('swap.simple.yourShare')}</span>
                             <b>≈ {lpBreakdown.share < 0.01 ? '<0.01' : lpBreakdown.share.toFixed(2)}%</b>
                           </div>
                         )}
                         <span className="sber-simple-breakdown__hint">
-                          Токены кладутся в пул в диапазоне ±{SIMPLE_BIN_HALF_RANGE} ценовых шагов вокруг текущей цены. Пока цена внутри диапазона — они зарабатывают комиссию с каждого обмена. Выйдет за диапазон — позиция временно перестанет торговать и снова заработает, когда цена вернётся. Забрать можно в любой момент — вкладка «Забрать».
+                          {t('swap.simple.addHint', { range: SIMPLE_BIN_HALF_RANGE })}
                         </span>
                       </div>
                     )}
@@ -668,7 +670,7 @@ export default function SimpleTradePage() {
                   onClick={() => addLiquidityMutation.mutate()}
                   style={{ borderRadius: 'var(--radius-md)' }}
                 >
-                  Добавить
+                  {t('swap.simple.addCta')}
                 </Button>
 
                 {/* Light context so the empty card isn't barren before a pick. */}
@@ -676,7 +678,7 @@ export default function SimpleTradePage() {
                   <>
                     <Divider style={{ margin: 'var(--space-2) 0' }} />
                     <Text type="secondary" style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>
-                      Популярные пулы
+                      {t('swap.simple.popularPools')}
                     </Text>
                     <div>
                       {[...activePools]
@@ -686,7 +688,7 @@ export default function SimpleTradePage() {
                           <div
                             key={p.id}
                             onClick={() => setLpPoolId(p.id)}
-                            {...rowButtonProps(() => setLpPoolId(p.id), `Выбрать пул ${p.tokenXSymbol} / ${p.tokenYSymbol}`)}
+                            {...rowButtonProps(() => setLpPoolId(p.id), t('swap.info.pickPoolAria', { pair: `${p.tokenXSymbol} / ${p.tokenYSymbol}` }))}
                             className="sber-simple-poolrow"
                             style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--border-light)' : 'none' }}
                           >
@@ -694,7 +696,7 @@ export default function SimpleTradePage() {
                             <Space size={6}>
                               <Tag color="green" style={{ marginInlineEnd: 0 }}>
                                 <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
-                                {p.estimatedApy > 0 ? `${p.estimatedApy.toFixed(1)}% APY` : 'активен'}
+                                {p.estimatedApy > 0 ? t('swap.simple.apyTag', { value: p.estimatedApy.toFixed(1) }) : t('swap.simple.activeTag')}
                               </Tag>
                               <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
                                 {formatCompact(p.totalTvlX + p.totalTvlY)}
@@ -712,26 +714,26 @@ export default function SimpleTradePage() {
             {lpMode === 'remove' && (
               <>
                 <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                  Верните ликвидность на баланс. Выберите позицию и сколько забрать — без диапазонов.
+                  {t('swap.simple.removeNote')}
                 </Text>
 
                 {activePositions.length === 0 ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={<Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>У вас пока нет открытых позиций</Text>}
+                    description={<Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>{t('swap.simple.noPositions')}</Text>}
                     style={{ margin: 'var(--space-5) 0' }}
                   />
                 ) : (
                   <>
                     <div>
                       <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-2)' }}>
-                        Позиция
+                        {t('swap.simple.position')}
                       </Text>
                       <Select
                         size="large"
                         style={{ width: '100%' }}
-                        aria-label="Позиция"
-                        placeholder="Выберите позицию"
+                        aria-label={t('swap.simple.positionAria')}
+                        placeholder={t('swap.simple.positionPlaceholder')}
                         value={removePositionId || undefined}
                         onChange={(v) => { setRemovePositionId(v); setRemoveError(null) }}
                         options={positionOptions}
@@ -748,7 +750,7 @@ export default function SimpleTradePage() {
                       <>
                         <div>
                           <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-2)' }}>
-                            Сколько забрать
+                            {t('swap.simple.howMuch')}
                           </Text>
                           <Segmented<number>
                             block
@@ -773,14 +775,14 @@ export default function SimpleTradePage() {
                           return (
                             <div className="sber-simple-est" aria-live="polite">
                               <div className="sber-simple-est__row">
-                                <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>Вернётся на баланс ≈</Text>
+                                <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>{t('swap.simple.returnsToBalance')}</Text>
                                 <Text strong style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
                                   {formatTokenAmount(gx, xSym, { compact: true, maxFractionDigits: 4 })}
                                   {ySym ? ` + ${formatTokenAmount(gy, ySym, { compact: true, maxFractionDigits: 4 })}` : ''}
                                 </Text>
                               </div>
                               <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginTop: 'var(--space-1)' }}>
-                                Примерная оценка по телу позиции — без учёта накопленных комиссий и сборов.
+                                {t('swap.simple.estimateNote')}
                               </Text>
                             </div>
                           )
@@ -807,7 +809,7 @@ export default function SimpleTradePage() {
                       onClick={() => removeMutation.mutate()}
                       style={{ borderRadius: 'var(--radius-md)' }}
                     >
-                      {selectedRemovePosition ? `Забрать ${removePercent}%` : 'Выберите позицию'}
+                      {selectedRemovePosition ? t('swap.simple.removeCta', { percent: removePercent }) : t('swap.simple.selectPositionCta')}
                     </Button>
                   </>
                 )}
