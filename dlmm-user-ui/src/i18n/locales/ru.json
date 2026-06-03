@@ -95,7 +95,8 @@
       "noAccount": "Нет аккаунта?",
       "register": "Зарегистрироваться",
       "errorFallback": "Неверный email или пароль. Попробуйте снова.",
-      "ssoButton": "Войти через корпоративный SSO"
+      "ssoButton": "Войти через корпоративный SSO",
+      "orDivider": "или"
     },
     "register": {
       "subtitle": "Создайте аккаунт",

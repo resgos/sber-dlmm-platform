@@ -116,7 +116,7 @@ export default function LoginPage() {
           </Form.Item>
         </Form>
 
-        <Divider plain style={{ color: 'var(--text-muted)', fontSize: 12 }}>или</Divider>
+        <Divider plain style={{ color: 'var(--text-muted)', fontSize: 12 }}>{t('auth.login.orDivider')}</Divider>
         <Button
           block
           size="large"
@@ -124,7 +124,7 @@ export default function LoginPage() {
           onClick={() => window.location.href = '/api/v1/auth/saml/initiate'}
           style={{ marginTop: 8 }}
         >
-          Войти через корпоративный SSO
+          {t('auth.login.ssoButton')}
         </Button>
 
         <div style={{ textAlign: 'center', marginTop: 16 }}>

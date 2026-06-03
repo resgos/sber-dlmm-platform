@@ -95,7 +95,8 @@
       "noAccount": "No account yet?",
       "register": "Sign up",
       "errorFallback": "Invalid email or password. Please try again.",
-      "ssoButton": "Sign in with corporate SSO"
+      "ssoButton": "Sign in with corporate SSO",
+      "orDivider": "or"
     },
     "register": {
       "subtitle": "Create your account",
