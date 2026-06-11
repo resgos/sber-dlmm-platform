@@ -9,8 +9,9 @@ import java.util.UUID;
  * each pool the user has accruals in, inside {@link FeesSummaryResponse#byPool()}.
  *
  * @param poolId          the pool
- * @param poolName        display label for the pool; currently the pool id as a
- *                        string (no name lookup is performed server-side)
+ * @param poolName        human {@code "TX/TY"} pair label, resolved server-side from the
+ *                        shared {@code liquidity_pools}/{@code tokens} catalogue
+ *                        (falls back to the pool id string if it can't be read)
  * @param unclaimedFeeX   still-unclaimed X-leg fees, raw ×10⁴ base units
  * @param unclaimedFeeY   still-unclaimed Y-leg fees, raw ×10⁴ base units
  * @param totalEarnedFeeX lifetime earned X-leg fees (claimed + unclaimed), raw ×10⁴ base units

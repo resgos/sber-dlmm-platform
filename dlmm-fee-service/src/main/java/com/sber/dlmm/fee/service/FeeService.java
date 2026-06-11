@@ -197,7 +197,7 @@ public class FeeService {
 
             poolSummaries.add(new PoolFeeSummary(
                     poolId,
-                    poolId.toString(),
+                    poolLabel(poolId),
                     unclaimedFeeX,
                     unclaimedFeeY,
                     earnedFeeX,
@@ -484,6 +484,33 @@ public class FeeService {
         if (claimedX <= 0 || price == null || price.signum() <= 0) return claimedY;
         long feeXInY = BigDecimal.valueOf(claimedX).multiply(price, MC).setScale(0, RoundingMode.FLOOR).longValueExact();
         return claimedY + feeXInY;
+    }
+
+    /** Pool "TX/TY" labels, resolved once from the shared catalogue (symbols are immutable). */
+    private final Map<UUID, String> poolLabelCache = new ConcurrentHashMap<>();
+
+    /**
+     * Human {@code "TX/TY"} label for a pool, resolved from the shared
+     * {@code liquidity_pools} + {@code tokens} catalogue (audit B3 — the fee summary
+     * previously exposed the raw pool UUID as {@code poolName}). Fail-soft: any lookup
+     * error falls back to the pool id so the field is never empty. Cached per pool for the
+     * lifetime of the bean (symbols don't change).
+     */
+    private String poolLabel(UUID poolId) {
+        if (poolId == null) return null;
+        return poolLabelCache.computeIfAbsent(poolId, id -> {
+            try {
+                String label = jdbcTemplate.queryForObject(
+                        "SELECT tx.symbol || '/' || ty.symbol FROM liquidity_pools lp " +
+                        "JOIN tokens tx ON tx.id = lp.token_x_id " +
+                        "JOIN tokens ty ON ty.id = lp.token_y_id WHERE lp.id = ?",
+                        String.class, id);
+                return label != null ? label : id.toString();
+            } catch (Exception e) {
+                log.debug("pool label lookup failed for {}: {}", id, e.toString());
+                return id.toString();
+            }
+        });
     }
 
     /**
