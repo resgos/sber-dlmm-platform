@@ -9,6 +9,7 @@ import type { Position, Pool, FeeHistoryEntry } from '@/api/types'
 import { KpiRow, PageHeader, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
 import PositionAlertsDrawer from '@/components/PositionAlertsDrawer'
+import EmptyState from '@/components/EmptyState'
 import HealthScoreBadge from '@/components/HealthScoreBadge'
 import HealthScoreExplainer from '@/components/HealthScoreExplainer'
 import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
@@ -456,6 +457,31 @@ export default function PositionsPage() {
           rowKey="id"
           pagination={false}
           size="middle"
+          locale={{
+            emptyText:
+              allActive.length === 0 ? (
+                <EmptyState
+                  title={t('positions.empty.title')}
+                  description={t('positions.empty.desc')}
+                  cta={
+                    <Button type="primary" icon={<DollarOutlined />} onClick={() => navigate('/pools')}>
+                      {t('positions.empty.cta')}
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  size="compact"
+                  title={t('positions.empty.filteredTitle')}
+                  description={t('positions.empty.filteredDesc')}
+                  secondary={
+                    <Button type="link" onClick={() => setHealthFilter('all')}>
+                      {t('positions.empty.filteredReset')}
+                    </Button>
+                  }
+                />
+              ),
+          }}
           onRow={(record) => ({
             style: { cursor: 'pointer' },
             onClick: () => navigate(`/pools/${record.poolId}`),

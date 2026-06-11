@@ -609,6 +609,14 @@
 
   "positions": {
     "title": "My positions",
+    "empty": {
+      "title": "You don't have any open positions yet",
+      "desc": "Add liquidity to a DLMM pool and start earning fees on every swap.",
+      "cta": "Browse pools",
+      "filteredTitle": "No positions match the filter",
+      "filteredDesc": "No position falls under the selected health filter.",
+      "filteredReset": "Show all"
+    },
     "subtitle": "Your LP positions in DLMM pools — bin ranges, unclaimed fees, payout history",
     "kpi": {
       "activePositions": "Active positions",
@@ -704,6 +712,13 @@
 
   "transactions": {
     "title": "Transaction history",
+    "empty": {
+      "title": "No transactions yet",
+      "desc": "Make a swap or a liquidity operation and it will show up here.",
+      "filteredTitle": "No transactions match the filters",
+      "filteredDesc": "No transaction falls under the selected filters.",
+      "filteredReset": "Reset filters"
+    },
     "filters": {
       "txTypePlaceholder": "Transaction type",
       "statusPlaceholder": "Status",

@@ -250,7 +250,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
             width: 24,
             height: 24,
             borderRadius: '50%',
-            background: 'var(--surface-1, #F9FAFB)',
+            background: 'var(--surface-1)',
             border: '1px solid var(--border-light)',
             color: 'var(--text-secondary)',
             fontSize: 'var(--text-xs)',

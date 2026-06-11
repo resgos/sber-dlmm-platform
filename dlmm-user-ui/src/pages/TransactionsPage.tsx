@@ -8,6 +8,7 @@ import { transactions } from '@/api/services'
 import type { Transaction, TxType, TxStatus, TransactionFilters } from '@/api/types'
 import dayjs from 'dayjs'
 import { TokenPairChip } from '@/components/sber'
+import EmptyState from '@/components/EmptyState'
 import { formatTokenAmount } from '@/lib/format'
 import { exportToCsv } from '@/lib/csvExport'
 
@@ -145,6 +146,26 @@ export default function TransactionsPage() {
         loading={isLoading}
         dataSource={data?.content || []}
         rowKey="id"
+        locale={{
+          emptyText:
+            filters.txType || filters.status || filters.dateFrom || filters.dateTo ? (
+              <EmptyState
+                size="compact"
+                title={t('transactions.empty.filteredTitle')}
+                description={t('transactions.empty.filteredDesc')}
+                secondary={
+                  <Button type="link" onClick={handleReset}>
+                    {t('transactions.empty.filteredReset')}
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                title={t('transactions.empty.title')}
+                description={t('transactions.empty.desc')}
+              />
+            ),
+        }}
         pagination={{
           current: page + 1,
           pageSize,
