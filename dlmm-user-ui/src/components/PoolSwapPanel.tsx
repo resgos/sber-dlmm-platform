@@ -196,7 +196,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       {/* In side */}
       <div
         style={{
-          background: 'var(--surface-1, #F9FAFB)',
+          background: 'var(--surface-1)',
           borderRadius: 'var(--radius-md)',
           padding: 14,
           marginBottom: 8,
@@ -263,7 +263,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
       {/* Out side */}
       <div
         style={{
-          background: 'var(--surface-1, #F9FAFB)',
+          background: 'var(--surface-1)',
           borderRadius: 'var(--radius-md)',
           padding: 14,
           marginTop: 8,
@@ -285,7 +285,7 @@ export default function PoolSwapPanel({ pool, embedded = false, pickedPrice }: P
 
       {/* Quote summary */}
       {quote && !quoteLoading && (
-        <div style={{ padding: '8px 12px', background: 'var(--surface-1, #F9FAFB)', borderRadius: 'var(--radius-sm)', marginBottom: 12 }}>
+        <div style={{ padding: '8px 12px', background: 'var(--surface-1)', borderRadius: 'var(--radius-sm)', marginBottom: 12 }}>
           {(() => {
             // Headline rate = the base asset's price (quote per base, e.g. ₽ per
             // SETH), pinned to the stable base so it never inverts on Buy↔Sell.
