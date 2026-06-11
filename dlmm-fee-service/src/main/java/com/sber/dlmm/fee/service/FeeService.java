@@ -104,6 +104,15 @@ public class FeeService {
     private final Set<String> processedIdempotencyKeys = ConcurrentHashMap.newKeySet();
 
     /**
+     * Pool "TX/TY" labels (audit B3), resolved from the shared catalogue. Only
+     * SUCCESSFUL lookups are cached (symbols are immutable); failures fall back to
+     * the pool id WITHOUT being cached, so a transient DB error self-heals on the
+     * next call instead of serving a UUID forever. Warmed for free by the
+     * getUserFeesSummary owed-query, which selects the label in the same round-trip.
+     */
+    private final Map<UUID, String> poolLabelCache = new ConcurrentHashMap<>();
+
+    /**
      * Aggregates a user's fee accruals across all pools into a dashboard summary:
      * per-pool earned/unclaimed totals for each side plus platform-wide rollups.
      *
@@ -135,6 +144,7 @@ public class FeeService {
         // per-bin product. Each row: [poolId, tokenXId, tokenYId, owedX, owedY].
         List<Object[]> owedRows = jdbcTemplate.query(
                 "SELECT p.pool_id, lp.token_x_id, lp.token_y_id, " +
+                "  tx.symbol || '/' || ty.symbol AS pool_label, " +
                 "  COALESCE(SUM(floor(GREATEST(b.fee_growth_x - pb.fee_growth_checkpoint_x,0)::numeric " +
                 "      * pb.liquidity_shares / 1000000000)),0)::bigint AS owed_x, " +
                 "  COALESCE(SUM(floor(GREATEST(b.fee_growth_y - pb.fee_growth_checkpoint_y,0)::numeric " +
@@ -143,17 +153,26 @@ public class FeeService {
                 "JOIN position_bins pb ON pb.position_id = p.id " +
                 "JOIN pool_bins b ON b.pool_id = p.pool_id AND b.bin_id = pb.bin_id " +
                 "JOIN liquidity_pools lp ON lp.id = p.pool_id " +
+                "JOIN tokens tx ON tx.id = lp.token_x_id " +
+                "JOIN tokens ty ON ty.id = lp.token_y_id " +
                 "WHERE p.is_active AND p.user_id = ? " +
-                "GROUP BY p.pool_id, lp.token_x_id, lp.token_y_id",
+                "GROUP BY p.pool_id, lp.token_x_id, lp.token_y_id, tx.symbol, ty.symbol",
                 (rs, n) -> new Object[]{ rs.getObject("pool_id"), rs.getObject("token_x_id"),
-                        rs.getObject("token_y_id"), rs.getLong("owed_x"), rs.getLong("owed_y") },
+                        rs.getObject("token_y_id"), rs.getString("pool_label"),
+                        rs.getLong("owed_x"), rs.getLong("owed_y") },
                 userId);
         Map<UUID, long[]> owedByPool = new LinkedHashMap<>();          // poolId -> [owedX, owedY]
         Map<UUID, UUID[]> tokensByPool = new LinkedHashMap<>();        // poolId -> [tokenXId, tokenYId]
         for (Object[] r : owedRows) {
             UUID poolId = (UUID) r[0];
-            owedByPool.put(poolId, new long[]{ ((Number) r[3]).longValue(), ((Number) r[4]).longValue() });
+            owedByPool.put(poolId, new long[]{ ((Number) r[4]).longValue(), ((Number) r[5]).longValue() });
             tokensByPool.put(poolId, new UUID[]{ (UUID) r[1], (UUID) r[2] });
+            // Labels ride along in the same round-trip (review: no per-pool N+1);
+            // poolLabel() below then only queries for claimed-history-only pools.
+            String label = (String) r[3];
+            if (label != null) {
+                poolLabelCache.putIfAbsent(poolId, label);
+            }
         }
 
         List<PoolFeeSummary> poolSummaries = new ArrayList<>();
@@ -486,31 +505,35 @@ public class FeeService {
         return claimedY + feeXInY;
     }
 
-    /** Pool "TX/TY" labels, resolved once from the shared catalogue (symbols are immutable). */
-    private final Map<UUID, String> poolLabelCache = new ConcurrentHashMap<>();
-
     /**
      * Human {@code "TX/TY"} label for a pool, resolved from the shared
      * {@code liquidity_pools} + {@code tokens} catalogue (audit B3 — the fee summary
-     * previously exposed the raw pool UUID as {@code poolName}). Fail-soft: any lookup
-     * error falls back to the pool id so the field is never empty. Cached per pool for the
-     * lifetime of the bean (symbols don't change).
+     * previously exposed the raw pool UUID as {@code poolName}). Fail-soft: a miss or
+     * lookup error falls back to the pool id so the field is never empty, but the
+     * fallback is deliberately NOT cached (review) — only successful resolutions are —
+     * so a transient DB error self-heals on a later call instead of serving the UUID
+     * until restart. Plain get/putIfAbsent instead of computeIfAbsent keeps the JDBC
+     * round-trip outside any ConcurrentHashMap bin lock; a duplicate concurrent lookup
+     * is a harmless idempotent read.
      */
     private String poolLabel(UUID poolId) {
         if (poolId == null) return null;
-        return poolLabelCache.computeIfAbsent(poolId, id -> {
-            try {
-                String label = jdbcTemplate.queryForObject(
-                        "SELECT tx.symbol || '/' || ty.symbol FROM liquidity_pools lp " +
-                        "JOIN tokens tx ON tx.id = lp.token_x_id " +
-                        "JOIN tokens ty ON ty.id = lp.token_y_id WHERE lp.id = ?",
-                        String.class, id);
-                return label != null ? label : id.toString();
-            } catch (Exception e) {
-                log.debug("pool label lookup failed for {}: {}", id, e.toString());
-                return id.toString();
+        String cached = poolLabelCache.get(poolId);
+        if (cached != null) return cached;
+        try {
+            String label = jdbcTemplate.queryForObject(
+                    "SELECT tx.symbol || '/' || ty.symbol FROM liquidity_pools lp " +
+                    "JOIN tokens tx ON tx.id = lp.token_x_id " +
+                    "JOIN tokens ty ON ty.id = lp.token_y_id WHERE lp.id = ?",
+                    String.class, poolId);
+            if (label != null) {
+                poolLabelCache.putIfAbsent(poolId, label);
+                return label;
             }
-        });
+        } catch (Exception e) {
+            log.debug("pool label lookup failed for {}: {}", poolId, e.toString());
+        }
+        return poolId.toString();
     }
 
     /**

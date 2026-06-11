@@ -147,8 +147,12 @@ export default function TransactionsPage() {
         dataSource={data?.content || []}
         rowKey="id"
         locale={{
-          emptyText:
-            filters.txType || filters.status || filters.dateFrom || filters.dateTo ? (
+          // isLoading guard: empty dataSource during the initial fetch must not flash
+          // the "no transactions" copy. Filter-active check covers EVERY field of
+          // TransactionFilters (review: a hardcoded field list silently missed poolId).
+          emptyText: isLoading ? (
+            <span aria-hidden="true" />
+          ) : Object.values(filters).some((v) => v !== undefined && v !== null && v !== '') ? (
               <EmptyState
                 size="compact"
                 title={t('transactions.empty.filteredTitle')}

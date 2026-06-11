@@ -15,9 +15,15 @@
 --      (roughly 3.3% daily-of-TVL turnover, gives ~1-5% APY at typical
 --      fees — realistic for treasury market-making).
 
--- Step 1: bump timestamps
+-- Step 1 + 1b run in ONE transaction (review): they are separate statements, and in
+-- autocommit a concurrent API reader between them would see created_at already bumped
+-- but confirmed_at still historical — a visible invariant break on a live demo stack.
+BEGIN;
+
+-- Step 1: bump timestamps. The 5-second floor keeps the +2s settlement stamp from
+-- Step 1b strictly in the past even when random() lands at ~0 (review).
 UPDATE transactions
-SET created_at = NOW() - (random() * INTERVAL '23 hours')
+SET created_at = NOW() - (random() * INTERVAL '23 hours') - INTERVAL '5 seconds'
 WHERE tx_type = 'SWAP'
   AND created_at > NOW() - INTERVAL '7 days';
 
@@ -35,6 +41,17 @@ SET confirmed_at = created_at + INTERVAL '2 seconds',
     updated_at   = created_at + INTERVAL '1 second'
 WHERE tx_type = 'SWAP' AND confirmed_at IS NOT NULL
   AND (created_at > confirmed_at OR updated_at > confirmed_at OR created_at > updated_at);
+
+-- Step 1c (review): Step 1 bumps created_at for ALL window SWAPs, including ones with
+-- no settlement yet (confirmed_at IS NULL — e.g. PENDING/FAILED), which Step 1b's
+-- confirmed-only WHERE skips; without this their updated_at would lag behind the new
+-- created_at. Mirrors 16-seed's pending-row rule.
+UPDATE transactions
+SET updated_at = created_at
+WHERE tx_type = 'SWAP' AND confirmed_at IS NULL
+  AND updated_at < created_at;
+
+COMMIT;
 
 -- Step 2: force-recalc volume_24h from updated data
 UPDATE liquidity_pools p

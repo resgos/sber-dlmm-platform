@@ -458,8 +458,12 @@ export default function PositionsPage() {
           pagination={false}
           size="middle"
           locale={{
-            emptyText:
-              allActive.length === 0 ? (
+            // While the query is in flight dataSource is [] for EVERYONE, so without
+            // the isLoading guard the "no positions" onboarding CTA flashes under the
+            // spinner for users who DO have positions (review).
+            emptyText: isLoading ? (
+              <span aria-hidden="true" />
+            ) : allActive.length === 0 ? (
                 <EmptyState
                   title={t('positions.empty.title')}
                   description={t('positions.empty.desc')}
