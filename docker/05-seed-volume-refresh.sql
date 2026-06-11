@@ -21,6 +21,21 @@ SET created_at = NOW() - (random() * INTERVAL '23 hours')
 WHERE tx_type = 'SWAP'
   AND created_at > NOW() - INTERVAL '7 days';
 
+-- Step 1b (arch-audit P0-2): the bump above moves created_at into the last 24h but
+-- leaves confirmed_at at the original historical settlement time, so confirmed_at <
+-- created_at ("confirmed before created") — the temporal invariant
+-- created_at <= updated_at <= confirmed_at breaks every time volume is refreshed,
+-- including the documented `FORCE_REAPPLY=05-seed-volume-refresh` 24h refresh, which
+-- does NOT re-run 16-seed. A swap settles in ~seconds, so pin updated/confirmed just
+-- after the new created_at. NOT window-limited, so it also sweeps up any straggler a
+-- prior bump left outside the 7-day window. Idempotent: once consistent the WHERE no
+-- longer matches. (16-seed still does the full-ledger pass during a cold seed.)
+UPDATE transactions
+SET confirmed_at = created_at + INTERVAL '2 seconds',
+    updated_at   = created_at + INTERVAL '1 second'
+WHERE tx_type = 'SWAP' AND confirmed_at IS NOT NULL
+  AND (created_at > confirmed_at OR updated_at > confirmed_at OR created_at > updated_at);
+
 -- Step 2: force-recalc volume_24h from updated data
 UPDATE liquidity_pools p
 SET volume_24h = COALESCE(
