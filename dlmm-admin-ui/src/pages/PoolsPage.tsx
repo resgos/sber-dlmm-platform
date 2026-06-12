@@ -259,9 +259,11 @@ export default function PoolsPage() {
             icon: <DollarOutlined style={{ color: '#F2994A' }} />,
           },
           {
+            // Same copy bug as user-ui PoolDetail had (fixed 2026-06-12): the value
+            // is quote-side turnover in SRUB, not a swap count.
             label: 'Объём за 24ч',
-            value: formatCompact(totalVolume24h),
-            sub: 'свопов на платформе',
+            value: formatRub(totalVolume24h),
+            sub: 'оборот в SRUB на платформе',
             icon: <RiseOutlined style={{ color: '#296AE3' }} />,
           },
           {
