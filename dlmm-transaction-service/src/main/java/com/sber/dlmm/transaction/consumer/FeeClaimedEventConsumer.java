@@ -64,7 +64,19 @@ public class FeeClaimedEventConsumer {
                     ? UUID.fromString(payload.get("tokenXId").asText()) : null;
             UUID tokenYId = payload.has("tokenYId") && !payload.get("tokenYId").isNull()
                     ? UUID.fromString(payload.get("tokenYId").asText()) : null;
-            String claimedAt = payload.path("claimedAt").asText("");
+            // claimedAt arrives as an ISO string OR as Jackson's array form for
+            // LocalDateTime ([2026,6,12,9,45,45,…] — the producer's mapper has no
+            // JavaTimeModule ISO setup). asText("") on an ARRAY node returns "",
+            // which degenerated the idempotency key to "feeclaim-<positionId>-" —
+            // one shared key for EVERY claim of that position forever, so every
+            // repeat claim was silently skipped and never reached the ledger
+            // (found live 2026-06-12: claim paid 146223 raw, no CLAIM_FEE row).
+            // toString() of the array form is unique per timestamp and keeps the
+            // key stable across redeliveries of the SAME event.
+            JsonNode claimedAtNode = payload.path("claimedAt");
+            String claimedAt = claimedAtNode.isTextual() ? claimedAtNode.asText()
+                    : claimedAtNode.isMissingNode() || claimedAtNode.isNull() ? ""
+                    : claimedAtNode.toString();
 
             // One ledger row per claim settlement; dedups Kafka redeliveries.
             String idempotencyKey = "feeclaim-" + positionId + "-" + claimedAt;
