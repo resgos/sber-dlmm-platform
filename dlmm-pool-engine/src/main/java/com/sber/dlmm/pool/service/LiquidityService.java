@@ -43,7 +43,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Manages LP positions: depositing liquidity across a bin range per a chosen
@@ -852,9 +855,18 @@ public class LiquidityService {
 
             List<BinAllocation> binAllocations = new ArrayList<>();
 
+            // One range query per position instead of one single-row query per bin
+            // (review: this read path issued ~positions×bins row lookups — ~150
+            // queries for the demo portfolio). A position's bins always lie within
+            // its recorded [binRangeMin, binRangeMax]; a bin missing from the map
+            // hits the same null branch as a missing row did.
+            Map<Integer, PoolBin> poolBinByBinId = poolBinRepository
+                    .findByPoolIdAndBinIdBetween(pos.getPoolId(), pos.getBinRangeMin(), pos.getBinRangeMax())
+                    .stream()
+                    .collect(Collectors.toMap(PoolBin::getBinId, Function.identity()));
+
             for (PositionBin pb : posBins) {
-                PoolBin poolBin = poolBinRepository.findByPoolIdAndBinId(pos.getPoolId(), pb.getBinId())
-                        .orElse(null);
+                PoolBin poolBin = poolBinByBinId.get(pb.getBinId());
                 if (poolBin == null || poolBin.getLiquidity() <= 0) {
                     binAllocations.add(new BinAllocation(pb.getBinId(), 0, 0, pb.getLiquidityShares()));
                     continue;
