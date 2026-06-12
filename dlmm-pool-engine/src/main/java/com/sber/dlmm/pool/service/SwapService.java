@@ -731,6 +731,17 @@ public class SwapService {
             pool.setTotalTvlX(Math.max(0, pool.getTotalTvlX() - totalAmountOut));
         }
 
+        // 24h volume — accrue the trade's quote-side (Y) notional. Found live
+        // 2026-06-12: NOTHING accrued this field (the only writer was the
+        // 5-minute decay scheduler, whose "updated incrementally during swaps"
+        // assumption never existed), so live swaps left the "Объём 24ч" KPI
+        // stuck at the seeds' decayed value — eventually a hard 0. The Y side
+        // is used for both directions so the figure stays in one unit (quote):
+        // X→Y trades contribute the Y they took out of bins, Y→X trades the Y
+        // they paid in.
+        long volumeYNotional = swapXtoY ? totalAmountOut : consumedAmountIn;
+        pool.setVolume24h(pool.getVolume24h() + volumeYNotional);
+
         // Flush NOW so the pool's @Version optimistic-lock check runs HERE,
         // BEFORE the (non-transactional, cross-service) balance settlement
         // below. Otherwise the version conflict only surfaces at commit —
