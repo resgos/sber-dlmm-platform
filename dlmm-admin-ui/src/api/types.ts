@@ -120,6 +120,11 @@ export interface Transaction {
   amountIn: number | null
   tokenOutId: string | null
   amountOut: number | null
+  // Audit B3 — self-describing labels resolved by transaction-service
+  // (admin-bff proxies them; scaleTransaction spreads them untouched).
+  tokenInSymbol?: string | null
+  tokenOutSymbol?: string | null
+  poolName?: string | null
   feeAmount: number | null
   feeRate: number | null
   binsCrossed: number | null

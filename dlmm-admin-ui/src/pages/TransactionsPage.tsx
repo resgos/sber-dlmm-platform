@@ -33,7 +33,7 @@ import type {
 } from '@/api/types'
 import dayjs from 'dayjs'
 import { KpiRow, PageHeader, TokenPairChip, UserChip } from '@/components/sber'
-import { formatTokenAmount, shortId } from '@/lib/format'
+import { formatRub, formatTokenAmount, shortId } from '@/lib/format'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -190,9 +190,17 @@ export default function TransactionsPage() {
   const swapsToday = txToday.filter((t) => t.txType === 'SWAP').length
   const distinctUsersToday = new Set(txToday.map((t) => t.userId).filter(Boolean)).size
   const failuresToday = txToday.filter((t) => t.status === 'FAILED').length
+  // Quote-side (SRUB) notional per swap — mirrors the engine's volume24h
+  // accrual. The old sum mixed token units (0.05 SETH + 32k SUSDT + …) into
+  // one meaningless figure. Non-SRUB pairs (none in the demo catalogue) are
+  // skipped rather than guessed.
   const volumeToday = txToday
-    .filter((t) => t.txType === 'SWAP' && t.amountIn)
-    .reduce((acc, t) => acc + (t.amountIn ?? 0), 0)
+    .filter((t) => t.txType === 'SWAP')
+    .reduce((acc, t) => {
+      if (t.tokenOutSymbol === 'SRUB') return acc + (t.amountOut ?? 0)
+      if (t.tokenInSymbol === 'SRUB') return acc + (t.amountIn ?? 0)
+      return acc
+    }, 0)
 
   const columns: ColumnsType<Transaction> = [
     {
@@ -379,8 +387,8 @@ export default function TransactionsPage() {
           },
           {
             label: 'Объём свопов 24ч',
-            value: formatTokenAmount(volumeToday, undefined, { compact: true, maxFractionDigits: 0 }),
-            sub: 'сумма по amountIn',
+            value: formatRub(volumeToday),
+            sub: 'оборот в SRUB (квота-нога)',
             icon: <RiseOutlined style={{ color: '#296AE3' }} />,
           },
           {
