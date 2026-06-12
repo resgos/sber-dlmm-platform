@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>{@link #handleDlmmException(DlmmException)} — domain errors, status taken from the exception.</li>
  *   <li>{@link #handleValidation(MethodArgumentNotValidException)} — bean-validation failures → 400.</li>
+ *   <li>{@link #handleUnreadableBody(HttpMessageNotReadableException)} — unparseable body → 400.</li>
  *   <li>{@link #handleTypeMismatch(MethodArgumentTypeMismatchException)} — param type conversion → 400.</li>
  *   <li>{@link #handleGeneric(Exception)} — framework exceptions carrying a 4xx status
  *       (unknown path/405/415 via {@code org.springframework.web.ErrorResponse}) keep it;
@@ -85,6 +87,32 @@ public class GlobalExceptionHandler {
         ErrorResponse response = new ErrorResponse(
                 "VALIDATION_ERROR",
                 message,
+                Instant.now().toString(),
+                traceId
+        );
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
+     * Maps an unparseable/mistyped request body (malformed JSON, {@code NaN} in a numeric
+     * field, wrong field type) to HTTP 400.
+     *
+     * <p>Without this, Jackson's parse failure surfaced as {@link HttpMessageNotReadableException}
+     * and fell through to the 500 catch-all (found live 2026-06-12: a swap body with
+     * {@code "minAmountOut":NaN} → 500 INTERNAL_ERROR + ERROR stack). A bad body is a client
+     * mistake: 400, {@code VALIDATION_ERROR}, INFO log without a stack. The response message is
+     * deliberately generic — Jackson's own text can echo payload fragments.
+     *
+     * @param ex the body-parse failure (its detail is logged, not returned)
+     * @return the standard {@link ErrorResponse} body with code {@code "VALIDATION_ERROR"} and HTTP 400
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex) {
+        String traceId = UUID.randomUUID().toString();
+        log.info("Unreadable request body [traceId={}]: {}", traceId, ex.getMessage());
+        ErrorResponse response = new ErrorResponse(
+                "VALIDATION_ERROR",
+                "Некорректное тело запроса (ошибка разбора JSON)",
                 Instant.now().toString(),
                 traceId
         );
