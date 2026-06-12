@@ -203,21 +203,31 @@ public class NotificationEventListener {
         String deadline = node.has("rebalanceDeadline") && !node.get("rebalanceDeadline").isNull()
                 ? node.get("rebalanceDeadline").asText() : null;
 
+        // Audit B2 tail — the copy used to lead with the raw position UUID and bin id
+        // ("Позиция 559d9fd0-… активный бин 8388608"), meaningless to an investor.
+        // The event carries poolId, so name the pool pair; bin details stay as a
+        // parenthesised technicality. Fallback: a missing poolId degrades to the
+        // generic "LP" wording, never to a UUID.
+        String pool = node.has("poolId") && !node.get("poolId").isNull()
+                ? formatter.poolLabel(node.get("poolId").asText()) : null;
+        String poolPhrase = pool != null ? "в пуле " + pool : "LP";
+
         String title;
         String message;
         if (type == NotificationType.MARGIN_CALL) {
             title = "Маржин-колл по LP-позиции";
             message = String.format(
-                    "Позиция %s вышла из диапазона: активный бин %d, диапазон [%d, %d], отклонение %d бинов. " +
-                    "Комиссии не начисляются.%s",
-                    positionId, activeBin, rangeMin, rangeMax, Math.abs(distance),
+                    "Позиция %s вышла из ценового диапазона — комиссии не начисляются " +
+                    "(активный бин %d вне [%d, %d], отклонение %d бинов).%s",
+                    poolPhrase, activeBin, rangeMin, rangeMax, Math.abs(distance),
                     deadline != null ? " Перебалансировать к " + deadline + "." : "");
         } else { // MARGIN_WARNING
             title = "Предупреждение по LP-позиции";
             message = String.format(
-                    "Позиция %s приближается к границе диапазона: активный бин %d, " +
-                    "до границы %d бинов. Рассмотрите ребалансировку.%s",
-                    positionId, activeBin, distance,
+                    distance == 0
+                            ? "Позиция %s: цена на границе диапазона (бин %d, до края %d бинов). Рассмотрите ребалансировку.%s"
+                            : "Позиция %s приближается к границе диапазона (бин %d, до края %d бинов). Рассмотрите ребалансировку.%s",
+                    poolPhrase, activeBin, distance,
                     deadline != null ? " Срок принятия решения: " + deadline + "." : "");
         }
 
