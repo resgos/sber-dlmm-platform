@@ -213,6 +213,32 @@ public final class BinMath {
     }
 
     /**
+     * Overflow-safe {@code floor(value · numerator / denominator)} for the
+     * engine's pro-rata splits (a position's share of a bin's reserve:
+     * {@code reserve · shares / liquidity}). A raw {@code long} product
+     * overflows on the post-×10⁴ demo magnitudes — e.g. reserveY 1.7e13 ×
+     * shares 1.6e10 ≈ 2.8e23 ≫ Long.MAX ≈ 9.2e18 — and wraps NEGATIVE, which
+     * surfaced as negative position values (audit B6) and corrupt withdraw
+     * amounts. Non-positive inputs short-circuit to 0, same convention as
+     * {@link #feeFromGrowth}.
+     *
+     * @param value       the quantity being split (e.g. a bin reserve)
+     * @param numerator   the held share (e.g. the position's shares in the bin)
+     * @param denominator the whole (e.g. the bin's total liquidity)
+     * @return {@code floor(value·numerator/denominator)}, or 0 when any input
+     *         is non-positive
+     */
+    public static long mulDiv(long value, long numerator, long denominator) {
+        if (value <= 0 || numerator <= 0 || denominator <= 0) {
+            return 0L;
+        }
+        return BigInteger.valueOf(value)
+                .multiply(BigInteger.valueOf(numerator))
+                .divide(BigInteger.valueOf(denominator))
+                .longValueExact();
+    }
+
+    /**
      * DLMM bin invariant: a bin's liquidity (in token_y units) is the value it
      * holds — {@code reserveX·price} (token_x valued in token_y) plus
      * {@code reserveY}. The seed reconciliation

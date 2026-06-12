@@ -673,9 +673,11 @@ public class LiquidityService {
                 continue;
             }
 
-            // 3b. Calculate amounts to withdraw
-            long amountX = poolBin.getReserveX() * binShareToRemove / poolBin.getLiquidity();
-            long amountY = poolBin.getReserveY() * binShareToRemove / poolBin.getLiquidity();
+            // 3b. Calculate amounts to withdraw. mulDiv: the raw long product
+            // reserve·shares overflows on ×10⁴ demo magnitudes (≈2.8e23) and wrapped
+            // into corrupt (even negative) withdraw amounts — audit B6.
+            long amountX = BinMath.mulDiv(poolBin.getReserveX(), binShareToRemove, poolBin.getLiquidity());
+            long amountY = BinMath.mulDiv(poolBin.getReserveY(), binShareToRemove, poolBin.getLiquidity());
 
             // 4. Settle ALL accrued fees for this bin (Meteora: a remove claims the
             // position's full pending fees, not just the removed proportion). Compute
@@ -858,9 +860,11 @@ public class LiquidityService {
                     continue;
                 }
 
-                // Calculate current value proportional to shares
-                long valueX = poolBin.getReserveX() * pb.getLiquidityShares() / poolBin.getLiquidity();
-                long valueY = poolBin.getReserveY() * pb.getLiquidityShares() / poolBin.getLiquidity();
+                // Calculate current value proportional to shares. mulDiv: raw long
+                // multiply overflowed on ×10⁴ demo magnitudes and showed NEGATIVE
+                // position values in the UI (audit B6, reproduced live 2026-06-12).
+                long valueX = BinMath.mulDiv(poolBin.getReserveX(), pb.getLiquidityShares(), poolBin.getLiquidity());
+                long valueY = BinMath.mulDiv(poolBin.getReserveY(), pb.getLiquidityShares(), poolBin.getLiquidity());
                 currentValueX += valueX;
                 currentValueY += valueY;
 
