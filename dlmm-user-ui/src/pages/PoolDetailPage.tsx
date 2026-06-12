@@ -395,7 +395,7 @@ export default function PoolDetailPage() {
           },
           {
             label: t('poolDetail.kpi.volume24h'),
-            value: formatCompact(pool.volume24h ?? 0),
+            value: formatRub(pool.volume24h ?? 0),
             sub: t('poolDetail.kpi.volume24hSub'),
             icon: <RiseOutlined style={{ color: '#296AE3' }} />,
           },

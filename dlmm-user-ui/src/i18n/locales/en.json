@@ -494,7 +494,7 @@
     "kpi": {
       "tvl": "Pool TVL",
       "volume24h": "24h volume",
-      "volume24hSub": "swaps in last 24h",
+      "volume24hSub": "quote turnover, last 24h",
       "apy": "Est. APY",
       "apyForLp": "for LPs",
       "apyNoData": "insufficient data",

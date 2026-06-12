@@ -497,7 +497,7 @@
     "kpi": {
       "tvl": "TVL пула",
       "volume24h": "Объём за 24ч",
-      "volume24hSub": "свопов за сутки",
+      "volume24hSub": "оборот в SRUB за сутки",
       "apy": "Расч. APY",
       "apyForLp": "для LP-провайдеров",
       "apyNoData": "недостаточно данных",
