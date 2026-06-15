@@ -740,7 +740,22 @@
       "dateFrom": "Date from",
       "dateTo": "Date to",
       "refresh": "Refresh",
-      "reset": "Reset"
+      "reset": "Reset",
+      "exportCsv": "Export CSV"
+    },
+    "csv": {
+      "id": "Operation ID",
+      "date": "Date & time",
+      "type": "Type",
+      "status": "Status",
+      "pool": "Pool",
+      "tokenIn": "Token (sent)",
+      "amountIn": "Amount (sent)",
+      "tokenOut": "Token (received)",
+      "amountOut": "Amount (received)",
+      "fee": "Fee",
+      "binsCrossed": "Bins crossed",
+      "error": "Error"
     },
     "pagination": {
       "totalCount_one": "{{count}} transaction total",

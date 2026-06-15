@@ -747,7 +747,22 @@
       "dateFrom": "Дата от",
       "dateTo": "Дата до",
       "refresh": "Обновить",
-      "reset": "Сбросить"
+      "reset": "Сбросить",
+      "exportCsv": "Экспорт CSV"
+    },
+    "csv": {
+      "id": "ID операции",
+      "date": "Дата и время",
+      "type": "Тип",
+      "status": "Статус",
+      "pool": "Пул",
+      "tokenIn": "Токен (отдано)",
+      "amountIn": "Сумма (отдано)",
+      "tokenOut": "Токен (получено)",
+      "amountOut": "Сумма (получено)",
+      "fee": "Комиссия",
+      "binsCrossed": "Пересечено бинов",
+      "error": "Ошибка"
     },
     "pagination": {
       "totalCount_one": "Всего {{count}} транзакция",

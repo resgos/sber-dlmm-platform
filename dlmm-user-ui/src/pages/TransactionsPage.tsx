@@ -10,7 +10,7 @@ import dayjs from 'dayjs'
 import { TokenPairChip } from '@/components/sber'
 import EmptyState from '@/components/EmptyState'
 import { formatTokenAmount } from '@/lib/format'
-import { exportToCsv } from '@/lib/csvExport'
+import { exportToCsv, type CsvColumn } from '@/lib/csvExport'
 
 const { Title, Text } = Typography
 const { RangePicker } = DatePicker
@@ -67,6 +67,50 @@ export default function TransactionsPage() {
     setPage(0)
   }
 
+  // QW-1+ (Batch #5) — CSV export of the FULL filtered result set (not just the
+  // 20-row page on screen) with human-readable symbols/pool, matching what the
+  // user sees rather than raw UUIDs. Loops the paged API at the service-wide
+  // 200/page ceiling (no skip: offset = page×200), bounded by EXPORT_HARD_CAP so
+  // a pathological history can't hang the tab. amountIn/Out/fee are already
+  // human-scaled by scaleTransaction. Beyond the cap we'd stream server-side.
+  const EXPORT_PAGE_SIZE = 200
+  const EXPORT_HARD_CAP = 5000
+  const [exporting, setExporting] = useState(false)
+
+  const handleExportCsv = async () => {
+    setExporting(true)
+    try {
+      const all: Transaction[] = []
+      let p = 0
+      for (;;) {
+        const res = await transactions.getMyTransactions(p, EXPORT_PAGE_SIZE, filters)
+        const chunk = res.content ?? []
+        all.push(...chunk)
+        const total = res.totalElements ?? all.length
+        if (chunk.length === 0 || all.length >= total || all.length >= EXPORT_HARD_CAP) break
+        p++
+      }
+      if (all.length === 0) return
+      const columns: CsvColumn<Transaction>[] = [
+        { header: t('transactions.csv.id'), accessor: (r) => r.id },
+        { header: t('transactions.csv.date'), accessor: (r) => dayjs(r.createdAt).format('YYYY-MM-DD HH:mm:ss') },
+        { header: t('transactions.csv.type'), accessor: (r) => txTypeLabel(r.txType) },
+        { header: t('transactions.csv.status'), accessor: (r) => statusLabel(r.status) },
+        { header: t('transactions.csv.pool'), accessor: (r) => r.poolName ?? '' },
+        { header: t('transactions.csv.tokenIn'), accessor: (r) => r.tokenInSymbol ?? '' },
+        { header: t('transactions.csv.amountIn'), accessor: (r) => r.amountIn ?? '' },
+        { header: t('transactions.csv.tokenOut'), accessor: (r) => r.tokenOutSymbol ?? '' },
+        { header: t('transactions.csv.amountOut'), accessor: (r) => r.amountOut ?? '' },
+        { header: t('transactions.csv.fee'), accessor: (r) => r.feeAmount ?? '' },
+        { header: t('transactions.csv.binsCrossed'), accessor: (r) => r.binsCrossed ?? '' },
+        { header: t('transactions.csv.error'), accessor: (r) => r.errorMessage ?? '' },
+      ]
+      exportToCsv(`dlmm-transactions-${dayjs().format('YYYY-MM-DD')}.csv`, all, columns)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const txTypeOptions = useMemo(
     () => Object.keys(txTypeColors).map((key) => ({ label: txTypeLabel(key), value: key })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,36 +151,16 @@ export default function TransactionsPage() {
         />
         <Button icon={<ReloadOutlined />} onClick={() => refetch()}>{t('transactions.filters.refresh')}</Button>
         <Button onClick={handleReset}>{t('transactions.filters.reset')}</Button>
-        {/* QW-1 (Batch #4) — CSV export of the currently-filtered page.
-            Exports the page the user is looking at, not all data — keeps
-            the helper sync, and matches user expectation ("download what
-            I see"). For bulk exports we'd add a server-side endpoint. */}
+        {/* CSV export — pulls the FULL filtered set (handleExportCsv loops the
+            paged API), not just the page on screen; columns are the human
+            symbols/pool the user sees, not raw UUIDs. */}
         <Button
           icon={<DownloadOutlined />}
-          onClick={() => {
-            const rows = data?.content || []
-            if (rows.length === 0) return
-            exportToCsv(
-              `dlmm-transactions-${dayjs().format('YYYY-MM-DD')}.csv`,
-              rows,
-              [
-                { header: 'Дата', accessor: (r: Transaction) => dayjs(r.createdAt).format('YYYY-MM-DD HH:mm:ss') },
-                { header: 'Тип', accessor: (r) => txTypeLabel(r.txType) },
-                { header: 'Статус', accessor: (r) => statusLabel(r.status) },
-                { header: 'Пул ID', accessor: (r) => r.poolId ?? '' },
-                { header: 'Token In ID', accessor: (r) => r.tokenInId ?? '' },
-                { header: 'Token Out ID', accessor: (r) => r.tokenOutId ?? '' },
-                { header: 'Amount In', accessor: (r) => r.amountIn ?? '' },
-                { header: 'Amount Out', accessor: (r) => r.amountOut ?? '' },
-                { header: 'Fee', accessor: (r) => r.feeAmount ?? '' },
-                { header: 'Bins Crossed', accessor: (r) => r.binsCrossed ?? '' },
-                { header: 'Error', accessor: (r) => r.errorMessage ?? '' },
-              ],
-            )
-          }}
-          disabled={!data?.content || data.content.length === 0}
+          loading={exporting}
+          onClick={handleExportCsv}
+          disabled={(data?.totalElements ?? 0) === 0}
         >
-          CSV
+          {t('transactions.filters.exportCsv')}
         </Button>
       </Space>
 
