@@ -698,7 +698,10 @@ export default function SimpleTradePage() {
                             <Space size={6}>
                               <Tag color="green" style={{ marginInlineEnd: 0 }}>
                                 <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
-                                {p.estimatedApy > 0 ? t('swap.simple.apyTag', { value: p.estimatedApy.toFixed(1) }) : t('swap.simple.activeTag')}
+                                {/* >=0.05 so the 1-decimal tag never renders a misleading "0.0% APY"
+                                    for a giant-TVL/low-volume pool (e.g. SBTC at 0.01%); those show
+                                    "активен" like a true-zero pool does. */}
+                                {p.estimatedApy >= 0.05 ? t('swap.simple.apyTag', { value: p.estimatedApy.toFixed(1) }) : t('swap.simple.activeTag')}
                               </Tag>
                               <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
                                 {formatCompact(p.totalTvlX + p.totalTvlY)}
