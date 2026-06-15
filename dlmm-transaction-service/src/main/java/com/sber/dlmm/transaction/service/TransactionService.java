@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -304,16 +305,25 @@ public class TransactionService {
                                                                    int page,
                                                                    int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Transaction> transactionPage;
-        if (type != null && status != null) {
-            transactionPage = transactionRepository.findByUserIdAndTxTypeAndStatus(userId, type, status, pageRequest);
-        } else if (type != null) {
-            transactionPage = transactionRepository.findByUserIdAndTxType(userId, type, pageRequest);
-        } else if (status != null) {
-            transactionPage = transactionRepository.findByUserIdAndStatus(userId, status, pageRequest);
-        } else {
-            transactionPage = transactionRepository.findByUserId(userId, pageRequest);
+        // Dynamic filter: user + ANY combination of type / status / createdAt window.
+        // Replaces the if-else ladder of named queries, which had no date branch at
+        // all — so the `from`/`to` window was silently dropped and the UI's date
+        // filter never worked. A Specification composes the optional predicates
+        // without a combinatorial explosion of repository methods.
+        Specification<Transaction> spec = (root, query, cb) -> cb.equal(root.get("userId"), userId);
+        if (type != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("txType"), type));
         }
+        if (status != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), status));
+        }
+        if (from != null) {
+            spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.<LocalDateTime>get("createdAt"), from));
+        }
+        if (to != null) {
+            spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.<LocalDateTime>get("createdAt"), to));
+        }
+        Page<Transaction> transactionPage = transactionRepository.findAll(spec, pageRequest);
 
         return new PageResponse<>(
                 transactionPage.getContent().stream().map(this::toResponse).toList(),

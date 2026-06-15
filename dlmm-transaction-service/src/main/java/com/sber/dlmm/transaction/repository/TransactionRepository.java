@@ -6,6 +6,7 @@ import com.sber.dlmm.transaction.entity.Transaction;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -23,7 +24,8 @@ import java.util.UUID;
  * and two specialised feeds: the AML scanner's confirmed-in-window
  * scan and the pool-scoped recent-swap feed for the PoolDetailPage.
  */
-public interface TransactionRepository extends JpaRepository<Transaction, UUID> {
+public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
+        JpaSpecificationExecutor<Transaction> {
 
     /**
      * Looks up a transaction by its client-supplied idempotency token.
