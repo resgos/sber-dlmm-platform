@@ -67,6 +67,12 @@ const SIMPLE_BIN_HALF_RANGE = 10
 // suppress the near-zero ruble projection so the two never disagree.
 const APY_DISPLAY_FLOOR = 0.05
 
+// Price-impact (%) at which the Simple-mode estimate paints the impact red,
+// mirroring the Pro swap (SwapPage / PoolSwapPanel both turn red at 5%). Below
+// 1% reads green, 1–5% amber. (Demo pools are deep, so impact typically stays
+// well under 1% — the tiers match Pro for parity and shallower real pools.)
+const HIGH_IMPACT_PCT = 5
+
 type Side = 'buy' | 'sell'
 type LpMode = 'add' | 'remove'
 
@@ -495,6 +501,23 @@ export default function SimpleTradePage() {
                     {formatTokenAmount(quote.fee, tokenInSymbol, { compact: true, maxFractionDigits: 6 })}
                   </Text>
                 </div>
+                {quote.priceImpact != null && quote.priceImpact > 0 && (
+                  <div className="sber-simple-est__row">
+                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('swap.simple.priceImpact')}</Text>
+                    <Text
+                      style={{
+                        fontSize: 'var(--text-xs)',
+                        fontVariantNumeric: 'tabular-nums',
+                        color:
+                          quote.priceImpact < 1 ? 'var(--sber-green)'
+                            : quote.priceImpact < HIGH_IMPACT_PCT ? 'var(--color-warning-amber)'
+                              : 'var(--color-negative)',
+                      }}
+                    >
+                      {quote.priceImpact < 0.01 ? '<0,01%' : `${quote.priceImpact.toFixed(2)}%`}
+                    </Text>
+                  </div>
+                )}
               </div>
             )}
 

@@ -329,6 +329,7 @@
       "youReceiveApprox": "You receive ≈",
       "rate": "Rate",
       "poolFee": "Pool fee",
+      "priceImpact": "Price impact",
       "noMarket": "No active market for {{sym}} against {{base}}",
       "marketNote": "Market trade against {{base}}. A {{slippage}}% slippage tolerance is applied automatically.",
       "ctaSelectAsset": "Pick an asset",
