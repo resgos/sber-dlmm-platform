@@ -13,7 +13,8 @@
     "test:e2e:ui": "playwright test --ui",
     "lint:colors": "node ../scripts/check-no-hex-in-tsx.mjs",
     "lint:styles": "node ../scripts/check-inline-styles.mjs",
-    "lint:all": "npm run lint:colors && npm run lint:styles"
+    "lint:i18n": "node ../scripts/check-no-cyrillic-in-tsx.mjs",
+    "lint:all": "npm run lint:colors && npm run lint:styles && npm run lint:i18n"
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.7",
