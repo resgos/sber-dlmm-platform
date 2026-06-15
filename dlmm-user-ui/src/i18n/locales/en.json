@@ -486,6 +486,16 @@
 
   "poolDetail": {
     "backToPools": "Back to pool list",
+    "yieldCalc": {
+      "title": "Yield calculator",
+      "amountLabel": "Deposit amount",
+      "periodLabel": "Period",
+      "daysOption": "{{count}}d",
+      "resultLabel": "Projected fees",
+      "resultSub": "≈ {{pct}}% over the period · current APY {{apy}}%",
+      "noApy": "Not enough APY data to project",
+      "disclaimer": "Estimate at the current APY: depends on trading volume and staying in range, excludes impermanent loss (IL)."
+    },
     "notFound": "Pool not found",
     "feeRaisedBadge": "fee raised",
     "binStep": "Bin step",

@@ -21,6 +21,7 @@ import BinLiquidityChart from '@/components/BinLiquidityChart'
 import OrderBook from '@/components/OrderBook'
 import ExternalPriceRef from '@/components/ExternalPriceRef'
 import PoolActionTabs from '@/components/PoolActionTabs'
+import YieldCalculator from '@/components/YieldCalculator'
 import PoolRecentSwapsPanel from '@/components/PoolRecentSwapsPanel'
 import PoolPriceChart from '@/components/PoolPriceChart'
 import { calculateStrategyWeights } from '@/lib/strategyWeights'
@@ -627,18 +628,22 @@ export default function PoolDetailPage() {
           {/* Sprint 9-DS-r4 — Meteora pattern: tabbed action panel
               with Add Liquidity + Swap as siblings. Mirrors the
               right-rail of Meteora's Dynamic Terminal. */}
-          <PoolActionTabs
-            pool={pool}
-            activeTab={actionTab}
-            onTabChange={(tab) => {
-              setActionTab(tab)
-              // Leaving the swap tab drops the order-book reference.
-              if (tab !== 'swap') setPickedPrice(null)
-            }}
-            onPreviewChange={setPendingPreview}
-            externalRange={chartRange}
-            pickedPrice={pickedPrice}
-          />
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <PoolActionTabs
+              pool={pool}
+              activeTab={actionTab}
+              onTabChange={(tab) => {
+                setActionTab(tab)
+                // Leaving the swap tab drops the order-book reference.
+                if (tab !== 'swap') setPickedPrice(null)
+              }}
+              onPreviewChange={setPendingPreview}
+              externalRange={chartRange}
+              pickedPrice={pickedPrice}
+            />
+            {/* Turns the headline APY into rubles for a retail investor. */}
+            <YieldCalculator apyPct={pool.estimatedApy ?? 0} />
+          </Space>
         </Col>
       </Row>
 
