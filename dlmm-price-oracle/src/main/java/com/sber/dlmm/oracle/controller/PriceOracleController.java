@@ -189,7 +189,9 @@ public class PriceOracleController {
     })
     public ResponseEntity<List<OhlcvCandleResponse>> getOhlcv(
             @Parameter(description = "Pool identifier (UUID)") @PathVariable UUID poolId,
-            @Parameter(description = "Candle bucket width in seconds; only 60 (1-minute) is supported today")
+            @Parameter(description = "Candle bucket width in seconds. 60 = stored 1-minute base; larger multiples "
+                    + "of 60 (e.g. 300=5m, 900=15m, 3600=1h) are rolled up from the 1-minute candles on read. "
+                    + "Non-multiples of 60 return an empty list.")
             @RequestParam(defaultValue = "60") int interval,
             @Parameter(description = "Maximum number of candles to return; clamped to the range 1..500")
             @RequestParam(defaultValue = "200") int limit) {
