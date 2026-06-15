@@ -726,6 +726,30 @@
     }
   },
 
+  "notifications": {
+    "title": "Notifications",
+    "markAll": "Mark all read",
+    "empty": "No notifications",
+    "goToPosition": "Go to position",
+    "ariaBell": "Notifications",
+    "ariaBellUnread": "Notifications ({{count}} unread)",
+    "types": {
+      "SWAP_COMPLETED": "Swap",
+      "SWAP_CONFIRMED": "Swap",
+      "LIQUIDITY_ADDED": "Liquidity",
+      "FEE_ACCRUED": "Fees",
+      "KYC_APPROVED": "KYC ✓",
+      "KYC_REJECTED": "KYC ✗",
+      "POSITION_CLOSED": "Position closed",
+      "POOL_PAUSED": "Pool paused",
+      "POOL_UPDATE": "Pool",
+      "SYSTEM_ALERT": "System",
+      "SUSPICIOUS_ACTIVITY": "Suspicious activity",
+      "MARGIN_WARNING": "⚠ Margin watch",
+      "MARGIN_CALL": "🔴 Margin call"
+    }
+  },
+
   "transactions": {
     "title": "Transaction history",
     "empty": {

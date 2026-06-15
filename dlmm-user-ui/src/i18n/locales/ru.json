@@ -733,6 +733,30 @@
     }
   },
 
+  "notifications": {
+    "title": "Уведомления",
+    "markAll": "Прочитать все",
+    "empty": "Нет уведомлений",
+    "goToPosition": "Перейти к позиции",
+    "ariaBell": "Уведомления",
+    "ariaBellUnread": "Уведомления ({{count}} непрочитанных)",
+    "types": {
+      "SWAP_COMPLETED": "Своп",
+      "SWAP_CONFIRMED": "Своп",
+      "LIQUIDITY_ADDED": "Ликвидность",
+      "FEE_ACCRUED": "Комиссии",
+      "KYC_APPROVED": "KYC ✓",
+      "KYC_REJECTED": "KYC ✗",
+      "POSITION_CLOSED": "Позиция закрыта",
+      "POOL_PAUSED": "Пул приостановлен",
+      "POOL_UPDATE": "Пул",
+      "SYSTEM_ALERT": "Система",
+      "SUSPICIOUS_ACTIVITY": "Подозрительная активность",
+      "MARGIN_WARNING": "⚠ Маржин-вотчинг",
+      "MARGIN_CALL": "🔴 Маржин-колл"
+    }
+  },
+
   "transactions": {
     "title": "История транзакций",
     "empty": {

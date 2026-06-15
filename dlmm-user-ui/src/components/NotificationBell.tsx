@@ -3,6 +3,7 @@ import { Badge, Popover, List, Typography, Button, Empty, Space, Tag } from 'ant
 import { BellOutlined, CheckOutlined, ArrowRightOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { notifications as notificationsApi } from '@/api/services'
 import { NOTIFICATION_TYPE_COLORS, NOTIFICATION_TAG_DEFAULT } from '@/styles/palette'
 import type { Notification as NotifType } from '@/api/types'
@@ -10,33 +11,24 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/ru'
 
+// 'ru' locale is imported for the relative-time strings; 'en' is dayjs's
+// built-in default. We pick per-render via the dayjs INSTANCE locale (no global
+// mutation) so the "5 minutes ago" follows the app language.
 dayjs.extend(relativeTime)
-dayjs.locale('ru')
 
 const { Text } = Typography
 
 // Sprint 8 UX-DS-1 — typeColors moved to @/styles/palette so the 12 hex
 // literals don't count against the AU-2 ratchet baseline. Same mapping,
-// single source of truth across the notification system.
-
-const typeRussianLabels: Record<string, string> = {
-  SWAP_COMPLETED: 'Своп',
-  LIQUIDITY_ADDED: 'Ликвидность',
-  FEE_ACCRUED: 'Комиссии',
-  KYC_APPROVED: 'KYC ✓',
-  KYC_REJECTED: 'KYC ✗',
-  POSITION_CLOSED: 'Позиция закрыта',
-  POOL_PAUSED: 'Пул приостановлен',
-  SYSTEM_ALERT: 'Система',
-  POOL_UPDATE: 'Пул',
-  MARGIN_WARNING: '⚠ Маржин-вотчинг',
-  MARGIN_CALL: '🔴 Маржин-колл',
-}
+// single source of truth across the notification system. Category LABELS are
+// now i18n keys under notifications.types.* (resolved at render).
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const { t, i18n } = useTranslation()
+  const dayjsLocale = i18n.language?.startsWith('en') ? 'en' : 'ru'
 
   /**
    * Sprint 6 #6.15 — margin alerts deep-link to /positions. notification-service
@@ -87,7 +79,7 @@ export default function NotificationBell() {
   const content = (
     <div style={{ width: 'min(360px, calc(100vw - 24px))' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <Text strong style={{ fontSize: 15 }}>Уведомления</Text>
+        <Text strong style={{ fontSize: 15 }}>{t('notifications.title')}</Text>
         {unreadCount > 0 && (
           <Button
             type="link"
@@ -96,12 +88,12 @@ export default function NotificationBell() {
             onClick={() => markAllMut.mutate()}
             loading={markAllMut.isPending}
           >
-            Прочитать все
+            {t('notifications.markAll')}
           </Button>
         )}
       </div>
       {!notifs?.content?.length ? (
-        <Empty description="Нет уведомлений" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        <Empty description={t('notifications.empty')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
       ) : (
         <List
           dataSource={notifs.content}
@@ -123,10 +115,10 @@ export default function NotificationBell() {
               <Space direction="vertical" size={2} style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Tag color={NOTIFICATION_TYPE_COLORS[item.type] || NOTIFICATION_TAG_DEFAULT} style={{ fontSize: 'var(--text-xs)' }}>
-                    {typeRussianLabels[item.type] || item.type.replace(/_/g, ' ')}
+                    {t(`notifications.types.${item.type}`, { defaultValue: item.type.replace(/_/g, ' ') })}
                   </Tag>
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                    {dayjs(item.createdAt).fromNow()}
+                    {dayjs(item.createdAt).locale(dayjsLocale).fromNow()}
                   </Text>
                 </div>
                 <Text strong style={{ fontSize: 'var(--text-sm)' }}>{item.title}</Text>
@@ -143,7 +135,7 @@ export default function NotificationBell() {
                       navigateForMarginAlert(item)
                     }}
                   >
-                    Перейти к позиции
+                    {t('notifications.goToPosition')}
                   </Button>
                 )}
               </Space>
@@ -173,7 +165,7 @@ export default function NotificationBell() {
           style={{ fontSize: 'var(--text-lg)', color: 'var(--text-secondary)', cursor: 'pointer' }}
           role="button"
           tabIndex={0}
-          aria-label={unreadCount > 0 ? `Уведомления (${unreadCount} непрочитанных)` : 'Уведомления'}
+          aria-label={unreadCount > 0 ? t('notifications.ariaBellUnread', { count: unreadCount }) : t('notifications.ariaBell')}
           aria-haspopup="dialog"
           aria-expanded={open}
         />
