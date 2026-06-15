@@ -659,8 +659,10 @@ public class AdminProxyController {
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size,
             @Parameter(description = "Optional transaction-type filter, e.g. SWAP, ADD_LIQUIDITY") @RequestParam(required = false) String txType,
             @Parameter(description = "Optional status filter, e.g. SETTLED, PENDING") @RequestParam(required = false) String status,
+            @Parameter(description = "Optional inclusive lower bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) String from,
+            @Parameter(description = "Optional inclusive upper bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) String to,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        return jsonOk(proxy.getTransactions(page, size, txType, status, auth));
+        return jsonOk(proxy.getTransactions(page, size, txType, status, from, to, auth));
     }
 
     /**

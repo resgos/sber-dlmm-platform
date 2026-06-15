@@ -305,12 +305,35 @@ public class TransactionService {
                                                                    int page,
                                                                    int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        // Dynamic filter: user + ANY combination of type / status / createdAt window.
-        // Replaces the if-else ladder of named queries, which had no date branch at
-        // all — so the `from`/`to` window was silently dropped and the UI's date
-        // filter never worked. A Specification composes the optional predicates
-        // without a combinatorial explosion of repository methods.
-        Specification<Transaction> spec = (root, query, cb) -> cb.equal(root.get("userId"), userId);
+        Page<Transaction> transactionPage =
+                transactionRepository.findAll(txSpec(userId, type, status, from, to), pageRequest);
+
+        return new PageResponse<>(
+                transactionPage.getContent().stream().map(this::toResponse).toList(),
+                transactionPage.getNumber(),
+                transactionPage.getSize(),
+                transactionPage.getTotalElements(),
+                transactionPage.getTotalPages()
+        );
+    }
+
+    /**
+     * Composes the optional transaction filters into a single {@link Specification},
+     * replacing the if-else ladder of named queries (which had no date branch, so
+     * the {@code from}/{@code to} window was silently dropped). A {@code null}
+     * {@code userId} means platform-wide (the admin feed); otherwise the result is
+     * scoped to that user. Any combination of type / status / createdAt-window is
+     * supported without a combinatorial explosion of repository methods.
+     */
+    private static Specification<Transaction> txSpec(UUID userId,
+                                                     TransactionType type,
+                                                     TransactionStatus status,
+                                                     LocalDateTime from,
+                                                     LocalDateTime to) {
+        Specification<Transaction> spec = (root, query, cb) -> cb.conjunction();
+        if (userId != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("userId"), userId));
+        }
         if (type != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("txType"), type));
         }
@@ -323,15 +346,7 @@ public class TransactionService {
         if (to != null) {
             spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.<LocalDateTime>get("createdAt"), to));
         }
-        Page<Transaction> transactionPage = transactionRepository.findAll(spec, pageRequest);
-
-        return new PageResponse<>(
-                transactionPage.getContent().stream().map(this::toResponse).toList(),
-                transactionPage.getNumber(),
-                transactionPage.getSize(),
-                transactionPage.getTotalElements(),
-                transactionPage.getTotalPages()
-        );
+        return spec;
     }
 
     /**
@@ -341,6 +356,8 @@ public class TransactionService {
      *
      * @param type   optional transaction-type filter, or {@code null}
      * @param status optional status filter, or {@code null}
+     * @param from   optional inclusive lower bound on createdAt, or {@code null}
+     * @param to     optional inclusive upper bound on createdAt, or {@code null}
      * @param page   zero-based page index
      * @param size   page size
      * @return a {@link PageResponse} of {@link TransactionResponse} rows
@@ -348,10 +365,13 @@ public class TransactionService {
     @Transactional(readOnly = true)
     public PageResponse<TransactionResponse> getAllTransactions(TransactionType type,
                                                                 TransactionStatus status,
+                                                                LocalDateTime from,
+                                                                LocalDateTime to,
                                                                 int page,
                                                                 int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Transaction> transactionPage = transactionRepository.findAllFiltered(type, status, pageRequest);
+        Page<Transaction> transactionPage =
+                transactionRepository.findAll(txSpec(null, type, status, from, to), pageRequest);
         return new PageResponse<>(
                 transactionPage.getContent().stream().map(this::toResponse).toList(),
                 transactionPage.getNumber(),
