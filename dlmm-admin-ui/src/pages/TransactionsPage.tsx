@@ -34,6 +34,7 @@ import type {
 import dayjs from 'dayjs'
 import { KpiRow, PageHeader, TokenPairChip, UserChip } from '@/components/sber'
 import { formatRub, formatTokenAmount, shortId } from '@/lib/format'
+import { swapVolumeSrub } from '@/lib/swapVolume'
 
 const { Text } = Typography
 const { RangePicker } = DatePicker
@@ -190,17 +191,8 @@ export default function TransactionsPage() {
   const swapsToday = txToday.filter((t) => t.txType === 'SWAP').length
   const distinctUsersToday = new Set(txToday.map((t) => t.userId).filter(Boolean)).size
   const failuresToday = txToday.filter((t) => t.status === 'FAILED').length
-  // Quote-side (SRUB) notional per swap — mirrors the engine's volume24h
-  // accrual. The old sum mixed token units (0.05 SETH + 32k SUSDT + …) into
-  // one meaningless figure. Non-SRUB pairs (none in the demo catalogue) are
-  // skipped rather than guessed.
-  const volumeToday = txToday
-    .filter((t) => t.txType === 'SWAP')
-    .reduce((acc, t) => {
-      if (t.tokenOutSymbol === 'SRUB') return acc + (t.amountOut ?? 0)
-      if (t.tokenInSymbol === 'SRUB') return acc + (t.amountIn ?? 0)
-      return acc
-    }, 0)
+  // Quote-side (SRUB) turnover — see lib/swapVolume (tested; fix fbb999a).
+  const volumeToday = swapVolumeSrub(txToday)
 
   const columns: ColumnsType<Transaction> = [
     {
