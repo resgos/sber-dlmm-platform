@@ -1,5 +1,6 @@
 package com.sber.dlmm.notification.repository;
 
+import com.sber.dlmm.common.enums.NotificationType;
 import com.sber.dlmm.notification.entity.Notification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -98,4 +99,17 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Modifying
     @Query("UPDATE Notification n SET n.read = true, n.readAt = CURRENT_TIMESTAMP WHERE n.userId = :userId AND n.read = false")
     int markAllAsReadByUserId(@Param("userId") UUID userId);
+
+    /**
+     * Bulk-marks a user's unread notifications of one category as read — lets a user clear a
+     * noisy category (e.g. dozens of MARGIN_WARNINGs) without touching the rest. Same
+     * idempotent semantics as {@link #markAllAsReadByUserId}.
+     *
+     * @param userId owner whose unread notifications to mark read
+     * @param type   category to clear
+     * @return the number of rows updated
+     */
+    @Modifying
+    @Query("UPDATE Notification n SET n.read = true, n.readAt = CURRENT_TIMESTAMP WHERE n.userId = :userId AND n.read = false AND n.type = :type")
+    int markAllAsReadByUserIdAndType(@Param("userId") UUID userId, @Param("type") NotificationType type);
 }

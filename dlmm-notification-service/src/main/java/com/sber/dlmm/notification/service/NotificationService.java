@@ -133,11 +133,15 @@ public class NotificationService {
      * per row) and logs how many rows were affected.
      *
      * @param userId owner whose notifications to mark read
+     * @param type   when non-null, only this category is cleared (lets a user clear a noisy
+     *               category, e.g. dozens of MARGIN_WARNINGs); when null, every category
      */
     @Transactional
-    public void markAllAsRead(UUID userId) {
-        int updated = notificationRepository.markAllAsReadByUserId(userId);
-        log.info("Marked {} notifications as read for user {}", updated, userId);
+    public void markAllAsRead(UUID userId, NotificationType type) {
+        int updated = (type == null)
+                ? notificationRepository.markAllAsReadByUserId(userId)
+                : notificationRepository.markAllAsReadByUserIdAndType(userId, type);
+        log.info("Marked {} notifications as read for user {} (type={})", updated, userId, type);
     }
 
     /**

@@ -13,8 +13,10 @@ export const notifications = {
     await apiClient.post(`/notifications/${id}/read`)
   },
 
-  markAllRead: async (): Promise<void> => {
-    await apiClient.post('/notifications/read-all')
+  // Pass a NotificationType to clear just that category (e.g. a noisy
+  // MARGIN_WARNING pile); omit to clear everything.
+  markAllRead: async (type?: string): Promise<void> => {
+    await apiClient.post('/notifications/read-all', null, type ? { params: { type } } : undefined)
   },
 
   getUnreadCount: async (): Promise<number> => {

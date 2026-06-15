@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.sber.dlmm.common.enums.NotificationType;
+
 import java.util.Map;
 import java.util.UUID;
 
@@ -113,14 +115,19 @@ public class NotificationController {
      */
     @PostMapping("/read-all")
     @Operation(summary = "Mark all my notifications as read",
-            description = "Marks every unread notification of the authenticated user as read in one operation.")
+            description = "Marks the authenticated user's unread notifications as read in one operation. "
+                    + "Pass an optional type to clear just that category (e.g. dozens of MARGIN_WARNINGs); "
+                    + "omit it to clear everything.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "All notifications marked as read"),
+            @ApiResponse(responseCode = "200", description = "Notifications marked as read"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid authentication token")
     })
-    public ResponseEntity<Void> markAllAsRead(Authentication authentication) {
+    public ResponseEntity<Void> markAllAsRead(
+            @Parameter(description = "Optional category to clear; omit to clear all categories")
+            @RequestParam(required = false) NotificationType type,
+            Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
-        notificationService.markAllAsRead(userId);
+        notificationService.markAllAsRead(userId, type);
         return ResponseEntity.ok().build();
     }
 

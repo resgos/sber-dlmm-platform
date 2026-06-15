@@ -75,7 +75,9 @@ export default function NotificationBell() {
   })
 
   const markAllMut = useMutation({
-    mutationFn: notificationsApi.markAllRead,
+    // Wrapped no-arg so the bell clears every category; the optional `type`
+    // param on markAllRead is for a future per-category "clear" control.
+    mutationFn: () => notificationsApi.markAllRead(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
       queryClient.invalidateQueries({ queryKey: ['unreadCount'] })
