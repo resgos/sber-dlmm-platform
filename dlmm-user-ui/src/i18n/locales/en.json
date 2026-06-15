@@ -366,6 +366,7 @@
       "popularPools": "Popular pools",
       "apyTag": "{{value}}% APY",
       "activeTag": "active",
+      "feeProjection30d": "Projected income (30d)",
       "removeNote": "Return liquidity to your balance. Pick a position and how much to withdraw — no ranges.",
       "noPositions": "You have no open positions yet",
       "position": "Position",

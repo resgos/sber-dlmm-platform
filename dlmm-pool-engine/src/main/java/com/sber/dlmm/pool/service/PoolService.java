@@ -470,37 +470,53 @@ public class PoolService {
      */
     private BigDecimal calculateEstimatedApy(LiquidityPool pool, int dynamicFeeBps) {
         long totalTvl = pool.getTotalTvlX() + pool.getTotalTvlY();
+        return estimateApyPercent(totalTvl, pool.getVolume24h(), dynamicFeeBps);
+    }
+
+    /**
+     * Pure, side-effect-free estimated-APY (percent) for a pool, given its
+     * combined TVL, 24h volume and current dynamic fee. Package-private + static
+     * so it is unit-testable without standing up the full service.
+     *
+     * <p>Model: a funded pool earns at least the "turnover-floor" model yield —
+     * ~3.3% of TVL traded per day (the same turnover floor the volume seed
+     * applies) at THIS pool's current fee tier, annualised. Varies per pool by
+     * fee (base + volatility surcharge); never a uniform number. The live 24h
+     * fee-yield reading can push the estimate ABOVE that floor when real volume
+     * justifies it, but never below it — so a funded, fee-earning pool never
+     * advertises a misleading ~0.00% just because the sampled 24h window is a
+     * sliver of the seeded TVL (audit B4: a funded pool must read neither 0.00%
+     * NOR a synthetic flat default). A truly empty pool (no TVL) yields 0.
+     *
+     * @param totalTvl      combined raw TVL (X + Y); ≤0 means no liquidity
+     * @param volume24h     raw 24h swap volume; ≤0 means no recent trading
+     * @param dynamicFeeBps current effective fee in basis points
+     * @return estimated annualised LP yield as a percent (scale 2)
+     */
+    static BigDecimal estimateApyPercent(long totalTvl, long volume24h, int dynamicFeeBps) {
         // Truly empty pool — no liquidity, no yield to advertise.
-        if (totalTvl == 0) {
+        if (totalTvl <= 0) {
             return BigDecimal.ZERO;
         }
-        // Live 24h fee-yield estimate (stays 0 when there is no recent volume).
-        BigDecimal spotApy = BigDecimal.ZERO;
-        if (pool.getVolume24h() > 0) {
-            BigDecimal dailyFeeRevenue = BigDecimal.valueOf(pool.getVolume24h())
-                    .multiply(BigDecimal.valueOf(dynamicFeeBps))
-                    .divide(BigDecimal.valueOf(10_000), 18, RoundingMode.HALF_UP);
-            BigDecimal annualFeeRevenue = dailyFeeRevenue.multiply(BigDecimal.valueOf(365));
-            spotApy = annualFeeRevenue
-                    .divide(BigDecimal.valueOf(totalTvl), 18, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal.valueOf(100))
-                    .setScale(2, RoundingMode.HALF_UP);
-        }
-        if (spotApy.signum() > 0) {
-            return spotApy;
-        }
-        // No recent volume → a per-pool model estimate, so a funded pool reads
-        // neither 0.00% (audit B4) NOR a synthetic flat default (the calibration
-        // fallback collapsed every sparse pool to a uniform 20% — code review):
-        // assume ~3.3% of TVL traded per day (the same turnover floor the volume
-        // seed applies) at THIS pool's current fee tier. Varies per pool by fee
-        // (base + volatility surcharge); never a uniform number. Fee-yield only.
-        return BigDecimal.valueOf(dynamicFeeBps)
-                .divide(BigDecimal.valueOf(10_000), 18, RoundingMode.HALF_UP) // fee fraction
-                .multiply(new BigDecimal("0.0333"))                          // ≈ TVL/30 daily turnover
+        BigDecimal feeFraction = BigDecimal.valueOf(dynamicFeeBps)
+                .divide(BigDecimal.valueOf(10_000), 18, RoundingMode.HALF_UP);
+        // Model floor: ~3.3% (≈ TVL/30) daily turnover at this fee tier, annualised.
+        BigDecimal modelApy = feeFraction
+                .multiply(new BigDecimal("0.0333"))
                 .multiply(BigDecimal.valueOf(365))
                 .multiply(BigDecimal.valueOf(100))
                 .setScale(2, RoundingMode.HALF_UP);
+        if (volume24h <= 0) {
+            return modelApy;
+        }
+        // Live 24h fee-yield estimate, annualised; floored by the model above.
+        BigDecimal spotApy = BigDecimal.valueOf(volume24h)
+                .multiply(feeFraction)                                       // daily fee revenue
+                .multiply(BigDecimal.valueOf(365))                           // annualised
+                .divide(BigDecimal.valueOf(totalTvl), 18, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))
+                .setScale(2, RoundingMode.HALF_UP);
+        return spotApy.max(modelApy);
     }
 
     /**

@@ -14,7 +14,8 @@ import TokenSelect from '@/components/TokenSelect'
 import PartialFillNotice from '@/components/PartialFillNotice'
 import { rowButtonProps } from '@/lib/a11y'
 import { TokenPairChip } from '@/components/sber'
-import { formatCompact, formatTokenAmount, baseAnchoredRate } from '@/lib/format'
+import { formatCompact, formatRub, formatTokenAmount, baseAnchoredRate } from '@/lib/format'
+import { projectFeeIncome } from '@/lib/yield'
 import { apiErrorMessage } from '@/lib/apiError'
 import { celebrateSberkot } from '@/components/sberkot/events'
 import { uuid } from '../lib/uuid'
@@ -60,6 +61,11 @@ const SIMPLE_SLIPPAGE_PCT = 0.5
 // SM-01 — basic add-liquidity defaults. ±10 bins around the active price,
 // uniform (SPOT) distribution. Surfaced to the user as a one-line note.
 const SIMPLE_BIN_HALF_RANGE = 10
+
+// Min APY (%) at which we surface a numeric yield — both the pool tag and the
+// add-liquidity income preview. Below it, a pool reads as just "активен" and we
+// suppress the near-zero ruble projection so the two never disagree.
+const APY_DISPLAY_FLOOR = 0.05
 
 type Side = 'buy' | 'sell'
 type LpMode = 'add' | 'remove'
@@ -645,6 +651,20 @@ export default function SimpleTradePage() {
                             <b>≈ {lpBreakdown.share < 0.01 ? '<0.01' : lpBreakdown.share.toFixed(2)}%</b>
                           </div>
                         )}
+                        {/* Income preview — turns the pool APY into rubles on the deposit the
+                            user just typed (lib/yield, the same projection as the pool-page
+                            calculator). depositY is the SRUB value of the position, so only
+                            shown for X/SRUB pools. Gate on the SAME APY_DISPLAY_FLOOR as the
+                            pool's APY tag (below) so we never show a near-zero ruble figure on
+                            a pool the UI otherwise labels just "активен". */}
+                        {selectedLpPool.tokenYSymbol === 'SRUB' && selectedLpPool.estimatedApy >= APY_DISPLAY_FLOOR && lpBreakdown.hasAmount && (
+                          <div className="sber-simple-breakdown__row">
+                            <span>{t('swap.simple.feeProjection30d')}</span>
+                            <b style={{ color: 'var(--sber-green)' }}>
+                              ≈ {formatRub(projectFeeIncome(lpBreakdown.depositY, selectedLpPool.estimatedApy, 30))}
+                            </b>
+                          </div>
+                        )}
                         <span className="sber-simple-breakdown__hint">
                           {t('swap.simple.addHint', { range: SIMPLE_BIN_HALF_RANGE })}
                         </span>
@@ -701,7 +721,7 @@ export default function SimpleTradePage() {
                                 {/* >=0.05 so the 1-decimal tag never renders a misleading "0.0% APY"
                                     for a giant-TVL/low-volume pool (e.g. SBTC at 0.01%); those show
                                     "активен" like a true-zero pool does. */}
-                                {p.estimatedApy >= 0.05 ? t('swap.simple.apyTag', { value: p.estimatedApy.toFixed(1) }) : t('swap.simple.activeTag')}
+                                {p.estimatedApy >= APY_DISPLAY_FLOOR ? t('swap.simple.apyTag', { value: p.estimatedApy.toFixed(1) }) : t('swap.simple.activeTag')}
                               </Tag>
                               <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
                                 {formatCompact(p.totalTvlX + p.totalTvlY)}
