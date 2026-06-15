@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -62,6 +63,26 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
      * @return number of unread notifications for the user
      */
     long countByUserIdAndReadFalse(UUID userId);
+
+    /**
+     * Counts a user's unread notifications grouped by category. Each row is
+     * {@code [type, count]}; the service collects them into a per-category map for a
+     * categorised badge ("3 margin alerts, 2 fee accruals"). Categories with no unread
+     * notifications are absent.
+     *
+     * <p>Deliberately a <b>native</b> query that returns the type column as a raw
+     * {@code String}, NOT the {@link com.sber.dlmm.common.enums.NotificationType} enum:
+     * some legacy/seeded rows carry type values no longer in the enum
+     * (e.g. {@code SWAP_CONFIRMED}, {@code LIQUIDITY_ADDED}), and a JPQL projection of
+     * {@code n.type} would blow up materialising those into the enum. Strings make the
+     * tally resilient to enum drift and still serialise straight to the client.
+     *
+     * @param userId owner whose unread notifications to tally
+     * @return list of {@code [String type, Number count]} rows
+     */
+    @Query(value = "SELECT type, COUNT(*) FROM notifications WHERE user_id = :userId AND is_read = false GROUP BY type",
+            nativeQuery = true)
+    List<Object[]> countUnreadByType(@Param("userId") UUID userId);
 
     /**
      * Bulk-marks all of a user's unread notifications as read in a single UPDATE.

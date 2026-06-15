@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
@@ -147,6 +149,25 @@ public class NotificationService {
     @Transactional(readOnly = true)
     public long getUnreadCount(UUID userId) {
         return notificationRepository.countByUserIdAndReadFalse(userId);
+    }
+
+    /**
+     * Returns the number of unread notifications for a user grouped by category name, for a
+     * categorised badge (e.g. "3 margin alerts, 2 fee accruals"). Categories with no unread
+     * notifications are absent; keys are the raw {@code type} strings (resilient to enum
+     * drift — see {@link com.sber.dlmm.notification.repository.NotificationRepository#countUnreadByType}).
+     * Ordered alphabetically for a stable response. Read-only.
+     *
+     * @param userId owner whose unread notifications to tally
+     * @return map of category name to its unread count (only non-zero entries)
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Long> getUnreadCountByType(UUID userId) {
+        Map<String, Long> counts = new TreeMap<>();
+        for (Object[] row : notificationRepository.countUnreadByType(userId)) {
+            counts.put((String) row[0], ((Number) row[1]).longValue());
+        }
+        return counts;
     }
 
     /**

@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -142,5 +143,27 @@ public class NotificationController {
         UUID userId = UUID.fromString(authentication.getName());
         long count = notificationService.getUnreadCount(userId);
         return ResponseEntity.ok(new UnreadCountResponse(count));
+    }
+
+    /**
+     * Returns the authenticated user's unread notification counts grouped by category,
+     * as a JSON object keyed by category name (e.g.
+     * {@code {"MARGIN_WARNING": 3, "FEE_ACCRUED": 2}}). Categories with no unread
+     * notifications are omitted. Backs a categorised bell badge.
+     *
+     * @param authentication the security principal; its name is the caller's user UUID
+     * @return 200 with the per-category unread counts
+     */
+    @GetMapping("/me/unread-count-by-type")
+    @Operation(summary = "Count my unread notifications grouped by category",
+            description = "Returns the authenticated user's unread notification counts keyed by "
+                    + "category name (e.g. for a categorised badge). Empty categories are omitted.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Per-category unread counts returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid authentication token")
+    })
+    public ResponseEntity<Map<String, Long>> getUnreadCountByType(Authentication authentication) {
+        UUID userId = UUID.fromString(authentication.getName());
+        return ResponseEntity.ok(notificationService.getUnreadCountByType(userId));
     }
 }

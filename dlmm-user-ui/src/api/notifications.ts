@@ -21,4 +21,11 @@ export const notifications = {
     const { data } = await apiClient.get<{ count: number }>('/notifications/me/unread-count')
     return data.count
   },
+
+  // Unread counts keyed by NotificationType (e.g. { MARGIN_WARNING: 3, FEE_ACCRUED: 2 }),
+  // for a categorised bell badge. Empty categories are omitted by the backend.
+  getUnreadCountByType: async (): Promise<Record<string, number>> => {
+    const { data } = await apiClient.get<Record<string, number>>('/notifications/me/unread-count-by-type')
+    return data
+  },
 }
