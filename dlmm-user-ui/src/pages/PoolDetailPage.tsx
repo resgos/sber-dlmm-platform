@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Card, Typography, Space, Tag, Button, Spin, Alert, Row, Col, Tabs, message, Modal } from 'antd'
+import { Card, Typography, Space, Tag, Button, Spin, Alert, Row, Col, Tabs, message, Modal, Tooltip } from 'antd'
 import {
   ArrowLeftOutlined,
   PlusOutlined,
@@ -28,6 +28,7 @@ import { calculateStrategyWeights } from '@/lib/strategyWeights'
 import { bpsToPercent } from '@/utils/format'
 import { KpiRow, KpiTile, TokenPairChip } from '@/components/sber'
 import { formatCompact, formatRub, formatTokenAmount } from '@/lib/format'
+import { apyProvenance } from '@/lib/apyProvenance'
 import dayjs from 'dayjs'
 import { uuid } from '../lib/uuid'
 
@@ -403,7 +404,23 @@ export default function PoolDetailPage() {
           {
             label: t('poolDetail.kpi.apy'),
             value: pool.estimatedApy > 0 ? `${pool.estimatedApy.toFixed(2)}%` : '—',
-            sub: pool.estimatedApy > 0 ? t('poolDetail.kpi.apyForLp') : t('poolDetail.kpi.apyNoData'),
+            // Sub line states the APY's provenance — whether it's driven by real
+            // 24h volume ("по факту") or a per-fee-tier model floor ("оценка по
+            // модели", thin volume). Mirrors the pool-engine APY branch; the
+            // tooltip explains the model case so 2.43% on a quiet pool reads as
+            // honest, not inflated.
+            sub: pool.estimatedApy > 0 ? (
+              (() => {
+                const isLive = apyProvenance(pool) === 'LIVE'
+                return (
+                  <Tooltip title={t(isLive ? 'poolDetail.kpi.apySourceLiveHint' : 'poolDetail.kpi.apySourceModelHint')}>
+                    <span style={{ cursor: 'help', textDecoration: 'underline dotted' }}>
+                      {t(isLive ? 'poolDetail.kpi.apySourceLive' : 'poolDetail.kpi.apySourceModel')}
+                    </span>
+                  </Tooltip>
+                )
+              })()
+            ) : t('poolDetail.kpi.apyNoData'),
             icon: <PercentageOutlined style={{ color: '#9B59B6' }} />,
             accent: pool.estimatedApy > 0 ? 'var(--sber-green)' : undefined,
           },
