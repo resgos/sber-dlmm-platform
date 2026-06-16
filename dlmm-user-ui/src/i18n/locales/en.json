@@ -780,6 +780,7 @@
       "title": "Notifications",
       "subtitle": "Full history of events across your positions, trades and account",
       "unreadOnly": "Unread only",
+      "typeFilter": "Notification type",
       "byType": "Unread by type:",
       "clearType": "Mark all “{{type}}” as read",
       "unreadTag": "New",

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { List, Typography, Button, Empty, Space, Tag, Switch, Pagination, Tooltip } from 'antd'
+import { List, Typography, Button, Empty, Space, Tag, Switch, Pagination, Tooltip, Select } from 'antd'
 import { CheckOutlined, ArrowRightOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -21,6 +21,20 @@ dayjs.extend(relativeTime)
 const { Text } = Typography
 const PAGE_SIZE = 15
 
+// Categories the backend /me?type= filter accepts. A curated subset of the
+// dlmm-common NotificationType enum: every value here is enum-valid (sending a
+// non-enum value 400s, which rules out FE-union-only POOL_UPDATE and label-only
+// SUSPICIOUS_ACTIVITY) AND carries a label distinct from its siblings.
+// SWAP_CONFIRMED is intentionally omitted: it's a deprecated lifecycle type
+// (absent from the FE union, a single legacy row in data) that shares the exact
+// label "Своп"/"Swap" with SWAP_COMPLETED — offering both makes two identical
+// dropdown entries. Its rows still appear in the unfiltered list.
+const FILTERABLE_TYPES = [
+  'SWAP_COMPLETED', 'LIQUIDITY_ADDED', 'FEE_ACCRUED',
+  'KYC_APPROVED', 'KYC_REJECTED', 'POSITION_CLOSED', 'POOL_PAUSED',
+  'SYSTEM_ALERT', 'MARGIN_WARNING', 'MARGIN_CALL',
+] as const
+
 /**
  * Full notification history. The header bell only surfaces the latest 10 — this
  * page is the "see all" surface: server-paginated over every notification, a
@@ -35,10 +49,11 @@ export default function NotificationsPage() {
   const dayjsLocale = i18n.language?.startsWith('en') ? 'en' : 'ru'
   const [page, setPage] = useState(0)
   const [unreadOnly, setUnreadOnly] = useState(false)
+  const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['notificationsPage', page, unreadOnly],
-    queryFn: () => notificationsApi.getMyNotifications(page, PAGE_SIZE, unreadOnly),
+    queryKey: ['notificationsPage', page, unreadOnly, typeFilter],
+    queryFn: () => notificationsApi.getMyNotifications(page, PAGE_SIZE, unreadOnly, typeFilter),
   })
   const { data: byType } = useQuery({
     queryKey: ['unreadCountByType'],
@@ -62,6 +77,18 @@ export default function NotificationsPage() {
 
   const typeLabel = (type: string) => t(`notifications.types.${type}`, { defaultValue: type.replace(/_/g, ' ') })
 
+  // Category-filter options — a colour dot (from the shared palette) + localized
+  // label, mirroring the per-type chips below.
+  const typeOptions = FILTERABLE_TYPES.map((tp) => ({
+    value: tp,
+    label: (
+      <Space size={6}>
+        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: NOTIFICATION_TYPE_COLORS[tp] || NOTIFICATION_TAG_DEFAULT }} />
+        {typeLabel(tp)}
+      </Space>
+    ),
+  }))
+
   const onItemClick = (item: NotifType) => {
     if (!item.isRead) markReadMut.mutate(item.id)
     const link = notificationDeepLink(item)
@@ -72,11 +99,21 @@ export default function NotificationsPage() {
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
       <PageHeader title={t('notifications.page.title')} subtitle={t('notifications.page.subtitle')} />
 
-      {/* Controls: unread-only toggle + global mark-all */}
+      {/* Controls: type filter + unread-only toggle + global mark-all */}
       <Space wrap style={{ justifyContent: 'space-between', width: '100%' }}>
-        <Space size={8}>
-          <Switch checked={unreadOnly} onChange={(v) => { setUnreadOnly(v); setPage(0) }} />
-          <Text>{t('notifications.page.unreadOnly')}</Text>
+        <Space size={12} wrap>
+          <Select
+            allowClear
+            value={typeFilter}
+            onChange={(v) => { setTypeFilter(v); setPage(0) }}
+            placeholder={t('notifications.page.typeFilter')}
+            options={typeOptions}
+            style={{ minWidth: 200 }}
+          />
+          <Space size={8}>
+            <Switch checked={unreadOnly} onChange={(v) => { setUnreadOnly(v); setPage(0) }} />
+            <Text>{t('notifications.page.unreadOnly')}</Text>
+          </Space>
         </Space>
         <Button
           icon={<CheckOutlined />}

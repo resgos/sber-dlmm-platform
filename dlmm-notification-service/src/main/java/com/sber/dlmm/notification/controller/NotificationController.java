@@ -51,6 +51,7 @@ public class NotificationController {
      *
      * @param authentication the security principal; its name is the caller's user UUID
      * @param unreadOnly     when {@code true}, return only unread notifications (default {@code false})
+     * @param type           when present, return only notifications of this category (default all)
      * @param page           zero-based page index (default {@code 0})
      * @param size           page size, notifications per page (default {@code 20})
      * @return 200 with a {@link PageResponse} of {@link NotificationResponse} for the user
@@ -58,7 +59,7 @@ public class NotificationController {
     @GetMapping("/me")
     @Operation(summary = "List my notifications",
             description = "Returns the authenticated user's notifications, newest first, with pagination. "
-                    + "Set unreadOnly=true to return only unread notifications.")
+                    + "Set unreadOnly=true to return only unread notifications; set type to filter by category.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Page of notifications returned"),
             @ApiResponse(responseCode = "401", description = "Missing or invalid authentication token")
@@ -67,13 +68,15 @@ public class NotificationController {
             Authentication authentication,
             @Parameter(description = "When true, return only unread notifications")
             @RequestParam(defaultValue = "false") boolean unreadOnly,
+            @Parameter(description = "When present, return only notifications of this category")
+            @RequestParam(required = false) NotificationType type,
             @Parameter(description = "Zero-based page index")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size (number of notifications per page)")
             @RequestParam(defaultValue = "20") int size) {
         UUID userId = UUID.fromString(authentication.getName());
         PageResponse<NotificationResponse> response =
-                notificationService.getUserNotifications(userId, unreadOnly, page, size);
+                notificationService.getUserNotifications(userId, unreadOnly, type, page, size);
         return ResponseEntity.ok(response);
     }
 

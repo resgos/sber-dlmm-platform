@@ -3,11 +3,15 @@ import type { Notification, PageResponse } from './types'
 
 export const notifications = {
   // unreadOnly maps to the backend /me filter (default false) — used by the
-  // full notifications page's "только непрочитанные" toggle.
-  getMyNotifications: async (page = 0, size = 20, unreadOnly = false): Promise<PageResponse<Notification>> => {
-    const { data } = await apiClient.get<PageResponse<Notification>>('/notifications/me', {
-      params: unreadOnly ? { page, size, unreadOnly: true } : { page, size },
-    })
+  // full notifications page's "только непрочитанные" toggle. `type` (a backend
+  // NotificationType, optional) narrows to one category; the two combine
+  // server-side (unread + type). Only enum-valid types may be passed — the
+  // gateway 400s an unknown value.
+  getMyNotifications: async (page = 0, size = 20, unreadOnly = false, type?: string): Promise<PageResponse<Notification>> => {
+    const params: Record<string, unknown> = { page, size }
+    if (unreadOnly) params.unreadOnly = true
+    if (type) params.type = type
+    const { data } = await apiClient.get<PageResponse<Notification>>('/notifications/me', { params })
     return data
   },
 

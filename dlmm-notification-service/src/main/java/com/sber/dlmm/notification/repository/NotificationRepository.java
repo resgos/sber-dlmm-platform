@@ -46,6 +46,29 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     Page<Notification> findByUserIdAndReadFalse(UUID userId, Pageable pageable);
 
     /**
+     * Returns one page of a user's notifications of a single category — backs the
+     * "filter by type" control on the notifications page. All seeded/live type
+     * values are valid {@link NotificationType} members, so a derived query is safe.
+     *
+     * @param userId   owner whose notifications to fetch
+     * @param type     category to filter by
+     * @param pageable page index, size and sort
+     * @return a page of the user's notifications of that type
+     */
+    Page<Notification> findByUserIdAndType(UUID userId, NotificationType type, Pageable pageable);
+
+    /**
+     * Like {@link #findByUserIdAndType} but only <em>unread</em> rows — the
+     * "type filter" combined with the "unread only" toggle.
+     *
+     * @param userId   owner whose unread notifications to fetch
+     * @param type     category to filter by
+     * @param pageable page index, size and sort
+     * @return a page of the user's unread notifications of that type
+     */
+    Page<Notification> findByUserIdAndReadFalseAndType(UUID userId, NotificationType type, Pageable pageable);
+
+    /**
      * Looks up a single notification by id, but only if it belongs to the given user.
      *
      * <p>The {@code userId} predicate is an ownership guard: a request for someone else's

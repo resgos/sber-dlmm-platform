@@ -83,11 +83,16 @@ public class NotificationService {
     @Transactional(readOnly = true)
     public PageResponse<NotificationResponse> getUserNotifications(UUID userId,
                                                                      boolean unreadOnly,
+                                                                     NotificationType type,
                                                                      int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Page<Notification> notificationPage;
-        if (unreadOnly) {
+        if (type != null) {
+            notificationPage = unreadOnly
+                    ? notificationRepository.findByUserIdAndReadFalseAndType(userId, type, pageRequest)
+                    : notificationRepository.findByUserIdAndType(userId, type, pageRequest);
+        } else if (unreadOnly) {
             notificationPage = notificationRepository.findByUserIdAndReadFalse(userId, pageRequest);
         } else {
             notificationPage = notificationRepository.findByUserId(userId, pageRequest);
