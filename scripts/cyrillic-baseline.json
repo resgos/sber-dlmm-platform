@@ -1,6 +1,6 @@
 {
   "dlmm-user-ui/src/components/AddLiquidityPreview.tsx": 25,
-  "dlmm-user-ui/src/components/AutoClaimSettings.tsx": 146,
+  "dlmm-user-ui/src/components/AutoClaimSettings.tsx": 143,
   "dlmm-user-ui/src/components/BinLiquidityChart.tsx": 63,
   "dlmm-user-ui/src/components/DemoBranding.tsx": 7,
   "dlmm-user-ui/src/components/ErrorBoundary.tsx": 21,

@@ -13,13 +13,14 @@ import {
   Popover,
   List,
 } from 'antd'
-import { ThunderboltFilled, ClockCircleOutlined, EyeOutlined, StopOutlined } from '@ant-design/icons'
+import { ThunderboltFilled, ClockCircleOutlined, EyeOutlined, StopOutlined, CheckCircleFilled, CloseCircleFilled, MinusCircleFilled } from '@ant-design/icons'
 import { autoClaimStore, type AutoClaimPolicy } from '@/store/autoClaimStore'
 import { previewFireable } from '@/lib/useAutoClaimWatcher'
-import { pools as poolsApi } from '@/api/services'
+import { pools as poolsApi, fees } from '@/api/services'
 import type { Pool, Position, TokenBalance } from '@/api/types'
 import { balances } from '@/api/services'
 import { formatRub } from '@/components/StatCard'
+import { formatCompact } from '@/lib/format'
 
 const { Text } = Typography
 
@@ -41,11 +42,14 @@ export default function AutoClaimSettings() {
     autoClaimStore.get,
     () => ({ enabled: false, threshold: 1000, dailyCap: 20, skipPoolIds: [] } as AutoClaimPolicy),
   )
-  const history = useSyncExternalStore(
-    autoClaimStore.subscribe,
-    autoClaimStore.history,
-    () => [] as ReturnType<typeof autoClaimStore.history>,
-  )
+  // Persistent server-side auto-claim execution log (auto_claim_log table) —
+  // the authoritative record of when the scheduler fired, what it claimed and
+  // whether it succeeded/failed/was skipped. Replaces the old ephemeral
+  // "since this tab opened" client store, which lost everything on reload.
+  const { data: autoClaimLog } = useQuery({
+    queryKey: ['autoClaimHistory'],
+    queryFn: () => fees.getAutoClaimHistory(20),
+  })
 
   const { data: myPositions } = useQuery({
     queryKey: ['myPositions'],
@@ -274,22 +278,44 @@ export default function AutoClaimSettings() {
           Backend-версия с серверным расписанием — Sprint 11.
         </Text>
 
-        {history.length > 0 && (
+        {autoClaimLog && autoClaimLog.length > 0 && (
           <>
             <Divider style={{ margin: '4px 0' }} />
-            <Text strong style={{ fontSize: 'var(--text-xs)' }}>Последние срабатывания (с момента открытия вкладки)</Text>
-            <Space direction="vertical" size={4} style={{ width: '100%' }}>
-              {history.slice(0, 8).map((h, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)' }}>
-                  <Space size={6}>
-                    <Tag color="green" style={{ borderRadius: 'var(--radius-pill)' }}>{h.symbol}</Tag>
-                    <Text type="secondary">{h.amount.toLocaleString('ru-RU')}</Text>
-                  </Space>
-                  <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                    {new Date(h.firedAt).toLocaleTimeString('ru-RU')}
-                  </Text>
-                </div>
-              ))}
+            <Text strong style={{ fontSize: 'var(--text-xs)' }}>История авто-сбора</Text>
+            <Space direction="vertical" size={6} style={{ width: '100%' }}>
+              {autoClaimLog.slice(0, 8).map((h) => {
+                const pool = poolById.get(h.poolId)
+                const xSym = pool?.tokenXSymbol ?? 'X'
+                const ySym = pool?.tokenYSymbol ?? 'Y'
+                // Status as a colour-coded icon (no text) keeps this RU-only
+                // component gate-safe (no new hardcoded Cyrillic): green = claimed,
+                // red = failed, grey = skipped (below threshold / cooldown).
+                const statusIcon = h.status === 'SUCCESS'
+                  ? <CheckCircleFilled style={{ color: 'var(--sber-green)' }} />
+                  : h.status === 'FAILURE'
+                    ? <CloseCircleFilled style={{ color: 'var(--plasma-critical)' }} />
+                    : <MinusCircleFilled style={{ color: 'var(--text-muted)' }} />
+                return (
+                  <div key={h.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 'var(--text-xs)' }}>
+                    <Space size={6}>
+                      {statusIcon}
+                      {pool && <Text type="secondary">{xSym}/{ySym}</Text>}
+                    </Space>
+                    <Space size={6}>
+                      {h.status === 'SUCCESS' && (h.amountX > 0 || h.amountY > 0) && (
+                        <Text style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--sber-green)' }}>
+                          {h.amountX > 0 ? `+${formatCompact(h.amountX)} ${xSym}` : ''}
+                          {h.amountX > 0 && h.amountY > 0 ? ' ' : ''}
+                          {h.amountY > 0 ? `+${formatCompact(h.amountY)} ${ySym}` : ''}
+                        </Text>
+                      )}
+                      <Text type="secondary" style={{ whiteSpace: 'nowrap' }}>
+                        {new Date(h.firedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </Space>
+                  </div>
+                )
+              })}
             </Space>
           </>
         )}

@@ -48,6 +48,7 @@ SEEDS=(
   16-seed-fix-tx-timestamps
   17-seed-ohlcv-carryforward
   18-seed-fix-bin-composition
+  19-seed-auto-claim-success
 )
 
 psqlq() { docker exec -i -e PGPASSWORD="$DBPW" "$PG" psql -U "$DBU" -d "$DB" "$@"; }
