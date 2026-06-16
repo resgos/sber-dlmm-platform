@@ -302,11 +302,12 @@ public class TransactionService {
                                                                    TransactionStatus status,
                                                                    LocalDateTime from,
                                                                    LocalDateTime to,
+                                                                   UUID poolId,
                                                                    int page,
                                                                    int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Transaction> transactionPage =
-                transactionRepository.findAll(txSpec(userId, type, status, from, to), pageRequest);
+                transactionRepository.findAll(txSpec(userId, type, status, from, to, poolId), pageRequest);
 
         return new PageResponse<>(
                 transactionPage.getContent().stream().map(this::toResponse).toList(),
@@ -329,7 +330,8 @@ public class TransactionService {
                                                      TransactionType type,
                                                      TransactionStatus status,
                                                      LocalDateTime from,
-                                                     LocalDateTime to) {
+                                                     LocalDateTime to,
+                                                     UUID poolId) {
         Specification<Transaction> spec = (root, query, cb) -> cb.conjunction();
         if (userId != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("userId"), userId));
@@ -345,6 +347,9 @@ public class TransactionService {
         }
         if (to != null) {
             spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.<LocalDateTime>get("createdAt"), to));
+        }
+        if (poolId != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("poolId"), poolId));
         }
         return spec;
     }
@@ -371,7 +376,7 @@ public class TransactionService {
                                                                 int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Transaction> transactionPage =
-                transactionRepository.findAll(txSpec(null, type, status, from, to), pageRequest);
+                transactionRepository.findAll(txSpec(null, type, status, from, to, null), pageRequest);
         return new PageResponse<>(
                 transactionPage.getContent().stream().map(this::toResponse).toList(),
                 transactionPage.getNumber(),

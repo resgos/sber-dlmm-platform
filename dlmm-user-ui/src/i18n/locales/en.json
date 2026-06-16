@@ -809,6 +809,7 @@
     "filters": {
       "txTypePlaceholder": "Transaction type",
       "statusPlaceholder": "Status",
+      "poolPlaceholder": "Pool",
       "dateFrom": "Date from",
       "dateTo": "Date to",
       "refresh": "Refresh",

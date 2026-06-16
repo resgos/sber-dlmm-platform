@@ -816,6 +816,7 @@
     "filters": {
       "txTypePlaceholder": "Тип транзакции",
       "statusPlaceholder": "Статус",
+      "poolPlaceholder": "Пул",
       "dateFrom": "Дата от",
       "dateTo": "Дата до",
       "refresh": "Обновить",

@@ -4,8 +4,8 @@ import { DownloadOutlined, FilterOutlined, ReloadOutlined, SwapOutlined } from '
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n'
-import { transactions } from '@/api/services'
-import type { Transaction, TxType, TxStatus, TransactionFilters } from '@/api/types'
+import { transactions, pools } from '@/api/services'
+import type { Transaction, TxType, TxStatus, TransactionFilters, Pool } from '@/api/types'
 import dayjs from 'dayjs'
 import { TokenPairChip } from '@/components/sber'
 import EmptyState from '@/components/EmptyState'
@@ -48,6 +48,19 @@ export default function TransactionsPage() {
     queryKey: ['myTransactions', page, filters],
     queryFn: () => transactions.getMyTransactions(page, pageSize, filters),
   })
+
+  // Pools populate the "filter by pool" select (label = pair, value = id).
+  const { data: poolList } = useQuery({
+    queryKey: ['pools'],
+    queryFn: () => pools.getPools(0, 100),
+  })
+  const poolOptions = useMemo(
+    () => (poolList?.content ?? []).map((p: Pool) => ({
+      label: `${p.tokenXSymbol}/${p.tokenYSymbol}`,
+      value: p.id,
+    })),
+    [poolList],
+  )
 
   // Sprint 9 / Audit B3 — the transaction read API now returns self-describing
   // labels (tokenInSymbol / tokenOutSymbol / poolName), so the columns render
@@ -143,6 +156,16 @@ export default function TransactionsPage() {
           options={statusOptions}
           value={filters.status}
           onChange={(v) => { setFilters((prev) => ({ ...prev, status: v as TxStatus })); setPage(0) }}
+        />
+        <Select
+          style={{ width: 180 }}
+          placeholder={t('transactions.filters.poolPlaceholder')}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          options={poolOptions}
+          value={filters.poolId}
+          onChange={(v) => { setFilters((prev) => ({ ...prev, poolId: v as string })); setPage(0) }}
         />
         <RangePicker
           onChange={handleDateChange}
