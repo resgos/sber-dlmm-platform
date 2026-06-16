@@ -739,8 +739,20 @@
     "markAll": "Mark all read",
     "empty": "No notifications",
     "goToPosition": "Go to position",
+    "open": "Open",
+    "seeAll": "All notifications",
     "ariaBell": "Notifications",
     "ariaBellUnread": "Notifications ({{count}} unread)",
+    "page": {
+      "title": "Notifications",
+      "subtitle": "Full history of events across your positions, trades and account",
+      "unreadOnly": "Unread only",
+      "byType": "Unread by type:",
+      "clearType": "Mark all “{{type}}” as read",
+      "unreadTag": "New",
+      "emptyUnread": "All notifications read",
+      "totalCount": "Total: {{count}}"
+    },
     "types": {
       "SWAP_COMPLETED": "Swap",
       "SWAP_CONFIRMED": "Swap",

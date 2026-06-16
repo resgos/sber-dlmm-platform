@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { notifications as notificationsApi } from '@/api/services'
 import { NOTIFICATION_TYPE_COLORS, NOTIFICATION_TAG_DEFAULT } from '@/styles/palette'
+import { notificationDeepLink } from '@/lib/notificationLink'
 import type { Notification as NotifType } from '@/api/types'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -30,20 +31,17 @@ export default function NotificationBell() {
   const { t, i18n } = useTranslation()
   const dayjsLocale = i18n.language?.startsWith('en') ? 'en' : 'ru'
 
-  /**
-   * Sprint 6 #6.15 — margin alerts deep-link to /positions. notification-service
-   * Sprint 5 #5.15 renders the alert message with the positionId; we pull
-   * the UUID out of the message text (format «Позиция {uuid} ...») and
-   * navigate. If no UUID found, fall back to plain /positions list.
-   */
-  const navigateForMarginAlert = (item: NotifType) => {
-    const match = item.message?.match(/Позиция ([0-9a-f-]{36})/i)
-    if (match) {
-      navigate(`/positions?highlight=${match[1]}`)
-    } else {
-      navigate('/positions')
+  // Deep-link resolution is shared with the full /notifications page via
+  // notificationDeepLink — margin alerts still extract the position UUID and
+  // jump with ?highlight=, and now fee/liquidity/swap/KYC/pool notifications
+  // open their context too instead of only the two margin types.
+  const openNotification = (item: NotifType) => {
+    if (!item.isRead) markReadMut.mutate(item.id)
+    const link = notificationDeepLink(item)
+    if (link) {
+      navigate(link)
+      setOpen(false)
     }
-    setOpen(false)
   }
 
   const { data: unreadCount = 0 } = useQuery({
@@ -98,7 +96,9 @@ export default function NotificationBell() {
         <List
           dataSource={notifs.content}
           style={{ maxHeight: 400, overflow: 'auto' }}
-          renderItem={(item: NotifType) => (
+          renderItem={(item: NotifType) => {
+            const link = notificationDeepLink(item)
+            return (
             <List.Item
               style={{
                 padding: '10px 0',
@@ -106,11 +106,9 @@ export default function NotificationBell() {
                 borderRadius: 'var(--radius-sm)',
                 paddingLeft: 8,
                 paddingRight: 8,
-                cursor: item.isRead ? 'default' : 'pointer',
+                cursor: !item.isRead || link ? 'pointer' : 'default',
               }}
-              onClick={() => {
-                if (!item.isRead) markReadMut.mutate(item.id)
-              }}
+              onClick={() => openNotification(item)}
             >
               <Space direction="vertical" size={2} style={{ width: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -123,8 +121,9 @@ export default function NotificationBell() {
                 </div>
                 <Text strong style={{ fontSize: 'var(--text-sm)' }}>{item.title}</Text>
                 <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{item.message}</Text>
-                {/* Sprint 6 #6.15 — margin alerts get a "перейти к позиции" link */}
-                {(item.type === 'MARGIN_WARNING' || item.type === 'MARGIN_CALL') && (
+                {/* Any actionable notification (not just margin) gets an "open"
+                    link, routed via the shared notificationDeepLink. */}
+                {link && (
                   <Button
                     type="link"
                     size="small"
@@ -132,17 +131,24 @@ export default function NotificationBell() {
                     style={{ padding: 0, height: 'auto', marginTop: 2, fontSize: 'var(--text-xs)' }}
                     onClick={(e) => {
                       e.stopPropagation()
-                      navigateForMarginAlert(item)
+                      openNotification(item)
                     }}
                   >
-                    {t('notifications.goToPosition')}
+                    {t('notifications.open')}
                   </Button>
                 )}
               </Space>
             </List.Item>
-          )}
+            )
+          }}
         />
       )}
+      {/* Bell shows only the latest 10 — link to the full paginated history. */}
+      <div style={{ marginTop: 8, textAlign: 'center' }}>
+        <Button type="link" size="small" onClick={() => { navigate('/notifications'); setOpen(false) }}>
+          {t('notifications.seeAll')}
+        </Button>
+      </div>
     </div>
   )
 

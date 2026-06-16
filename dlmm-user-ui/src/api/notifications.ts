@@ -2,9 +2,11 @@ import apiClient from './client'
 import type { Notification, PageResponse } from './types'
 
 export const notifications = {
-  getMyNotifications: async (page = 0, size = 20): Promise<PageResponse<Notification>> => {
+  // unreadOnly maps to the backend /me filter (default false) — used by the
+  // full notifications page's "только непрочитанные" toggle.
+  getMyNotifications: async (page = 0, size = 20, unreadOnly = false): Promise<PageResponse<Notification>> => {
     const { data } = await apiClient.get<PageResponse<Notification>>('/notifications/me', {
-      params: { page, size },
+      params: unreadOnly ? { page, size, unreadOnly: true } : { page, size },
     })
     return data
   },
