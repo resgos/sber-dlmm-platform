@@ -22,11 +22,27 @@ export type UserRole = 'USER' | 'OPERATOR' | 'ADMIN' | 'SUPER_ADMIN'
 export interface User {
   id: string
   email: string
-  fullName: string
+  // The admin user payload (list + detail) carries first/last name, sberId and
+  // phone — NOT a composed fullName. `fullName` is composed at the API boundary
+  // (users.ts normalizeUser) so the UI can keep reading user.fullName. These are
+  // non-null in the real API but optional here so the mock fixtures (which carry
+  // fullName directly) still type-check.
+  firstName?: string
+  lastName?: string
+  sberId?: string
+  phone?: string
+  fullName?: string
   role: UserRole
   kycStatus: KycStatus
   createdAt: string
-  blocked: boolean
+  // NOTE: the user-service DTO does NOT currently return a blocked flag (the
+  // block/unblock endpoints exist, but neither list nor detail expose the
+  // resulting state — see docs/BUSINESS-IDEAS). Optional + always-undefined for
+  // now; the status tag/KPI therefore read as "Активен"/0 until the BE adds it.
+  blocked?: boolean
+  // Populated by the login flow + seed backfill; rendered/sorted in the
+  // users table and exported to CSV. Optional — older rows may be null.
+  lastLoginAt?: string | null
 }
 
 // Token

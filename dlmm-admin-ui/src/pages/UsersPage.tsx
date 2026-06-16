@@ -116,10 +116,17 @@ export default function UsersPage() {
         </Space>
       ),
     },
-    // Sprint 9 — dropped the ФИО column. The admin-bff user listing
-    // doesn't include fullName, so every row rendered "—" and the
-    // column was visual dead weight. Names live on the user detail
-    // page where they're actually populated.
+    // ФИО restored: the listing DOESN'T send fullName, but it DOES send
+    // firstName + lastName — composed into fullName at the API boundary
+    // (users.ts). The column was previously dropped on the wrong assumption
+    // that names weren't available, so the admin saw only emails.
+    {
+      title: 'ФИО',
+      dataIndex: 'fullName',
+      key: 'fullName',
+      render: (fullName: string | undefined) =>
+        fullName ? <span>{fullName}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>,
+    },
     {
       title: 'Роль',
       dataIndex: 'role',
@@ -292,20 +299,26 @@ export default function UsersPage() {
               onClick={() => {
                 if (filteredUsers.length === 0) return
                 const stamp = new Date().toISOString().slice(0, 10)
-                exportToCsv(
+                // Columns typed against User so a wrong field name is a compile
+                // error — the previous spec was cast to `any` and referenced
+                // isBlocked (never on the payload → always "false") while ФИО
+                // relied on a fullName the API never sends. Now: real fields,
+                // localized role/KYC to match the on-screen table. The blocked
+                // column is intentionally dropped — the API doesn't expose it,
+                // so exporting "Активен" for everyone is misleading.
+                exportToCsv<User>(
                   `dlmm-users-${stamp}.csv`,
                   filteredUsers,
                   [
-                    { header: 'ID', accessor: (u: any) => u.id },
-                    { header: 'Email', accessor: (u: any) => u.email },
-                    { header: 'Имя', accessor: (u: any) => u.firstName ?? '' },
-                    { header: 'Фамилия', accessor: (u: any) => u.lastName ?? '' },
-                    { header: 'Sber ID', accessor: (u: any) => u.sberId ?? '' },
-                    { header: 'Роль', accessor: (u: any) => u.role },
-                    { header: 'KYC статус', accessor: (u: any) => u.kycStatus },
-                    { header: 'Заблокирован', accessor: (u: any) => u.isBlocked ?? false },
-                    { header: 'Создан', accessor: (u: any) => u.createdAt },
-                    { header: 'Последний вход', accessor: (u: any) => u.lastLoginAt ?? '' },
+                    { header: 'ID', accessor: (u) => u.id },
+                    { header: 'Email', accessor: (u) => u.email },
+                    { header: 'ФИО', accessor: (u) => u.fullName ?? '' },
+                    { header: 'Sber ID', accessor: (u) => u.sberId ?? '' },
+                    { header: 'Телефон', accessor: (u) => u.phone ?? '' },
+                    { header: 'Роль', accessor: (u) => roleLabel[u.role] ?? u.role },
+                    { header: 'KYC статус', accessor: (u) => kycStatusLabel[u.kycStatus] ?? u.kycStatus },
+                    { header: 'Создан', accessor: (u) => u.createdAt },
+                    { header: 'Последний вход', accessor: (u) => u.lastLoginAt ?? '' },
                   ],
                 )
               }}
