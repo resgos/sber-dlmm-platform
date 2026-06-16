@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Card, Select, InputNumber, Button, Typography, Space, Alert, Spin, Popover, Tag, Divider, Row, Col, Tooltip } from 'antd'
+import { useMemo, useState, useEffect } from 'react'
+import { Card, Select, InputNumber, Button, Typography, Space, Alert, Spin, Popover, Tag, Divider, Row, Col, Tooltip, Checkbox } from 'antd'
 import {
   SettingOutlined,
   ArrowDownOutlined,
@@ -48,6 +48,9 @@ export default function SwapPage() {
   const [customSlippage, setCustomSlippage] = useState<number | null>(null)
   const [swapError, setSwapError] = useState<string | null>(null)
   const [swapSuccess, setSwapSuccess] = useState(false)
+  // High price-impact safety gate: a swap with impact ≥ HIGH_IMPACT_PCT must be
+  // explicitly acknowledged before it can be sent (thin pool / oversized trade).
+  const [highImpactAck, setHighImpactAck] = useState(false)
 
   const { data: tokenList } = useQuery({
     queryKey: ['tokens'],
@@ -107,6 +110,14 @@ export default function SwapPage() {
 
   const effectiveSlippage = customSlippage ?? slippage
   const minAmountOut = quote ? Math.floor(quote.amountOut * (1 - effectiveSlippage / 100)) : 0
+
+  // Price impact at/above this percent is treated as dangerous and gated behind
+  // an explicit acknowledgement (matches the red colour threshold on the quote).
+  const HIGH_IMPACT_PCT = 5
+  const isHighImpact = quote?.priceImpact != null && quote.priceImpact >= HIGH_IMPACT_PCT
+  // Re-require acknowledgement whenever the impact or the pool changes, so a
+  // freshly-dangerous quote can't inherit a stale "I understand" from before.
+  useEffect(() => { setHighImpactAck(false) }, [quote?.priceImpact, selectedPool?.id])
 
   const swapMutation = useMutation({
     mutationFn: () => pools.executeSwap({
@@ -515,12 +526,27 @@ export default function SwapPage() {
 
           <PartialFillNotice fillable={quote?.amountIn} requested={amountIn} symbol={tokenInSymbol} />
 
+          {isHighImpact && (
+            <Alert
+              type="error"
+              showIcon
+              style={{ borderRadius: 'var(--radius-md)' }}
+              message={t('swap.highImpact.warning', { value: quote!.priceImpact!.toFixed(2) })}
+              description={
+                <Checkbox checked={highImpactAck} onChange={(e) => setHighImpactAck(e.target.checked)}>
+                  {t('swap.highImpact.ack')}
+                </Checkbox>
+              }
+            />
+          )}
+
           <Button
             type="primary"
             block
             size="large"
             className="sber-swap-cta"
-            disabled={!quote || !selectedPool || swapMutation.isPending}
+            danger={isHighImpact && highImpactAck}
+            disabled={!quote || !selectedPool || swapMutation.isPending || (isHighImpact && !highImpactAck)}
             loading={swapMutation.isPending}
             onClick={() => swapMutation.mutate()}
           >

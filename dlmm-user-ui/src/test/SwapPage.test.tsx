@@ -221,6 +221,40 @@ describe('SwapPage — quote + slippage math', () => {
     expect(screen.getAllByText('Курс').length).toBeGreaterThanOrEqual(1)
   })
 
+  it('high price impact (>=5%) gates the swap behind an acknowledgement', async () => {
+    quoteMock.mockResolvedValue({
+      poolId: POOL.id, amountIn: 10000, amountOut: 8000, fee: 30, priceImpact: 8.5,
+    })
+    await renderSwap()
+    await selectTokenIn('SRUB — Sber Rouble')
+    await selectTokenOut('SBER — Sberbank')
+    await userEvent.type(amountInInput(), '10000')
+
+    await waitFor(() => expect(quoteMock).toHaveBeenCalled())
+
+    // Danger warning renders with the impact value, and the swap CTA is blocked.
+    expect(await screen.findByText(/Высокое влияние на цену: 8\.50%/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Обменять' })).toBeDisabled()
+
+    // Ticking the acknowledgement enables the swap.
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Понимаю риск высокого влияния на цену' }))
+    expect(screen.getByRole('button', { name: 'Обменять' })).toBeEnabled()
+  })
+
+  it('low price impact (<5%) shows no acknowledgement gate', async () => {
+    quoteMock.mockResolvedValue({
+      poolId: POOL.id, amountIn: 100, amountOut: 99, fee: 1, priceImpact: 0.42,
+    })
+    await renderSwap()
+    await selectTokenIn('SRUB — Sber Rouble')
+    await selectTokenOut('SBER — Sberbank')
+    await userEvent.type(amountInInput(), '100')
+
+    await waitFor(() => expect(quoteMock).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Обменять' })).toBeEnabled())
+    expect(screen.queryByText(/Высокое влияние на цену/)).not.toBeInTheDocument()
+  })
+
   it('default slippage 0.5%: minAmountOut = floor(9970 * 0.995) = 9920', async () => {
     quoteMock.mockResolvedValue({
       poolId: POOL.id, amountIn: 10000, amountOut: 9970, fee: 30, priceImpact: 0.42,

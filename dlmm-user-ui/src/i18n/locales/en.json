@@ -284,6 +284,10 @@
       "success": "Swap completed successfully!",
       "errorFallback": "Swap failed"
     },
+    "highImpact": {
+      "warning": "High price impact: {{value}}%. You may receive notably less than market value — the pool is thin or the trade is large.",
+      "ack": "I understand the high price impact risk"
+    },
     "side": {
       "buyAsset": "Buy {{sym}}",
       "sellAsset": "Sell {{sym}}"
