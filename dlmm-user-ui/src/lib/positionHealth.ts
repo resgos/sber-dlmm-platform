@@ -71,6 +71,37 @@ export function isPositionInRange(position: Position, pool: Pool | undefined): b
   return pool.activeBinId >= position.binRangeMin && pool.activeBinId <= position.binRangeMax
 }
 
+export interface RangeSummary {
+  /** Positions whose pool's active bin is inside the range (earning fees). */
+  inRange: number
+  /** Positions whose active bin has left the range (earning nothing). */
+  outOfRange: number
+  /** Positions whose pool isn't loaded yet, so we can't tell. */
+  unknown: number
+}
+
+/**
+ * Portfolio-level roll-up of {@link isPositionInRange} across a set of positions —
+ * powers the "В диапазоне: X/N" KPI tile (the glanceable counterpart of the
+ * per-row range badge). `unknown` (pool not loaded) is counted separately so the
+ * tile never miscounts an un-resolved position as out-of-range.
+ */
+export function summarizePositionRanges(
+  positions: Position[],
+  poolById: Map<string, Pool>,
+): RangeSummary {
+  let inRange = 0
+  let outOfRange = 0
+  let unknown = 0
+  for (const p of positions) {
+    const r = isPositionInRange(p, poolById.get(p.poolId))
+    if (r === true) inRange++
+    else if (r === false) outOfRange++
+    else unknown++
+  }
+  return { inRange, outOfRange, unknown }
+}
+
 export function calculateHealth(position: Position, pool: Pool | undefined): HealthScore {
   // --- Factor 1: range fit ---
   let rangeFitRaw = 0

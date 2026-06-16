@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip, Dropdown, Alert } from 'antd'
-import { DollarOutlined, DeleteOutlined, DownloadOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined, DownOutlined } from '@ant-design/icons'
+import { DollarOutlined, DeleteOutlined, DownloadOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined, DownOutlined, AimOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -14,7 +14,7 @@ import HealthScoreBadge from '@/components/HealthScoreBadge'
 import HealthScoreExplainer from '@/components/HealthScoreExplainer'
 import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
 import { useAutoClaimWatcher } from '@/lib/useAutoClaimWatcher'
-import { calculateHealth, isPositionInRange, type HealthScore } from '@/lib/positionHealth'
+import { calculateHealth, isPositionInRange, summarizePositionRanges, type HealthScore } from '@/lib/positionHealth'
 import { exportToCsv } from '@/lib/csvExport'
 import { strategyLabel } from '@/lib/strategy'
 import { apiErrorMessage } from '@/lib/apiError'
@@ -168,6 +168,15 @@ export default function PositionsPage() {
   const totalUnclaimedX = activePositions.reduce((s: number, p: Position) => s + p.unclaimedFeeX, 0)
   const totalUnclaimedY = activePositions.reduce((s: number, p: Position) => s + p.unclaimedFeeY, 0)
 
+  // Portfolio roll-up of the per-row range badge: how many positions are
+  // currently earning (active bin inside their range) vs idle. Drives the
+  // "В диапазоне X/N" KPI tile so the user sees attention-needed positions
+  // without scanning every row.
+  const rangeSummary = useMemo(
+    () => summarizePositionRanges(activePositions, poolById),
+    [activePositions, poolById],
+  )
+
   const positionsWithClaimableFees = activePositions.filter(
     (p) => p.unclaimedFeeX > 0 || p.unclaimedFeeY > 0,
   )
@@ -300,6 +309,15 @@ export default function PositionsPage() {
             value: activePositions.length.toLocaleString('ru-RU'),
             sub: activePositions.length === 0 ? t('positions.kpi.activeNone') : t('positions.kpi.activeProvide'),
             icon: <PieChartOutlined style={{ color: '#9B59B6' }} />,
+          },
+          {
+            label: t('positions.kpi.inRange'),
+            value: `${rangeSummary.inRange}/${activePositions.length}`,
+            sub: rangeSummary.outOfRange > 0
+              ? t('positions.kpi.outOfRangeCount', { count: rangeSummary.outOfRange })
+              : t('positions.kpi.allInRange'),
+            icon: <AimOutlined style={{ color: 'var(--viz-up)' }} />,
+            accent: rangeSummary.outOfRange > 0 ? 'var(--plasma-critical)' : 'var(--sber-green)',
           },
           {
             label: t('positions.kpi.unclaimedFees'),
