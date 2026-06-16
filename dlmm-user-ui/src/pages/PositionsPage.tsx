@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip, Dropdown, Alert } from 'antd'
+import { Table, Tag, Typography, Space, Button, Card, Modal, Slider, message, Row, Col, Tooltip, Dropdown, Alert, Grid } from 'antd'
 import { DollarOutlined, DeleteOutlined, DownloadOutlined, PieChartOutlined, TrophyOutlined, WalletOutlined, ClearOutlined, RiseOutlined, FallOutlined, BellOutlined, DownOutlined, AimOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -56,6 +56,10 @@ export default function PositionsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  // Below md the 8-column table is unusable (1060px in a 375px viewport even
+  // with secondary columns hidden) — render stacked cards instead (Meteora-style).
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [removeModalPos, setRemoveModalPos] = useState<Position | null>(null)
   const [removePercent, setRemovePercent] = useState(100)
   const [alertsDrawerOpen, setAlertsDrawerOpen] = useState(false)
@@ -467,6 +471,67 @@ export default function PositionsPage() {
             />
           </div>
         )}
+        {isMobile ? (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            {activePositions.map((r) => {
+              const pool = poolById.get(r.poolId)
+              const x = r.tokenXSymbol || pool?.tokenXSymbol
+              const y = r.tokenYSymbol || pool?.tokenYSymbol
+              const inRange = isPositionInRange(r, pool)
+              const noClaim = r.unclaimedFeeX === 0 && r.unclaimedFeeY === 0
+              return (
+                <Card
+                  key={r.id}
+                  size="small"
+                  className="sber-card"
+                  style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)', cursor: 'pointer' }}
+                  styles={{ body: { padding: 'var(--space-3)' } }}
+                  onClick={() => navigate(`/pools/${r.poolId}`)}
+                >
+                  <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      {x && y ? <TokenPairChip x={x} y={y} /> : <Text type="secondary">{t('positions.table.poolFallback', { id: r.poolId.slice(0, 6) })}</Text>}
+                      <HealthScoreBadge position={r} pool={pool} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      {inRange === false ? (
+                        <Tag color="red" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>⚠ {t('positions.range.outOfRange')}</Tag>
+                      ) : inRange === true ? (
+                        <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>{t('positions.range.inRange')}</Tag>
+                      ) : <span />}
+                      {noClaim ? (
+                        <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>—</Text>
+                      ) : (
+                        <Space size={4} wrap style={{ justifyContent: 'flex-end' }}>
+                          {r.unclaimedFeeX > 0 && <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', fontVariantNumeric: 'tabular-nums' }}>+{formatTokenAmount(r.unclaimedFeeX, x, { compact: true, maxFractionDigits: 4 })}</Tag>}
+                          {r.unclaimedFeeY > 0 && <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', fontVariantNumeric: 'tabular-nums' }}>+{formatTokenAmount(r.unclaimedFeeY, y, { compact: true, maxFractionDigits: 4 })}</Tag>}
+                        </Space>
+                      )}
+                    </div>
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<DollarOutlined />}
+                      block
+                      disabled={noClaim}
+                      loading={claimMutation.isPending}
+                      onClick={(e) => { e.stopPropagation(); claimMutation.mutate({ positionId: r.id, quoteOnly: false }) }}
+                    >
+                      {t('positions.table.claimButton')}
+                    </Button>
+                  </Space>
+                </Card>
+              )
+            })}
+            {!isLoading && activePositions.length === 0 && (
+              <EmptyState
+                title={t('positions.empty.title')}
+                description={t('positions.empty.desc')}
+                cta={<Button type="primary" icon={<DollarOutlined />} onClick={() => navigate('/pools')}>{t('positions.empty.cta')}</Button>}
+              />
+            )}
+          </Space>
+        ) : (
         <Table
           scroll={{ x: 'max-content' }}
           className="sber-table"
@@ -725,6 +790,7 @@ export default function PositionsPage() {
             },
           ]}
         />
+        )}
       </Card>
 
       {/* Fee history */}
