@@ -10,6 +10,7 @@ import { pools, balances, fees } from '@/api/services'
 import type { Position, LiquidityStrategy } from '@/api/types'
 import StrategySelector from '@/components/StrategySelector'
 import { strategyLabel } from '@/lib/strategy'
+import { presetBinRange, BIN_RANGE_PRESETS } from '@/lib/binRange'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
 import RiskDisclosure from '@/components/RiskDisclosure'
 import ModalHeader from '@/components/ModalHeader'
@@ -157,6 +158,25 @@ export default function LiquidityPage() {
 
           <div>
             <Text strong style={{ display: 'block', marginBottom: 8 }}>Диапазон бинов</Text>
+            {/* One-click range presets around the active bin — investors pick a
+                concentration band (±N bins) instead of typing raw bin indices.
+                Neutral "±N" labels keep this gate-safe on an otherwise RU page. */}
+            <Space size={8} style={{ marginBottom: 8 }}>
+              {BIN_RANGE_PRESETS.map((p) => {
+                const r = presetBinRange(pool.activeBinId, p.halfWidth)
+                const active = binMin === r.min && binMax === r.max
+                return (
+                  <Button
+                    key={p.halfWidth}
+                    size="small"
+                    type={active ? 'primary' : 'default'}
+                    onClick={() => { setBinMin(r.min); setBinMax(r.max) }}
+                  >
+                    ±{p.halfWidth}
+                  </Button>
+                )
+              })}
+            </Space>
             <Space>
               <InputNumber
                 placeholder="Мин бин"
