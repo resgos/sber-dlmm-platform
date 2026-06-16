@@ -9,9 +9,12 @@ import type {
 import { scaleTransaction } from './scale'
 
 export const users = {
-  getUsers: async (page = 0, size = 20, email?: string): Promise<PageResponse<User>> => {
+  // Free-text name/email search. The param MUST be `query`: admin-bff (and
+  // user-service) read `query`, so sending `email` silently dropped the filter
+  // and the admin search returned everyone regardless of input.
+  getUsers: async (page = 0, size = 20, query?: string): Promise<PageResponse<User>> => {
     const params: Record<string, unknown> = { page, size }
-    if (email) params.email = email
+    if (query) params.query = query
     const response = await apiClient.get<PageResponse<User>>('/admin/users', { params })
     return response.data
   },
