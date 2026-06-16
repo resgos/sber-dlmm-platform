@@ -14,7 +14,7 @@ import HealthScoreBadge from '@/components/HealthScoreBadge'
 import HealthScoreExplainer from '@/components/HealthScoreExplainer'
 import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
 import { useAutoClaimWatcher } from '@/lib/useAutoClaimWatcher'
-import { calculateHealth, type HealthScore } from '@/lib/positionHealth'
+import { calculateHealth, isPositionInRange, type HealthScore } from '@/lib/positionHealth'
 import { exportToCsv } from '@/lib/csvExport'
 import { strategyLabel } from '@/lib/strategy'
 import { apiErrorMessage } from '@/lib/apiError'
@@ -529,17 +529,33 @@ export default function PositionsPage() {
               key: 'range',
               render: (_: unknown, r: Position) => {
                 const pool = poolById.get(r.poolId)
+                const inRange = isPositionInRange(r, pool)
                 return (
-                  <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 'var(--text-sm)' }}>
-                    {formatBinPriceRange(
-                      r.binRangeMin,
-                      r.binRangeMax,
-                      pool?.activeBinId,
-                      pool?.binStep,
-                      pool?.currentPrice,
-                      pool?.tokenYSymbol ?? '',
-                    )}
-                  </span>
+                  <Space direction="vertical" size={2} style={{ alignItems: 'flex-start' }}>
+                    <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 'var(--text-sm)' }}>
+                      {formatBinPriceRange(
+                        r.binRangeMin,
+                        r.binRangeMax,
+                        pool?.activeBinId,
+                        pool?.binStep,
+                        pool?.currentPrice,
+                        pool?.tokenYSymbol ?? '',
+                      )}
+                    </span>
+                    {/* Glanceable earning status — out-of-range = earning nothing,
+                        the single most actionable LP signal (Meteora-style). */}
+                    {inRange === false ? (
+                      <Tooltip title={t('positions.range.outOfRangeHint')}>
+                        <Tag color="red" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>
+                          ⚠ {t('positions.range.outOfRange')}
+                        </Tag>
+                      </Tooltip>
+                    ) : inRange === true ? (
+                      <Tag color="green" style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>
+                        {t('positions.range.inRange')}
+                      </Tag>
+                    ) : null}
+                  </Space>
                 )
               },
             },

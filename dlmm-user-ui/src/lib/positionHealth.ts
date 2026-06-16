@@ -59,13 +59,24 @@ const WEIGHTS = { rangeFit: 0.45, feeEarning: 0.35, age: 0.20 } as const
 const TARGET_APY = 20
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000
 
+/**
+ * Whether the pool's active bin currently sits inside the position's bin range —
+ * i.e. the position is earning fees right now. Returns null when the pool isn't
+ * loaded yet (can't tell). This is the single most actionable LP signal
+ * (out-of-range = earning nothing), so it's surfaced as a glanceable badge on
+ * the positions list, not only folded into the health score.
+ */
+export function isPositionInRange(position: Position, pool: Pool | undefined): boolean | null {
+  if (!pool) return null
+  return pool.activeBinId >= position.binRangeMin && pool.activeBinId <= position.binRangeMax
+}
+
 export function calculateHealth(position: Position, pool: Pool | undefined): HealthScore {
   // --- Factor 1: range fit ---
   let rangeFitRaw = 0
   let rangeReason = 'Нет данных о пуле — диапазон оценить невозможно'
   if (pool) {
-    const inRange = pool.activeBinId >= position.binRangeMin &&
-                    pool.activeBinId <= position.binRangeMax
+    const inRange = isPositionInRange(position, pool) === true
     if (inRange) {
       // Bonus for being centred: a position whose activeBin is in the
       // middle of [min,max] is more resilient to small price moves.

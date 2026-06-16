@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createInstance, type i18n as I18n } from 'i18next'
+import { createInstance } from 'i18next'
 import ru from '../i18n/locales/ru.json'
 import en from '../i18n/locales/en.json'
 
@@ -10,7 +10,7 @@ import en from '../i18n/locales/en.json'
  * Uses an ISOLATED i18next instance per language (not the shared app singleton)
  * so changing language here can't leak into other test files.
  */
-function makeI18n(lng: 'ru' | 'en'): I18n {
+function makeI18n(lng: 'ru' | 'en') {
   const inst = createInstance()
   inst.init({
     lng,

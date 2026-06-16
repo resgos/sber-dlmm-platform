@@ -683,6 +683,11 @@
       "noClaimTooltip": "No fees accrued yet — the position is working, but fee accrual hasn't run yet",
       "removeButton": "Remove"
     },
+    "range": {
+      "inRange": "In range",
+      "outOfRange": "Out of range",
+      "outOfRangeHint": "The active price has left your range — this position is NOT earning fees right now. Consider rebalancing."
+    },
     "feeHistory": {
       "title": "Fee history",
       "date": "Date",
