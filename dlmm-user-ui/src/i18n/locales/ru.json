@@ -497,6 +497,7 @@
 
   "poolDetail": {
     "backToPools": "К списку пулов",
+    "txHistory": "История по пулу",
     "yieldCalc": {
       "title": "Калькулятор доходности",
       "amountLabel": "Сумма вложения",

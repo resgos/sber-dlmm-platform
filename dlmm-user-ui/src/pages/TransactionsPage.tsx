@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Table, Tag, Typography, Space, Select, DatePicker, Button } from 'antd'
 import { DownloadOutlined, FilterOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
@@ -40,8 +41,14 @@ const statusLabel = (key: string) => i18n.t(`transactions.txStatus.${key}`, { de
 
 export default function TransactionsPage() {
   const { t } = useTranslation()
+  // Deep-link support: /transactions?poolId=<id> opens pre-filtered to one pool
+  // (e.g. the "История по пулу" link on the pool page). Read once on mount.
+  const [searchParams] = useSearchParams()
   const [page, setPage] = useState(0)
-  const [filters, setFilters] = useState<TransactionFilters>({})
+  const [filters, setFilters] = useState<TransactionFilters>(() => {
+    const poolId = searchParams.get('poolId')
+    return poolId ? { poolId } : {}
+  })
   const pageSize = 20
 
   const { data, isLoading, refetch } = useQuery({

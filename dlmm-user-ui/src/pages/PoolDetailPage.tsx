@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Card, Typography, Space, Tag, Button, Spin, Alert, Row, Col, Tabs, message, Modal, Tooltip } from 'antd'
 import {
   ArrowLeftOutlined,
+  UnorderedListOutlined,
   PlusOutlined,
   DollarOutlined,
   RiseOutlined,
@@ -325,14 +326,24 @@ export default function PoolDetailPage() {
 
   return (
     <Space direction="vertical" size={20} style={{ width: '100%' }}>
-      <Button
-        type="text"
-        icon={<ArrowLeftOutlined />}
-        onClick={() => navigate('/pools')}
-        style={{ padding: 0, color: 'var(--text-secondary)' }}
-      >
-        {t('poolDetail.backToPools')}
-      </Button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Button
+          type="text"
+          icon={<ArrowLeftOutlined />}
+          onClick={() => navigate('/pools')}
+          style={{ padding: 0, color: 'var(--text-secondary)' }}
+        >
+          {t('poolDetail.backToPools')}
+        </Button>
+        {/* Deep-link into the transaction history pre-filtered to this pool —
+            completes the per-pool transactions filter (?poolId=). */}
+        <Button
+          icon={<UnorderedListOutlined />}
+          onClick={() => navigate(`/transactions?poolId=${id}`)}
+        >
+          {t('poolDetail.txHistory')}
+        </Button>
+      </div>
 
       <Card
         className="sber-card"

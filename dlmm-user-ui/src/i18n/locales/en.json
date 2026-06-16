@@ -494,6 +494,7 @@
 
   "poolDetail": {
     "backToPools": "Back to pool list",
+    "txHistory": "Pool transactions",
     "yieldCalc": {
       "title": "Yield calculator",
       "amountLabel": "Deposit amount",
