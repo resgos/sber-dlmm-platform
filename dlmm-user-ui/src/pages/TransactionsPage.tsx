@@ -207,6 +207,7 @@ export default function TransactionsPage() {
             title: t('transactions.table.date'),
             dataIndex: 'createdAt',
             width: 150,
+            responsive: ['md'] as const,
             render: (d: string) => (
               <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-sm)' }}>
                 {dayjs(d).format('DD.MM.YYYY HH:mm')}
@@ -267,6 +268,7 @@ export default function TransactionsPage() {
             title: t('transactions.table.fee'),
             dataIndex: 'feeAmount',
             align: 'right' as const,
+            responsive: ['md'] as const,
             render: (v: number | null, r: Transaction) => (
               <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                 {formatTokenAmount(v, r.tokenInSymbol, { maxFractionDigits: 6 })}

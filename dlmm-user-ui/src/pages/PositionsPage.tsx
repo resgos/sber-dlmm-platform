@@ -541,7 +541,7 @@ export default function PositionsPage() {
               },
               render: (_: unknown, r: Position) => <HealthScoreBadge position={r} pool={poolById.get(r.poolId)} />,
             },
-            { title: t('positions.table.strategy'), dataIndex: 'strategy', render: (s: string) => <Tag color="green">{strategyLabel(s)}</Tag> },
+            { title: t('positions.table.strategy'), dataIndex: 'strategy', responsive: ['md'], render: (s: string) => <Tag color="green">{strategyLabel(s)}</Tag> },
             {
               title: t('positions.table.priceRange'),
               key: 'range',
@@ -591,6 +591,7 @@ export default function PositionsPage() {
               title: <Tooltip title={t('positions.table.pnlTooltip')}>{t('positions.table.pnl')}</Tooltip>,
               key: 'pnl',
               align: 'right' as const,
+              responsive: ['md'] as const,
               render: (_: unknown, r: Position) => {
                 const pool = poolById.get(r.poolId)
                 const price = pool?.currentPrice ?? 0
@@ -677,6 +678,7 @@ export default function PositionsPage() {
             {
               title: t('positions.table.createdAt'),
               dataIndex: 'createdAt',
+              responsive: ['md'] as const,
               render: (d: string) => dayjs(d).format('DD.MM.YYYY'),
             },
             {
