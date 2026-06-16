@@ -249,6 +249,12 @@
     "slippageCustom": "custom",
     "slippageButton": "Slippage {{value}}%",
     "popularPairs": "Popular pairs:",
+    "marketRef": {
+      "label": "Market price",
+      "tooltip": "Independent asset price from the oracle (Bank of Russia / exchanges) to compare against the pool rate — shows whether the pool trades near the market.",
+      "atMarket": "≈ market",
+      "vsMarket": "{{pct}}% vs market"
+    },
     "quote": {
       "loading": "Calculating route…",
       "rate": "Rate",

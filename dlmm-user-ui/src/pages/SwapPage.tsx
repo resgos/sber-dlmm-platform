@@ -12,8 +12,9 @@ import {
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { tokens, pools, balances } from '@/api/services'
+import { tokens, pools, balances, oracle } from '@/api/services'
 import type { Token, Pool, TokenBalance } from '@/api/types'
+import { marketReference } from '@/lib/marketRef'
 import TokenChip from '@/components/TokenChip'
 import TokenSelect from '@/components/TokenSelect'
 import { rowButtonProps } from '@/lib/a11y'
@@ -37,7 +38,8 @@ export default function SwapPage() {
   // Sprint 8 C-4 — translation wiring. Only some strings extracted in this
   // first wave to keep the diff readable; full extraction is Sprint 9 work.
   // The t() call pattern here is the template for the rest of the app.
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const numLocale = i18n.language?.startsWith('en') ? 'en-US' : 'ru-RU'
   const queryClient = useQueryClient()
   const [tokenInId, setTokenInId] = useState<string>('')
   const [tokenOutId, setTokenOutId] = useState<string>('')
@@ -62,6 +64,15 @@ export default function SwapPage() {
     queryFn: () => pools.getPools(0, 100),
   })
 
+  // Independent reference prices (Bank of Russia / CoinGecko via the oracle) —
+  // reused from the same feed the dashboard ticker loads, to flag whether the
+  // selected pool is trading near the market.
+  const { data: oraclePrices } = useQuery({
+    queryKey: ['oraclePrices'],
+    queryFn: oracle.getPrices,
+    staleTime: 60_000,
+  })
+
   const selectedPool = useMemo(() => {
     if (!tokenInId || !tokenOutId || !poolList?.content) return null
     return poolList.content
@@ -71,6 +82,17 @@ export default function SwapPage() {
         (p.tokenXId === tokenOutId && p.tokenYId === tokenInId),
       ) || null
   }, [tokenInId, tokenOutId, poolList])
+
+  // Pool spot (SRUB per X) vs the oracle's ₽-per-X reference for the same asset.
+  // Every pool is X/SRUB (SRUB is the quote = tokenY), so the asset is tokenX and
+  // currentPrice is already SRUB-per-asset — directly comparable to the oracle.
+  // Guard the (invariant-violating) SRUB-as-X case so we never compare against the
+  // oracle's SRUB=1 feed and render a bogus deviation.
+  const marketRef = useMemo(() => {
+    if (!selectedPool || selectedPool.tokenXSymbol === 'SRUB') return null
+    const oraclePrice = oraclePrices?.find((p) => p.symbol === selectedPool.tokenXSymbol)?.price
+    return marketReference(selectedPool.currentPrice, oraclePrice)
+  }, [selectedPool, oraclePrices])
 
   const { data: quote, isLoading: quoteLoading } = useQuery({
     queryKey: ['swapQuote', selectedPool?.id, tokenInId, amountIn],
@@ -430,6 +452,29 @@ export default function SwapPage() {
                   )
                 })()}
               </div>
+              {marketRef && (
+                <div className="sber-swap-quote__row">
+                  <Text type="secondary">
+                    {t('swap.marketRef.label')}{' '}
+                    <Tooltip title={t('swap.marketRef.tooltip')}>
+                      <InfoCircleOutlined style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }} />
+                    </Tooltip>
+                  </Text>
+                  <div style={{ textAlign: 'right' }}>
+                    <Text strong style={{ fontVariantNumeric: 'tabular-nums', display: 'block' }}>
+                      {marketRef.oraclePrice.toLocaleString(numLocale, { maximumFractionDigits: marketRef.oraclePrice >= 100 ? 0 : marketRef.oraclePrice >= 1 ? 2 : 4 })} ₽
+                    </Text>
+                    <Tag
+                      color={marketRef.band === 'fair' ? 'green' : marketRef.band === 'slight' ? 'default' : 'orange'}
+                      style={{ marginInlineEnd: 0, borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}
+                    >
+                      {marketRef.band === 'fair'
+                        ? t('swap.marketRef.atMarket')
+                        : t('swap.marketRef.vsMarket', { pct: `${marketRef.deviationPct > 0 ? '+' : ''}${marketRef.deviationPct.toFixed(2)}` })}
+                    </Tag>
+                  </div>
+                </div>
+              )}
               <div className="sber-swap-quote__row">
                 <Text type="secondary">
                   {t('swap.quote.priceImpact')}{' '}

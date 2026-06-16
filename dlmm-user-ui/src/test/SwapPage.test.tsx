@@ -15,6 +15,7 @@ const balancesMock = vi.fn()
 const poolsMock = vi.fn()
 const quoteMock = vi.fn()
 const executeMock = vi.fn()
+const oracleMock = vi.fn(() => Promise.resolve([] as unknown[]))
 
 vi.mock('@/api/services', () => ({
   tokens: { getTokens: (...args: unknown[]) => tokensMock(...args) },
@@ -24,6 +25,8 @@ vi.mock('@/api/services', () => ({
     getSwapQuote: (req: unknown) => quoteMock(req),
     executeSwap: (req: unknown) => executeMock(req),
   },
+  // Market-reference ticker feed; empty by default — the marketRef row hides.
+  oracle: { getPrices: () => oracleMock() },
 }))
 
 import SwapPage from '../pages/SwapPage'
@@ -434,5 +437,53 @@ describe('SwapPage — quote panel formatting', () => {
     // The row value cell renders "98 SBER" — may appear in inline
     // quote AND right-rail; multiplicity acceptable.
     expect(screen.getAllByText(/98 SBER/).length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('SwapPage — market-price reference (vs oracle)', () => {
+  // Correct X/SRUB ordering (asset = tokenX, SRUB = tokenY), unlike the reversed
+  // base POOL fixture; carries a spot currentPrice to compare against the oracle.
+  const SBER_POOL = {
+    ...POOL,
+    tokenXId: SBER.id,
+    tokenYId: SRUB.id,
+    tokenXSymbol: 'SBER',
+    tokenYSymbol: 'SRUB',
+    currentPrice: 221.6,
+  }
+  const aQuote = {
+    poolId: SBER_POOL.id, tokenInId: SRUB.id, tokenOutId: SBER.id,
+    amountIn: 10000, amountOut: 45, fee: 30, feeBps: 30, binsCrossed: 1,
+    estimatedPrice: 221.6, priceImpact: 0.42,
+  }
+
+  beforeEach(() => {
+    tokensMock.mockReset(); balancesMock.mockReset(); poolsMock.mockReset()
+    quoteMock.mockReset(); executeMock.mockReset()
+    oracleMock.mockReset(); oracleMock.mockResolvedValue([])
+  })
+
+  it('shows the oracle price + signed deviation when the pool is off-market', async () => {
+    oracleMock.mockResolvedValue([{ symbol: 'SBER', price: 200, change24h: 0, source: 'MOEX' }])
+    quoteMock.mockResolvedValue(aQuote)
+    await renderSwap({ pools: [SBER_POOL] })
+    await selectTokenIn('SRUB — Sber Rouble')
+    await selectTokenOut('SBER — Sberbank')
+    await userEvent.type(amountInInput(), '10000')
+    // pool spot 221.6 vs oracle 200 → +10.80% → wide band.
+    expect(await screen.findByText(/Рыночная цена/)).toBeInTheDocument()
+    expect(await screen.findByText('+10.80% к рынку')).toBeInTheDocument()
+  })
+
+  it('hides the reference when the oracle has no feed for that asset', async () => {
+    oracleMock.mockResolvedValue([]) // no SBER price
+    quoteMock.mockResolvedValue(aQuote)
+    await renderSwap({ pools: [SBER_POOL] })
+    await selectTokenIn('SRUB — Sber Rouble')
+    await selectTokenOut('SBER — Sberbank')
+    await userEvent.type(amountInInput(), '10000')
+    // the quote still renders (rate row), but no market-reference row.
+    expect(await screen.findByText('Курс')).toBeInTheDocument()
+    expect(screen.queryByText(/Рыночная цена/)).not.toBeInTheDocument()
   })
 })
