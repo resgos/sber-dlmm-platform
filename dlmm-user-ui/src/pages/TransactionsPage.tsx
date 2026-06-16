@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Table, Tag, Typography, Space, Select, DatePicker, Button } from 'antd'
+import { Table, Tag, Typography, Space, Select, DatePicker, Button, Card, Grid, Pagination } from 'antd'
 import { DownloadOutlined, FilterOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -41,6 +41,10 @@ const statusLabel = (key: string) => i18n.t(`transactions.txStatus.${key}`, { de
 
 export default function TransactionsPage() {
   const { t } = useTranslation()
+  // Mobile (<md): the wide transaction table forces horizontal scroll, so we
+  // render a stacked card per row instead (same approach as PositionsPage).
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   // Deep-link support: /transactions?poolId=<id> opens pre-filtered to one pool
   // (e.g. the "История по пулу" link on the pool page). Read once on mount.
   const [searchParams] = useSearchParams()
@@ -194,6 +198,69 @@ export default function TransactionsPage() {
         </Button>
       </Space>
 
+      {isMobile ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {(data?.content || []).map((r) => {
+            const px = r.tokenInSymbol || (r.poolName ? r.poolName.split('/')[0] : undefined)
+            const py = r.tokenOutSymbol || (r.poolName ? r.poolName.split('/')[1] : undefined)
+            return (
+              <Card
+                key={r.id}
+                size="small"
+                className="sber-card"
+                style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
+                styles={{ body: { padding: 'var(--space-3)' } }}
+              >
+                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <Tag color={txTypeColors[r.txType] || 'default'} style={{ marginInlineEnd: 0 }}>{txTypeLabel(r.txType)}</Tag>
+                    <Tag color={statusColors[r.status] || 'default'} style={{ marginInlineEnd: 0 }}>{statusLabel(r.status)}</Tag>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    {px || py ? <TokenPairChip x={px} y={py} /> : <Text type="secondary">—</Text>}
+                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)', whiteSpace: 'nowrap' }}>
+                      {dayjs(r.createdAt).format('DD.MM.YYYY HH:mm')}
+                    </Text>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontVariantNumeric: 'tabular-nums', fontSize: 'var(--text-sm)' }}>
+                      {formatTokenAmount(r.amountIn, r.tokenInSymbol)} → {formatTokenAmount(r.amountOut, r.tokenOutSymbol)}
+                    </Text>
+                    {r.feeAmount != null && r.feeAmount > 0 && (
+                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)', whiteSpace: 'nowrap' }}>
+                        {t('transactions.table.fee')}: {formatTokenAmount(r.feeAmount, r.tokenInSymbol, { maxFractionDigits: 6 })}
+                      </Text>
+                    )}
+                  </div>
+                </Space>
+              </Card>
+            )
+          })}
+          {!isLoading && (data?.content || []).length === 0 && (
+            Object.values(filters).some((v) => v !== undefined && v !== null && v !== '') ? (
+              <EmptyState
+                size="compact"
+                title={t('transactions.empty.filteredTitle')}
+                description={t('transactions.empty.filteredDesc')}
+                secondary={<Button type="link" onClick={handleReset}>{t('transactions.empty.filteredReset')}</Button>}
+              />
+            ) : (
+              <EmptyState title={t('transactions.empty.title')} description={t('transactions.empty.desc')} />
+            )
+          )}
+          {(data?.totalElements || 0) > pageSize && (
+            <div style={{ textAlign: 'center', marginTop: 'var(--space-2)' }}>
+              <Pagination
+                simple
+                current={page + 1}
+                pageSize={pageSize}
+                total={data?.totalElements || 0}
+                onChange={(p) => setPage(p - 1)}
+              />
+            </div>
+          )}
+        </Space>
+      ) : (
       <Table
         scroll={{ x: 'max-content' }}
         className="sber-table"
@@ -316,6 +383,7 @@ export default function TransactionsPage() {
           },
         ]}
       />
+      )}
     </Space>
   )
 }
