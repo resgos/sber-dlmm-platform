@@ -634,6 +634,30 @@
     }
   },
 
+  "risk": {
+    "title": "Important risk information",
+    "lp": {
+      "ilTerm": "Impermanent loss",
+      "ilBody": "can occur if the price of the paired tokens changes. It means your share of the pool may be worth less than if you had simply held the tokens.",
+      "notDeposit": "This is not a bank deposit.",
+      "asvBefore": "DIA deposit insurance",
+      "asvNot": "does not cover",
+      "asvAfter": "LP positions — it only covers SRUB balances held as a deposit (up to ₽1.4M).",
+      "pastPerf": "Past pool returns do not guarantee future ones."
+    },
+    "swap": {
+      "slipTerm": "Slippage",
+      "slipBody": "can be higher than expected if the pool is thin or the trade is large.",
+      "reverse": "A reverse swap (sell then buy back) can cost more due to 2x fees + price impact."
+    },
+    "hedge": {
+      "fixedRate": "The locked rate applies only until the settlement date. After that, conversion is at the spot rate.",
+      "oppBefore": "If the market rate moves in your favour, the hedge",
+      "oppCost": "will cost",
+      "oppAfter": "the difference. That is the price of protection against the opposite move.",
+      "obligation": "A hedge is an obligation, not an option. You can close early, but the actual close price depends on the market at that moment."
+    }
+  },
   "positions": {
     "healthExplainer": {
       "title": "New: position health score",

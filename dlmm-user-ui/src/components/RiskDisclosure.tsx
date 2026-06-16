@@ -1,5 +1,6 @@
 import { Alert, Space, Typography } from 'antd'
 import { WarningFilled } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import Glossary from './Glossary'
 
 const { Text } = Typography
@@ -13,55 +14,55 @@ interface Props {
 /**
  * Sprint 12 G-14 — risk disclosure banner.
  *
- * Always-on banner на add-liquidity / swap / hedge flows. Compliance
- * required — Anna-driven feedback: «Стоп. Вы только что сказали что я
- * могу потерять. А до этого говорили "это просто как депозит"».
+ * Always-on banner on the add-liquidity / swap / hedge flows. Compliance
+ * required — Anna-driven feedback: «Стоп. Вы только что сказали что я могу
+ * потерять. А до этого говорили "это просто как депозит"».
  *
- * Не dismissible by design — compliance + АСВ disclosure должен быть
- * виден КАЖДЫЙ раз, не один раз при первом visit. Тон: нейтрально-
- * информативный, не FUD; warning Alert но не danger.
+ * Not dismissible by design — compliance + АСВ/DIA disclosure must be visible
+ * EVERY time, not once on first visit. Tone: neutral-informative, not FUD;
+ * warning Alert, never danger.
  *
- * Risk taxonomy:
- *   - lp:    Impermanent loss + АСВ не покрывает + Past performance
- *   - swap:  Slippage + price impact + reverse-swap может быть дороже
- *   - hedge: Counterparty risk + settlement date + курс может качнуться против хеджа
+ * i18n (2026-06-17): wording lives under `risk.*` (ru+en). The inline
+ * <Glossary>/<Text strong> emphasis is preserved by composing several t()
+ * calls per sentence rather than a single <Trans> — same render, simpler keys.
  */
 export default function RiskDisclosure({ variant }: Props) {
+  const { t } = useTranslation()
+
   const content = {
     lp: (
       <Space direction="vertical" size={4}>
         <Text style={{ fontSize: 'var(--text-sm)' }}>
-          <Glossary term="il"><Text strong>Impermanent loss</Text></Glossary> возможен, если цена токенов в паре изменится.
-          Это значит, что ваша доля в пуле может стоить меньше, чем если бы вы просто держали токены.
+          <Glossary term="il"><Text strong>{t('risk.lp.ilTerm')}</Text></Glossary>{' '}{t('risk.lp.ilBody')}
         </Text>
         <Text style={{ fontSize: 'var(--text-sm)' }}>
-          <Text strong>Это не банковский депозит.</Text> Страхование АСВ <Text strong>не распространяется</Text> на LP-позиции — оно покрывает только балансы SRUB в качестве депозита (до 1.4 млн ₽).
+          <Text strong>{t('risk.lp.notDeposit')}</Text>{' '}{t('risk.lp.asvBefore')}{' '}<Text strong>{t('risk.lp.asvNot')}</Text>{' '}{t('risk.lp.asvAfter')}
         </Text>
         <Text style={{ fontSize: 'var(--text-sm)' }}>
-          Прошлая доходность пула не гарантирует будущую.
+          {t('risk.lp.pastPerf')}
         </Text>
       </Space>
     ),
     swap: (
       <Space direction="vertical" size={4}>
         <Text style={{ fontSize: 'var(--text-sm)' }}>
-          <Glossary term="slippage"><Text strong>Проскальзывание</Text></Glossary> может быть выше ожидаемого, если в пуле мало ликвидности или сделка крупная.
+          <Glossary term="slippage"><Text strong>{t('risk.swap.slipTerm')}</Text></Glossary>{' '}{t('risk.swap.slipBody')}
         </Text>
         <Text style={{ fontSize: 'var(--text-sm)' }}>
-          Обратный своп (продать и купить обратно) может стоить дороже за счёт комиссий ×2 + price impact.
+          {t('risk.swap.reverse')}
         </Text>
       </Space>
     ),
     hedge: (
       <Space direction="vertical" size={4}>
         <Text style={{ fontSize: 'var(--text-sm)' }}>
-          Зафиксированный курс действует только до даты исполнения. После — конвертация по курсу момента.
+          {t('risk.hedge.fixedRate')}
         </Text>
         <Text style={{ fontSize: 'var(--text-sm)' }}>
-          Если рыночный курс пойдёт в вашу пользу, хедж <Text strong>будет стоить</Text> разницы. Это плата за защиту от противоположного движения.
+          {t('risk.hedge.oppBefore')}{' '}<Text strong>{t('risk.hedge.oppCost')}</Text>{' '}{t('risk.hedge.oppAfter')}
         </Text>
         <Text style={{ fontSize: 'var(--text-sm)' }}>
-          Хедж — обязательство, не опцион. Закрыть досрочно можно, но фактическая цена закрытия зависит от рынка на момент закрытия.
+          {t('risk.hedge.obligation')}
         </Text>
       </Space>
     ),
@@ -72,7 +73,7 @@ export default function RiskDisclosure({ variant }: Props) {
       type="warning"
       showIcon
       icon={<WarningFilled />}
-      message={<Text strong>Важно знать о рисках</Text>}
+      message={<Text strong>{t('risk.title')}</Text>}
       description={content}
       style={{ borderRadius: 'var(--radius-sm)' }}
     />

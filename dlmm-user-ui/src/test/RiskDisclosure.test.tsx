@@ -1,6 +1,11 @@
 import { render, screen } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
+import i18n from '@/i18n'
 import RiskDisclosure from '../components/RiskDisclosure'
+
+// The copy is now i18n-driven; reset to the default locale after each test so a
+// language switch in one case can't leak into the next.
+afterEach(() => { i18n.changeLanguage('ru') })
 
 describe('RiskDisclosure (G-14)', () => {
   it('LP variant calls out impermanent loss + АСВ + past-perf', () => {
@@ -30,5 +35,25 @@ describe('RiskDisclosure (G-14)', () => {
     expect(alert).toBeTruthy()
     // No close button — compliance requires always-visible disclosure.
     expect(container.querySelector('.ant-alert-close-icon')).toBeNull()
+  })
+
+  it('renders English copy when language is en (bilingual compliance)', async () => {
+    await i18n.changeLanguage('en')
+    const { container } = render(<RiskDisclosure variant="lp" />)
+    expect(container.textContent).toMatch(/Important risk information/)
+    expect(container.textContent).toMatch(/This is not a bank deposit/)
+    expect(container.textContent).toMatch(/does not cover/)
+    // No Russian copy leaks through in EN mode.
+    expect(container.textContent).not.toMatch(/банковский депозит/)
+  })
+
+  it('swap + hedge variants localise to English too', async () => {
+    await i18n.changeLanguage('en')
+    const { container: swap } = render(<RiskDisclosure variant="swap" />)
+    expect(swap.textContent).toMatch(/Slippage/)
+    expect(swap.textContent).toMatch(/reverse swap/i)
+    const { container: hedge } = render(<RiskDisclosure variant="hedge" />)
+    expect(hedge.textContent).toMatch(/settlement date/)
+    expect(hedge.textContent).toMatch(/obligation, not an option/)
   })
 })

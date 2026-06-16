@@ -15,7 +15,6 @@
   "dlmm-user-ui/src/components/PoolRecentSwapsPanel.tsx": 10,
   "dlmm-user-ui/src/components/PoolZapPanel.tsx": 61,
   "dlmm-user-ui/src/components/PositionAlertsDrawer.tsx": 154,
-  "dlmm-user-ui/src/components/RiskDisclosure.tsx": 125,
   "dlmm-user-ui/src/components/SelfRestrictionPanel.tsx": 171,
   "dlmm-user-ui/src/components/SpasiboWidget.tsx": 20,
   "dlmm-user-ui/src/components/StatCard.tsx": 5,
