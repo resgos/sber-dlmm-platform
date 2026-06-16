@@ -631,6 +631,16 @@
   },
 
   "positions": {
+    "healthExplainer": {
+      "title": "New: position health score",
+      "dismiss": "Hide hint",
+      "intro": "The Health column shows a number from 0 to 100 that answers a simple question: is this position working?",
+      "bandExcellent": "80–100 — great, nothing to do",
+      "bandGood": "60–79 — fine, keep an eye on it",
+      "bandFair": "35–59 — so-so, consider rebalancing",
+      "bandPoor": "0–34 — poor, needs attention",
+      "hint": "Hover the score to see what it's made of: how well it fits the pool range, fee yield, and the position's age."
+    },
     "title": "My positions",
     "empty": {
       "title": "You don't have any open positions yet",

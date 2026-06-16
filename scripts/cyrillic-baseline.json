@@ -6,7 +6,6 @@
   "dlmm-user-ui/src/components/ErrorBoundary.tsx": 21,
   "dlmm-user-ui/src/components/Glossary.tsx": 266,
   "dlmm-user-ui/src/components/HealthScoreBadge.tsx": 16,
-  "dlmm-user-ui/src/components/HealthScoreExplainer.tsx": 54,
   "dlmm-user-ui/src/components/KycStatusBadge.tsx": 7,
   "dlmm-user-ui/src/components/KycUploadPanel.tsx": 188,
   "dlmm-user-ui/src/components/LanguageSwitcher.tsx": 3,

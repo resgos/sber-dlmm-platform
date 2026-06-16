@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Alert, Space, Typography, Tag, Button } from 'antd'
 import { HeartFilled, CloseOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 
 const { Text } = Typography
 
@@ -9,9 +10,10 @@ const DISMISS_KEY = 'dlmm.user.healthExplainerDismissed'
 /**
  * Sprint 10 wave 3 — Health Score explainer card.
  *
- * Mounts at the top of PositionsPage on first visit only. Explains
- * in plain Russian what the new "Здоровье" column means and how to
- * act on it. Once dismissed, stays gone (localStorage flag).
+ * Mounts at the top of PositionsPage on first visit only. Explains in
+ * plain language (i18n: positions.healthExplainer.*) what the "Health"
+ * column means and how to act on it. Once dismissed, stays gone
+ * (localStorage flag).
  *
  * Why a one-shot banner instead of permanent help text: the badge
  * itself carries a tooltip + popover, so the long-form explanation
@@ -19,6 +21,7 @@ const DISMISS_KEY = 'dlmm.user.healthExplainerDismissed'
  * the heart icon means; the banner just clutters.
  */
 export default function HealthScoreExplainer() {
+  const { t } = useTranslation()
   const initiallyDismissed = (() => {
     try { return localStorage.getItem(DISMISS_KEY) === 'true' } catch { return false }
   })()
@@ -40,25 +43,23 @@ export default function HealthScoreExplainer() {
       closable={false}
       message={
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <Text strong>Новое: оценка здоровья позиции</Text>
-          <Button size="small" type="text" icon={<CloseOutlined />} onClick={dismiss} aria-label="Скрыть подсказку" />
+          <Text strong>{t('positions.healthExplainer.title')}</Text>
+          <Button size="small" type="text" icon={<CloseOutlined />} onClick={dismiss} aria-label={t('positions.healthExplainer.dismiss')} />
         </div>
       }
       description={
         <Space direction="vertical" size={6} style={{ marginTop: 4 }}>
           <Text style={{ fontSize: 'var(--text-sm)' }}>
-            Колонка <Text strong>«Здоровье»</Text> показывает число от 0 до 100, которое отвечает на простой вопрос —
-            «работает ли эта позиция?».
+            {t('positions.healthExplainer.intro')}
           </Text>
           <Space size={6} wrap>
-            <Tag color="green" style={{ borderRadius: 'var(--radius-pill)' }}>80–100 — отлично, ничего не делайте</Tag>
-            <Tag color="lime" style={{ borderRadius: 'var(--radius-pill)' }}>60–79 — нормально, посматривайте</Tag>
-            <Tag color="orange" style={{ borderRadius: 'var(--radius-pill)' }}>35–59 — так себе, подумайте о ребалансе</Tag>
-            <Tag color="red" style={{ borderRadius: 'var(--radius-pill)' }}>0–34 — плохо, требуется внимание</Tag>
+            <Tag color="green" style={{ borderRadius: 'var(--radius-pill)' }}>{t('positions.healthExplainer.bandExcellent')}</Tag>
+            <Tag color="lime" style={{ borderRadius: 'var(--radius-pill)' }}>{t('positions.healthExplainer.bandGood')}</Tag>
+            <Tag color="orange" style={{ borderRadius: 'var(--radius-pill)' }}>{t('positions.healthExplainer.bandFair')}</Tag>
+            <Tag color="red" style={{ borderRadius: 'var(--radius-pill)' }}>{t('positions.healthExplainer.bandPoor')}</Tag>
           </Space>
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-            Наведите на оценку, чтобы увидеть, из чего она складывается: соответствие диапазону пула,
-            доходность по комиссиям и срок жизни позиции.
+            {t('positions.healthExplainer.hint')}
           </Text>
         </Space>
       }
