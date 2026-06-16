@@ -18,6 +18,7 @@ import { calculateHealth, isPositionInRange, summarizePositionRanges, type Healt
 import { exportToCsv } from '@/lib/csvExport'
 import { strategyLabel } from '@/lib/strategy'
 import { apiErrorMessage } from '@/lib/apiError'
+import { estimateRemoveReturn } from '@/lib/removeEstimate'
 import { positionAlertsStore } from '@/store/positionAlertsStore'
 import { useSyncExternalStore } from 'react'
 import { Segmented } from 'antd'
@@ -849,6 +850,35 @@ export default function PositionsPage() {
           <Text strong style={{ textAlign: 'center', display: 'block', fontSize: 24, color: 'var(--color-negative-strong)' }}>
             {removePercent}%
           </Text>
+          {/* Meteora-style withdrawal estimate — mirrors removeLiquidity crediting
+              (proportional principal − 0.1% exit fee + ALL accrued fees). Pure
+              client estimate (no extra API), updates live with the slider. */}
+          {removeModalPos && (() => {
+            const pool = poolById.get(removeModalPos.poolId)
+            const symX = removeModalPos.tokenXSymbol || pool?.tokenXSymbol
+            const symY = removeModalPos.tokenYSymbol || pool?.tokenYSymbol
+            const est = estimateRemoveReturn(removeModalPos, removePercent)
+            const hasFees = est.feeX > 0 || est.feeY > 0
+            return (
+              <div style={{ border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)' }}>
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('positions.removeModal.youReceive')}</Text>
+                <div style={{ fontWeight: 600, fontSize: 'var(--text-lg)', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+                  ≈ {formatTokenAmount(est.totalX, symX)} + {formatTokenAmount(est.totalY, symY)}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 8, fontSize: 'var(--text-xs)' }}>
+                  <Text type="secondary">{t('positions.removeModal.principal')}</Text>
+                  <Text style={{ fontVariantNumeric: 'tabular-nums' }}>{formatTokenAmount(est.principalX, symX)} · {formatTokenAmount(est.principalY, symY)}</Text>
+                </div>
+                {hasFees && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginTop: 2, fontSize: 'var(--text-xs)' }}>
+                    <Text type="secondary">{t('positions.removeModal.fees')}</Text>
+                    <Text style={{ color: 'var(--sber-green)', fontVariantNumeric: 'tabular-nums' }}>+{formatTokenAmount(est.feeX, symX)} · +{formatTokenAmount(est.feeY, symY)}</Text>
+                  </div>
+                )}
+                <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 'var(--text-xs)' }}>{t('positions.removeModal.estimateNote')}</Text>
+              </div>
+            )
+          })()}
         </Space>
       </Modal>
 

@@ -732,7 +732,11 @@
     "removeModal": {
       "title": "Remove liquidity",
       "okText": "Remove",
-      "body": "What percentage of liquidity should be removed from position {{pair}}?"
+      "body": "What percentage of liquidity should be removed from position {{pair}}?",
+      "youReceive": "You'll receive ≈",
+      "principal": "Principal (−0.1% exit fee)",
+      "fees": "Accrued fees",
+      "estimateNote": "Estimate. Accrued fees are collected in full at any withdrawal percentage."
     },
     "messages": {
       "feesClaimed": "Fees claimed",
