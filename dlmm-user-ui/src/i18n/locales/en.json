@@ -734,6 +734,27 @@
     }
   },
 
+  "marketTicker": {
+    "title": "Market prices",
+    "updateInterval": "updates ~every 2 min",
+    "loading": "Loading quotes…",
+    "perGram": " / g",
+    "source": {
+      "cbr": "CBR",
+      "exchange": "exchange"
+    },
+    "assets": {
+      "SBTC": "Bitcoin",
+      "SETH": "Ethereum",
+      "SGOLD": "Gold",
+      "SSILV": "Silver",
+      "SPLAT": "Platinum",
+      "SPALD": "Palladium",
+      "SUSDT": "US Dollar",
+      "SEUR": "Euro",
+      "SCNY": "Yuan"
+    }
+  },
   "notifications": {
     "title": "Notifications",
     "markAll": "Mark all read",

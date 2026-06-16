@@ -11,8 +11,6 @@
   "dlmm-user-ui/src/components/KycUploadPanel.tsx": 188,
   "dlmm-user-ui/src/components/LanguageSwitcher.tsx": 3,
   "dlmm-user-ui/src/components/LimitOrdersPanel.tsx": 71,
-  "dlmm-user-ui/src/components/MarketTicker.tsx": 24,
-  "dlmm-user-ui/src/components/NotificationBell.tsx": 1,
   "dlmm-user-ui/src/components/OrderBook.tsx": 65,
   "dlmm-user-ui/src/components/PartialFillNotice.tsx": 21,
   "dlmm-user-ui/src/components/PoolRecentSwapsPanel.tsx": 10,

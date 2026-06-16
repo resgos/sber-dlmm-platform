@@ -741,6 +741,27 @@
     }
   },
 
+  "marketTicker": {
+    "title": "Биржевые цены",
+    "updateInterval": "обновление ~каждые 2 мин",
+    "loading": "Котировки загружаются…",
+    "perGram": " / г",
+    "source": {
+      "cbr": "ЦБ РФ",
+      "exchange": "биржа"
+    },
+    "assets": {
+      "SBTC": "Bitcoin",
+      "SETH": "Ethereum",
+      "SGOLD": "Золото",
+      "SSILV": "Серебро",
+      "SPLAT": "Платина",
+      "SPALD": "Палладий",
+      "SUSDT": "Доллар США",
+      "SEUR": "Евро",
+      "SCNY": "Юань"
+    }
+  },
   "notifications": {
     "title": "Уведомления",
     "markAll": "Прочитать все",
