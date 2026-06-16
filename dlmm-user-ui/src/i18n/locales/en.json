@@ -741,6 +741,11 @@
     }
   },
 
+  "strategy": {
+    "SPOT": { "name": "Uniform", "desc": "Liquidity spread evenly across the range. Best for stable pairs." },
+    "CURVE": { "name": "Concentrated", "desc": "Liquidity concentrated around the current price. Maximum capital efficiency." },
+    "BID_ASK": { "name": "Two-sided", "desc": "Liquidity placed on both sides of the price. A market-maker strategy." }
+  },
   "marketTicker": {
     "title": "Market prices",
     "updateInterval": "updates ~every 2 min",
