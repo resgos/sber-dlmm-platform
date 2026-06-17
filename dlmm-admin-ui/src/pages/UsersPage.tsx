@@ -17,7 +17,7 @@ import {
   FilterOutlined,
   TeamOutlined,
   SafetyCertificateOutlined,
-  StopOutlined,
+  PieChartOutlined,
   ClockCircleOutlined,
   DownloadOutlined,
 } from '@ant-design/icons'
@@ -95,14 +95,17 @@ export default function UsersPage() {
   // grows past the first page.
   const summary = useMemo(() => {
     const list = data?.content ?? []
-    const s = { total: list.length, verified: 0, pending: 0, blocked: 0 }
+    const s = { total: list.length, verified: 0, pending: 0 }
     for (const u of list) {
       if (u.kycStatus === 'VERIFIED') s.verified += 1
       if (u.kycStatus === 'PENDING') s.pending += 1
-      if (u.blocked) s.blocked += 1
     }
     return s
   }, [data])
+  // KYC conversion over the current page — replaces the old "Заблокировано"
+  // tile, which counted a `blocked` flag the real user-service DTO never sends
+  // (so it was permanently 0). verified/total is a real, non-phantom signal.
+  const kycRate = summary.total > 0 ? Math.round((summary.verified / summary.total) * 100) : 0
 
   const columns: ColumnsType<User> = [
     {
@@ -145,15 +148,6 @@ export default function UsersPage() {
         <Tag color={kycStatusColor[status] || 'default'}>
           {kycStatusLabel[status] || status}
         </Tag>
-      ),
-    },
-    {
-      title: 'Статус',
-      dataIndex: 'blocked',
-      key: 'blocked',
-      width: 140,
-      render: (blocked: boolean) => (
-        <Tag color={blocked ? 'red' : 'green'}>{blocked ? 'Заблокирован' : 'Активен'}</Tag>
       ),
     },
     {
@@ -244,11 +238,11 @@ export default function UsersPage() {
             accent: summary.pending > 0 ? '#D97706' : undefined,
           },
           {
-            label: 'Заблокировано',
-            value: summary.blocked.toLocaleString('ru-RU'),
-            sub: summary.blocked === 0 ? 'все активны' : 'без доступа',
-            icon: <StopOutlined style={{ color: summary.blocked > 0 ? '#DC2626' : 'var(--text-muted)' }} />,
-            accent: summary.blocked > 0 ? '#DC2626' : undefined,
+            label: 'Доля KYC',
+            value: summary.total > 0 ? `${kycRate}%` : '—',
+            sub: 'верифицированы',
+            icon: <PieChartOutlined style={{ color: 'var(--sber-green)' }} />,
+            accent: 'var(--sber-green)',
           },
         ]}
       />
