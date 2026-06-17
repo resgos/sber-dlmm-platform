@@ -76,7 +76,14 @@ public class BffDownstreamClient {
         this.userServiceWebClient = webClientBuilder.clone().baseUrl(userServiceUrl).build();
         this.tokenServiceWebClient = webClientBuilder.clone().baseUrl(tokenServiceUrl).build();
         this.feeServiceWebClient = webClientBuilder.clone().baseUrl(feeServiceUrl).build();
-        this.transactionServiceWebClient = webClientBuilder.clone().baseUrl(transactionServiceUrl).build();
+        // The AML suspicious-scan pulls up to 1000 recent transactions (~600KB+);
+        // the default 256KB in-memory codec buffer truncated that response with a
+        // decode error → CB fallback → zero flags. Raise the buffer for this
+        // client so the full batch decodes.
+        this.transactionServiceWebClient = webClientBuilder.clone()
+                .baseUrl(transactionServiceUrl)
+                .codecs(c -> c.defaultCodecs().maxInMemorySize(8 * 1024 * 1024))
+                .build();
         this.priceOracleWebClient = webClientBuilder.clone().baseUrl(priceOracleUrl).build();
     }
 
@@ -233,12 +240,22 @@ public class BffDownstreamClient {
     @CircuitBreaker(name = "transaction-service", fallbackMethod = "fetchRecentTransactionsFallback")
     @Retry(name = "transaction-service")
     public List<Map<String, Object>> fetchRecentTransactions(int limit) {
-        List<Map<String, Object>> result = transactionServiceWebClient.get()
-                .uri("/api/v1/transactions?limit=" + limit)
+        // GET /api/v1/transactions returns a PageResponse object {content:[...]}
+        // and pages by `size`, NOT `limit`. The previous `?limit=` + List
+        // deserialization threw a DecodingException on EVERY call (the body is a
+        // START_OBJECT, not an ARRAY) → CB fallback → the AML suspicious-scan
+        // silently saw zero transactions and flagged nothing.
+        Map<String, Object> page = transactionServiceWebClient.get()
+                .uri("/api/v1/transactions?page=0&size=" + limit)
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .block(CALL_TIMEOUT);
-        return result == null ? Collections.emptyList() : result;
+        if (page == null || !(page.get("content") instanceof List<?> content)) {
+            return Collections.emptyList();
+        }
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> result = (List<Map<String, Object>>) content;
+        return result;
     }
 
     /**

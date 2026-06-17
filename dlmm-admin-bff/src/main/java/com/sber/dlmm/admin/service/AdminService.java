@@ -368,11 +368,17 @@ public class AdminService {
                         java.util.stream.Collectors.counting()
                 ));
 
+        // High-frequency flags once per user, not once per transaction — else an
+        // active account floods the review queue with its entire history.
+        java.util.Set<String> freqFlaggedUsers = new java.util.HashSet<>();
         List<SuspiciousTransactionResponse> suspicious = new ArrayList<>();
 
         for (Map<String, Object> tx : transactions) {
-            String txType = toString(tx.get("type"));
-            long amount = toLong(tx.get("amount"));
+            // Field names per TransactionResponse: txType / amountIn / createdAt
+            // (NOT type / amount / timestamp — those read null and silently
+            // produced empty/zero flag rows).
+            String txType = toString(tx.get("txType"));
+            long amount = toLong(tx.get("amountIn"));
             BigDecimal priceImpact = toBigDecimal(tx.get("priceImpact"));
             String userId = toString(tx.get("userId"));
             String poolId = toString(tx.get("poolId"));
@@ -388,9 +394,10 @@ public class AdminService {
                 }
             }
 
-            // Check 2: High frequency (> 50 tx per user in the batch)
+            // Check 2: High frequency (> 50 tx per user in the batch) — flagged
+            // once per user (Set.add is true only the first time we see them).
             Long count = userTxCount.get(userId);
-            if (count != null && count > HIGH_FREQUENCY_THRESHOLD) {
+            if (count != null && count > HIGH_FREQUENCY_THRESHOLD && freqFlaggedUsers.add(userId)) {
                 reasons.add("High frequency: " + count + " transactions detected");
             }
 
@@ -407,7 +414,7 @@ public class AdminService {
                         String.join("; ", reasons),
                         amount,
                         priceImpact,
-                        parseDateTime(tx.get("timestamp"))
+                        parseDateTime(tx.get("createdAt"))
                 ));
             }
         }

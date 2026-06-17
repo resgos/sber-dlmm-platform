@@ -65,6 +65,10 @@ export const scaleTransaction = (t: Transaction): Transaction => ({
 
 export const scaleSuspiciousTransaction = (t: SuspiciousTransaction): SuspiciousTransaction => ({
   ...t,
+  // admin-bff returns the flag's transaction id as `transactionId`, not `id`
+  // (the FE type/columns/rowKey expect `id`) — map it so the ID column, CSV and
+  // React key resolve instead of rendering blank. The amount is raw (×10⁴).
+  id: t.id ?? (t as { transactionId?: string }).transactionId ?? '',
   amount: fromRaw(t.amount),
 })
 
