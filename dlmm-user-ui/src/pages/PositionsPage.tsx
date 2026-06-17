@@ -15,6 +15,7 @@ import HealthScoreExplainer from '@/components/HealthScoreExplainer'
 import { usePositionAlertWatcher } from '@/lib/usePositionAlertWatcher'
 import { useAutoClaimWatcher } from '@/lib/useAutoClaimWatcher'
 import { calculateHealth, isPositionInRange, summarizePositionRanges, type HealthScore } from '@/lib/positionHealth'
+import { portfolioValueQuote } from '@/lib/positionValue'
 import { exportToCsv } from '@/lib/csvExport'
 import { strategyLabel } from '@/lib/strategy'
 import { apiErrorMessage } from '@/lib/apiError'
@@ -182,6 +183,14 @@ export default function PositionsPage() {
     [activePositions, poolById],
   )
 
+  // Total liquidity currently deployed, in SRUB (every pool is X/SRUB). Mirrors
+  // the per-row P&L column's mark-to-market (currentValueY + currentValueX·price)
+  // — the page exposed this per position but never as a portfolio headline.
+  const totalPositionValue = useMemo(
+    () => portfolioValueQuote(activePositions, poolById),
+    [activePositions, poolById],
+  )
+
   const positionsWithClaimableFees = activePositions.filter(
     (p) => p.unclaimedFeeX > 0 || p.unclaimedFeeY > 0,
   )
@@ -310,10 +319,13 @@ export default function PositionsPage() {
       <KpiRow
         tiles={[
           {
-            label: t('positions.kpi.activePositions'),
-            value: activePositions.length.toLocaleString('ru-RU'),
-            sub: activePositions.length === 0 ? t('positions.kpi.activeNone') : t('positions.kpi.activeProvide'),
+            label: t('positions.kpi.totalValue'),
+            value: activePositions.length > 0 ? formatRub(totalPositionValue) : '—',
+            sub: activePositions.length === 0
+              ? t('positions.kpi.activeNone')
+              : t('positions.kpi.activeCount', { count: activePositions.length }),
             icon: <PieChartOutlined style={{ color: '#9B59B6' }} />,
+            accent: totalPositionValue > 0 ? 'var(--sber-green)' : undefined,
           },
           {
             label: t('positions.kpi.inRange'),

@@ -739,6 +739,8 @@
       "activePositions": "Активных позиций",
       "activeNone": "нет открытых",
       "activeProvide": "предоставляют ликвидность",
+      "totalValue": "Стоимость позиций",
+      "activeCount": "{{count}} активных",
       "inRange": "В диапазоне",
       "allInRange": "все зарабатывают",
       "outOfRangeCount": "{{count}} вне диапазона",

@@ -732,6 +732,8 @@
       "activePositions": "Active positions",
       "activeNone": "none open",
       "activeProvide": "providing liquidity",
+      "totalValue": "Positions value",
+      "activeCount": "{{count}} active",
       "inRange": "In range",
       "allInRange": "all earning",
       "outOfRangeCount": "{{count}} out of range",
