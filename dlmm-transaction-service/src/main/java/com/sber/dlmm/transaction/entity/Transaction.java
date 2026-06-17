@@ -35,8 +35,9 @@ import java.util.UUID;
  * and {@link #feeAmount} are raw integers where 1 unit = 10⁻⁴ token
  * (uniform 4 platform decimals). The backend never applies a token's
  * {@code decimals} column; UIs convert raw↔human at the API boundary.
- * {@link #feeRate} is a ratio (NOT scaled), so it stays meaningful
- * regardless of the quantity scaling.
+ * {@link #feeRate} is the effective fee rate in BASIS POINTS (fee/amountIn ×
+ * 10000) — unaffected by the quantity scaling, and a unit the fee_rate
+ * numeric(38,2) column can actually hold (a raw ratio rounded to 0.00).
  *
  * <p><b>Deduplication:</b> two independent unique keys guard against
  * double-writes — {@link #idempotencyKey} (client-supplied, any flow)
@@ -91,7 +92,7 @@ public class Transaction {
     /** Fee charged, raw ×10⁴ scale (quote-token units). */
     private long feeAmount;
 
-    /** Effective fee rate applied (a ratio — NOT scaled). */
+    /** Effective fee rate applied, in basis points (fee/amountIn × 10000). */
     private BigDecimal feeRate;
 
     /** Number of price bins the swap traversed (0 for non-swap rows). */

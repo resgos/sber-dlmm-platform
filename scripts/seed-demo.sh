@@ -49,6 +49,7 @@ SEEDS=(
   17-seed-ohlcv-carryforward
   18-seed-fix-bin-composition
   19-seed-auto-claim-success
+  20-seed-backfill-fee-rate
 )
 
 psqlq() { docker exec -i -e PGPASSWORD="$DBPW" "$PG" psql -U "$DBU" -d "$DB" "$@"; }

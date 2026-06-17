@@ -125,8 +125,14 @@ public class SwapEventConsumer {
             long amountOut = payload.get("amountOut").asLong();
             long fee = payload.path("fee").asLong(0);
             int binsCrossed = payload.path("binsCrossed").asInt(0);
+            // Effective fee rate in BASIS POINTS (fee/amountIn × 10000). The
+            // fee_rate column is numeric(38,2); a raw ratio (≈0.001–0.003)
+            // rounded to 0.00 there, so EVERY swap recorded fee_rate=0. bps is
+            // the platform's fee unit (baseFeeBps/estimatedFeeBps) and fits
+            // scale-2 cleanly (e.g. a 0.30% fee → 30.00 bps).
             BigDecimal feeRate = amountIn > 0
-                    ? BigDecimal.valueOf(fee).divide(BigDecimal.valueOf(amountIn), 8, java.math.RoundingMode.HALF_UP)
+                    ? BigDecimal.valueOf(fee).multiply(BigDecimal.valueOf(10_000L))
+                        .divide(BigDecimal.valueOf(amountIn), 2, java.math.RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
 
             try {
