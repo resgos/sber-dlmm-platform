@@ -39,6 +39,30 @@ const statusColors: Record<string, string> = {
 const txTypeLabel = (key: string) => i18n.t(`transactions.txType.${key}`, { defaultValue: key })
 const statusLabel = (key: string) => i18n.t(`transactions.txStatus.${key}`, { defaultValue: key })
 
+// 2026-06-17 — per-row "elevated fee" indicator. The effective swap fee rate
+// (bps, written per swap) is compared to the pool's configured base fee: when it
+// is materially higher the variable/dynamic fee kicked in (volatility) or the
+// swap crossed several bins, so the trader paid above the sticker price. We tint
+// the bps text and explain it in the tooltip instead of letting an expensive
+// trade hide as a plain number. Thresholds are intentionally wide (×1.5 / ×3) so
+// ordinary rounding noise around the base fee never flags.
+export type FeeRateSeverity = 'normal' | 'elevated' | 'high'
+export function classifyFeeRate(
+  feeRateBps: number | null | undefined,
+  baseFeeBps: number | null | undefined,
+): FeeRateSeverity {
+  if (feeRateBps == null || feeRateBps <= 0 || baseFeeBps == null || baseFeeBps <= 0) return 'normal'
+  const ratio = feeRateBps / baseFeeBps
+  if (ratio >= 3) return 'high'
+  if (ratio >= 1.5) return 'elevated'
+  return 'normal'
+}
+// Colour class (not AntD `type="danger"`): the dark theme force-overrides
+// .ant-typography colour with !important, so the tint lives in sber-theme.css
+// under a higher-specificity .fee-rate-* class. '' keeps the base secondary look.
+const severityClass = (s: FeeRateSeverity): string =>
+  s === 'high' ? 'fee-rate-high' : s === 'elevated' ? 'fee-rate-elevated' : ''
+
 export default function TransactionsPage() {
   const { t } = useTranslation()
   // Mobile (<md): the wide transaction table forces horizontal scroll, so we
@@ -72,6 +96,14 @@ export default function TransactionsPage() {
     })),
     [poolList],
   )
+  // poolId -> base fee (bps) to flag rows whose effective fee ran above it. The
+  // pool list is already fetched for the filter; an unknown poolId (not in the
+  // first 100) just yields no badge (fail-open).
+  const poolBaseFeeById = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of poolList?.content ?? []) m.set(p.id, p.baseFeeBps)
+    return m
+  }, [poolList])
 
   // Sprint 9 / Audit B3 — the transaction read API now returns self-describing
   // labels (tokenInSymbol / tokenOutSymbol / poolName), so the columns render
@@ -204,6 +236,8 @@ export default function TransactionsPage() {
           {(data?.content || []).map((r) => {
             const px = r.tokenInSymbol || (r.poolName ? r.poolName.split('/')[0] : undefined)
             const py = r.tokenOutSymbol || (r.poolName ? r.poolName.split('/')[1] : undefined)
+            const feeBase = r.poolId ? poolBaseFeeById.get(r.poolId) : undefined
+            const feeSev = classifyFeeRate(r.feeRate, feeBase)
             return (
               <Card
                 key={r.id}
@@ -228,9 +262,9 @@ export default function TransactionsPage() {
                       {formatTokenAmount(r.amountIn, r.tokenInSymbol)} → {formatTokenAmount(r.amountOut, r.tokenOutSymbol)}
                     </Text>
                     {r.feeAmount != null && r.feeAmount > 0 && (
-                      <Text type="secondary" style={{ fontSize: 'var(--text-xs)', whiteSpace: 'nowrap' }}>
+                      <Text type="secondary" className={severityClass(feeSev)} style={{ fontSize: 'var(--text-xs)', whiteSpace: 'nowrap' }}>
                         {t('transactions.table.fee')}: {formatTokenAmount(r.feeAmount, r.tokenInSymbol, { maxFractionDigits: 6 })}
-                        {r.feeRate != null && r.feeRate > 0 ? ` · ${+r.feeRate.toFixed(2)} bps` : ''}
+                        {r.feeRate != null && r.feeRate > 0 ? ` · ${+r.feeRate.toFixed(2)} bps${feeSev !== 'normal' ? ' ⚠' : ''}` : ''}
                       </Text>
                     )}
                   </div>
@@ -368,20 +402,26 @@ export default function TransactionsPage() {
             dataIndex: 'feeAmount',
             align: 'right' as const,
             responsive: ['md'] as const,
-            render: (v: number | null, r: Transaction) => (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                  {formatTokenAmount(v, r.tokenInSymbol, { maxFractionDigits: 6 })}
-                </span>
-                {r.feeRate != null && r.feeRate > 0 && (
-                  <Tooltip title={t('transactions.table.feeRateTooltip')}>
-                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', cursor: 'help' }}>
-                      {+r.feeRate.toFixed(2)} bps
-                    </Text>
-                  </Tooltip>
-                )}
-              </div>
-            ),
+            render: (v: number | null, r: Transaction) => {
+              const base = r.poolId ? poolBaseFeeById.get(r.poolId) : undefined
+              const sev = classifyFeeRate(r.feeRate, base)
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                  <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    {formatTokenAmount(v, r.tokenInSymbol, { maxFractionDigits: 6 })}
+                  </span>
+                  {r.feeRate != null && r.feeRate > 0 && (
+                    <Tooltip title={sev !== 'normal' && base
+                      ? t('transactions.table.feeRateElevatedTooltip', { base, actual: +r.feeRate.toFixed(2), ratio: +(r.feeRate / base).toFixed(1) })
+                      : t('transactions.table.feeRateTooltip')}>
+                      <Text type="secondary" className={severityClass(sev)} style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', cursor: 'help' }}>
+                        {+r.feeRate.toFixed(2)} bps{sev !== 'normal' ? ' ⚠' : ''}
+                      </Text>
+                    </Tooltip>
+                  )}
+                </div>
+              )
+            },
           },
           {
             title: t('transactions.table.status'),

@@ -941,6 +941,7 @@
       "amountOut": "Amount out",
       "fee": "Fee",
       "feeRateTooltip": "Effective fee rate (basis points)",
+      "feeRateElevatedTooltip": "Pool base fee {{base}} bps, effective {{actual}} bps (×{{ratio}}) — dynamic fee kicked in during volatility, or the swap crossed several bins.",
       "status": "Status"
     },
     "txType": {

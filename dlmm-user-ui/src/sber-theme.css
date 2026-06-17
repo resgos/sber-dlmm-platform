@@ -451,6 +451,15 @@
 [data-theme="dark"] .ant-typography-disabled {
   color: var(--text-muted) !important;
 }
+/* 2026-06-17 — elevated-fee indicator on the transaction feed. The blanket
+   dark-theme .ant-typography override above is !important, so a colour must be
+   re-asserted with higher specificity (extra class) to tint the bps text. The
+   vars are already theme-aware + a11y-tuned, so one pair of rules covers both
+   themes; light theme has no blanket override but !important keeps it uniform. */
+[data-theme="dark"] .ant-typography.fee-rate-elevated,
+.ant-typography.fee-rate-elevated { color: var(--color-warning-amber) !important; }
+[data-theme="dark"] .ant-typography.fee-rate-high,
+.ant-typography.fee-rate-high { color: var(--color-negative) !important; }
 
 /* Task #13 — Table column headers + cells. The thead/tbody bg fix at
    line 210 had !important, but the cell text was missing. Add explicit
