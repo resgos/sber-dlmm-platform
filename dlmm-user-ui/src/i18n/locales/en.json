@@ -634,6 +634,55 @@
     }
   },
 
+  "glossary": {
+    "examplePrefix": "Example:",
+    "bin": {
+      "term": "Bin",
+      "definition": "A bin is a tiny price range inside a pool. Every pool has many bins, and each one holds its own liquidity. Trades pass through the active bin.",
+      "example": "If SBER is 500 ₽, the active bin might cover the 499.95–500.05 ₽ range."
+    },
+    "slippage": {
+      "term": "Slippage",
+      "definition": "Slippage is the gap between the expected price and the actual execution price. The larger the trade and the thinner the pool, the bigger the slippage.",
+      "example": "A 0.5% tolerance means: accept up to a 0.5% difference, otherwise cancel the trade."
+    },
+    "il": {
+      "term": "Impermanent Loss (IL)",
+      "definition": "If you provided liquidity to a pool and the price of one token changed, your share can be worth less than if you had simply held the tokens. That is IL.",
+      "example": "You deposit 1000 ₽ and 2 SBER (500 ₽ each). SBER rises to 600 ₽. You end up with less SBER and more ₽ — just holding would have earned more."
+    },
+    "lp": {
+      "term": "LP — liquidity provider",
+      "definition": "An LP (Liquidity Provider) is you, when you add liquidity to a pool. In return you earn a share of the fee from every swap that passes through it.",
+      "example": "Deposit 1M ₽ into the SRUB/SBER pool — you are an LP. Your fee share = 1M ÷ total TVL × trading volume × fee."
+    },
+    "apy": {
+      "term": "APY — annual yield",
+      "definition": "APY (Annual Percentage Yield) estimates your yearly income if the pool's current activity holds for 12 months. Not a guarantee.",
+      "example": "APY 18% = if nothing changes, every 1,000,000 ₽ earns about 180,000 ₽ a year."
+    },
+    "tvl": {
+      "term": "TVL — total value locked",
+      "definition": "TVL (Total Value Locked) is the combined value of everything in the pool. The higher the TVL, the more stable the price on large trades."
+    },
+    "basefee": {
+      "term": "Base fee",
+      "definition": "The share of every trade in the pool that the trader pays. Usually 0.05–1%. Split between LPs and the protocol (Sber takes 5% of this fee)."
+    },
+    "binstep": {
+      "term": "Bin step",
+      "definition": "The distance between neighbouring bins as a % of price. A smaller step means more precise liquidity placement, but it is more expensive to maintain.",
+      "example": "A 0.25% step means the neighbouring bin sits 0.25% away from the current price."
+    },
+    "pivot": {
+      "term": "Pivot currency",
+      "definition": "SRUB is the platform's pivot currency. Any X↔Y swap routes through SRUB: first X→SRUB, then SRUB→Y. This lets the platform reuse liquidity in one place."
+    },
+    "rangefit": {
+      "term": "Range fit",
+      "definition": "If the pool's active bin falls within the range you chose, your liquidity is working and earning. If it moves out, the position sits idle."
+    }
+  },
   "risk": {
     "title": "Important risk information",
     "lp": {

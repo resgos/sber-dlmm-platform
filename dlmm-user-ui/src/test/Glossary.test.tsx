@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
+import i18n from '@/i18n'
 import Glossary, { GLOSSARY_TERMS } from '../components/Glossary'
 
 describe('Glossary (G-18)', () => {
@@ -13,26 +14,28 @@ describe('Glossary (G-18)', () => {
   it('renders children unchanged for unknown term (fail-open)', () => {
     render(<Glossary term="zzz-unknown">текст</Glossary>)
     expect(screen.getByText('текст')).toBeInTheDocument()
-    // No popover rendered → no AntD popover trigger spans with cursor:help
-    // Easiest assertion: no icon
     expect(screen.queryByRole('img')).toBeNull()
   })
 
-  it('has definitions for all the terms used in the codebase', () => {
-    // Sanity floor — if someone deletes a term that's wired into a page,
-    // this test fires and forces them to either restore the term or
-    // sweep the page-side usage.
+  it('every wired term has a non-empty i18n term + definition (< 400 chars)', () => {
+    // Sanity floor — if a term wired into a page loses its copy this fires and
+    // forces restoring the locale entry (the copy now lives in i18n, not here).
     const required = ['bin', 'slippage', 'il', 'lp', 'apy', 'tvl', 'basefee', 'binstep', 'pivot', 'rangefit']
-    for (const t of required) {
-      expect(GLOSSARY_TERMS[t], `Missing glossary term: ${t}`).toBeDefined()
-      expect(GLOSSARY_TERMS[t].term.length).toBeGreaterThan(0)
-      expect(GLOSSARY_TERMS[t].definition.length).toBeGreaterThan(20) // not a stub
+    for (const key of required) {
+      expect(GLOSSARY_TERMS, `Missing glossary key: ${key}`).toContain(key)
+      const term = i18n.t(`glossary.${key}.term`)
+      const def = i18n.t(`glossary.${key}.definition`)
+      expect(term.length, `Empty term: ${key}`).toBeGreaterThan(0)
+      expect(def.length, `Definition for "${key}" is a stub`).toBeGreaterThan(20)
+      expect(def.length, `Definition for "${key}" too long`).toBeLessThan(400)
     }
   })
 
-  it('definitions stay under 400 chars (tooltip-fit)', () => {
-    for (const [key, def] of Object.entries(GLOSSARY_TERMS)) {
-      expect(def.definition.length, `Definition for "${key}" too long`).toBeLessThan(400)
-    }
+  it('localises term + definition to English', async () => {
+    await i18n.changeLanguage('en')
+    expect(i18n.t('glossary.il.term')).toMatch(/Impermanent Loss/)
+    expect(i18n.t('glossary.bin.definition')).toMatch(/tiny price range/)
+    expect(i18n.t('glossary.examplePrefix')).toBe('Example:')
+    await i18n.changeLanguage('ru')
   })
 })
