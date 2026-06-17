@@ -876,6 +876,7 @@
       "tokenOut": "Token (received)",
       "amountOut": "Amount (received)",
       "fee": "Fee",
+      "feeRate": "Fee rate (bps)",
       "binsCrossed": "Bins crossed",
       "error": "Error"
     },
@@ -890,6 +891,7 @@
       "amountIn": "Amount in",
       "amountOut": "Amount out",
       "fee": "Fee",
+      "feeRateTooltip": "Effective fee rate (basis points)",
       "status": "Status"
     },
     "txType": {

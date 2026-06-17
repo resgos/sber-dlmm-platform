@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Table, Tag, Typography, Space, Select, DatePicker, Button, Card, Grid, Pagination } from 'antd'
+import { Table, Tag, Typography, Space, Select, DatePicker, Button, Card, Grid, Pagination, Tooltip } from 'antd'
 import { DownloadOutlined, FilterOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -126,6 +126,7 @@ export default function TransactionsPage() {
         { header: t('transactions.csv.tokenOut'), accessor: (r) => r.tokenOutSymbol ?? '' },
         { header: t('transactions.csv.amountOut'), accessor: (r) => r.amountOut ?? '' },
         { header: t('transactions.csv.fee'), accessor: (r) => r.feeAmount ?? '' },
+        { header: t('transactions.csv.feeRate'), accessor: (r) => r.feeRate ?? '' },
         { header: t('transactions.csv.binsCrossed'), accessor: (r) => r.binsCrossed ?? '' },
         { header: t('transactions.csv.error'), accessor: (r) => r.errorMessage ?? '' },
       ]
@@ -229,6 +230,7 @@ export default function TransactionsPage() {
                     {r.feeAmount != null && r.feeAmount > 0 && (
                       <Text type="secondary" style={{ fontSize: 'var(--text-xs)', whiteSpace: 'nowrap' }}>
                         {t('transactions.table.fee')}: {formatTokenAmount(r.feeAmount, r.tokenInSymbol, { maxFractionDigits: 6 })}
+                        {r.feeRate != null && r.feeRate > 0 ? ` · ${+r.feeRate.toFixed(2)} bps` : ''}
                       </Text>
                     )}
                   </div>
@@ -367,9 +369,18 @@ export default function TransactionsPage() {
             align: 'right' as const,
             responsive: ['md'] as const,
             render: (v: number | null, r: Transaction) => (
-              <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                {formatTokenAmount(v, r.tokenInSymbol, { maxFractionDigits: 6 })}
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                  {formatTokenAmount(v, r.tokenInSymbol, { maxFractionDigits: 6 })}
+                </span>
+                {r.feeRate != null && r.feeRate > 0 && (
+                  <Tooltip title={t('transactions.table.feeRateTooltip')}>
+                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums', cursor: 'help' }}>
+                      {+r.feeRate.toFixed(2)} bps
+                    </Text>
+                  </Tooltip>
+                )}
+              </div>
             ),
           },
           {
