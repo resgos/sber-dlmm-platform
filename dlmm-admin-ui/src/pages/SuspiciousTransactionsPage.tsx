@@ -16,6 +16,7 @@ import {
   CheckCircleOutlined,
   RiseOutlined,
   CheckOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
@@ -24,6 +25,20 @@ import type { SuspiciousTransaction } from '@/api/types'
 import dayjs from 'dayjs'
 import { KpiRow, PageHeader, UserChip } from '@/components/sber'
 import { formatCompact, shortId } from '@/lib/format'
+import { exportToCsv, type CsvColumn } from '@/lib/csvExport'
+
+// Compliance export schema — kept module-level (and exported) so the column
+// mapping is unit-testable without rendering the page. Typed against
+// SuspiciousTransaction so a wrong field name is a compile error.
+export const suspiciousCsvColumns: CsvColumn<SuspiciousTransaction>[] = [
+  { header: 'ID', accessor: (t) => t.id },
+  { header: 'Тип', accessor: (t) => t.type },
+  { header: 'ID пользователя', accessor: (t) => t.userId },
+  { header: 'ID пула', accessor: (t) => t.poolId ?? '' },
+  { header: 'Сумма', accessor: (t) => t.amount },
+  { header: 'Причина', accessor: (t) => t.reason },
+  { header: 'Время', accessor: (t) => dayjs(t.timestamp).format('YYYY-MM-DD HH:mm:ss') },
+]
 
 /**
  * Sprint 9-DS — Suspicious transactions page refactor.
@@ -64,6 +79,16 @@ export default function SuspiciousTransactionsPage() {
     const distinctUsers = new Set(list.map((t) => t.userId)).size
     return { total: list.length, today: todayCount, bigTicket, distinctUsers }
   }, [data])
+
+  // Compliance export — a regulator/AML officer asks "give me every flagged
+  // operation": one click downloads the full current list. Columns typed
+  // against SuspiciousTransaction so a wrong field name is a compile error.
+  const handleExportCsv = () => {
+    const list = data ?? []
+    if (list.length === 0) return
+    const stamp = dayjs().format('YYYY-MM-DD')
+    exportToCsv(`dlmm-suspicious-${stamp}.csv`, list, suspiciousCsvColumns)
+  }
 
   const columns: ColumnsType<SuspiciousTransaction> = [
     {
@@ -235,6 +260,16 @@ export default function SuspiciousTransactionsPage() {
           },
         ]}
       />
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Button
+          icon={<DownloadOutlined />}
+          onClick={handleExportCsv}
+          disabled={(data?.length ?? 0) === 0}
+        >
+          Экспорт CSV
+        </Button>
+      </div>
 
       <Card className="sber-card sber-table" style={{ borderRadius: 12, border: '1px solid var(--border-light)' }}>
         <Table<SuspiciousTransaction>
