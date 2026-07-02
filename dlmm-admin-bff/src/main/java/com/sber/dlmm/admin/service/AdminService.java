@@ -411,6 +411,7 @@ public class AdminService {
                         toUUID(transactionId),
                         toUUID(userId),
                         toUUID(poolId),
+                        txType,
                         String.join("; ", reasons),
                         amount,
                         priceImpact,

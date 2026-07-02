@@ -69,6 +69,10 @@ export const scaleSuspiciousTransaction = (t: SuspiciousTransaction): Suspicious
   // (the FE type/columns/rowKey expect `id`) — map it so the ID column, CSV and
   // React key resolve instead of rendering blank. The amount is raw (×10⁴).
   id: t.id ?? (t as { transactionId?: string }).transactionId ?? '',
+  // 2026-06-17 — same drift, second field: the wire now carries `txType`
+  // (added to the BFF DTO), the FE reads `type`; map it so the «Тип» column
+  // and CSV stop rendering blank.
+  type: t.type ?? (t as { txType?: string }).txType ?? '',
   amount: fromRaw(t.amount),
 })
 

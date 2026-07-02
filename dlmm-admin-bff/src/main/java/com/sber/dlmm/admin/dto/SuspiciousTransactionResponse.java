@@ -16,6 +16,10 @@ import java.util.UUID;
  * @param transactionId  identifier of the flagged transaction
  * @param userId         identifier of the user who initiated the transaction
  * @param poolId         identifier of the pool the transaction touched
+ * @param txType         operation type of the flagged transaction (SWAP / TRANSFER / …);
+ *                       2026-06-17 — was absent, leaving the admin table's «Тип»
+ *                       column permanently blank even though the scan already
+ *                       reads the type for its TVL heuristic
  * @param reason         human-readable AML heuristic that flagged this row
  * @param amount         transaction amount, raw integer (1 unit = 10⁻⁴ token)
  * @param priceImpactPct price impact of the transaction, as a percentage (%)
@@ -25,6 +29,7 @@ public record SuspiciousTransactionResponse(
     UUID transactionId,
     UUID userId,
     UUID poolId,
+    String txType,
     String reason,
     long amount,
     BigDecimal priceImpactPct,

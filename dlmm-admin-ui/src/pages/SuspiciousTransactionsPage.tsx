@@ -109,7 +109,9 @@ export default function SuspiciousTransactionsPage() {
       dataIndex: 'type',
       key: 'type',
       width: 120,
-      render: (type: string) => <Tag color="blue">{type}</Tag>,
+      // 2026-06-17 — the BFF now sends txType (mapped to `type` at the API
+      // boundary); em-dash instead of an empty blue chip when it's absent.
+      render: (type: string) => (type ? <Tag color="blue">{type}</Tag> : '—'),
     },
     {
       title: 'Пользователь',
