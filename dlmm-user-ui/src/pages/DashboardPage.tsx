@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import { Row, Col, Card, Table, Tag, Space, Typography, Spin, Alert, Button, Tooltip } from 'antd'
 import {
   WalletOutlined,
@@ -19,6 +19,8 @@ import SpasiboWidget from '@/components/SpasiboWidget'
 import MarketTicker from '@/components/MarketTicker'
 import { uiPrefStore } from '@/store/uiPrefStore'
 import { portfolioValueQuote } from '@/lib/positionValue'
+import { buildPortfolioSegments } from '@/lib/portfolioStructure'
+import PortfolioStructure from '@/components/PortfolioStructure'
 import { DASHBOARD_TILE_PALETTE } from '@/styles/palette'
 import type { TokenBalance, Position, Transaction, TokenPrice, Pool, Token } from '@/api/types'
 import dayjs from 'dayjs'
@@ -51,6 +53,10 @@ const statusColors: Record<string, string> = {
   FAILED: 'error',
   CANCELLED: 'default',
 }
+
+// 2026-06-17 — idle-capital nudge dismiss flag (same localStorage pattern as
+// HealthScoreExplainer): once closed, stays closed on this browser.
+const IDLE_NUDGE_DISMISS_KEY = 'dlmm.dashboard.idleNudge.dismissed'
 
 export default function DashboardPage() {
   const { t } = useTranslation()
@@ -167,6 +173,29 @@ export default function DashboardPage() {
   // the two surfaces can't drift.
   const deployedRub = portfolioValueQuote(activePositions, poolById)
   const totalPortfolioRub = totalBalanceRub + deployedRub
+
+  // 2026-06-17 — capital utilization: what share of the portfolio is actually
+  // working (deployed in LP). Sub-line of the «В ликвидности» hero metric and
+  // the trigger for the idle-capital nudge below the hero.
+  const utilizationPct = totalPortfolioRub > 0 ? (deployedRub / totalPortfolioRub) * 100 : 0
+  const utilizationPctText = utilizationPct > 0 && utilizationPct < 0.01 ? '<0,01' : utilizationPct.toFixed(2)
+
+  const [idleNudgeDismissed, setIdleNudgeDismissed] = useState<boolean>(() => {
+    try { return localStorage.getItem(IDLE_NUDGE_DISMISS_KEY) === 'true' } catch { return false }
+  })
+  const dismissIdleNudge = () => {
+    setIdleNudgeDismissed(true)
+    try { localStorage.setItem(IDLE_NUDGE_DISMISS_KEY, 'true') } catch { /* ignore */ }
+  }
+  const showIdleNudge =
+    !idleNudgeDismissed && !loadingBalances && !loadingPositions && totalBalanceRub > 0 && utilizationPct < 50
+
+  // «Структура портфеля» — the same figures the hero sums, decomposed into
+  // top-3 wallet tokens / прочие / LP / unclaimed fees. One source, no drift.
+  const portfolioSegments = useMemo(
+    () => buildPortfolioSegments(myBalances ?? [], rubPriceBySymbol, deployedRub, feeSummary?.totalUnclaimed ?? 0),
+    [myBalances, rubPriceBySymbol, deployedRub, feeSummary],
+  )
 
   if (loadingBalances) {
     return <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
@@ -327,7 +356,13 @@ export default function DashboardPage() {
           {heroSubMetric(
             t('dashboard.tiles.deployedValue'),
             loadingPositions ? '—' : formatRub(deployedRub),
-            <span style={{ color: 'rgba(255,255,255,0.65)' }}>{t('dashboard.tiles_sub.deployedInPools')}</span>,
+            // Utilization beats a static caption once there IS deployed capital;
+            // before that, explain what the metric will show.
+            <span style={{ color: 'rgba(255,255,255,0.65)' }}>
+              {deployedRub > 0
+                ? t('dashboard.tiles_sub.utilization', { pct: utilizationPctText })
+                : t('dashboard.tiles_sub.deployedInPools')}
+            </span>,
             t('dashboard.hero.tooltips.deployedValue'),
           )}
           {heroSubMetric(
@@ -369,6 +404,25 @@ export default function DashboardPage() {
           middle — the three shortcuts a treasurer hits most often,
           (3) Recent activity teaser on the right that's also a link to
           the full transactions page. */}
+      {/* 2026-06-17 — idle-capital nudge: the hero now shows how little of the
+          portfolio is deployed; this turns the observation into an action.
+          Dismiss persists (localStorage), hidden once utilization ≥ 50%. */}
+      {showIdleNudge && (
+        <Alert
+          type="info"
+          showIcon
+          closable
+          onClose={dismissIdleNudge}
+          style={{ borderRadius: 'var(--radius-md)' }}
+          message={t('dashboard.idleNudge.text', { amount: formatRub(totalBalanceRub) })}
+          action={
+            <Button size="small" type="primary" onClick={() => navigate('/pools')}>
+              {t('dashboard.hero.toPools')}
+            </Button>
+          }
+        />
+      )}
+
       <MarketTicker prices={prices} />
 
       <Row gutter={[16, 16]} align="stretch">
@@ -476,6 +530,9 @@ export default function DashboardPage() {
           </Card>
         </Col>
       </Row>
+
+      {/* 2026-06-17 — portfolio composition: the hero total decomposed. */}
+      <PortfolioStructure segments={portfolioSegments} />
 
       {/* Token balances */}
       <Card className="sber-card" title={<Text strong>{t('dashboard.tokens.title')}</Text>}

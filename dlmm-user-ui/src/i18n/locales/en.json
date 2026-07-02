@@ -159,7 +159,17 @@
       "openPositionToEarn": "open a position to start earning fees",
       "earnedDelta": "+{{value}}% of balance",
       "startEarning": "start earning in pools",
-      "deployedInPools": "capital in LP positions"
+      "deployedInPools": "capital in LP positions",
+      "utilization": "{{pct}}% of portfolio working"
+    },
+    "idleNudge": {
+      "text": "Idle {{amount}} in your wallet isn't earning — deploy it into a liquidity pool and earn swap fees."
+    },
+    "structure": {
+      "title": "Portfolio structure",
+      "others": "Others",
+      "deployed": "In liquidity",
+      "fees": "Fees to claim"
     },
     "hero": {
       "buySell": "Buy / Sell",

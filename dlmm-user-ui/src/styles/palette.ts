@@ -52,3 +52,22 @@ export const NOTIFICATION_TYPE_COLORS: Record<string, string> = {
 
 /** Fallback tag colour (used when the type isn't in the map). */
 export const NOTIFICATION_TAG_DEFAULT = '#6B7280'
+
+/**
+ * 2026-06-17 — portfolio-structure card (dashboard). Segment colours for the
+ * stacked composition bar: distinct, dashboard-palette-adjacent hues. Token
+ * segments cycle through TOKEN_CYCLE by rank; the three fixed segment kinds
+ * get stable colours so «В ликвидности» is always violet regardless of how
+ * many token segments precede it. Hex lives here (.ts) — the AU-2 ratchet
+ * scans .tsx only.
+ */
+export const PORTFOLIO_SEGMENT_COLORS = {
+  /** Wallet token slices, by descending value rank (cycled). */
+  TOKEN_CYCLE: ['#21A038', '#0EA5E9', '#F59E0B', '#EC4899', '#14B8A6'],
+  /** Aggregated tail beyond the top-N tokens. */
+  others: '#6B7280',
+  /** Capital deployed in LP positions. */
+  deployed: '#8B5CF6',
+  /** Unclaimed fees ready to claim. */
+  fees: '#F97316',
+} as const
