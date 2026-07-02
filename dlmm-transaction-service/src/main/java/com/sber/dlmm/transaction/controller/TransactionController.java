@@ -225,6 +225,34 @@ public class TransactionController {
     }
 
     /**
+     * 2026-06-17 — effective-fee stats for a pool over its last N swaps.
+     * The pool card advertises the static base fee; this returns what recent
+     * traders actually paid (avg/min/max of the ledger's fee_rate, bps),
+     * including the variable fee. Same public-read rationale as the recent
+     * feed above: aggregate market data, no PII.
+     *
+     * @param poolId pool whose fee stats to compute
+     * @param limit  sample size («last N swaps»); the service clamps to [1, 200]
+     * @return 200 with {@link com.sber.dlmm.transaction.dto.PoolFeeStatsResponse}
+     */
+    @GetMapping("/pool/{poolId}/fee-stats")
+    @Operation(
+            summary = "Effective fee statistics for a pool",
+            description = "Aggregates the fee_rate (basis points) of the pool's most recent CONFIRMED swaps "
+                    + "(avg/min/max over the last N, N clamped to [1, 200]) — the rate traders actually paid, "
+                    + "including the volatility-driven variable fee, vs the pool's advertised base fee. "
+                    + "Null aggregates when the pool has no recorded swap fee rates.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Fee statistics returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid access token")
+    })
+    public ResponseEntity<com.sber.dlmm.transaction.dto.PoolFeeStatsResponse> getPoolFeeStats(
+            @Parameter(description = "Pool id") @PathVariable UUID poolId,
+            @Parameter(description = "Sample size (last N swaps); clamped to [1, 200]") @RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(transactionService.getPoolFeeStats(poolId, limit));
+    }
+
+    /**
      * Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" action for the
      * SuspiciousTransactionsPage. Stamps reviewedAt/reviewedBy on the
      * transaction so admin-bff's on-the-fly suspicious detection

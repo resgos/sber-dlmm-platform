@@ -329,6 +329,21 @@ export interface TransactionFilters {
   poolId?: string
 }
 
+/**
+ * 2026-06-17 — effective-fee stats for a pool over its last N swaps
+ * (GET /transactions/pool/{poolId}/fee-stats). All rates are basis points —
+ * NOT amount-scaled. Aggregates are null when the pool has no recorded
+ * swap fee rates (new pool / pre-backfill data).
+ */
+export interface PoolFeeStats {
+  poolId: string
+  avgFeeRateBps: number | null
+  minFeeRateBps: number | null
+  maxFeeRateBps: number | null
+  swapCount: number
+  sampleLimit: number
+}
+
 // Fees
 export interface FeeSummary {
   totalEarnedX: number

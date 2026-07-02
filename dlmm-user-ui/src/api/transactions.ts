@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { Transaction, PageResponse, TransactionFilters } from './types'
+import type { Transaction, PageResponse, TransactionFilters, PoolFeeStats } from './types'
 import { scaleTransaction } from './scale'
 
 export const transactions = {
@@ -47,5 +47,18 @@ export const transactions = {
       { params: { limit } },
     )
     return data.map(scaleTransaction)
+  },
+
+  /**
+   * 2026-06-17 — effective-fee stats over the pool's last N swaps. Rates are
+   * bps (never amount-scaled — pass through untouched); aggregates are null
+   * for pools with no recorded swap fee rates.
+   */
+  getPoolFeeStats: async (poolId: string, limit = 50): Promise<PoolFeeStats> => {
+    const { data } = await apiClient.get<PoolFeeStats>(
+      `/transactions/pool/${poolId}/fee-stats`,
+      { params: { limit } },
+    )
+    return data
   },
 }

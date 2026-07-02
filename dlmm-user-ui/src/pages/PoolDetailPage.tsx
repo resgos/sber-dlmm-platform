@@ -16,7 +16,8 @@ import {
   DeleteOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { pools, fees } from '@/api/services'
+import { pools, fees, transactions } from '@/api/services'
+import { classifyFeeRate } from './TransactionsPage'
 import type { LiquidityStrategy, Pool, PoolDetail, Position } from '@/api/types'
 import BinLiquidityChart from '@/components/BinLiquidityChart'
 import OrderBook from '@/components/OrderBook'
@@ -54,6 +55,16 @@ export default function PoolDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+
+  // 2026-06-17 — effective fee over the pool's last 50 swaps (ledger
+  // fee_rate, bps). Rendered next to the advertised base fee in the header
+  // so «заявленная vs фактическая» is one glance; hidden when the pool has
+  // no recorded swap rates (fail-open).
+  const { data: feeStats } = useQuery({
+    queryKey: ['poolFeeStats', id],
+    queryFn: () => transactions.getPoolFeeStats(id!, 50),
+    enabled: !!id,
+  })
 
   // Sprint 9-DS-r4 (P1-2) — pending preview state for the bin chart.
   // The Add Liquidity panel (inside PoolActionTabs) pushes its current
@@ -381,6 +392,31 @@ export default function PoolDetailPage() {
                   <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
                     {t('poolDetail.baseFee')}: <strong style={{ color: 'var(--text-primary)' }}>{bpsToPercent(pool.baseFeeBps)}</strong>
                   </Text>
+                  {feeStats?.avgFeeRateBps != null && (() => {
+                    // Same thresholds as the transaction-feed indicator: tint only
+                    // when the realized average materially exceeds the base fee.
+                    const sev = classifyFeeRate(feeStats.avgFeeRateBps, pool.baseFeeBps)
+                    return (
+                      <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
+                        {t('poolDetail.effectiveFee')}:{' '}
+                        <Tooltip
+                          title={t('poolDetail.effectiveFeeTooltip', {
+                            count: feeStats.swapCount,
+                            min: feeStats.minFeeRateBps,
+                            max: feeStats.maxFeeRateBps,
+                          })}
+                        >
+                          <Text
+                            strong
+                            className={sev !== 'normal' ? `fee-rate-${sev}` : ''}
+                            style={{ color: 'var(--text-primary)', cursor: 'help', fontSize: 'var(--text-sm)' }}
+                          >
+                            {feeStats.avgFeeRateBps.toFixed(2)} bps{sev !== 'normal' ? ' ⚠' : ''}
+                          </Text>
+                        </Tooltip>
+                      </Text>
+                    )
+                  })()}
                   <Text type="secondary" style={{ fontSize: 'var(--text-sm)' }}>
                     {t('poolDetail.createdAt')}: <strong style={{ color: 'var(--text-primary)' }}>{dayjs(pool.createdAt).format('DD.MM.YYYY')}</strong>
                   </Text>

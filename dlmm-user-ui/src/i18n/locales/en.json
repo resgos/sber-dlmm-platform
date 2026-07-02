@@ -526,6 +526,8 @@
     "feeRaisedBadge": "fee raised",
     "binStep": "Bin step",
     "baseFee": "Base fee",
+    "effectiveFee": "Effective fee",
+    "effectiveFeeTooltip": "Average realized rate over the pool's last {{count}} swaps (min {{min}} — max {{max}} bps). Includes the volatility-driven variable fee and multi-bin traversal — what traders actually paid, not the advertised base.",
     "createdAt": "Created",
     "kpi": {
       "tvl": "Pool TVL",

@@ -167,4 +167,25 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID>,
            "AND t.status = com.sber.dlmm.common.enums.TransactionStatus.CONFIRMED " +
            "ORDER BY t.createdAt DESC")
     java.util.List<Transaction> findRecentPoolSwaps(@Param("poolId") UUID poolId, Pageable pageable);
+
+    /**
+     * 2026-06-17 — effective-fee sample for {@code /pool/{id}/fee-stats}:
+     * the fee_rate (bps) of the pool's most recent CONFIRMED swaps, newest
+     * first. {@code feeRate > 0} skips legacy rows written before the
+     * fee_rate backfill (20-seed) — a zero there means «not recorded», not
+     * «free swap», and would silently drag the average down. Projection
+     * keeps the transfer to one column; the aggregate is computed in the
+     * service (sample is ≤ 200 rows by contract).
+     *
+     * @param poolId   pool whose swap fee rates to sample
+     * @param pageable caps the sample size (service clamps to [1, 200])
+     * @return fee_rate values in bps, newest first
+     */
+    @Query("SELECT t.feeRate FROM Transaction t " +
+           "WHERE t.poolId = :poolId " +
+           "AND t.txType = com.sber.dlmm.common.enums.TransactionType.SWAP " +
+           "AND t.status = com.sber.dlmm.common.enums.TransactionStatus.CONFIRMED " +
+           "AND t.feeRate > 0 " +
+           "ORDER BY t.createdAt DESC")
+    java.util.List<java.math.BigDecimal> findRecentPoolSwapFeeRates(@Param("poolId") UUID poolId, Pageable pageable);
 }

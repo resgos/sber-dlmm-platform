@@ -436,6 +436,35 @@ public class TransactionService {
     }
 
     /**
+     * 2026-06-17 — effective-fee stats over the pool's last N CONFIRMED
+     * swaps (fee_rate, bps). Complements the static baseFeeBps the pool
+     * advertises: this is what recent traders actually paid, including the
+     * volatility-driven variable fee and multi-bin traversal. Aggregated in
+     * Java over a ≤200-row single-column projection — no schema, no money
+     * path. Empty sample (new pool / pre-backfill data) → null aggregates.
+     */
+    @Transactional(readOnly = true)
+    public com.sber.dlmm.transaction.dto.PoolFeeStatsResponse getPoolFeeStats(UUID poolId, int limit) {
+        int clamped = Math.max(1, Math.min(limit, 200));
+        java.util.List<java.math.BigDecimal> rates =
+                transactionRepository.findRecentPoolSwapFeeRates(poolId, PageRequest.of(0, clamped));
+        if (rates.isEmpty()) {
+            return new com.sber.dlmm.transaction.dto.PoolFeeStatsResponse(poolId, null, null, null, 0, clamped);
+        }
+        java.math.BigDecimal sum = java.math.BigDecimal.ZERO;
+        java.math.BigDecimal min = rates.get(0);
+        java.math.BigDecimal max = rates.get(0);
+        for (java.math.BigDecimal r : rates) {
+            sum = sum.add(r);
+            if (r.compareTo(min) < 0) min = r;
+            if (r.compareTo(max) > 0) max = r;
+        }
+        java.math.BigDecimal avg = sum.divide(
+                java.math.BigDecimal.valueOf(rates.size()), 2, java.math.RoundingMode.HALF_UP);
+        return new com.sber.dlmm.transaction.dto.PoolFeeStatsResponse(poolId, avg, min, max, rates.size(), clamped);
+    }
+
+    /**
      * Sprint 4 #4.4 — settlement-report CSV row source.
      * Returns up to {@link #REPORT_MAX_ROWS} transactions matching the
      * filter, sorted by createdAt DESC. Capped to bound memory; corp
