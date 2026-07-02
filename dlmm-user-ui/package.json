@@ -15,7 +15,8 @@
     "lint:styles": "node ../scripts/check-inline-styles.mjs",
     "lint:i18n": "node ../scripts/check-no-cyrillic-in-tsx.mjs",
     "lint:api": "node ../scripts/check-api-params.mjs",
-    "lint:all": "npm run lint:colors && npm run lint:styles && npm run lint:i18n && npm run lint:api"
+    "lint:all": "npm run lint:colors && npm run lint:styles && npm run lint:i18n && npm run lint:i18n-dead && npm run lint:api",
+    "lint:i18n-dead": "node ../scripts/check-unused-i18n-keys.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.7",
