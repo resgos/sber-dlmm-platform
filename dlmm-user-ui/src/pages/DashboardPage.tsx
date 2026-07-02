@@ -1,5 +1,5 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
-import { Row, Col, Card, Table, Tag, Space, Typography, Spin, Alert, Button, Tooltip } from 'antd'
+import { Row, Col, Card, Table, Tag, Space, Typography, Spin, Alert, Button, Tooltip, Grid } from 'antd'
 import {
   WalletOutlined,
   PieChartOutlined,
@@ -65,6 +65,11 @@ export default function DashboardPage() {
   // buy/sell+LP surface instead of the Pro Swap page.
   const prefs = useSyncExternalStore(uiPrefStore.subscribe, uiPrefStore.getSnapshot)
   const tradeRoute = prefs.simpleMode ? '/simple' : '/swap'
+  // 2026-06-17 mobile fix — below md the four hero sub-metrics (flex 1 1 0 +
+  // minWidth 0) crammed into 73px-wide slivers of vertically wrapped text.
+  // On mobile they become a 2×2 grid without the hairline left borders.
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
 
   const { data: myBalances, isLoading: loadingBalances } = useQuery({
     queryKey: ['myBalances'],
@@ -218,10 +223,11 @@ export default function DashboardPage() {
   // of being looked up by the (now translated) label text.
   const heroSubMetric = (label: string, value: React.ReactNode, sub: React.ReactNode, tooltip?: string) => (
     <Col
-      flex="1 1 0"
+      // Mobile: 2×2 grid (each ~half width) instead of four 73px slivers.
+      flex={isMobile ? '1 1 40%' : '1 1 0'}
       style={{
-        padding: '0 22px',
-        borderLeft: '1px solid rgba(255,255,255,0.22)',
+        padding: isMobile ? '12px 8px 0 4px' : '0 22px',
+        borderLeft: isMobile ? 'none' : '1px solid rgba(255,255,255,0.22)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
@@ -279,7 +285,10 @@ export default function DashboardPage() {
           Design redesign at docs/design/user-dashboard-claude-design/. */}
       <div className="sber-hero" style={{ padding: '20px 24px' }}>
         <Row gutter={0} align="middle" wrap={false} style={{ flexWrap: 'wrap' }}>
-          <Col flex="0 0 320px" style={{ padding: '0 20px 0 4px', minWidth: 240 }}>
+          <Col
+            flex={isMobile ? '1 1 100%' : '0 0 320px'}
+            style={{ padding: isMobile ? '0 4px 4px' : '0 20px 0 4px', minWidth: 240 }}
+          >
             <div
               style={{
                 fontSize: 'var(--text-xs)',
