@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Form, Input, Button, Card, Typography, Alert, Space } from 'antd'
 import { UserOutlined, LockOutlined, MailOutlined, IdcardOutlined, PhoneOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { auth } from '@/api/services'
 import { authStore } from '@/store/authStore'
 
@@ -19,6 +20,11 @@ function SberLogoLarge() {
 }
 
 export default function RegisterPage() {
+  // 2026-06-17 — wired to i18n. The auth.register.* copy existed in BOTH
+  // locale bundles for a while but the page stayed hardcoded Russian — the
+  // exact "dead keys" class the lint:i18n-dead ratchet now guards against.
+  // An EN investor saw a Russian registration form as the first screen.
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -56,7 +62,7 @@ export default function RegisterPage() {
       navigate('/', { replace: true })
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { message?: string } } }
-      setError(axiosError?.response?.data?.message || 'Ошибка регистрации. Попробуйте снова.')
+      setError(axiosError?.response?.data?.message || t('auth.register.errorFallback'))
     } finally {
       setLoading(false)
     }
@@ -70,7 +76,7 @@ export default function RegisterPage() {
           <Title level={3} className="sber-brand-title" style={{ margin: 0 }}>
             СБЕР <span className="sber-brand-title-accent">DLMM</span>
           </Title>
-          <Text style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-base)' }}>Создайте аккаунт</Text>
+          <Text style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-base)' }}>{t('auth.register.subtitle')}</Text>
         </Space>
 
         {error && (
@@ -88,59 +94,65 @@ export default function RegisterPage() {
           <Space style={{ width: '100%' }} size={12}>
             <Form.Item
               name="firstName"
-              label={<span style={{ fontWeight: 500, color: '#374151' }}>Имя</span>}
-              rules={[{ required: true, message: 'Введите имя' }, { min: 2, message: 'Минимум 2 символа' }]}
+              label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('auth.register.firstNameLabel')}</span>}
+              rules={[
+                { required: true, message: t('auth.register.firstNameRequired') },
+                { min: 2, message: t('auth.register.firstNameMin') },
+              ]}
               style={{ flex: 1 }}
             >
               <Input
                 prefix={<UserOutlined style={{ color: '#9CA3AF' }} />}
-                placeholder="Иван"
+                placeholder={t('auth.register.firstNamePlaceholder')}
                 style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
               />
             </Form.Item>
             <Form.Item
               name="lastName"
-              label={<span style={{ fontWeight: 500, color: '#374151' }}>Фамилия</span>}
-              rules={[{ required: true, message: 'Введите фамилию' }, { min: 2, message: 'Минимум 2 символа' }]}
+              label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('auth.register.lastNameLabel')}</span>}
+              rules={[
+                { required: true, message: t('auth.register.lastNameRequired') },
+                { min: 2, message: t('auth.register.lastNameMin') },
+              ]}
               style={{ flex: 1 }}
             >
-              <Input placeholder="Иванов" style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
+              <Input placeholder={t('auth.register.lastNamePlaceholder')} style={{ height: 44, borderRadius: 'var(--radius-sm)' }} />
             </Form.Item>
           </Space>
 
           <Form.Item
             name="sberId"
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Сбер ID</span>}
-            rules={[{ required: true, message: 'Введите Сбер ID' }]}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('auth.register.sberIdLabel')}</span>}
+            rules={[{ required: true, message: t('auth.register.sberIdRequired') }]}
           >
             <Input
               prefix={<IdcardOutlined style={{ color: '#9CA3AF' }} />}
-              placeholder="SBER-USR-12345"
+              placeholder={t('auth.register.sberIdPlaceholder')}
               style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
             />
           </Form.Item>
 
           <Form.Item
             name="phone"
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Телефон</span>}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('auth.register.phoneLabel')}</span>}
             rules={[
-              { required: true, message: 'Введите номер телефона' },
-              { pattern: /^\+7\d{10}$/, message: 'Формат: +7XXXXXXXXXX' },
+              { required: true, message: t('auth.register.phoneRequired') },
+              { pattern: /^\+7\d{10}$/, message: t('auth.register.phonePattern') },
             ]}
           >
             <Input
               prefix={<PhoneOutlined style={{ color: '#9CA3AF' }} />}
-              placeholder="+79001234567"
+              placeholder={t('auth.register.phonePlaceholder')}
               style={{ height: 44, borderRadius: 'var(--radius-sm)' }}
             />
           </Form.Item>
 
           <Form.Item
             name="email"
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Электронная почта</span>}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('auth.register.emailLabel')}</span>}
             rules={[
-              { required: true, message: 'Введите email' },
-              { type: 'email', message: 'Введите корректный email' },
+              { required: true, message: t('auth.register.emailRequired') },
+              { type: 'email', message: t('auth.register.emailInvalid') },
             ]}
           >
             <Input
@@ -153,11 +165,11 @@ export default function RegisterPage() {
 
           <Form.Item
             name="password"
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Пароль</span>}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('auth.register.passwordLabel')}</span>}
             rules={[
-              { required: true, message: 'Введите пароль' },
-              { min: 8, message: 'Минимум 8 символов' },
-              { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: 'Должен содержать буквы и цифры' },
+              { required: true, message: t('auth.register.passwordRequired') },
+              { min: 8, message: t('auth.register.passwordMin') },
+              { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: t('auth.register.passwordPattern') },
             ]}
           >
             <Input.Password
@@ -169,14 +181,14 @@ export default function RegisterPage() {
 
           <Form.Item
             name="confirmPassword"
-            label={<span style={{ fontWeight: 500, color: '#374151' }}>Подтверждение пароля</span>}
+            label={<span style={{ fontWeight: 500, color: '#374151' }}>{t('auth.register.confirmPasswordLabel')}</span>}
             dependencies={['password']}
             rules={[
-              { required: true, message: 'Подтвердите пароль' },
+              { required: true, message: t('auth.register.confirmPasswordRequired') },
               ({ getFieldValue }) => ({
                 validator(_, value) {
                   if (!value || getFieldValue('password') === value) return Promise.resolve()
-                  return Promise.reject(new Error('Пароли не совпадают'))
+                  return Promise.reject(new Error(t('auth.register.passwordMismatch')))
                 },
               }),
             ]}
@@ -196,16 +208,16 @@ export default function RegisterPage() {
               block
               style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-sm)' }}
             >
-              Зарегистрироваться
+              {t('auth.register.submit')}
             </Button>
           </Form.Item>
         </Form>
 
         <div style={{ textAlign: 'center' }}>
           <Text style={{ color: '#6B7280' }}>
-            Уже есть аккаунт?{' '}
+            {t('auth.register.hasAccount')}{' '}
             <Link to="/login" style={{ color: '#21A038', fontWeight: 500 }}>
-              Войти
+              {t('auth.register.loginLink')}
             </Link>
           </Text>
         </div>

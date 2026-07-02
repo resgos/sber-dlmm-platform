@@ -29,7 +29,7 @@
   "dlmm-user-ui/src/pages/PoolComparePage.tsx": 139,
   "dlmm-user-ui/src/pages/PricingPage.tsx": 158,
   "dlmm-user-ui/src/pages/RebalancePage.tsx": 125,
-  "dlmm-user-ui/src/pages/RegisterPage.tsx": 54,
+  "dlmm-user-ui/src/pages/RegisterPage.tsx": 1,
   "dlmm-user-ui/src/pages/ReviewsPage.tsx": 96,
   "dlmm-user-ui/src/pages/SamlCallbackPage.tsx": 18,
   "dlmm-user-ui/src/pages/TeamPage.tsx": 171
