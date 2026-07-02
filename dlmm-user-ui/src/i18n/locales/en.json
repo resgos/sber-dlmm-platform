@@ -145,6 +145,7 @@
     "tiles": {
       "totalBalance": "Total balance",
       "activePositions": "Active positions",
+      "deployedValue": "In liquidity",
       "unclaimedFees": "Unclaimed fees",
       "totalEarned": "Total earned"
     },
@@ -157,7 +158,8 @@
       "feeAccrualRefreshing": "fee accrual refreshes every ~5 min",
       "openPositionToEarn": "open a position to start earning fees",
       "earnedDelta": "+{{value}}% of balance",
-      "startEarning": "start earning in pools"
+      "startEarning": "start earning in pools",
+      "deployedInPools": "capital in LP positions"
     },
     "hero": {
       "buySell": "Buy / Sell",
@@ -166,6 +168,7 @@
       "tooltips": {
         "portfolio": "Value of all your tokens (free + locked) plus liquidity in open LP positions, at the latest market prices.",
         "activePositions": "The number of your open LP positions. Each is a range of bins where you provide liquidity and earn fees.",
+        "deployedValue": "Current value of the capital in your active LP positions at current pool prices. Already counted into the portfolio total on the left.",
         "unclaimedFees": "Fees accrued from swaps inside your active positions. Claim them any time with the \"Claim all\" button on the Positions page.",
         "totalEarned": "All claimed fees plus your current unrealized P&L on positions relative to the initial deposit."
       }

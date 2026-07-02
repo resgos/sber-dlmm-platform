@@ -18,6 +18,7 @@ import StatCard, { formatRub } from '@/components/StatCard'
 import SpasiboWidget from '@/components/SpasiboWidget'
 import MarketTicker from '@/components/MarketTicker'
 import { uiPrefStore } from '@/store/uiPrefStore'
+import { portfolioValueQuote } from '@/lib/positionValue'
 import { DASHBOARD_TILE_PALETTE } from '@/styles/palette'
 import type { TokenBalance, Position, Transaction, TokenPrice, Pool, Token } from '@/api/types'
 import dayjs from 'dayjs'
@@ -157,12 +158,22 @@ export default function DashboardPage() {
     [myPositions],
   )
 
+  // 2026-06-17 — LP capital deployed in active positions, in ₽ (SRUB quote,
+  // 1 SRUB = 1 ₽). The hero tooltip has always DOCUMENTED the portfolio as
+  // "tokens + liquidity in open LP positions", but the number only summed
+  // wallet balances — a user with most capital deployed (411M ₽ in demo) saw
+  // a headline that ignored it. No double count: add-liquidity deducts the
+  // tokens from balances. Reuses the Positions-page portfolioValueQuote so
+  // the two surfaces can't drift.
+  const deployedRub = portfolioValueQuote(activePositions, poolById)
+  const totalPortfolioRub = totalBalanceRub + deployedRub
+
   if (loadingBalances) {
     return <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
   }
 
   const totalEarned = (feeSummary?.totalClaimed ?? 0) + (feeSummary?.totalUnclaimed ?? 0)
-  const earnedDelta = totalBalanceRub > 0 ? (totalEarned / totalBalanceRub) * 100 : 0
+  const earnedDelta = totalPortfolioRub > 0 ? (totalEarned / totalPortfolioRub) * 100 : 0
 
   // Sprint 9 — compact hero spec lifted from the Claude Design
   // user-dashboard mockup (docs/design/user-dashboard-claude-design/).
@@ -250,7 +261,14 @@ export default function DashboardPage() {
                 marginBottom: 6,
               }}
             >
-              {t('dashboard.portfolioLabel')}
+              {/* 2026-06-17 — the tooltips.portfolio key existed in both locales
+                  but was never rendered; it documents the wallet+LP semantics the
+                  headline now actually computes. */}
+              <Tooltip title={t('dashboard.hero.tooltips.portfolio')}>
+                <span style={{ cursor: 'help', borderBottom: '1px dotted rgba(255,255,255,0.4)' }}>
+                  {t('dashboard.portfolioLabel')}
+                </span>
+              </Tooltip>
             </div>
             <div
               style={{
@@ -269,7 +287,7 @@ export default function DashboardPage() {
                 marginBottom: 8,
               }}
             >
-              {formatRub(totalBalanceRub)}
+              {formatRub(totalPortfolioRub)}
             </div>
             <Space size={10}>
               <Button size="middle" onClick={() => navigate(tradeRoute)}
@@ -301,6 +319,16 @@ export default function DashboardPage() {
                 : t('dashboard.tiles_sub.positionsInWork', { count: activePositions.length })}
             </span>,
             t('dashboard.hero.tooltips.activePositions'),
+          )}
+          {/* 2026-06-17 — the design comment above says "4 inline sub-metrics"
+              but only 3 were ever built; the missing one is the LP-capital
+              value, which also makes the headline's wallet+LP composition
+              legible at a glance. */}
+          {heroSubMetric(
+            t('dashboard.tiles.deployedValue'),
+            loadingPositions ? '—' : formatRub(deployedRub),
+            <span style={{ color: 'rgba(255,255,255,0.65)' }}>{t('dashboard.tiles_sub.deployedInPools')}</span>,
+            t('dashboard.hero.tooltips.deployedValue'),
           )}
           {heroSubMetric(
             t('dashboard.tiles.unclaimedFees'),
