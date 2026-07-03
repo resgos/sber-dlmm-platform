@@ -27,9 +27,12 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { performance } from 'node:perf_hooks';
+import { performance, monitorEventLoopDelay } from 'node:perf_hooks';
+import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -213,7 +216,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const name = a.slice(2);
-      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps'].includes(name);
+      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format'].includes(name);
       if (needsValue) {
         flags[name] = argv[++i];
         if (flags[name] === undefined) die(1, `Опции --${name} нужно значение. Пример: --${name} <значение>`);
@@ -237,7 +240,7 @@ function die(code, msg) {
 const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'load', 'thresholds', 'allowWrites'];
 const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks'];
 const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'];
-const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps'];
+const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps', 'workers'];
 const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -448,6 +451,12 @@ function validateScenario(scn) {
       push(errors, 'load.thinkTimeMs должен быть числом или парой [minМс, maxМс], min <= max');
     } else scn.load.thinkTimeMs = tt;
     if (scn.load.maxRps !== undefined && (typeof scn.load.maxRps !== 'number' || scn.load.maxRps < 1)) push(errors, 'load.maxRps должен быть числом >= 1');
+    scn.load.workers = scn.load.workers ?? 1;
+    const cores = os.cpus().length;
+    if (!Number.isInteger(scn.load.workers) || scn.load.workers < 1) push(errors, `load.workers должен быть целым >= 1 (число потоков-генераторов), сейчас: ${JSON.stringify(scn.load.workers)}`);
+    else if (scn.load.workers > 4 * cores) push(errors, `load.workers=${scn.load.workers} превышает разумный предел ${4 * cores} (4× ядер этой машины=${cores})`);
+    else if (scn.load.workers > cores) push(warnings, `load.workers=${scn.load.workers} больше числа ядер (${cores}) — потоки будут конкурировать за CPU, прироста RPS не будет`);
+    if (scn.load.workers > 1 && scn.load.workers > scn.load.vus) push(warnings, `load.workers=${scn.load.workers} больше load.vus=${scn.load.vus} — лишние потоки останутся без пользователей; часть будет простаивать`);
   }
 
   // thresholds
@@ -600,6 +609,149 @@ const OTHERS_BUCKET = '(прочие)';
 const MAX_LAT_SAMPLES = 1_000_000; // защита памяти/spread: перцентили считаются по первым N выборкам на запрос
 const MAX_CELL_LAT = 100_000;
 
+// ─────────────────────────────────────────────── исполнение нагрузки (общее для 1 потока и воркеров) ──
+
+function makePicker(requests) {
+  const cum = [];
+  let acc = 0;
+  for (const r of requests) { acc += r.weight; cum.push([acc, r]); }
+  return () => {
+    const x = Math.random() * acc;
+    for (const [c, r] of cum) if (x < c) return r;
+    return cum[cum.length - 1][1];
+  };
+}
+
+function makeRateGate(maxRps) {
+  if (!maxRps || maxRps === Infinity) return null;
+  // равномерное распределение: следующий грант не раньше next; корректно работает и при maxRps < 10.
+  const intervalMs = 1000 / maxRps;
+  let next = 0;
+  return async () => {
+    const now = Date.now();
+    if (next < now) next = now;
+    const wait = next - now;
+    next += intervalMs;
+    if (wait > 0) await sleep(wait);
+  };
+}
+
+/** Гоняет vuCount виртуальных пользователей до endAt, записывая в stats. Используется и в главном потоке, и в воркере. */
+async function runLoadSlice({ scn, preToken, stats, vuCount, vuOffset, totalVus, endAt, rampMs, effectiveMaxRps, ctx, loginFailures, onSample }) {
+  const pick = makePicker(scn.requests);
+  const rateGate = makeRateGate(effectiveMaxRps);
+  const [ttMin, ttMax] = scn.load.thinkTimeMs;
+  const runVU = async (localIdx) => {
+    const globalIdx = vuOffset + localIdx;
+    if (rampMs) await sleep((rampMs * globalIdx) / Math.max(1, totalVus));
+    // все VU используют общий токен из pre-flight: логин выполняется ОДИН раз, без шторма
+    // на старте (иначе rampUp:0 + сотни VU = сотни одновременных POST /auth/login).
+    const token = preToken;
+    void loginFailures;
+    while (Date.now() < endAt && !ctx.aborted) {
+      if (rateGate) await rateGate();
+      const req = pick();
+      const r = await callOnce(scn, req, scn._resolvedVars, token);
+      stats.record(req, r, Date.now());
+      if (onSample && r.ok) onSample(r.ms);
+      if (ttMax > 0) await sleep(ttMin + Math.random() * (ttMax - ttMin));
+    }
+  };
+  await Promise.all(Array.from({ length: vuCount }, (_, i) => runVU(i)));
+}
+
+// ─── сериализация статистики для передачи между воркерами и главным потоком ──
+
+function serializeStats(stats) {
+  const per = {};
+  for (const [name, s] of stats.per) {
+    per[name] = {
+      count: s.count, errors: s.errors, slow: s.slow, latDropped: s.latDropped || 0,
+      lat: s.lat,
+      statuses: [...s.statuses.entries()],
+      errSamples: [...s.errSamples.entries()],
+      perVar: [...s.perVar.entries()].map(([vn, m]) => [vn, [...m.entries()].map(([val, c]) => [val, { count: c.count, errors: c.errors, lat: c.lat }])]),
+    };
+  }
+  return { total: stats.total, errors: stats.errors, startedAt: stats.startedAt, endedAt: stats.endedAt, per };
+}
+
+function mergeStats(parts, requests) {
+  const base = makeStats(requests);
+  base.startedAt = Math.min(...parts.map((p) => p.startedAt));
+  base.endedAt = Math.max(...parts.map((p) => p.endedAt));
+  for (const part of parts) {
+    base.total += part.total;
+    base.errors += part.errors;
+    for (const [name, ps] of Object.entries(part.per)) {
+      const s = base.per.get(name);
+      if (!s) continue;
+      s.count += ps.count; s.errors += ps.errors; s.slow += ps.slow;
+      s.latDropped = (s.latDropped || 0) + (ps.latDropped || 0);
+      for (const pair of ps.lat) { if (s.lat.length < MAX_LAT_SAMPLES) s.lat.push(pair); else s.latDropped = (s.latDropped || 0) + 1; }
+      for (const [k, v] of ps.statuses) s.statuses.set(k, (s.statuses.get(k) || 0) + v);
+      for (const [k, v] of ps.errSamples) if (!s.errSamples.has(k)) s.errSamples.set(k, v);
+      for (const [vn, cells] of ps.perVar) {
+        let m = s.perVar.get(vn);
+        if (!m) { m = new Map(); s.perVar.set(vn, m); }
+        for (const [val, c] of cells) {
+          const bucket = m.has(val) || m.size < MAX_TRACKED_VALUES ? val : OTHERS_BUCKET;
+          let cell = m.get(bucket);
+          if (!cell) { cell = { count: 0, errors: 0, lat: [] }; m.set(bucket, cell); }
+          cell.count += c.count; cell.errors += c.errors;
+          for (const ms of c.lat) if (cell.lat.length < MAX_CELL_LAT) cell.lat.push(ms);
+        }
+      }
+    }
+  }
+  return base;
+}
+
+// ─── монитор ресурсов генератора (CPU процесса, event-loop lag, память) ──
+
+function startResourceMonitor({ watchEventLoop }) {
+  const cpu0 = process.cpuUsage();
+  const t0 = performance.now();
+  let elMon = null;
+  if (watchEventLoop) { elMon = monitorEventLoopDelay({ resolution: 20 }); elMon.enable(); }
+  let rssMax = process.memoryUsage().rss;
+  let sysFreeMin = os.freemem(); // отслеживаем минимум за прогон, а не снимок в конце
+  const iv = setInterval(() => {
+    const r = process.memoryUsage().rss; if (r > rssMax) rssMax = r;
+    const f = os.freemem(); if (f < sysFreeMin) sysFreeMin = f;
+  }, 1000);
+  if (iv.unref) iv.unref();
+  return {
+    finish(extraElLagMaxMs) {
+      clearInterval(iv);
+      const cpu = process.cpuUsage(cpu0);
+      const wallMs = performance.now() - t0;
+      const cpuMs = (cpu.user + cpu.system) / 1000;
+      const cores = os.cpus().length;
+      // сколько ядер в среднем было занято процессом (все потоки, включая воркеры)
+      const cpuBusyCores = wallMs > 0 ? cpuMs / wallMs : 0;
+      let elLagMeanMs = null, elLagMaxMs = extraElLagMaxMs ?? null;
+      if (elMon) {
+        elMon.disable();
+        elLagMeanMs = elMon.mean / 1e6;
+        elLagMaxMs = Math.max(elLagMaxMs ?? 0, elMon.max / 1e6);
+      }
+      const fMin = Math.min(sysFreeMin, os.freemem());
+      return {
+        cores,
+        cpuMs: Math.round(cpuMs), wallMs: Math.round(wallMs),
+        cpuBusyCores: Number(cpuBusyCores.toFixed(2)),
+        cpuPctAllCores: Number(((cpuBusyCores / cores) * 100).toFixed(0)),
+        elLagMeanMs: elLagMeanMs == null ? null : Number(elLagMeanMs.toFixed(1)),
+        elLagMaxMs: elLagMaxMs == null ? null : Number(elLagMaxMs.toFixed(1)),
+        rssMaxMB: Math.round(rssMax / 1048576),
+        sysFreeMB: Math.round(fMin / 1048576),
+        sysTotalMB: Math.round(os.totalmem() / 1048576),
+      };
+    },
+  };
+}
+
 function makeStats(requests) {
   const per = new Map();
   for (const r of requests) per.set(r.name, { lat: [], count: 0, errors: 0, slow: 0, statuses: new Map(), errSamples: new Map(), perVar: new Map() });
@@ -736,7 +888,9 @@ function buildReport(scn, stats, opts = {}) {
     { name: `p95 ${fmtMs(p95)}ms <= ${th.p95Ms}ms`, pass: p95 <= th.p95Ms },
     { name: `errors ${totalErrPct.toFixed(2)}% <= ${th.errorRatePct}%`, pass: totalErrPct <= th.errorRatePct },
   ];
-  const pass = checks.every((c) => c.pass) && (!opts.smoke || stats.errors === 0);
+  const incompleteWorkers = opts.incompleteWorkers || 0;
+  const pass = checks.every((c) => c.pass) && (!opts.smoke || stats.errors === 0) && incompleteWorkers === 0;
+  if (incompleteWorkers > 0) checks.push({ name: `все потоки-генераторы вернули данные (не вернули: ${incompleteWorkers})`, pass: false });
 
   // подсказки
   const hints = [];
@@ -772,6 +926,47 @@ function buildReport(scn, stats, opts = {}) {
   }
   if (latDroppedTotal > 0) hints.push(`Выборок латентности больше лимита ${MAX_LAT_SAMPLES} на запрос — перцентили посчитаны по первым ${MAX_LAT_SAMPLES} (отброшено ${latDroppedTotal}).`);
 
+  if (incompleteWorkers > 0) hints.push(`⚠ ${incompleteWorkers} поток(ов)-генератор(ов) упали и не вернули данные — их доля нагрузки НЕ выполнена. Отчёт неполный, вердикт принудительно FAIL. Проверьте память/стабильность и повторите.`);
+
+  // насыщение генератора: не упёрлись ли МЫ, а не цель
+  const res = opts.resource || null;
+  const workers = scn.load?.workers || 1;
+  if (res) {
+    // event-loop lag — главный сигнал: он меряется на КАЖДОМ потоке-генераторе (в воркерах — max),
+    // и напрямую показывает, что поток нагрузки не успевает. CPU% процесса как таковой ненадёжен
+    // (аггрегирует все потоки + GC/DNS), поэтому используем «занято ядер на поток».
+    const elLagBad = res.elLagMaxMs != null && res.elLagMaxMs > 100;
+    const cpuPerThread = res.cpuBusyCores / Math.max(1, workers); // доля ядра на один поток-генератор
+    // на CPU упёрлись, только если потоки-генераторы реально пекут свои ядра (>=0.85) И это видно по lag
+    const cpuBad = cpuPerThread >= 0.85 && elLagBad;
+    const sat = [];
+    if (elLagBad) sat.push('event-loop');
+    if (cpuBad && !sat.includes('CPU')) sat.push('CPU');
+    if (res.sysFreeMB < 256) sat.push('память');
+    res.saturated = sat;
+    res.cpuBusyCores = res.cpuBusyCores;
+    if (sat.length) {
+      hints.push(`⚠ ГЕНЕРАТОР УПЁРСЯ В РЕСУРСЫ (${sat.join(', ')}): измеренная латентность и достигнутый RPS ограничены самой машиной-генератором, а НЕ целью — числам ниже доверять нельзя как оценке сервиса.`);
+      if (elLagBad) {
+        if (workers < res.cores) {
+          hints.push(`Потоков-генераторов ${workers}, а ядер ${res.cores} — распределите нагрузку: load.workers ${Math.min(res.cores, Math.max(2, workers * 2))} (или флаг --workers) и повторите прогон.`);
+        } else {
+          hints.push(`Генератор уже занял все ${res.cores} ядра (${res.cpuBusyCores} в среднем) — для более высокой нагрузки НУЖНО БОЛЕЕ МОЩНОЕ ЖЕЛЕЗО или запуск loadgen с нескольких машин параллельно.`);
+        }
+      }
+      if (sat.includes('память')) {
+        hints.push(`Свободной ОЗУ в системе падало до ${res.sysFreeMB}МБ, процесс занял ${res.rssMaxMB}МБ — уменьшите vus/длительность или возьмите машину с большим объёмом памяти.`);
+      }
+      const target = scn.load?.maxRps;
+      if (target && rows.length && (stats.total / durSec) < target * 0.8) {
+        hints.push(`Целевой RPS (${target}) не достигнут (факт ${Math.round(stats.total / durSec)}) при упёртом генераторе — узкое место в генераторе, не в цели.`);
+      }
+    } else if (res.cpuBusyCores >= workers * 0.75 && workers < res.cores && res.elLagMaxMs != null && res.elLagMaxMs > 40) {
+      // не упёрлись, но потоки заметно грузят свои ядра и lag подрастает — подсказать про запас по ядрам
+      hints.push(`Потоки-генераторы заметно грузят CPU (занято ~${res.cpuBusyCores} ядер из ${res.cores}); при повышении нагрузки поднимите load.workers до ${Math.min(res.cores, Math.max(2, workers * 2))}.`);
+    }
+  }
+
   return {
     tool: 'loadgen', version: VERSION,
     scenario: scn.name || '(без имени)', baseUrl: scn.baseUrl,
@@ -783,6 +978,7 @@ function buildReport(scn, stats, opts = {}) {
     errors: stats.errors, errorRatePct: Number(totalErrPct.toFixed(2)),
     latencyMs: { p50: pct(latSorted, 50), p90: pct(latSorted, 90), p95, p99: pct(latSorted, 99), max: latSorted.length ? latSorted[latSorted.length - 1] : 0 },
     perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max) })),
+    workers, resource: res, incompleteWorkers,
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
   };
@@ -826,6 +1022,16 @@ function printReport(rep) {
   if (rep.loginFailures.length) {
     L('');
     L(`  ЛОГИН НЕ УДАЛСЯ у ${rep.loginFailures.length} VU: ${rep.loginFailures[0]}`);
+  }
+  if (rep.resource) {
+    const r = rep.resource;
+    L('');
+    L('──────────────── РЕСУРСЫ ГЕНЕРАТОРА ────────────────────');
+    L(`  CPU: занято ~${r.cpuBusyCores} ядер из ${r.cores} (${r.cpuPctAllCores}% машины) | потоков-генераторов: ${rep.workers}`);
+    if (r.elLagMaxMs != null) L(`  Event-loop lag: сред. ${r.elLagMeanMs ?? '—'}ms, макс. ${r.elLagMaxMs}ms (>100ms = поток нагрузки не успевает)`);
+    L(`  Память: процесс ${r.rssMaxMB}МБ (пик) | свободно в системе ${r.sysFreeMB}МБ из ${r.sysTotalMB}МБ`);
+    if (r.saturated && r.saturated.length) L(`  СТАТУС: ⚠ УПЁРЛИСЬ В (${r.saturated.join(', ')}) — цифрам латентности доверять нельзя`);
+    else L(`  СТАТУС: OK — генератор не был узким местом`);
   }
   L('');
   L('==================== ИТОГ ====================');
@@ -937,8 +1143,8 @@ function cmdInit(flags) {
       { name: 'item detail', method: 'GET', path: '/api/v1/items/{{exampleId}}', weight: 3 },
     ],
     _requests_hint: 'weight — относительная частота. Встроенные placeholders: {{uuid}}, {{ts}}, {{randInt:1-100}}. Для POST добавьте body и allowWrites:true. Если path/body содержит {{переменную}}-список — в отчёте будет разбивка «ВЛИЯНИЕ ПАРАМЕТРОВ» по каждому значению.',
-    load: { vus: 5, durationSec: 30, rampUpSec: 5, thinkTimeMs: [100, 300] },
-    _load_hint: `vus — параллельные пользователи (max ${MAX_VUS}), durationSec — длительность (max ${MAX_DURATION_SEC}), maxRps — глобальный потолок запросов/сек (опционально)`,
+    load: { vus: 5, durationSec: 30, rampUpSec: 5, thinkTimeMs: [100, 300], workers: 1 },
+    _load_hint: `vus — параллельные пользователи (max ${MAX_VUS}), durationSec — длительность (max ${MAX_DURATION_SEC}), maxRps — глобальный потолок запросов/сек (опц.), workers — число потоков-генераторов на разные ядра (по умолч. 1; поднимайте, если генератор упирается в CPU)`,
     thresholds: { p95Ms: 1000, errorRatePct: 1 },
     _thresholds_hint: 'Пороги для вердикта PASS/FAIL',
     allowWrites: false,
@@ -961,6 +1167,209 @@ function cmdValidate(positional) {
   console.log(`OK: сценарий валиден. Запросов: ${scn.requests.length} (изменяющих: ${writes}), VUs: ${scn.load.vus}, длительность: ${scn.load.durationSec}с, цель: ${scn.baseUrl}`);
 }
 
+// ─────────────────────────────────────────────── profile: статистика N запросов → черновик сценария ──
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ACCESS_LINE_RE = /"(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\S+)\s+HTTP\/[\d.]+"\s+(\d{3})/;
+const ACCESS_TS_RE = /\[(\d{2})\/(\w{3})\/(\d{4}):(\d{2}):(\d{2}):(\d{2})/;
+const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+
+/** Один сегмент пути — «переменная» (ID)? */
+function isIdSegment(seg) {
+  if (UUID_RE.test(seg)) return true;
+  if (/^\d+$/.test(seg)) return true;
+  if (/^[0-9a-f]{16,}$/i.test(seg)) return true; // длинный hex-хэш
+  return false;
+}
+
+/** Путь → { template: '/api/v1/pools/{{p1}}', values: [[val,...]] по позициям } */
+function normalizePath(rawPath) {
+  const qIdx = rawPath.indexOf('?');
+  const pathOnly = qIdx >= 0 ? rawPath.slice(0, qIdx) : rawPath;
+  const query = qIdx >= 0 ? rawPath.slice(qIdx) : '';
+  const segs = pathOnly.split('/');
+  const values = [];
+  let pi = 0;
+  const outSegs = segs.map((s) => {
+    if (s !== '' && isIdSegment(s)) { pi++; values.push([s]); return `{{p${pi}}}`; }
+    return s;
+  });
+  // нормализуем и query: value каждого параметра заменяем на {{q_ключ}} только если это ID
+  let queryTemplate = '';
+  if (query) {
+    const pairs = query.slice(1).split('&').map((kv) => {
+      const eq = kv.indexOf('=');
+      if (eq < 0) return kv;
+      const k = kv.slice(0, eq), v = kv.slice(eq + 1);
+      return `${k}=${v}`; // query оставляем как есть (обычно page/size — часть профиля)
+    });
+    queryTemplate = '?' + pairs.join('&');
+  }
+  return { template: outSegs.join('/') + queryTemplate, values };
+}
+
+function parseProfileInput(raw, format) {
+  // автоопределение формата
+  const trimmed = raw.replace(/^﻿/, '').trimStart();
+  if (!format) {
+    if (trimmed[0] === '[' || trimmed[0] === '{') format = 'json';
+    else if (/^[^\n]*\bpath\b/i.test(trimmed) && trimmed.includes(',')) format = 'csv';
+    else format = 'access';
+  }
+  const hits = []; // { method, path, count, ts? }
+  if (format === 'json') {
+    let json;
+    try { json = JSON.parse(trimmed); } catch (e) { throw new Error(`вход не парсится как JSON: ${e.message}`); }
+    const arr = Array.isArray(json) ? json : Object.entries(json).map(([k, v]) => {
+      // ключ вида "METHOD /path [HTTP/x]" или просто "/path"; вытаскиваем метод и первый путь-токен
+      const m = k.match(/^\s*(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)?\s*(\S+)/i);
+      return { method: (m && m[1] ? m[1] : 'GET').toUpperCase(), path: m ? m[2] : k, count: v };
+    });
+    for (const it of arr) {
+      if (!it || !it.path) continue;
+      hits.push({ method: (it.method || 'GET').toUpperCase(), path: it.path, count: Number(it.count ?? it.hits ?? 1) || 1 });
+    }
+  } else if (format === 'csv') {
+    const rows = parseCsv(trimmed);
+    if (rows.length < 2) throw new Error('CSV должен содержать заголовок и хотя бы одну строку');
+    const header = rows[0].map((h) => h.toLowerCase());
+    const pi = header.indexOf('path');
+    const mi = header.indexOf('method');
+    const ci = header.findIndex((h) => h === 'count' || h === 'hits');
+    if (pi < 0) throw new Error(`в CSV нет колонки "path". Есть: ${rows[0].join(', ')}`);
+    for (const r of rows.slice(1)) {
+      if (!r[pi]) continue;
+      hits.push({ method: (mi >= 0 ? r[mi] : 'GET').toUpperCase(), path: r[pi], count: ci >= 0 ? Number(r[ci]) || 1 : 1 });
+    }
+  } else {
+    // access log
+    for (const line of trimmed.split(/\r?\n/)) {
+      const m = line.match(ACCESS_LINE_RE);
+      if (!m) continue;
+      const hit = { method: m[1], path: m[2], count: 1 };
+      const tm = line.match(ACCESS_TS_RE);
+      if (tm && MONTHS[tm[2]] !== undefined) {
+        hit.ts = Date.UTC(Number(tm[3]), MONTHS[tm[2]], Number(tm[1]), Number(tm[4]), Number(tm[5]), Number(tm[6]));
+      }
+      hits.push(hit);
+    }
+    if (!hits.length) throw new Error('в access-логе не найдено ни одной строки вида "GET /path HTTP/1.1" 200 — проверьте формат или задайте --format');
+  }
+  return { format, hits };
+}
+
+function cmdProfile(positional, flags) {
+  const input = positional[0];
+  if (!input) die(1, 'Использование: node loadgen.mjs profile <access.log|stats.csv|stats.json> [--format access|csv|json] [--base-url URL] [--top N] [--out scenario.json]');
+  if (!existsSync(input)) die(1, `Файл не найден: ${input}`);
+  let raw;
+  try { raw = readFileSync(input, 'utf8'); } catch (e) { die(1, `Не удалось прочитать ${input}: ${e.message}`); }
+
+  let parsed;
+  try { parsed = parseProfileInput(raw, flags.format); } catch (e) { die(1, `Разбор входа не удался: ${e.message}`); }
+  const { format, hits } = parsed;
+
+  // группировка по (method, шаблон)
+  const groups = new Map(); // key → { method, template, count, valueSets: [Set,...] }
+  let minTs = Infinity, maxTs = -Infinity, tsCount = 0;
+  for (const h of hits) {
+    const { template, values } = normalizePath(h.path);
+    const key = `${h.method} ${template}`;
+    let g = groups.get(key);
+    if (!g) { g = { method: h.method, template, count: 0, valueSets: values.map(() => new Set()) }; groups.set(key, g); }
+    g.count += h.count;
+    values.forEach((vals, i) => { if (g.valueSets[i]) for (const v of vals) if (g.valueSets[i].size < 200) g.valueSets[i].add(v); });
+    if (h.ts) { minTs = Math.min(minTs, h.ts); maxTs = Math.max(maxTs, h.ts); tsCount++; }
+  }
+
+  let list = [...groups.values()].sort((a, b) => b.count - a.count);
+  // отбрасываем эндпоинты с невалидным путём (не начинается с /) — иначе черновик не пройдёт validate
+  const badPaths = list.filter((g) => !/^\//.test(g.template));
+  list = list.filter((g) => /^\//.test(g.template));
+  const writeMethods = list.filter((g) => WRITE_METHODS.includes(g.method));
+  const includeWrites = !!flags['include-writes'];
+  if (!includeWrites) list = list.filter((g) => !WRITE_METHODS.includes(g.method));
+
+  const topN = flags.top !== undefined ? Number(flags.top) : 20;
+  if (!Number.isInteger(topN) || topN < 1) die(1, `--top должно быть целым числом >= 1, получено: ${flags.top}`);
+  if (!list.length) die(1, `После разбора не осталось пригодных ${includeWrites ? '' : 'читающих '}эндпоинтов (разобрано записей: ${hits.length}). Проверьте формат входа или снимите фильтр (--include-writes).`);
+  const total = list.reduce((a, g) => a + g.count, 0);
+  const top = list.slice(0, topN);
+
+  // оценка RPS из таймстемпов access-лога
+  let rpsEstimate = null, spanSec = null;
+  if (tsCount > 1 && maxTs > minTs) {
+    spanSec = (maxTs - minTs) / 1000;
+    rpsEstimate = hits.filter((h) => h.ts).reduce((a, h) => a + h.count, 0) / spanSec;
+  }
+
+  // строим сценарий
+  const vars = {};
+  const usedNames = new Set();
+  const requests = top.map((g, idx) => {
+    let path = g.template;
+    g.valueSets.forEach((set, i) => {
+      const pos = i + 1;
+      if (!path.includes(`{{p${pos}}}`)) return;
+      const varName = `v${idx}_${pos}`;
+      const values = [...set];
+      if (values.length) { vars[varName] = values; path = path.replace(`{{p${pos}}}`, `{{${varName}}}`); }
+      else path = path.replace(`{{p${pos}}}`, '1'); // не было примеров — заглушка
+    });
+    const weight = Math.max(1, Math.round((g.count / total) * 100));
+    // имя должно быть уникальным (метрики агрегируются по имени; validate это требует)
+    let name = `${g.method} ${g.template}`;
+    if (usedNames.has(name)) name = `${name} #${idx}`;
+    usedNames.add(name);
+    const req = { name, method: g.method, path, weight };
+    if (g.method === 'GET') req.checks = { status: [200] };
+    return req;
+  });
+
+  const scenario = {
+    _comment: `ЧЕРНОВИК, сгенерирован из ${format}-статистики (${input}). ПРОВЕРЬТЕ перед запуском: baseUrl, auth, значения vars, веса.`,
+    name: `profiled-${format}`,
+    baseUrl: flags['base-url'] || 'http://localhost:8080',
+    _baseUrl_note: flags['base-url'] ? undefined : 'ЗАМЕНИТЕ на адрес вашего сервиса',
+    timeoutMs: 10000,
+    auth: { _note: 'Если API требует авторизацию — заполните: {"type":"login","login":{...}} или {"type":"bearer","token":"..."}', type: 'none' },
+    vars: Object.keys(vars).length ? vars : undefined,
+    requests,
+    load: {
+      vus: 10,
+      durationSec: 60,
+      rampUpSec: 5,
+      thinkTimeMs: [50, 200],
+      ...(rpsEstimate ? { maxRps: Math.max(1, Math.round(rpsEstimate)) } : {}),
+    },
+    _load_note: rpsEstimate
+      ? `maxRps=${Math.round(rpsEstimate)} — средний RPS из лога за ${Math.round(spanSec)}с. Для стресс-теста уберите maxRps или повышайте.`
+      : 'RPS из входных данных вычислить не удалось (нет таймстемпов) — задайте maxRps вручную под нужную интенсивность.',
+    thresholds: { p95Ms: 1000, errorRatePct: 1 },
+    allowWrites: false,
+  };
+
+  const out = flags.out || 'profile-scenario.json';
+  writeFileSync(out, JSON.stringify(scenario, (k, v) => (v === undefined ? undefined : v), 2), 'utf8');
+
+  // сводка
+  console.log(`profile: разобрано ${hits.length} записей (формат ${format}), уникальных эндпоинтов ${groups.size}`);
+  if (badPaths.length) console.log(`  Пропущено ${badPaths.length} записей с некорректным путём (не начинается с /) — проверьте формат входа.`);
+  if (writeMethods.length && !includeWrites) console.log(`  Пропущено ${writeMethods.length} изменяющих эндпоинтов (POST/PUT/DELETE) — добавьте --include-writes, если нужны (осторожно: запись).`);
+  if (rpsEstimate) console.log(`  Средний RPS из лога: ${rpsEstimate.toFixed(1)} (за ${Math.round(spanSec)}с)`); else console.log('  RPS: нет таймстемпов во входе — maxRps не задан.');
+  console.log('');
+  console.log('  ТОП эндпоинтов по частоте:');
+  console.log(`  ${'доля%'.padEnd(7)}${'запросов'.padEnd(10)}${'vars'.padEnd(6)}метод + шаблон`);
+  for (const g of top) {
+    const share = ((g.count / total) * 100).toFixed(1);
+    const nvars = g.valueSets.filter((s) => s.size).length;
+    console.log(`  ${share.padEnd(7)}${String(g.count).padEnd(10)}${String(nvars).padEnd(6)}${g.method} ${g.template}`);
+  }
+  console.log('');
+  console.log(`Черновик сценария записан: ${out}`);
+  console.log(`Дальше: 1) впишите baseUrl и auth; 2) node loadgen.mjs validate ${out}; 3) node loadgen.mjs run ${out} --smoke; 4) run.`);
+}
+
 async function cmdRun(positional, flags) {
   const file = positional[0];
   if (!file) die(1, 'Использование: node loadgen.mjs run <scenario.json> [--smoke] [--vus N] [--duration N] [--out FILE]');
@@ -971,6 +1380,7 @@ async function cmdRun(positional, flags) {
   if (flags.vus) { scn.load = scn.load || {}; scn.load.vus = Number(flags.vus); }
   if (flags.duration) { scn.load = scn.load || {}; scn.load.durationSec = Number(flags.duration); }
   if (flags['max-rps']) { scn.load = scn.load || {}; scn.load.maxRps = Number(flags['max-rps']); }
+  if (flags.workers) { scn.load = scn.load || {}; scn.load.workers = Number(flags.workers); }
 
   const { errors, warnings } = validateScenario(scn);
   for (const w of warnings) console.log(`ПРЕДУПРЕЖДЕНИЕ: ${w}`);
@@ -1011,8 +1421,10 @@ async function cmdRun(positional, flags) {
     process.exit(3);
   }
 
-  const stats = makeStats(scn.requests);
+  let stats = makeStats(scn.requests);
   const loginFailures = [];
+  let resource = null;
+  let incompleteWorkers = 0;
 
   if (smoke) {
     stats.startedAt = Date.now();
@@ -1026,41 +1438,94 @@ async function cmdRun(positional, flags) {
       console.log(line);
     }
     stats.endedAt = Date.now();
-  } else {
-    // весовая рулетка
-    const cum = [];
-    let acc = 0;
-    for (const r of scn.requests) { acc += r.weight; cum.push([acc, r]); }
-    const pick = () => {
-      const x = Math.random() * acc;
-      for (const [c, r] of cum) if (x < c) return r;
-      return cum[cum.length - 1][1];
+  } else if (scn.load.workers > 1) {
+    // ─── многопоточный режим: worker_threads на несколько ядер ──
+    const workers = Math.min(scn.load.workers, scn.load.vus);
+    console.log(`Потоков-генераторов: ${workers} (ядер доступно: ${os.cpus().length})`);
+    const resMon = startResourceMonitor({ watchEventLoop: false });
+    stats.startedAt = Date.now();
+    const endAt = stats.startedAt + scn.load.durationSec * 1000;
+    const rampMs = scn.load.rampUpSec * 1000;
+    const scnJson = JSON.stringify(scn);
+
+    // распределяем VU по воркерам
+    const base = Math.floor(scn.load.vus / workers);
+    const rem = scn.load.vus % workers;
+    const parts = [];
+    const workerLoginFailures = [];
+    const workerErrors = [];
+    let elLagMaxMs = 0;
+    const ticks = new Array(workers).fill(null).map(() => ({ total: 0, errors: 0 }));
+    const workerObjs = [];
+    let offset = 0;
+
+    let progressTimer = null;
+    const startProgress = () => {
+      if (flags.quiet) return;
+      let lastTotal = 0;
+      progressTimer = setInterval(() => {
+        const total = ticks.reduce((a, t) => a + t.total, 0);
+        const errors = ticks.reduce((a, t) => a + t.errors, 0);
+        const rps = (total - lastTotal) / 5;
+        lastTotal = total;
+        const errPct = total ? ((100 * errors) / total).toFixed(1) : '0.0';
+        console.log(`  t=${Math.round((Date.now() - stats.startedAt) / 1000)}с всего=${total} rps=${rps.toFixed(0)} err=${errPct}% (${workers} потоков)`);
+      }, 5000);
     };
 
-    // глобальный rate limiter (окно 100мс)
-    let winStart = 0, winCount = 0;
-    const perWin = scn.load.maxRps ? scn.load.maxRps / 10 : Infinity;
-    const rateGate = async () => {
-      for (;;) {
-        const now = Date.now();
-        if (now - winStart >= 100) { winStart = now; winCount = 0; }
-        if (winCount < perWin) { winCount++; return; }
-        await sleep(10);
+    const runResult = await new Promise((resolve) => {
+      let done = 0;
+      const finalize = () => { if (progressTimer) clearInterval(progressTimer); resolve(); };
+      process.on('SIGINT', () => { console.log('\nПрерывание — останавливаю потоки...'); for (const w of workerObjs) w.postMessage('abort'); });
+      for (let w = 0; w < workers; w++) {
+        const vuCount = base + (w < rem ? 1 : 0);
+        const vuOffset = offset;
+        offset += vuCount;
+        const worker = new Worker(fileURLToPath(import.meta.url), {
+          workerData: {
+            role: 'load-slice', scnJson, preToken, vuCount, vuOffset,
+            totalVus: scn.load.vus, endAt, rampMs,
+            effectiveMaxRps: scn.load.maxRps ? scn.load.maxRps / workers : 0,
+          },
+        });
+        workerObjs.push(worker);
+        worker.on('message', (m) => {
+          if (m.type === 'tick') { ticks[w] = { total: m.total, errors: m.errors }; }
+          else if (m.type === 'result') {
+            parts.push(m.stats);
+            workerLoginFailures.push(...m.loginFailures);
+            if (m.elLagMaxMs != null) elLagMaxMs = Math.max(elLagMaxMs, m.elLagMaxMs);
+          }
+        });
+        worker.on('error', (e) => { workerErrors.push(`Поток #${w}: ${e.message}`); console.log(`Поток #${w} упал: ${e.message}`); });
+        worker.on('exit', () => { if (++done === workers) finalize(); });
       }
-    };
+      startProgress();
+    });
+    void runResult;
 
+    if (!parts.length) { console.log('Ни один поток не вернул результат — прогон не удался.'); process.exit(2); }
+    // частичный крах: часть нагрузки не выполнена — нельзя выдавать это за валидный результат
+    if (parts.length < workers) {
+      incompleteWorkers = workers - parts.length;
+      console.log(`⚠ ВНИМАНИЕ: ${incompleteWorkers} из ${workers} потоков не вернули данные (${workerErrors.join('; ') || 'причина неизвестна'}). Результат НЕПОЛНЫЙ.`);
+    }
+    stats = mergeStats(parts, scn.requests);
+    // stats.endedAt уже выставлен mergeStats = max(endedAt воркеров) — НЕ перетираем его пост-фактум
+    loginFailures.push(...workerLoginFailures);
+    resource = resMon.finish(elLagMaxMs);
+  } else {
+    // ─── однопоточный режим ──
+    const resMon = startResourceMonitor({ watchEventLoop: true });
     const ctx = { aborted: false };
     process.on('SIGINT', () => { ctx.aborted = true; console.log('\nПрерывание — формирую отчёт по собранным данным...'); });
 
     stats.startedAt = Date.now();
     const endAt = stats.startedAt + scn.load.durationSec * 1000;
     const rampMs = scn.load.rampUpSec * 1000;
-    const [ttMin, ttMax] = scn.load.thinkTimeMs;
 
-    // прогресс каждые 5с
     let lastTotal = 0;
     const winLat = [];
-    stats._winLat = winLat;
     const progress = flags.quiet ? null : setInterval(() => {
       const now = Date.now();
       const rps = (stats.total - lastTotal) / 5;
@@ -1070,29 +1535,17 @@ async function cmdRun(positional, flags) {
       console.log(`  t=${Math.round((now - stats.startedAt) / 1000)}с всего=${stats.total} rps=${rps.toFixed(0)} err=${errPct}% p95(окно)=${fmtMs(pct(sorted, 95))}ms`);
     }, 5000);
 
-    const runVU = async (idx) => {
-      if (rampMs) await sleep((rampMs * idx) / scn.load.vus);
-      let token = preToken;
-      if (scn.auth.type === 'login' && idx > 0) {
-        try { token = await doLogin(scn); } catch (e) { loginFailures.push(e.message); return; }
-      }
-      while (Date.now() < endAt && !ctx.aborted) {
-        if (scn.load.maxRps) await rateGate();
-        const req = pick();
-        const r = await callOnce(scn, req, scn._resolvedVars, token);
-        const now = Date.now();
-        stats.record(req, r, now);
-        if (r.ok) winLat.push(r.ms);
-        if (ttMax > 0) await sleep(ttMin + Math.random() * (ttMax - ttMin));
-      }
-    };
-
-    await Promise.all(Array.from({ length: scn.load.vus }, (_, i) => runVU(i)));
+    await runLoadSlice({
+      scn, preToken, stats, vuCount: scn.load.vus, vuOffset: 0, totalVus: scn.load.vus,
+      endAt, rampMs, effectiveMaxRps: scn.load.maxRps || 0, ctx, loginFailures,
+      onSample: (ms) => winLat.push(ms),
+    });
     stats.endedAt = Date.now();
     if (progress) clearInterval(progress);
+    resource = resMon.finish();
   }
 
-  const rep = buildReport(scn, stats, { smoke, loginFailures });
+  const rep = buildReport(scn, stats, { smoke, loginFailures, resource, incompleteWorkers });
   printReport(rep);
 
   const outFile = flags.out || 'loadgen-result.json';
@@ -1107,31 +1560,73 @@ async function cmdRun(positional, flags) {
   process.exit(rep.verdict === 'PASS' ? 0 : 2);
 }
 
+// ─────────────────────────────────────────────── worker-режим ──
+
+/** Точка входа воркера: гоняет свою долю VU и отсылает статистику в главный поток. */
+async function runWorkerSlice() {
+  const { scnJson, preToken, vuCount, vuOffset, totalVus, endAt, rampMs, effectiveMaxRps } = workerData;
+  const scn = JSON.parse(scnJson);
+  const stats = makeStats(scn.requests);
+  const loginFailures = [];
+  const ctx = { aborted: false };
+  parentPort.on('message', (m) => { if (m === 'abort') ctx.aborted = true; });
+  const elMon = monitorEventLoopDelay({ resolution: 20 });
+  elMon.enable();
+  const tick = setInterval(() => parentPort.postMessage({ type: 'tick', total: stats.total, errors: stats.errors }), 2000);
+  if (tick.unref) tick.unref();
+  stats.startedAt = Date.now();
+  await runLoadSlice({ scn, preToken, stats, vuCount, vuOffset, totalVus, endAt, rampMs, effectiveMaxRps, ctx, loginFailures });
+  stats.endedAt = Date.now();
+  clearInterval(tick);
+  elMon.disable();
+  parentPort.postMessage({ type: 'result', stats: serializeStats(stats), loginFailures, elLagMaxMs: elMon.max / 1e6 });
+  parentPort.close(); // снимаем listener, иначе воркер не завершится
+}
+
 // ─────────────────────────────────────────────── main ──
 
+if (!isMainThread && workerData && workerData.role === 'load-slice') {
+  await runWorkerSlice();
+} else {
+  await runCli();
+}
+
+async function runCli() {
 const { cmd, positional, flags } = parseArgs(process.argv.slice(2));
 
 const HELP = `loadgen v${VERSION} — REST load generator (Node >= 18, без зависимостей)
 
 Команды:
-  probe <baseUrl> [path ...]   проверить доступность цели (exit 0/3)
-  init [--out FILE] [--force]  создать шаблон сценария
-  validate <scenario.json>     проверить сценарий (exit 0/1)
-  run <scenario.json>          прогнать нагрузку (exit 0=PASS, 2=FAIL, 3=цель недоступна)
-    --smoke                    каждый запрос по 1 разу, последовательно (проверка конфига)
-    --vus N --duration N       переопределить нагрузку
-    --base-url URL             переопределить цель
-    --out FILE                 файл JSON-результата (по умолч. loadgen-result.json)
-    --allow-writes             подтвердить изменяющие запросы
-    --confirm-external         подтвердить нагрузку на внешний хост
-    --quiet                    без прогресса каждые 5с
+  probe <baseUrl> [path ...]        проверить доступность цели (exit 0/3)
+  init [--out FILE] [--force]        создать шаблон сценария
+  validate <scenario.json>          проверить сценарий (exit 0/1)
+  profile <log|csv|json>            построить черновик сценария из статистики N запросов
+    --format access|csv|json         формат входа (по умолчанию — автоопределение)
+    --base-url URL                   цель для сценария
+    --top N                          сколько самых частых эндпоинтов взять (по умолч. 20)
+    --include-writes                 включить POST/PUT/DELETE (по умолчанию только чтение)
+    --out FILE                       куда записать черновик сценария
+  run <scenario.json>               прогнать нагрузку (exit 0=PASS, 2=FAIL, 3=цель недоступна)
+    --smoke                          каждый запрос по 1 разу, последовательно (проверка конфига)
+    --vus N --duration N             переопределить нагрузку
+    --workers N                      число потоков-генераторов (по умолч. из сценария/1)
+    --base-url URL                   переопределить цель
+    --out FILE                       файл JSON-результата (по умолч. loadgen-result.json)
+    --allow-writes                   подтвердить изменяющие запросы
+    --confirm-external               подтвердить нагрузку на внешний хост
+    --quiet                          без прогресса каждые 5с
 
-Рекомендуемый порядок: probe → init → validate → run --smoke → run`;
+Параллелизм: load.workers (или --workers) распределяет VU по потокам worker_threads на
+несколько ядер. Отчёт всегда включает секцию РЕСУРСЫ ГЕНЕРАТОРА и предупреждает, если
+упёрлись в CPU/event-loop/память (тогда латентность завышена самим генератором).
+
+Рекомендуемый порядок: probe → (profile) → init → validate → run --smoke → run`;
 
 switch (cmd) {
   case 'probe': await cmdProbe(positional); break;
   case 'init': cmdInit(flags); break;
   case 'validate': cmdValidate(positional); break;
+  case 'profile': cmdProfile(positional, flags); break;
   case 'run': await cmdRun(positional, flags); break;
   case undefined:
   case 'help':
@@ -1139,4 +1634,5 @@ switch (cmd) {
     console.log(HELP); break;
   default:
     die(1, `Неизвестная команда "${cmd}".\n\n${HELP}`);
+}
 }

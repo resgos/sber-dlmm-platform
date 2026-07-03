@@ -17,9 +17,10 @@ load-agent/
 │   └── dlmm-read-heavy.json # демо: read-heavy браузинг DLMM через gateway :8080
 ├── clients/                 # обёртки для интеграции в тесты: Node/Python/Java/Scala
 ├── agent/
-│   ├── SYSTEM_PROMPT_BODY.md# переносимый промпт агента (для любого харнесса)
-│   ├── REQUEST_ANALYSIS.md  # развёрнутый промпт разбора запроса пользователя → сценарий
-│   └── README.md            # как подключить к GigaChat/другому LLM
+│   ├── SYSTEM_PROMPT_BODY.md   # переносимый промпт агента (для любого харнесса)
+│   ├── REQUEST_ANALYSIS.md     # развёрнутый промпт разбора запроса пользователя → сценарий
+│   ├── PROFILE_FROM_STATS.md   # промпт: профиль нагрузки из access-лога/метрик
+│   └── README.md               # как подключить к GigaChat/другому LLM
 └── results/                 # сюда пишутся JSON-результаты прогонов
 
 .claude/agents/load-tester.md   # готовый субагент для Claude Code (model: haiku)
@@ -30,10 +31,12 @@ load-agent/
 
 ```bash
 node load-agent/bin/loadgen.mjs probe http://localhost:8080 actuator/health api/v1/pools
-node load-agent/bin/loadgen.mjs init --out my.json     # шаблон с подсказками
-node load-agent/bin/loadgen.mjs validate my.json       # точные ошибки, если что-то не так
-node load-agent/bin/loadgen.mjs run my.json --smoke    # каждый запрос по 1 разу (проверка конфига)
-node load-agent/bin/loadgen.mjs run my.json            # нагрузка + вердикт PASS/FAIL
+node load-agent/bin/loadgen.mjs init --out my.json          # шаблон с подсказками
+node load-agent/bin/loadgen.mjs validate my.json            # точные ошибки, если что-то не так
+node load-agent/bin/loadgen.mjs run my.json --smoke         # каждый запрос по 1 разу (проверка конфига)
+node load-agent/bin/loadgen.mjs run my.json                 # нагрузка + вердикт PASS/FAIL
+node load-agent/bin/loadgen.mjs run my.json --workers 4     # та же нагрузка на 4 ядрах
+node load-agent/bin/loadgen.mjs profile access.log --base-url http://x  # черновик сценария из лога
 ```
 
 В Claude Code: `/load-test http://localhost:8080 ...` или попросить текстом
@@ -96,7 +99,8 @@ flowchart LR
     "durationSec": 60,                     // max 900
     "rampUpSec": 5,                        // плавный старт VU
     "thinkTimeMs": [50, 200],              // пауза между запросами VU
-    "maxRps": 50                           // глобальный потолок (опционально)
+    "maxRps": 50,                          // глобальный потолок (опционально)
+    "workers": 1                           // потоков-генераторов на разные ядра (см. «Параллелизм»)
   },
   "thresholds": { "p95Ms": 500, "errorRatePct": 1 },  // критерии PASS/FAIL
   "allowWrites": false                     // true + флаг --allow-writes для POST/PUT/DELETE
@@ -137,6 +141,39 @@ Extract-пути: `content[*].id` (Spring Page), `[*].id` (массив), `data.
 - рекомендации («это rate limit — задайте maxRps», «система держит — повышайте --vus»,
   «значение X аномально медленное»);
 - машиночитаемый JSON (`--out file.json`): поля checksSummary, paramImpact, hints и т.д.
+
+## Параллелизм и ресурсы генератора
+
+`load.workers` (или `--workers N`) распределяет VU по нескольким потокам `worker_threads`,
+каждый на своём ядре — это снимает потолок «одно ядро Node» при высоких RPS. Статистика
+всех потоков сливается в один отчёт. Разумный предел — число ядер машины.
+
+Отчёт **всегда** содержит секцию «РЕСУРСЫ ГЕНЕРАТОРА»: CPU процесса (в % от одного ядра и от
+всех), event-loop lag, память процесса и системы. Если генератор упёрся (CPU ≥ 85% всех ядер,
+event-loop lag > 100мс или мало свободной ОЗУ) — инструмент прямо пишет **«⚠ УПЁРЛИСЬ»** и
+предупреждает, что латентность и достигнутый RPS ограничены самой машиной-генератором, а не
+целью. В подсказках: либо «добавьте workers» (если ядра ещё свободны), либо «нужно более мощное
+железо / несколько машин» (если все ядра уже заняты). Это защищает от вывода «сервис медленный»,
+когда на самом деле медленный генератор.
+
+## Профиль нагрузки из статистики (`profile`)
+
+Если есть историческая статистика обращений — превратите её в реалистичный сценарий:
+
+```bash
+node load-agent/bin/loadgen.mjs profile access.log --base-url http://host --top 20 --out scenario.json
+```
+
+Вход: access-лог (nginx/gateway), CSV (`path,method,count`) или JSON (`[{method,path,count}]` /
+`{"GET /x": 1994}`) — формат определяется автоматически. Команда:
+- нормализует пути: ID-сегменты (числа, UUID, длинные hex) → `{{переменные}}`, а реальные
+  значения из статистики складывает в `vars` (нагрузка идёт по настоящим ID);
+- считает `weight` каждого запроса как долю хитов — смесь повторяет продовую;
+- из таймстемпов access-лога оценивает средний RPS → `load.maxRps`;
+- по умолчанию отбрасывает POST/PUT/DELETE (нужен `--include-writes`).
+
+Результат — **черновик**: впишите `baseUrl`/`auth`, при желании `workers`, затем обычный
+`validate → run --smoke → run`. Подробный разбор для агента — `agent/PROFILE_FROM_STATS.md`.
 
 ## Интеграция в код (Node.js / Python / Java / Scala)
 
