@@ -32,7 +32,7 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -216,7 +216,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const name = a.slice(2);
-      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format'].includes(name);
+      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format', 'baseline', 'max-p95-regression-pct', 'max-error-increase-pp'].includes(name);
       if (needsValue) {
         flags[name] = argv[++i];
         if (flags[name] === undefined) die(1, `Опции --${name} нужно значение. Пример: --${name} <значение>`);
@@ -241,7 +241,7 @@ const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'var
 const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture'];
 const KNOWN_FLOW_KEYS = ['name', 'weight', 'steps'];
 const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'];
-const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps', 'workers'];
+const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps', 'workers', 'stages'];
 const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -512,6 +512,31 @@ function validateScenario(scn) {
         push(warnings, `load: неизвестный ключ "${k}"${s ? ` — возможно, "${s}"` : ''}`);
       }
     }
+    // stages — многоступенчатый профиль (ramp/spike/soak). Если задан — выводит vus/durationSec.
+    if (scn.load.stages !== undefined) {
+      if (!Array.isArray(scn.load.stages) || !scn.load.stages.length) {
+        push(errors, 'load.stages должен быть непустым массивом ступеней: [{ "vus": N, "durationSec": T }, ...]');
+      } else {
+        let ok = true, maxVus = 0, totalSec = 0;
+        scn.load.stages.forEach((st, i) => {
+          if (typeof st !== 'object' || st === null || !Number.isInteger(st.vus) || st.vus < 0 || typeof st.durationSec !== 'number' || st.durationSec <= 0) {
+            push(errors, `load.stages[${i}] должен быть { "vus": целое>=0, "durationSec": число>0 }`); ok = false;
+          } else { maxVus = Math.max(maxVus, st.vus); totalSec += st.durationSec; }
+        });
+        if (ok) {
+          if (maxVus < 1) push(errors, 'load.stages: хотя бы одна ступень должна иметь vus >= 1');
+          if (maxVus > MAX_VUS) push(errors, `load.stages: пиковые vus=${maxVus} превышают лимит ${MAX_VUS}`);
+          if (totalSec > MAX_DURATION_SEC) push(errors, `load.stages: суммарная длительность ${totalSec}с превышает лимит ${MAX_DURATION_SEC}с`);
+          if (scn.load.vus !== undefined || scn.load.durationSec !== undefined || scn.load.rampUpSec !== undefined) {
+            push(warnings, 'load.stages задан — load.vus/durationSec/rampUpSec игнорируются (выводятся из ступеней)');
+          }
+          // выводим производные значения для остального кода
+          scn.load.vus = maxVus;
+          scn.load.durationSec = totalSec;
+          scn.load.rampUpSec = 0;
+        }
+      }
+    }
     scn.load.vus = scn.load.vus ?? 5;
     scn.load.durationSec = scn.load.durationSec ?? 30;
     scn.load.rampUpSec = scn.load.rampUpSec ?? 0;
@@ -719,6 +744,20 @@ function makePicker(requests) {
   };
 }
 
+/** Целевое число активных VU в момент elapsedMs (кусочно-линейная интерполяция ступеней, старт с 0). */
+function stageTargetAt(stages, elapsedMs) {
+  let t = 0, prev = 0;
+  for (const st of stages) {
+    const durMs = st.durationSec * 1000;
+    if (elapsedMs <= t + durMs) {
+      const frac = durMs > 0 ? (elapsedMs - t) / durMs : 1;
+      return prev + (st.vus - prev) * frac;
+    }
+    t += durMs; prev = st.vus;
+  }
+  return prev; // после последней ступени держим её уровень (обычно 0)
+}
+
 function makeRateGate(maxRps) {
   if (!maxRps || maxRps === Infinity) return null;
   // равномерное распределение: следующий грант не раньше next; корректно работает и при maxRps < 10.
@@ -763,18 +802,25 @@ async function runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, c
 }
 
 /** Гоняет vuCount виртуальных пользователей до endAt, записывая в stats. Используется и в главном потоке, и в воркере. */
-async function runLoadSlice({ scn, preToken, stats, vuCount, vuOffset, totalVus, endAt, rampMs, effectiveMaxRps, ctx, loginFailures, onSample }) {
+async function runLoadSlice({ scn, preToken, stats, vuCount, vuBase, vuStride, totalVus, endAt, rampMs, effectiveMaxRps, ctx, loginFailures, onSample, startedAt }) {
   const pick = makePicker(scn._flows);
   const rateGate = makeRateGate(effectiveMaxRps);
   const [ttMin, ttMax] = scn.load.thinkTimeMs;
+  const stages = scn.load.stages;
+  const t0 = startedAt || Date.now();
+  const stride = vuStride || 1;
   const runVU = async (localIdx) => {
-    const globalIdx = vuOffset + localIdx;
-    if (rampMs) await sleep((rampMs * globalIdx) / Math.max(1, totalVus));
-    // все VU используют общий токен из pre-flight: логин выполняется ОДИН раз, без шторма
-    // на старте (иначе rampUp:0 + сотни VU = сотни одновременных POST /auth/login).
-    const token = preToken;
+    // round-robin по глобальному индексу: активный набор ступеней [0,target) равномерно
+    // ложится на все потоки (иначе на ramp работал бы только поток с младшими индексами)
+    const globalIdx = (vuBase || 0) + localIdx * stride;
+    const token = preToken; // общий токен из pre-flight (логин один раз, без шторма на старте)
     void loginFailures;
+    if (!stages && rampMs) await sleep((rampMs * globalIdx) / Math.max(1, totalVus));
     while (Date.now() < endAt && !ctx.aborted) {
+      if (stages) {
+        // VU активен, только если его глобальный индекс попадает в текущий целевой уровень ступеней
+        if (globalIdx >= stageTargetAt(stages, Date.now() - t0)) { await sleep(200); continue; }
+      }
       const flow = pick();
       await runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, ctx, endAt, rateGate);
       // think-time между сессиями (для одношаговых flow = пауза между итерациями, как раньше)
@@ -957,9 +1003,10 @@ function buildReport(scn, stats, opts = {}) {
   const latSorted = allLat.map(([, ms]) => ms).sort((a, b) => a - b);
   const totalErrPct = stats.total ? (100 * stats.errors) / stats.total : 0;
 
-  // деградация: p95 первой половины vs второй
+  // деградация: p95 первой половины vs второй (только при ПОСТОЯННОЙ нагрузке;
+  // при stages рост латентности к концу — следствие роста нагрузки, а не деградации)
   let degradation = null;
-  if (allLat.length > 100) {
+  if (allLat.length > 100 && !scn.load?.stages) {
     const mid = stats.startedAt + (stats.endedAt - stats.startedAt) / 2;
     const h1 = allLat.filter(([t]) => t < mid).map(([, ms]) => ms).sort((a, b) => a - b);
     const h2 = allLat.filter(([t]) => t >= mid).map(([, ms]) => ms).sort((a, b) => a - b);
@@ -1134,7 +1181,7 @@ function buildReport(scn, stats, opts = {}) {
     vus: opts.smoke ? 1 : scn.load.vus,
     total: stats.total, rps: Number((stats.total / durSec).toFixed(1)),
     errors: stats.errors, errorRatePct: Number(totalErrPct.toFixed(2)),
-    latencyMs: { p50: pct(latSorted, 50), p90: pct(latSorted, 90), p95, p99: pct(latSorted, 99), max: latSorted.length ? latSorted[latSorted.length - 1] : 0 },
+    latencyMs: { p50: Math.round(pct(latSorted, 50)), p90: Math.round(pct(latSorted, 90)), p95: Math.round(p95), p99: Math.round(pct(latSorted, 99)), max: Math.round(latSorted.length ? latSorted[latSorted.length - 1] : 0) },
     perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max) })),
     workers, resource: res, incompleteWorkers, flows: flowReport,
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
@@ -1323,6 +1370,8 @@ function cmdInit(flags) {
     ],
     load: { vus: 5, durationSec: 30, rampUpSec: 5, thinkTimeMs: [100, 300], workers: 1 },
     _load_hint: `vus — параллельные пользователи (max ${MAX_VUS}), durationSec — длительность (max ${MAX_DURATION_SEC}), maxRps — глобальный потолок запросов/сек (опц.), workers — число потоков-генераторов на разные ядра (по умолч. 1; поднимайте, если генератор упирается в CPU)`,
+    _stages_hint: 'АЛЬТЕРНАТИВА vus/durationSec: многоступенчатый профиль (ramp→плато→спад). Линейная интерполяция между уровнями, старт с 0. Пример ниже (разгон до 20, плато, спад) — вставьте внутрь "load" вместо vus/durationSec.',
+    _stages_example: [{ vus: 20, durationSec: 20 }, { vus: 20, durationSec: 30 }, { vus: 0, durationSec: 10 }],
     thresholds: { p95Ms: 1000, errorRatePct: 1 },
     _thresholds_hint: 'Пороги для вердикта PASS/FAIL',
     allowWrites: false,
@@ -1549,6 +1598,180 @@ function cmdProfile(positional, flags) {
   console.log(`Дальше: 1) впишите baseUrl и auth; 2) node loadgen.mjs validate ${out}; 3) node loadgen.mjs run ${out} --smoke; 4) run.`);
 }
 
+// ─────────────────────────────────────────────── compare: регрессия против базы ──
+
+/**
+ * Сравнивает два результата прогона (JSON из `run --out`). Чистая функция для CI-гейта и тестов.
+ * opts: { maxP95RegressionPct=20, maxErrorIncreasePP=1, minMs=5 }
+ * Возвращает { verdict: 'IMPROVED'|'STABLE'|'REGRESSED', overall, perRequest[], flows[], regressions[], added[], removed[], warnings[] }
+ */
+function compareResults(baseline, current, opts = {}) {
+  // Number.isFinite вместо ?? — иначе кривой (NaN) порог молча ОТКЛЮЧИЛ бы гейт регрессий
+  const maxP95Pct = Number.isFinite(opts.maxP95RegressionPct) ? opts.maxP95RegressionPct : 20;
+  const maxErrPP = Number.isFinite(opts.maxErrorIncreasePP) ? opts.maxErrorIncreasePP : 1;
+  const minMs = Number.isFinite(opts.minMs) ? opts.minMs : 5;
+  const warnings = [];
+  if (baseline.scenario && current.scenario && baseline.scenario !== current.scenario) {
+    warnings.push(`сравниваются РАЗНЫЕ сценарии: базовый "${baseline.scenario}" vs текущий "${current.scenario}" — сравнение может быть некорректным`);
+  }
+  if (baseline.baseUrl && current.baseUrl && baseline.baseUrl !== current.baseUrl) {
+    warnings.push(`разные цели: базовая ${baseline.baseUrl} vs текущая ${current.baseUrl}`);
+  }
+
+  // % изменения; null (а не Infinity) когда базы нет (base=0) — чтобы не текло "+Infinity%"/null в JSON
+  const finiteDelta = (base, cur) => {
+    if (base > 0) return Number((((cur - base) / base) * 100).toFixed(1));
+    return null; // нет базы для процента
+  };
+  const showDelta = (d) => (d === null ? 'нов.' : `${d > 0 ? '+' : ''}${d}%`);
+  const p95Regressed = (base, cur) => cur > base && cur - base >= minMs && cur > base * (1 + maxP95Pct / 100);
+  const errRegressed = (base, cur) => cur > base + maxErrPP;
+  const p95Line = (label, base, cur) => (base > 0 ? `${label} ${base}→${cur}ms (${showDelta(finiteDelta(base, cur))}, порог +${maxP95Pct}%)` : `${label} baseline=0, текущий ${cur}ms (нет базы для %)`);
+
+  const regressions = [];
+
+  // общая латентность и ошибки
+  const bl = baseline.latencyMs || {}, cl = current.latencyMs || {};
+  const b95 = bl.p95 ?? 0, c95 = cl.p95 ?? 0, b99 = bl.p99 ?? 0, c99 = cl.p99 ?? 0;
+  const overall = {
+    p95: { base: b95, cur: c95, deltaPct: finiteDelta(b95, c95), regressed: p95Regressed(b95, c95) },
+    p99: { base: b99, cur: c99, deltaPct: finiteDelta(b99, c99), regressed: p95Regressed(b99, c99) },
+    errorRatePct: { base: baseline.errorRatePct ?? 0, cur: current.errorRatePct ?? 0, deltaPP: Number(((current.errorRatePct ?? 0) - (baseline.errorRatePct ?? 0)).toFixed(2)), regressed: errRegressed(baseline.errorRatePct ?? 0, current.errorRatePct ?? 0) },
+    rps: { base: baseline.rps ?? 0, cur: current.rps ?? 0, deltaPct: finiteDelta(baseline.rps ?? 0, current.rps ?? 0) },
+  };
+  if (overall.p95.regressed) regressions.push(p95Line('Общий p95:', b95, c95));
+  if (overall.errorRatePct.regressed) regressions.push(`Ошибки выросли ${overall.errorRatePct.base}%→${overall.errorRatePct.cur}% (+${overall.errorRatePct.deltaPP}пп, порог +${maxErrPP}пп)`);
+
+  // по запросам: сначала точное имя, затем НОРМАЛИЗОВАННЫЙ ключ (без query, id-сегменты → {id}),
+  // чтобы дрейф имени (query-параметр/переименование) не прятал регресс в added/removed
+  const normKey = (name) => {
+    const sp = String(name).split(/\s+/);
+    const method = sp.length > 1 ? sp[0] : 'GET';
+    let path = sp.length > 1 ? sp.slice(1).join(' ') : String(name);
+    const qi = path.indexOf('?'); if (qi >= 0) path = path.slice(0, qi);
+    const norm = path.split('/').map((s) => (s !== '' && isIdSegment(s) ? '{id}' : s)).join('/');
+    return `${method} ${norm}`;
+  };
+  const baseByName = new Map((baseline.perRequest || []).map((r) => [r.name, r]));
+  const curByName = new Map((current.perRequest || []).map((r) => [r.name, r]));
+  const baseByNorm = new Map();
+  for (const r of baseline.perRequest || []) if (!baseByNorm.has(normKey(r.name))) baseByNorm.set(normKey(r.name), r);
+  const matchedBase = new Set();
+  const perRequest = [];
+  for (const [name, c] of curByName) {
+    let b = baseByName.get(name);
+    if (b) matchedBase.add(name);
+    else { b = baseByNorm.get(normKey(name)); if (b) matchedBase.add(b.name); } // fallback по нормализованному ключу
+    if (!b) continue;
+    const reg95 = p95Regressed(b.p95, c.p95);
+    const regErr = errRegressed(b.errPct, c.errPct);
+    perRequest.push({
+      name, baseP95: b.p95, curP95: c.p95, deltaPct: finiteDelta(b.p95, c.p95),
+      baseErrPct: b.errPct, curErrPct: c.errPct, regressed: reg95 || regErr,
+    });
+    if (reg95) regressions.push(p95Line(`Запрос "${name}":`, b.p95, c.p95));
+    if (regErr) regressions.push(`Запрос "${name}": ошибки ${b.errPct}%→${c.errPct}%`);
+  }
+  const matchedCurNorm = new Set(perRequest.map((r) => normKey(r.name)));
+  const added = [...curByName.keys()].filter((n) => !baseByName.has(n) && !baseByNorm.has(normKey(n)));
+  const removed = [...baseByName.keys()].filter((n) => !curByName.has(n) && !matchedBase.has(n) && !matchedCurNorm.has(normKey(n)));
+  if (added.length || removed.length) {
+    warnings.push(`набор запросов изменился: ${added.length ? `новые [${added.join(', ')}]` : ''}${added.length && removed.length ? '; ' : ''}${removed.length ? `пропали [${removed.join(', ')}]` : ''} — их метрики не сравнивались, проверьте, не спрятался ли за переименованием регресс`);
+  }
+
+  // цепочки
+  const baseFlows = new Map((baseline.flows || []).map((f) => [f.name, f]));
+  const flows = [];
+  for (const cf of current.flows || []) {
+    const bf = baseFlows.get(cf.name);
+    if (!bf) continue;
+    const deltaPP = Number((cf.completionPct - bf.completionPct).toFixed(1));
+    const regressed = deltaPP < -5; // падение доли завершённых сессий > 5пп
+    flows.push({ name: cf.name, baseCompletionPct: bf.completionPct, curCompletionPct: cf.completionPct, deltaPP, regressed });
+    if (regressed) regressions.push(`Цепочка "${cf.name}": завершаемость ${bf.completionPct}%→${cf.completionPct}% (${deltaPP}пп)`);
+  }
+
+  let verdict = 'STABLE';
+  if (regressions.length) verdict = 'REGRESSED';
+  else if ((overall.p95.base > 0 && overall.p95.deltaPct <= -10) || overall.errorRatePct.deltaPP < 0) verdict = 'IMPROVED';
+
+  return { verdict, overall, perRequest, flows, regressions, added, removed, warnings };
+}
+
+function printCompare(cmp, baseName, curName) {
+  const L = console.log;
+  L(`Сравнение: базовый "${baseName}" → текущий "${curName}"`);
+  for (const w of cmp.warnings) L(`ПРЕДУПРЕЖДЕНИЕ: ${w}`);
+  const o = cmp.overall;
+  L('');
+  L('──────────────── ОБЩИЕ МЕТРИКИ ────────────────────────');
+  const arrow = (d) => (d === null ? '' : d > 0 ? '▲' : d < 0 ? '▼' : '=');
+  const dp = (d) => (d === null ? 'нов.' : `${arrow(d)}${d}%`); // null = не с чем сравнивать (base=0)
+  L(`  p95:     ${o.p95.base}ms → ${o.p95.cur}ms (${dp(o.p95.deltaPct)})${o.p95.regressed ? '  ⚠ РЕГРЕСС' : ''}`);
+  L(`  p99:     ${o.p99.base}ms → ${o.p99.cur}ms (${dp(o.p99.deltaPct)})${o.p99.regressed ? '  ⚠ РЕГРЕСС' : ''}`);
+  L(`  ошибки:  ${o.errorRatePct.base}% → ${o.errorRatePct.cur}% (${arrow(o.errorRatePct.deltaPP)}${o.errorRatePct.deltaPP}пп)${o.errorRatePct.regressed ? '  ⚠ РЕГРЕСС' : ''}`);
+  L(`  RPS:     ${o.rps.base} → ${o.rps.cur} (${dp(o.rps.deltaPct)})`);
+  if (cmp.perRequest.length) {
+    L('');
+    L('──────────────── ПО ЗАПРОСАМ (p95) ────────────────────');
+    const head = ['запрос', 'база', 'текущ', 'Δ%', ''];
+    const rows = cmp.perRequest.map((r) => [r.name.slice(0, 32), `${r.baseP95}ms`, `${r.curP95}ms`, dp(r.deltaPct), r.regressed ? '⚠' : '']);
+    const table = [head, ...rows];
+    const w = head.map((_, c) => Math.max(...table.map((row) => String(row[c]).length)));
+    for (const row of table) L('  ' + row.map((v, c) => String(v).padEnd(w[c])).join('  '));
+  }
+  if (cmp.flows.length) {
+    L('');
+    L('──────────────── ЦЕПОЧКИ (завершаемость) ──────────────');
+    for (const f of cmp.flows) L(`  ${f.name}: ${f.baseCompletionPct}% → ${f.curCompletionPct}% (${arrow(f.deltaPP)}${f.deltaPP}пп)${f.regressed ? '  ⚠ РЕГРЕСС' : ''}`);
+  }
+  if (cmp.added.length) L(`\n  + новые запросы (нет в базе): ${cmp.added.join(', ')}`);
+  if (cmp.removed.length) L(`  - пропали из текущего: ${cmp.removed.join(', ')}`);
+  L('');
+  L('==================== ИТОГ СРАВНЕНИЯ ====================');
+  L(`VERDICT: ${cmp.verdict}`);
+  if (cmp.regressions.length) {
+    L('РЕГРЕССИИ:');
+    for (const r of cmp.regressions) L(`  ✗ ${r}`);
+  } else {
+    L(cmp.verdict === 'IMPROVED' ? 'Метрики улучшились, регрессий нет.' : 'Регрессий нет, метрики стабильны.');
+  }
+  L('=======================================================');
+}
+
+/** Разбирает пороги сравнения из флагов; кривое число — громкая ошибка, а не тихое отключение гейта. */
+function parseCompareOpts(flags) {
+  const opts = {};
+  const num = (flag, key) => {
+    if (flags[flag] === undefined) return;
+    const n = Number(flags[flag]);
+    if (!Number.isFinite(n) || n < 0) die(1, `--${flag}: ожидается неотрицательное число, получено "${flags[flag]}"`);
+    opts[key] = n;
+  };
+  num('max-p95-regression-pct', 'maxP95RegressionPct');
+  num('max-error-increase-pp', 'maxErrorIncreasePP');
+  return opts;
+}
+
+function cmdCompare(positional, flags) {
+  const [baseFile, curFile] = positional;
+  if (!baseFile || !curFile) die(1, 'Использование: node loadgen.mjs compare <baseline.json> <current.json> [--max-p95-regression-pct N] [--max-error-increase-pp N] [--out diff.json]\nОба файла — это JSON-результаты из `run --out`.');
+  const read = (f) => {
+    if (!existsSync(f)) die(1, `Файл результата не найден: ${f} (это JSON из "run --out")`);
+    try { return JSON.parse(readFileSync(f, 'utf8')); } catch (e) { die(1, `${f} — не валидный JSON результата: ${e.message}`); }
+  };
+  const baseline = read(baseFile);
+  const current = read(curFile);
+  if (!baseline.latencyMs || !current.latencyMs) die(1, 'Один из файлов не похож на результат loadgen (нет поля latencyMs). Сравнивать нужно JSON из "run --out".');
+  const opts = parseCompareOpts(flags);
+  const cmp = compareResults(baseline, current, opts);
+  printCompare(cmp, baseline.scenario || baseFile, current.scenario || curFile);
+  if (flags.out) {
+    try { const dir = dirname(flags.out); if (dir && dir !== '.') mkdirSync(dir, { recursive: true }); writeFileSync(flags.out, JSON.stringify(cmp, null, 2), 'utf8'); console.log(`\nJSON-сравнение: ${flags.out}`); } catch (e) { console.log(`\nНе удалось записать ${flags.out}: ${e.message}`); }
+  }
+  process.exit(cmp.verdict === 'REGRESSED' ? 2 : 0);
+}
+
 async function cmdRun(positional, flags) {
   const file = positional[0];
   if (!file) die(1, 'Использование: node loadgen.mjs run <scenario.json> [--smoke] [--vus N] [--duration N] [--out FILE]');
@@ -1582,7 +1805,10 @@ async function cmdRun(positional, flags) {
   }
 
   const smoke = !!flags.smoke;
-  console.log(`loadgen v${VERSION} | сценарий "${scn.name || '(без имени)'}" | цель ${scn.baseUrl} | режим ${smoke ? `SMOKE (${scn._hasExplicitFlows ? 'каждая цепочка' : 'каждый запрос'} по 1 разу)` : `LOAD (${scn.load.vus} VUs${scn.load.workers > 1 ? `×${scn.load.workers} потоков` : ''}, ${scn.load.durationSec}с)`}`);
+  const loadDesc = scn.load.stages
+    ? `STAGES (${scn.load.stages.length} ступ., пик ${scn.load.vus} VUs, ${scn.load.durationSec}с${scn.load.workers > 1 ? `, ×${scn.load.workers} потоков` : ''})`
+    : `LOAD (${scn.load.vus} VUs${scn.load.workers > 1 ? `×${scn.load.workers} потоков` : ''}, ${scn.load.durationSec}с)`;
+  console.log(`loadgen v${VERSION} | сценарий "${scn.name || '(без имени)'}" | цель ${scn.baseUrl} | режим ${smoke ? `SMOKE (${scn._hasExplicitFlows ? 'каждая цепочка' : 'каждый запрос'} по 1 разу)` : loadDesc}`);
 
   // pre-flight: логин + переменные
   let preToken = null;
@@ -1641,7 +1867,9 @@ async function cmdRun(positional, flags) {
     const rampMs = scn.load.rampUpSec * 1000;
     const scnJson = JSON.stringify(scn);
 
-    // распределяем VU по воркерам
+    // распределяем VU по воркерам ЧЕРЕДУЯ индексы (round-robin): воркер w владеет
+    // глобальными индексами w, w+workers, w+2*workers… — при stages активный набор [0,target)
+    // ложится на все потоки равномерно, а не сериализуется на младший поток.
     const base = Math.floor(scn.load.vus / workers);
     const rem = scn.load.vus % workers;
     const parts = [];
@@ -1650,7 +1878,6 @@ async function cmdRun(positional, flags) {
     let elLagMaxMs = 0;
     const ticks = new Array(workers).fill(null).map(() => ({ total: 0, errors: 0 }));
     const workerObjs = [];
-    let offset = 0;
 
     let progressTimer = null;
     const startProgress = () => {
@@ -1671,13 +1898,11 @@ async function cmdRun(positional, flags) {
       const finalize = () => { if (progressTimer) clearInterval(progressTimer); resolve(); };
       process.on('SIGINT', () => { console.log('\nПрерывание — останавливаю потоки...'); for (const w of workerObjs) w.postMessage('abort'); });
       for (let w = 0; w < workers; w++) {
-        const vuCount = base + (w < rem ? 1 : 0);
-        const vuOffset = offset;
-        offset += vuCount;
+        const vuCount = base + (w < rem ? 1 : 0); // столько индексов в residue-классе w
         const worker = new Worker(fileURLToPath(import.meta.url), {
           workerData: {
-            role: 'load-slice', scnJson, preToken, vuCount, vuOffset,
-            totalVus: scn.load.vus, endAt, rampMs,
+            role: 'load-slice', scnJson, preToken, vuCount, vuBase: w, vuStride: workers,
+            totalVus: scn.load.vus, endAt, rampMs, startedAt: stats.startedAt,
             effectiveMaxRps: scn.load.maxRps ? scn.load.maxRps / workers : 0,
           },
         });
@@ -1725,13 +1950,14 @@ async function cmdRun(positional, flags) {
       lastTotal = stats.total;
       const sorted = winLat.splice(0).sort((a, b) => a - b);
       const errPct = stats.total ? ((100 * stats.errors) / stats.total).toFixed(1) : '0.0';
-      console.log(`  t=${Math.round((now - stats.startedAt) / 1000)}с всего=${stats.total} rps=${rps.toFixed(0)} err=${errPct}% p95(окно)=${fmtMs(pct(sorted, 95))}ms`);
+      const tgt = scn.load.stages ? ` цель=${Math.round(stageTargetAt(scn.load.stages, now - stats.startedAt))}VU` : '';
+      console.log(`  t=${Math.round((now - stats.startedAt) / 1000)}с всего=${stats.total} rps=${rps.toFixed(0)} err=${errPct}% p95(окно)=${fmtMs(pct(sorted, 95))}ms${tgt}`);
     }, 5000);
 
     await runLoadSlice({
-      scn, preToken, stats, vuCount: scn.load.vus, vuOffset: 0, totalVus: scn.load.vus,
+      scn, preToken, stats, vuCount: scn.load.vus, vuBase: 0, vuStride: 1, totalVus: scn.load.vus,
       endAt, rampMs, effectiveMaxRps: scn.load.maxRps || 0, ctx, loginFailures,
-      onSample: (ms) => winLat.push(ms),
+      onSample: (ms) => winLat.push(ms), startedAt: stats.startedAt,
     });
     stats.endedAt = Date.now();
     if (progress) clearInterval(progress);
@@ -1750,14 +1976,34 @@ async function cmdRun(positional, flags) {
   } catch (e) {
     console.log(`\nНе удалось записать ${outFile}: ${e.message}`);
   }
-  process.exit(rep.verdict === 'PASS' ? 0 : 2);
+
+  // --baseline: сразу сравнить с эталонным прогоном (CI-гейт регрессий)
+  let regressed = false;
+  if (!smoke && flags.baseline) {
+    if (!existsSync(flags.baseline)) {
+      console.log(`\n⚠ --baseline: файл ${flags.baseline} не найден — сравнение пропущено (сохраните текущий как базу для следующего раза).`);
+    } else {
+      try {
+        const baseline = JSON.parse(readFileSync(flags.baseline, 'utf8'));
+        const cmp = compareResults(baseline, rep, parseCompareOpts(flags));
+        console.log('');
+        printCompare(cmp, baseline.scenario || flags.baseline, rep.scenario || '(текущий)');
+        regressed = cmp.verdict === 'REGRESSED';
+      } catch (e) {
+        console.log(`\n⚠ --baseline: не удалось сравнить с ${flags.baseline}: ${e.message}`);
+      }
+    }
+  }
+
+  // exit: FAIL по порогам ИЛИ регресс против базы → 2
+  process.exit(rep.verdict === 'PASS' && !regressed ? 0 : 2);
 }
 
 // ─────────────────────────────────────────────── worker-режим ──
 
 /** Точка входа воркера: гоняет свою долю VU и отсылает статистику в главный поток. */
 async function runWorkerSlice() {
-  const { scnJson, preToken, vuCount, vuOffset, totalVus, endAt, rampMs, effectiveMaxRps } = workerData;
+  const { scnJson, preToken, vuCount, vuBase, vuStride, totalVus, endAt, rampMs, effectiveMaxRps, startedAt } = workerData;
   const scn = JSON.parse(scnJson);
   const stats = makeStats(scn._steps);
   const loginFailures = [];
@@ -1768,7 +2014,7 @@ async function runWorkerSlice() {
   const tick = setInterval(() => parentPort.postMessage({ type: 'tick', total: stats.total, errors: stats.errors }), 2000);
   if (tick.unref) tick.unref();
   stats.startedAt = Date.now();
-  await runLoadSlice({ scn, preToken, stats, vuCount, vuOffset, totalVus, endAt, rampMs, effectiveMaxRps, ctx, loginFailures });
+  await runLoadSlice({ scn, preToken, stats, vuCount, vuBase, vuStride, totalVus, endAt, rampMs, effectiveMaxRps, ctx, loginFailures, startedAt });
   stats.endedAt = Date.now();
   clearInterval(tick);
   elMon.disable();
@@ -1779,7 +2025,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
@@ -1805,12 +2051,17 @@ const HELP = `loadgen v${VERSION} — REST load generator (Node >= 18, без з
     --top N                          сколько самых частых эндпоинтов взять (по умолч. 20)
     --include-writes                 включить POST/PUT/DELETE (по умолчанию только чтение)
     --out FILE                       куда записать черновик сценария
+  compare <base.json> <cur.json>    сравнить два результата run, найти регрессию (exit 0/2)
+    --max-p95-regression-pct N       допустимый рост p95 в % (по умолч. 20)
+    --max-error-increase-pp N        допустимый рост доли ошибок в пунктах (по умолч. 1)
+    --out FILE                       записать сравнение в JSON
   run <scenario.json>               прогнать нагрузку (exit 0=PASS, 2=FAIL, 3=цель недоступна)
     --smoke                          каждый запрос по 1 разу, последовательно (проверка конфига)
     --vus N --duration N             переопределить нагрузку
     --workers N                      число потоков-генераторов (по умолч. из сценария/1)
     --base-url URL                   переопределить цель
     --out FILE                       файл JSON-результата (по умолч. loadgen-result.json)
+    --baseline FILE                  сравнить результат с эталоном (регресс → exit 2)
     --allow-writes                   подтвердить изменяющие запросы
     --confirm-external               подтвердить нагрузку на внешний хост
     --quiet                          без прогресса каждые 5с
@@ -1826,6 +2077,7 @@ switch (cmd) {
   case 'init': cmdInit(flags); break;
   case 'validate': cmdValidate(positional); break;
   case 'profile': cmdProfile(positional, flags); break;
+  case 'compare': cmdCompare(positional, flags); break;
   case 'run': await cmdRun(positional, flags); break;
   case undefined:
   case 'help':

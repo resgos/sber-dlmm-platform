@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment,
-  evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats,
+  evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -173,6 +173,103 @@ test('validateScenario: обратная совместимость — requests
 });
 
 // ─── makeStats / mergeStats + flowStats ──
+// ─── compareResults (детект регрессий) ──
+function res({ p95 = 100, p99 = 150, err = 0, rps = 50, perRequest = [], flows = [], scenario = 's', baseUrl = 'http://x' } = {}) {
+  return { scenario, baseUrl, latencyMs: { p95, p99 }, errorRatePct: err, rps, perRequest, flows };
+}
+test('compareResults: одинаковые метрики = STABLE', () => {
+  const c = compareResults(res(), res());
+  assert.equal(c.verdict, 'STABLE');
+  assert.equal(c.regressions.length, 0);
+});
+test('compareResults: рост p95 выше порога = REGRESSED', () => {
+  const c = compareResults(res({ p95: 100 }), res({ p95: 200 }));
+  assert.equal(c.verdict, 'REGRESSED');
+  assert.ok(c.overall.p95.regressed);
+});
+test('compareResults: мелкий рост в пределах minMs = не регресс', () => {
+  const c = compareResults(res({ p95: 10 }), res({ p95: 13 })); // +3ms < minMs(5)
+  assert.equal(c.verdict, 'STABLE');
+});
+test('compareResults: рост ошибок выше порога = REGRESSED', () => {
+  const c = compareResults(res({ err: 0 }), res({ err: 2 }));
+  assert.equal(c.verdict, 'REGRESSED');
+  assert.ok(c.overall.errorRatePct.regressed);
+});
+test('compareResults: заметное улучшение p95 = IMPROVED', () => {
+  const c = compareResults(res({ p95: 200 }), res({ p95: 100 }));
+  assert.equal(c.verdict, 'IMPROVED');
+});
+test('compareResults: локальный регресс одного запроса ловится', () => {
+  const base = res({ perRequest: [{ name: 'a', p95: 50, errPct: 0 }, { name: 'b', p95: 50, errPct: 0 }] });
+  const cur = res({ perRequest: [{ name: 'a', p95: 50, errPct: 0 }, { name: 'b', p95: 200, errPct: 0 }] });
+  const c = compareResults(base, cur);
+  assert.equal(c.verdict, 'REGRESSED');
+  assert.ok(c.perRequest.find((r) => r.name === 'b').regressed);
+});
+test('compareResults: новые/пропавшие запросы и разные сценарии в warnings', () => {
+  const base = res({ scenario: 'old', perRequest: [{ name: 'a', p95: 50, errPct: 0 }] });
+  const cur = res({ scenario: 'new', perRequest: [{ name: 'b', p95: 50, errPct: 0 }] });
+  const c = compareResults(base, cur);
+  assert.deepEqual(c.added, ['b']);
+  assert.deepEqual(c.removed, ['a']);
+  assert.ok(c.warnings.some((w) => /РАЗНЫЕ сценари/.test(w)));
+});
+test('compareResults: падение завершаемости цепочки = REGRESSED', () => {
+  const base = res({ flows: [{ name: 'j', completionPct: 100 }] });
+  const cur = res({ flows: [{ name: 'j', completionPct: 80 }] });
+  const c = compareResults(base, cur);
+  assert.equal(c.verdict, 'REGRESSED');
+});
+test('compareResults: дрейф имени (query-параметр) НЕ прячет регресс', () => {
+  const base = res({ perRequest: [{ name: 'GET /a', p95: 20, errPct: 0 }] });
+  const cur = res({ perRequest: [{ name: 'GET /a?x=1', p95: 900, errPct: 0 }] });
+  const c = compareResults(base, cur);
+  assert.equal(c.verdict, 'REGRESSED', 'регресс должен ловиться через нормализованный ключ');
+});
+test('compareResults: id-сегмент в имени схлопывается для матчинга', () => {
+  const base = res({ perRequest: [{ name: 'GET /pools/111', p95: 20, errPct: 0 }] });
+  const cur = res({ perRequest: [{ name: 'GET /pools/999', p95: 900, errPct: 0 }] });
+  assert.equal(compareResults(base, cur).verdict, 'REGRESSED');
+});
+test('compareResults: NaN-порог НЕ отключает гейт (Number.isFinite guard)', () => {
+  const c = compareResults(res({ p95: 100 }), res({ p95: 5000 }), { maxP95RegressionPct: NaN });
+  assert.equal(c.verdict, 'REGRESSED', 'кривой порог должен откатываться к дефолту, а не отключать гейт');
+});
+test('compareResults: нулевая база p95 → deltaPct null, без Infinity, регресс есть', () => {
+  const c = compareResults(res({ p95: 0 }), res({ p95: 800 }));
+  assert.equal(c.overall.p95.deltaPct, null);
+  assert.equal(c.overall.p95.regressed, true);
+  assert.ok(JSON.stringify(c).indexOf('Infinity') === -1, 'в JSON не должно быть Infinity');
+});
+
+// ─── stageTargetAt (профиль нагрузки) ──
+test('stageTargetAt: линейный разгон/плато/спад', () => {
+  const stages = [{ vus: 20, durationSec: 10 }, { vus: 20, durationSec: 10 }, { vus: 0, durationSec: 10 }];
+  assert.equal(stageTargetAt(stages, 0), 0);          // старт с 0
+  assert.equal(stageTargetAt(stages, 5000), 10);      // середина разгона → 10
+  assert.equal(stageTargetAt(stages, 10000), 20);     // конец разгона → 20
+  assert.equal(stageTargetAt(stages, 15000), 20);     // плато
+  assert.equal(stageTargetAt(stages, 20000), 20);     // конец плато
+  assert.equal(stageTargetAt(stages, 25000), 10);     // середина спада → 10
+  assert.equal(stageTargetAt(stages, 30000), 0);      // конец → 0
+  assert.equal(stageTargetAt(stages, 99999), 0);      // после конца держим последний уровень
+});
+test('validateScenario: stages выводят пик vus и суммарную длительность', () => {
+  const scn = { baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x' }],
+    load: { stages: [{ vus: 50, durationSec: 20 }, { vus: 200, durationSec: 40 }, { vus: 0, durationSec: 10 }] } };
+  const { errors } = validateScenario(scn);
+  assert.deepEqual(errors, []);
+  assert.equal(scn.load.vus, 200);        // пик
+  assert.equal(scn.load.durationSec, 70); // сумма
+});
+test('validateScenario: пустой/битый stages = ошибка', () => {
+  const bad = { baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x' }], load: { stages: [] } };
+  assert.ok(validateScenario(bad).errors.some((e) => /stages/.test(e)));
+  const bad2 = { baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x' }], load: { stages: [{ vus: -1, durationSec: 5 }] } };
+  assert.ok(validateScenario(bad2).errors.some((e) => /stages/.test(e)));
+});
+
 test('mergeStats: складывает per-step и flowStats из нескольких частей', () => {
   const steps = [{ name: 's1' }, { name: 's2' }];
   const a = makeStats(steps); a.startedAt = 100; a.endedAt = 200;

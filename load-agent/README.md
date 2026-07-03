@@ -38,6 +38,8 @@ node load-agent/bin/loadgen.mjs validate my.json            # точные ош�
 node load-agent/bin/loadgen.mjs run my.json --smoke         # каждый запрос по 1 разу (проверка конфига)
 node load-agent/bin/loadgen.mjs run my.json                 # нагрузка + вердикт PASS/FAIL
 node load-agent/bin/loadgen.mjs run my.json --workers 4     # та же нагрузка на 4 ядрах
+node load-agent/bin/loadgen.mjs run my.json --baseline base.json  # + сравнить с эталоном (регресс → exit 2)
+node load-agent/bin/loadgen.mjs compare base.json cur.json  # сравнить два прогона
 node load-agent/bin/loadgen.mjs profile access.log --base-url http://x  # черновик сценария из лога
 ```
 
@@ -177,6 +179,29 @@ Extract-пути: `content[*].id` (Spring Page), `[*].id` (массив), `data.
 - Один прогон `--smoke` проходит каждую цепочку целиком один раз — проверяет всю проводку
   (включая capture) до нагрузки.
 
+## Многоступенчатый профиль (`load.stages`) — ramp / spike / soak
+
+Постоянная нагрузка (`vus` + `durationSec`) не находит точку излома. Для этого — ступени:
+
+```jsonc
+"load": {
+  "stages": [
+    { "vus": 50,  "durationSec": 30 },   // разгон 0 → 50 за 30с
+    { "vus": 200, "durationSec": 60 },   // разгон 50 → 200 за 60с (ищем предел)
+    { "vus": 200, "durationSec": 120 },  // плато на 200 (soak — утечки/деградация)
+    { "vus": 0,   "durationSec": 30 }    // плавный спад
+  ],
+  "thinkTimeMs": [50, 200]
+}
+```
+
+- Число активных VU интерполируется линейно между уровнями (старт с 0). Пик выводит `vus`,
+  сумма длительностей — общую продолжительность (`stages` заменяет `vus`/`durationSec`).
+- Прогресс каждые 5с показывает текущий целевой уровень `цель=NVU`.
+- Работает в многопотоке (все потоки делят один график по времени старта).
+- При stages детект «деградации во времени» отключается (рост латентности к концу —
+  следствие роста нагрузки, а не утечки); смотрите на форму RPS/латентности по ходу.
+
 ## Параллелизм и ресурсы генератора
 
 `load.workers` (или `--workers N`) распределяет VU по нескольким потокам `worker_threads`,
@@ -215,6 +240,27 @@ node load-agent/bin/loadgen.mjs profile access.log --base-url http://host --top 
 Готовые обёртки в [clients/](clients/README.md): движок один, клиенты запускают его
 процессом и отдают результат в родном виде — удобно для нагрузочных тестов в CI
 (pytest / JUnit / scalatest / node:test). Единственное требование на агенте CI — Node >= 18.
+
+## Регрессии: сравнение прогонов (`compare`) — CI-гейт
+
+Один прогон — снимок. Чтобы ловить «этот PR ухудшил p95», сравнивайте текущий результат
+с эталонным:
+
+```bash
+node load-agent/bin/loadgen.mjs compare baseline.json current.json
+# или сразу после прогона:
+node load-agent/bin/loadgen.mjs run scenario.json --out current.json --baseline baseline.json
+```
+
+- Сравнивает p95/p99/долю ошибок/RPS суммарно **и по каждому запросу**, плюс завершаемость
+  цепочек. Локальный регресс одного эндпоинта не спрячется за хорошим средним.
+- Пороги: рост p95 > `--max-p95-regression-pct` (по умолч. 20%, с полом шума 5ms) или рост
+  ошибок > `--max-error-increase-pp` (по умолч. 1 пункт) → **VERDICT: REGRESSED, exit 2**.
+- Заметное улучшение → `IMPROVED`, иначе `STABLE` (оба exit 0).
+
+**Паттерн для CI**: храните `baseline.json` (эталон с main), в пайплайне запускайте
+`run ... --baseline baseline.json` — ненулевой код выхода валит сборку при регрессе.
+Периодически обновляйте базу принятым прогоном.
 
 ## Тесты самого движка
 
