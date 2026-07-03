@@ -1,0 +1,30 @@
+{
+  "_comment": "Демо-сценарий: read-heavy браузинг DLMM-платформы через gateway. Только чтение, безопасен.",
+  "name": "dlmm-read-heavy",
+  "baseUrl": "http://localhost:8080",
+  "timeoutMs": 10000,
+  "auth": {
+    "type": "login",
+    "login": {
+      "path": "/api/v1/auth/login",
+      "method": "POST",
+      "body": { "email": "ivanov@example.com", "password": "Demo1234" },
+      "tokenField": "accessToken"
+    }
+  },
+  "vars": {
+    "poolId": { "setupPath": "/api/v1/pools?page=0&size=20", "extract": "content[*].id" },
+    "tokenId": { "setupPath": "/api/v1/tokens?page=0&size=20", "extract": "content[*].id" }
+  },
+  "requests": [
+    { "name": "pools list", "method": "GET", "path": "/api/v1/pools?page=0&size=20", "weight": 5 },
+    { "name": "pool detail", "method": "GET", "path": "/api/v1/pools/{{poolId}}", "weight": 4 },
+    { "name": "pool bins", "method": "GET", "path": "/api/v1/pools/{{poolId}}/bins?from=8388558&to=8388658", "weight": 3 },
+    { "name": "tokens list", "method": "GET", "path": "/api/v1/tokens?page=0&size=20", "weight": 2 },
+    { "name": "token detail", "method": "GET", "path": "/api/v1/tokens/{{tokenId}}", "weight": 2 }
+  ],
+  "_load_note": "maxRps 8: на gateway включён rate limit (~10 rps на ключ в текущем образе), выше него полетят 429",
+  "load": { "vus": 10, "durationSec": 60, "rampUpSec": 5, "thinkTimeMs": [50, 200], "maxRps": 8 },
+  "thresholds": { "p95Ms": 500, "errorRatePct": 1 },
+  "allowWrites": false
+}
