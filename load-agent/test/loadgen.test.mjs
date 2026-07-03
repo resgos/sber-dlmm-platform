@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment,
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
+  toJUnitXml, toMarkdown,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -241,6 +242,75 @@ test('compareResults: нулевая база p95 → deltaPct null, без Infi
   assert.equal(c.overall.p95.deltaPct, null);
   assert.equal(c.overall.p95.regressed, true);
   assert.ok(JSON.stringify(c).indexOf('Infinity') === -1, 'в JSON не должно быть Infinity');
+});
+
+// ─── per-request thresholds (валидация) ──
+test('validateScenario: thresholds.perRequest на корректное имя проходит', () => {
+  const scn = { baseUrl: 'http://localhost:8080', requests: [{ name: 'a', method: 'GET', path: '/x' }],
+    thresholds: { perRequest: { a: { p95Ms: 100 } } } };
+  assert.deepEqual(validateScenario(scn).errors, []);
+});
+test('validateScenario: опечатка в имени perRequest = ОШИБКА (иначе SLO молча не enforce)', () => {
+  const scn = { baseUrl: 'http://localhost:8080', requests: [{ name: 'a', method: 'GET', path: '/x' }],
+    thresholds: { perRequest: { nope: { p95Ms: 50 } } } };
+  assert.ok(validateScenario(scn).errors.some((e) => /nope/.test(e)), 'опечатка имени должна быть ошибкой');
+});
+test('validateScenario: perRequest без порогов = ошибка', () => {
+  const scn = { baseUrl: 'http://localhost:8080', requests: [{ name: 'a', method: 'GET', path: '/x' }],
+    thresholds: { perRequest: { a: {} } } };
+  assert.ok(validateScenario(scn).errors.some((e) => /perRequest/.test(e)));
+});
+
+// ─── warmupSec (валидация) ──
+test('validateScenario: warmupSec >= durationSec = ошибка', () => {
+  const scn = { baseUrl: 'http://localhost:8080', requests: [{ name: 'a', method: 'GET', path: '/x' }],
+    load: { vus: 1, durationSec: 10, warmupSec: 10 } };
+  assert.ok(validateScenario(scn).errors.some((e) => /warmupSec/.test(e)));
+});
+
+// ─── toJUnitXml / toMarkdown ──
+function sampleRep(verdict = 'FAIL') {
+  return {
+    scenario: 'demo & <test>', baseUrl: 'http://x', mode: 'load', verdict, durationSec: 20, startedAt: '2026-01-01T00:00:00Z',
+    total: 100, rps: 5, errorRatePct: 0, workers: 1,
+    latencyMs: { p95: 30, p99: 40 },
+    perRequest: [{ name: 'GET /a?x=1', count: 100, rps: 5, errPct: 0, p95: 30, p99: 40, statuses: '200:100' }],
+    flows: [{ name: 'j', completionPct: 90, p95Ms: 100, topBreak: { step: 's2' } }],
+    checks: [{ name: 'p95 30ms <= 500ms', pass: true }, { name: '[GET /a] p95 30ms <= 1ms', pass: false }],
+    resource: { saturated: [], cpuBusyCores: 0.1, cores: 8, elLagMaxMs: 20 }, hints: ['подсказка'],
+  };
+}
+test('toJUnitXml: валидный XML, экранирование, failure на нарушенном пороге', () => {
+  const xml = toJUnitXml(sampleRep('FAIL'));
+  assert.match(xml, /^<\?xml/);
+  assert.ok(xml.includes('&amp;') && xml.includes('&lt;test&gt;'), 'спецсимволы экранированы');
+  assert.ok(xml.includes('&lt;='), '<= экранирован');
+  assert.ok(xml.includes('<failure'), 'нарушенный порог = failure');
+  assert.match(xml, /failures="/);
+  // теги сбалансированы (грубая проверка)
+  const open = (xml.match(/<testcase /g) || []).length;
+  const flow = (xml.match(/classname="flows"/g) || []).length;
+  assert.equal(flow, 1);
+  assert.ok(open >= 3);
+});
+test('toMarkdown: содержит вердикт, таблицу и цепочки', () => {
+  const md = toMarkdown(sampleRep('PASS'));
+  assert.ok(md.includes('✅ PASS'));
+  assert.ok(md.includes('| запрос |'));
+  assert.ok(md.includes('90% завершено'));
+});
+test('toJUnitXml: C0-управляющие символы вырезаются (well-formed XML)', () => {
+  const rep = sampleRep('PASS');
+  rep.perRequest = [{ name: 'healthcheck', count: 1, rps: 1, errPct: 0, p95: 5, p99: 5, statuses: '200:1' }];
+  const xml = toJUnitXml(rep);
+  for (const ch of xml) { const c = ch.charCodeAt(0); assert.ok(!(c < 32 && c !== 9 && c !== 10 && c !== 13), `control char ${c} утёк в XML`); }
+  assert.ok(xml.includes('healthcheck'));
+});
+test('toMarkdown: пайп | в имени экранируется (не ломает таблицу)', () => {
+  const rep = sampleRep('PASS');
+  rep.perRequest = [{ name: 'GET /a|b', count: 1, rps: 1, errPct: 0, p95: 5, p99: 5, statuses: '200:1' }];
+  const md = toMarkdown(rep);
+  assert.ok(md.includes('GET /a\\|b'), 'пайп должен быть экранирован');
 });
 
 // ─── stageTargetAt (профиль нагрузки) ──

@@ -32,7 +32,7 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -216,7 +216,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const name = a.slice(2);
-      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format', 'baseline', 'max-p95-regression-pct', 'max-error-increase-pp'].includes(name);
+      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format', 'baseline', 'max-p95-regression-pct', 'max-error-increase-pp', 'junit', 'md'].includes(name);
       if (needsValue) {
         flags[name] = argv[++i];
         if (flags[name] === undefined) die(1, `Опции --${name} нужно значение. Пример: --${name} <значение>`);
@@ -241,7 +241,7 @@ const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'var
 const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture'];
 const KNOWN_FLOW_KEYS = ['name', 'weight', 'steps'];
 const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'];
-const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps', 'workers', 'stages'];
+const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps', 'workers', 'stages', 'warmupSec'];
 const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -545,6 +545,10 @@ function validateScenario(scn) {
     if (typeof scn.load.durationSec !== 'number' || scn.load.durationSec < 1) push(errors, `load.durationSec должен быть числом >= 1`);
     if (scn.load.durationSec > MAX_DURATION_SEC) push(errors, `load.durationSec=${scn.load.durationSec} превышает жёсткий лимит ${MAX_DURATION_SEC} сек`);
     if (typeof scn.load.rampUpSec !== 'number' || scn.load.rampUpSec < 0) push(errors, `load.rampUpSec должен быть числом >= 0`);
+    scn.load.warmupSec = scn.load.warmupSec ?? 0;
+    if (typeof scn.load.warmupSec !== 'number' || scn.load.warmupSec < 0) push(errors, 'load.warmupSec должен быть числом >= 0 (сколько секунд разогрева исключить из метрик)');
+    else if (scn.load.warmupSec >= scn.load.durationSec) push(errors, `load.warmupSec=${scn.load.warmupSec} должен быть меньше длительности ${scn.load.durationSec}с`);
+    if (scn.load.warmupSec > 0 && scn.load.stages) push(warnings, 'load.warmupSec со stages не применяется (нагрузка не постоянна) — будет проигнорирован');
     let tt = scn.load.thinkTimeMs ?? 0;
     if (typeof tt === 'number') tt = [tt, tt];
     if (!Array.isArray(tt) || tt.length !== 2 || tt.some((x) => typeof x !== 'number' || x < 0) || tt[0] > tt[1]) {
@@ -566,6 +570,24 @@ function validateScenario(scn) {
   th.errorRatePct = th.errorRatePct ?? 1;
   if (typeof th.p95Ms !== 'number' || th.p95Ms <= 0) push(errors, 'thresholds.p95Ms должен быть положительным числом (мс)');
   if (typeof th.errorRatePct !== 'number' || th.errorRatePct < 0) push(errors, 'thresholds.errorRatePct должен быть числом >= 0 (проценты)');
+  // per-request пороги: { "имя запроса": { p95Ms?, errorRatePct? } } — вердикт enforce'ит SLO на эндпоинт
+  if (th.perRequest !== undefined) {
+    if (typeof th.perRequest !== 'object' || th.perRequest === null || Array.isArray(th.perRequest)) {
+      push(errors, 'thresholds.perRequest должен быть объектом { "имя запроса": { "p95Ms": N, "errorRatePct": N } }');
+    } else {
+      // имена шагов берём из allSteps (есть всегда, даже при других ошибках), НЕ из scn._steps
+      const stepNames = new Set(allSteps.map((s) => s.name).filter(Boolean));
+      for (const [name, t] of Object.entries(th.perRequest)) {
+        if (name.startsWith('_')) continue;
+        if (typeof t !== 'object' || t === null || Array.isArray(t)) { push(errors, `thresholds.perRequest["${name}"] должен быть объектом { p95Ms?, errorRatePct? }`); continue; }
+        if (t.p95Ms !== undefined && (typeof t.p95Ms !== 'number' || t.p95Ms <= 0)) push(errors, `thresholds.perRequest["${name}"].p95Ms должен быть положительным числом`);
+        if (t.errorRatePct !== undefined && (typeof t.errorRatePct !== 'number' || t.errorRatePct < 0)) push(errors, `thresholds.perRequest["${name}"].errorRatePct должен быть числом >= 0`);
+        if (t.p95Ms === undefined && t.errorRatePct === undefined) push(errors, `thresholds.perRequest["${name}"]: задайте хотя бы p95Ms или errorRatePct`);
+        // опечатка в имени = ОШИБКА (иначе SLO молча не enforce'ится → ложный PASS)
+        if (!stepNames.has(name)) push(errors, `thresholds.perRequest["${name}"]: нет запроса/шага с таким именем — порог не был бы применён. Есть: ${[...stepNames].join(', ') || 'нет шагов'}`);
+      }
+    }
+  }
 
   return { errors, warnings };
 }
@@ -797,7 +819,7 @@ async function runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, c
     if (!rec.ok) { completed = false; brokeAt = step.name; break; }
     if (ttMax > 0 && i < flow.steps.length - 1) await sleep(ttMin + Math.random() * (ttMax - ttMin));
   }
-  if (flow._track && !interrupted) stats.recordFlow(flow.name, completed, svcMs, brokeAt);
+  if (flow._track && !interrupted) stats.recordFlow(flow.name, completed, svcMs, brokeAt, Date.now());
   return { interrupted };
 }
 
@@ -844,7 +866,7 @@ function serializeStats(stats) {
     };
   }
   const flowStats = [...stats.flowStats.entries()].map(([n, f]) => [n, { started: f.started, completed: f.completed, durations: f.durations, breaks: [...f.breaks.entries()] }]);
-  return { total: stats.total, errors: stats.errors, startedAt: stats.startedAt, endedAt: stats.endedAt, per, flowStats };
+  return { total: stats.total, errors: stats.errors, startedAt: stats.startedAt, endedAt: stats.endedAt, warmupSkipped: stats.warmupSkipped || 0, per, flowStats };
 }
 
 function mergeStats(parts, steps) {
@@ -854,6 +876,7 @@ function mergeStats(parts, steps) {
   for (const part of parts) {
     base.total += part.total;
     base.errors += part.errors;
+    base.warmupSkipped += part.warmupSkipped || 0;
     for (const [name, ps] of Object.entries(part.per)) {
       const s = base.per.get(name);
       if (!s) continue;
@@ -940,7 +963,10 @@ function makeStats(steps) {
     endedAt: 0,
     total: 0,
     errors: 0,
-    recordFlow(name, completed, ms, brokeAt) {
+    warmupUntil: 0, // выборки со временем < warmupUntil не учитываются (разогрев)
+    warmupSkipped: 0,
+    recordFlow(name, completed, ms, brokeAt, now) {
+      if (this.warmupUntil && now && now < this.warmupUntil) return; // сессия на разогреве — не учитываем (как и per-request)
       let f = this.flowStats.get(name);
       if (!f) { f = { started: 0, completed: 0, durations: [], breaks: new Map() }; this.flowStats.set(name, f); }
       f.started++;
@@ -948,6 +974,7 @@ function makeStats(steps) {
       else if (brokeAt) f.breaks.set(brokeAt, (f.breaks.get(brokeAt) || 0) + 1);
     },
     record(req, r, now) {
+      if (this.warmupUntil && now < this.warmupUntil) { this.warmupSkipped++; return; } // разогрев — не считаем
       const s = this.per.get(req.name);
       this.total++;
       s.count++;
@@ -979,7 +1006,9 @@ function makeStats(steps) {
 }
 
 function buildReport(scn, stats, opts = {}) {
-  const durSec = Math.max(0.001, (stats.endedAt - stats.startedAt) / 1000);
+  // окно измерения — от конца разогрева (warmupUntil), а не от старта: так RPS считается честно
+  const measureStart = stats.warmupUntil && stats.warmupUntil > stats.startedAt ? stats.warmupUntil : stats.startedAt;
+  const durSec = Math.max(0.001, (stats.endedAt - measureStart) / 1000);
   const allLat = [];
   const rows = [];
   const errorsDetail = [];
@@ -1075,6 +1104,18 @@ function buildReport(scn, stats, opts = {}) {
     { name: `p95 ${fmtMs(p95)}ms <= ${th.p95Ms}ms`, pass: p95 <= th.p95Ms },
     { name: `errors ${totalErrPct.toFixed(2)}% <= ${th.errorRatePct}%`, pass: totalErrPct <= th.errorRatePct },
   ];
+  // per-request пороги (SLO на конкретный эндпоинт) — тоже в вердикт
+  if (!opts.smoke && th.perRequest) {
+    for (const r of rows) {
+      const t = th.perRequest[r.name];
+      if (!t) continue;
+      // запрос ни разу не выполнился (например, шаг цепочки после обрыва) — SLO нельзя считать пройденным
+      if (r.count === 0) { checks.push({ name: `[${r.name}] не выполнялся ни разу (0 запросов) — SLO не подтверждён`, pass: false }); continue; }
+      // если у запроса НЕТ успешных выборок (100% ошибок), p95=0 — не даём порогу p95 ложно пройти
+      if (t.p95Ms !== undefined) checks.push({ name: `[${r.name}] p95 ${fmtMs(r.p95)}ms <= ${t.p95Ms}ms`, pass: r.errPct < 100 && r.p95 <= t.p95Ms });
+      if (t.errorRatePct !== undefined) checks.push({ name: `[${r.name}] errors ${r.errPct.toFixed(2)}% <= ${t.errorRatePct}%`, pass: r.errPct <= t.errorRatePct });
+    }
+  }
   const incompleteWorkers = opts.incompleteWorkers || 0;
   const pass = checks.every((c) => c.pass) && (!opts.smoke || stats.errors === 0) && incompleteWorkers === 0;
   if (incompleteWorkers > 0) checks.push({ name: `все потоки-генераторы вернули данные (не вернули: ${incompleteWorkers})`, pass: false });
@@ -1125,6 +1166,7 @@ function buildReport(scn, stats, opts = {}) {
     hints.push(`Система легко держит эту нагрузку (p95 ${fmtMs(p95)}ms при пороге ${th.p95Ms}ms). Чтобы найти предел — повышайте нагрузку: --vus ${Math.min(MAX_VUS, scn.load.vus * 2)}.`);
   }
   if (latDroppedTotal > 0) hints.push(`Выборок латентности больше лимита ${MAX_LAT_SAMPLES} на запрос — перцентили посчитаны по первым ${MAX_LAT_SAMPLES} (отброшено ${latDroppedTotal}).`);
+  if ((stats.warmupSkipped || 0) > 0) hints.push(`Разогрев ${scn.load.warmupSec}с: ${stats.warmupSkipped} запросов на прогреве НЕ учтены в метриках (честные перцентили без JIT/прогрева пула соединений).`);
 
   if (incompleteWorkers > 0) hints.push(`⚠ ${incompleteWorkers} поток(ов)-генератор(ов) упали и не вернули данные — их доля нагрузки НЕ выполнена. Отчёт неполный, вердикт принудительно FAIL. Проверьте память/стабильность и повторите.`);
   for (const fr of flowReport) {
@@ -1178,6 +1220,8 @@ function buildReport(scn, stats, opts = {}) {
     mode: opts.smoke ? 'smoke' : 'load',
     startedAt: new Date(stats.startedAt).toISOString(),
     durationSec: Number(durSec.toFixed(1)),
+    warmupSec: (!opts.smoke && scn.load?.warmupSec) || 0,
+    warmupSkipped: stats.warmupSkipped || 0,
     vus: opts.smoke ? 1 : scn.load.vus,
     total: stats.total, rps: Number((stats.total / durSec).toFixed(1)),
     errors: stats.errors, errorRatePct: Number(totalErrPct.toFixed(2)),
@@ -1187,6 +1231,86 @@ function buildReport(scn, stats, opts = {}) {
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
   };
+}
+
+// ─── отчёты для CI: JUnit XML и Markdown ──
+
+function xmlEsc(s) {
+  // сначала выкидываем C0-управляющие символы (кроме табуляции/переводов строк) — недопустимы в XML 1.0
+  return String(s)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
+}
+
+/** JUnit XML: каждый порог/запрос/цепочка = testcase (Jenkins/GitLab/GitHub рендерят нативно). */
+function toJUnitXml(rep) {
+  const cases = [];
+  // пороги (это и есть критерии PASS/FAIL)
+  for (const c of rep.checks || []) {
+    cases.push({ cls: 'thresholds', name: c.name, fail: c.pass ? null : 'порог нарушен' });
+  }
+  // запросы: время = p95, провал если есть ошибки
+  for (const r of rep.perRequest || []) {
+    cases.push({ cls: 'requests', name: r.name, timeSec: (r.p95 || 0) / 1000, fail: r.errPct > 0 ? `ошибки ${r.errPct}% (${r.statuses})` : null });
+  }
+  // цепочки: провал если не 100% завершения
+  for (const f of rep.flows || []) {
+    cases.push({ cls: 'flows', name: f.name, timeSec: (f.p95Ms || 0) / 1000, fail: f.completionPct < 100 ? `завершено ${f.completionPct}%${f.topBreak ? `, рвётся на "${f.topBreak.step}"` : ''}` : null });
+  }
+  const failures = cases.filter((c) => c.fail).length;
+  const suiteName = rep.scenario || 'loadgen';
+  const lines = [];
+  lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  lines.push(`<testsuites name="loadgen" tests="${cases.length}" failures="${failures}">`);
+  lines.push(`  <testsuite name="${xmlEsc(suiteName)}" tests="${cases.length}" failures="${failures}" time="${rep.durationSec || 0}" timestamp="${rep.startedAt || ''}">`);
+  lines.push(`    <properties><property name="verdict" value="${rep.verdict}"/><property name="target" value="${xmlEsc(rep.baseUrl || '')}"/><property name="rps" value="${rep.rps}"/><property name="errorRatePct" value="${rep.errorRatePct}"/></properties>`);
+  for (const c of cases) {
+    const attrs = `classname="${xmlEsc(c.cls)}" name="${xmlEsc(c.name)}"${c.timeSec !== undefined ? ` time="${c.timeSec}"` : ''}`;
+    if (c.fail) lines.push(`    <testcase ${attrs}><failure message="${xmlEsc(c.fail)}">${xmlEsc(c.fail)}</failure></testcase>`);
+    else lines.push(`    <testcase ${attrs}/>`);
+  }
+  lines.push('  </testsuite>');
+  lines.push('</testsuites>');
+  return lines.join('\n') + '\n';
+}
+
+/** Markdown-сводка для комментария в PR. */
+function toMarkdown(rep) {
+  const L = [];
+  const badge = rep.verdict === 'PASS' ? '✅ PASS' : '❌ FAIL';
+  L.push(`## Нагрузочный тест: ${badge}`);
+  L.push('');
+  L.push(`**Сценарий:** ${rep.scenario} · **Цель:** ${rep.baseUrl} · **Режим:** ${rep.mode}${rep.workers > 1 ? ` · потоков: ${rep.workers}` : ''}`);
+  L.push('');
+  L.push(`Запросов **${rep.total}** за ${rep.durationSec}с · RPS **${rep.rps}** · ошибок **${rep.errorRatePct}%** · p95 **${rep.latencyMs.p95}ms** (p99 ${rep.latencyMs.p99}ms)`);
+  L.push('');
+  const mdCell = (s) => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' '); // экранируем | чтобы не ломать таблицу
+  if (rep.perRequest && rep.perRequest.length) {
+    L.push('| запрос | кол-во | rps | err% | p95 | p99 |');
+    L.push('|---|--:|--:|--:|--:|--:|');
+    for (const r of rep.perRequest) L.push(`| ${mdCell(r.name)} | ${r.count} | ${r.rps} | ${r.errPct} | ${r.p95}ms | ${r.p99}ms |`);
+    L.push('');
+  }
+  if (rep.flows && rep.flows.length) {
+    L.push('**Цепочки:** ' + rep.flows.map((f) => `${f.name} — ${f.completionPct}% завершено${f.topBreak ? ` (рвётся на "${f.topBreak.step}")` : ''}`).join('; '));
+    L.push('');
+  }
+  if (rep.checks && rep.checks.length) {
+    L.push('**Пороги:**');
+    for (const c of rep.checks) L.push(`- ${c.pass ? '✅' : '❌'} ${c.name}`);
+    L.push('');
+  }
+  if (rep.resource) {
+    const r = rep.resource;
+    const sat = r.saturated && r.saturated.length ? `⚠ УПЁРЛИСЬ в ${r.saturated.join(', ')}` : 'OK';
+    L.push(`**Ресурсы генератора:** ${sat} (CPU ~${r.cpuBusyCores} ядер/${r.cores}, lag ${r.elLagMaxMs ?? '—'}ms)`);
+    L.push('');
+  }
+  if (rep.hints && rep.hints.length) {
+    L.push('**Подсказки:**');
+    for (const h of rep.hints) L.push(`- ${h}`);
+  }
+  return L.join('\n') + '\n';
 }
 
 function printReport(rep) {
@@ -1369,11 +1493,11 @@ function cmdInit(flags) {
       },
     ],
     load: { vus: 5, durationSec: 30, rampUpSec: 5, thinkTimeMs: [100, 300], workers: 1 },
-    _load_hint: `vus — параллельные пользователи (max ${MAX_VUS}), durationSec — длительность (max ${MAX_DURATION_SEC}), maxRps — глобальный потолок запросов/сек (опц.), workers — число потоков-генераторов на разные ядра (по умолч. 1; поднимайте, если генератор упирается в CPU)`,
+    _load_hint: `vus — параллельные пользователи (max ${MAX_VUS}), durationSec — длительность (max ${MAX_DURATION_SEC}), maxRps — глобальный потолок запросов/сек (опц.), workers — число потоков-генераторов на разные ядра, warmupSec — сколько секунд разогрева исключить из метрик (опц.)`,
     _stages_hint: 'АЛЬТЕРНАТИВА vus/durationSec: многоступенчатый профиль (ramp→плато→спад). Линейная интерполяция между уровнями, старт с 0. Пример ниже (разгон до 20, плато, спад) — вставьте внутрь "load" вместо vus/durationSec.',
     _stages_example: [{ vus: 20, durationSec: 20 }, { vus: 20, durationSec: 30 }, { vus: 0, durationSec: 10 }],
     thresholds: { p95Ms: 1000, errorRatePct: 1 },
-    _thresholds_hint: 'Пороги для вердикта PASS/FAIL',
+    _thresholds_hint: 'Пороги для вердикта PASS/FAIL. Можно задать SLO на конкретный запрос: "perRequest": { "имя запроса": { "p95Ms": 200, "errorRatePct": 0 } } — тоже войдёт в вердикт.',
     allowWrites: false,
   };
   writeFileSync(out, JSON.stringify(template, null, 2), 'utf8');
@@ -1930,6 +2054,7 @@ async function cmdRun(positional, flags) {
     }
     stats = mergeStats(parts, scn._steps);
     // stats.endedAt уже выставлен mergeStats = max(endedAt воркеров) — НЕ перетираем его пост-фактум
+    if (scn.load.warmupSec && !scn.load.stages) stats.warmupUntil = stats.startedAt + scn.load.warmupSec * 1000;
     loginFailures.push(...workerLoginFailures);
     resource = resMon.finish(elLagMaxMs);
   } else {
@@ -1939,6 +2064,7 @@ async function cmdRun(positional, flags) {
     process.on('SIGINT', () => { ctx.aborted = true; console.log('\nПрерывание — формирую отчёт по собранным данным...'); });
 
     stats.startedAt = Date.now();
+    if (scn.load.warmupSec && !scn.load.stages) stats.warmupUntil = stats.startedAt + scn.load.warmupSec * 1000;
     const endAt = stats.startedAt + scn.load.durationSec * 1000;
     const rampMs = scn.load.rampUpSec * 1000;
 
@@ -1977,6 +2103,16 @@ async function cmdRun(positional, flags) {
     console.log(`\nНе удалось записать ${outFile}: ${e.message}`);
   }
 
+  // отчёты для CI
+  const writeReport = (path, content, label) => {
+    try {
+      const dir = dirname(path); if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
+      writeFileSync(path, content, 'utf8'); console.log(`${label}: ${path}`);
+    } catch (e) { console.log(`Не удалось записать ${path}: ${e.message}`); }
+  };
+  if (flags.junit) writeReport(flags.junit, toJUnitXml(rep), 'JUnit XML');
+  if (flags.md) writeReport(flags.md, toMarkdown(rep), 'Markdown-отчёт');
+
   // --baseline: сразу сравнить с эталонным прогоном (CI-гейт регрессий)
   let regressed = false;
   if (!smoke && flags.baseline) {
@@ -2013,7 +2149,8 @@ async function runWorkerSlice() {
   elMon.enable();
   const tick = setInterval(() => parentPort.postMessage({ type: 'tick', total: stats.total, errors: stats.errors }), 2000);
   if (tick.unref) tick.unref();
-  stats.startedAt = Date.now();
+  stats.startedAt = startedAt || Date.now();
+  if (scn.load.warmupSec && !scn.load.stages) stats.warmupUntil = stats.startedAt + scn.load.warmupSec * 1000; // окно разогрева от ГЛОБАЛЬНОГО старта
   await runLoadSlice({ scn, preToken, stats, vuCount, vuBase, vuStride, totalVus, endAt, rampMs, effectiveMaxRps, ctx, loginFailures, startedAt });
   stats.endedAt = Date.now();
   clearInterval(tick);
@@ -2025,7 +2162,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
@@ -2061,6 +2198,8 @@ const HELP = `loadgen v${VERSION} — REST load generator (Node >= 18, без з
     --workers N                      число потоков-генераторов (по умолч. из сценария/1)
     --base-url URL                   переопределить цель
     --out FILE                       файл JSON-результата (по умолч. loadgen-result.json)
+    --junit FILE                     дополнительно записать отчёт в JUnit XML (для CI)
+    --md FILE                        дополнительно записать отчёт в Markdown (для PR-комментария)
     --baseline FILE                  сравнить результат с эталоном (регресс → exit 2)
     --allow-writes                   подтвердить изменяющие запросы
     --confirm-external               подтвердить нагрузку на внешний хост

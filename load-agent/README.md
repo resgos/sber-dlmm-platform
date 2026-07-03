@@ -262,6 +262,35 @@ node load-agent/bin/loadgen.mjs run scenario.json --out current.json --baseline 
 `run ... --baseline baseline.json` — ненулевой код выхода валит сборку при регрессе.
 Периодически обновляйте базу принятым прогоном.
 
+### Отчёты для CI: JUnit XML и Markdown
+
+```bash
+node load-agent/bin/loadgen.mjs run scenario.json --junit report.xml --md report.md
+```
+- `--junit` — стандартный JUnit XML: каждый порог/запрос/цепочка становится test-case'ом,
+  который Jenkins/GitLab/GitHub Actions рендерят как обычные результаты тестов (провал порога =
+  failing test). `--md` — Markdown-сводка для комментария в PR (вердикт, таблица, цепочки, ресурсы).
+
+### Пороги на конкретный запрос (SLO по эндпоинту)
+
+Глобальные `thresholds.p95Ms`/`errorRatePct` дополняются порогами на отдельный запрос:
+```jsonc
+"thresholds": {
+  "p95Ms": 1000, "errorRatePct": 1,
+  "perRequest": {
+    "pools list":  { "p95Ms": 100 },
+    "pool detail": { "p95Ms": 300, "errorRatePct": 0 }
+  }
+}
+```
+Нарушение per-request порога тоже валит вердикт (и виден отдельным test-case'ом в JUnit).
+
+### Разогрев (`load.warmupSec`)
+
+`"load": { ..., "warmupSec": 10 }` — первые 10 секунд (JIT, прогрев пула соединений, кэшей)
+**не учитываются** в метриках. Перцентили считаются по установившемуся режиму; RPS — по окну
+после разогрева. С `stages` не применяется (нагрузка не постоянна).
+
 ## Тесты самого движка
 
 Регрессионные self-тесты ядра (парсинг, проверки, захват, валидация flows, слияние
