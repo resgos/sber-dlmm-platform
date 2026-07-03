@@ -102,6 +102,7 @@ services:
       DB_HOST: postgres
       DB_USER: dlmm
       DB_PASS: dlmm_secret
+      DB_PASSWORD: dlmm_secret
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
@@ -134,6 +135,7 @@ services:
       DB_HOST: postgres
       DB_USER: dlmm
       DB_PASS: dlmm_secret
+      DB_PASSWORD: dlmm_secret
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
@@ -160,6 +162,7 @@ services:
       DB_HOST: postgres
       DB_USER: dlmm
       DB_PASS: dlmm_secret
+      DB_PASSWORD: dlmm_secret
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
@@ -186,6 +189,7 @@ services:
       DB_HOST: postgres
       DB_USER: dlmm
       DB_PASS: dlmm_secret
+      DB_PASSWORD: dlmm_secret
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
@@ -215,6 +219,7 @@ services:
       DB_HOST: postgres
       DB_USER: dlmm
       DB_PASS: dlmm_secret
+      DB_PASSWORD: dlmm_secret
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
@@ -241,6 +246,7 @@ services:
       DB_HOST: postgres
       DB_USER: dlmm
       DB_PASS: dlmm_secret
+      DB_PASSWORD: dlmm_secret
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
@@ -265,6 +271,7 @@ services:
       DB_HOST: postgres
       DB_USER: dlmm
       DB_PASS: dlmm_secret
+      DB_PASSWORD: dlmm_secret
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
@@ -291,6 +298,7 @@ services:
       DB_HOST: postgres
       DB_USER: dlmm
       DB_PASS: dlmm_secret
+      DB_PASSWORD: dlmm_secret
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
@@ -315,6 +323,7 @@ services:
       DB_HOST: postgres
       DB_USER: dlmm
       DB_PASS: dlmm_secret
+      DB_PASSWORD: dlmm_secret
       REDIS_HOST: redis
       KAFKA_SERVERS: kafka:9092
       JWT_SECRET: super-secret-jwt-key-for-dlmm-platform-256-bit-min
