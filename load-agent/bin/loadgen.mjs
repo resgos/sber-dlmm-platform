@@ -25,11 +25,11 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -91,7 +91,8 @@ function extractPath(root, path) {
 
 const BUILTIN_PLACEHOLDERS = ['uuid', 'ts'];
 
-function renderTemplate(str, vars) {
+/** used (опционально) — объект, в который записываются выбранные значения переменных: { имя: значение } */
+function renderTemplate(str, vars, used) {
   return String(str).replace(/\{\{([^}]+)\}\}/g, (_, raw) => {
     const expr = raw.trim();
     if (expr === 'uuid') return randomUUID();
@@ -102,11 +103,76 @@ function renderTemplate(str, vars) {
       return String(a + Math.floor(Math.random() * (b - a + 1)));
     }
     if (vars[expr] !== undefined) {
+      // одно значение на HTTP-вызов: повторное вхождение {{var}} (в path и body) получает тот же выбор
+      if (used && used[expr] !== undefined) return used[expr];
       const v = vars[expr];
-      return String(Array.isArray(v) ? v[Math.floor(Math.random() * v.length)] : v);
+      const chosen = String(Array.isArray(v) ? v[Math.floor(Math.random() * v.length)] : v);
+      if (used) used[expr] = chosen;
+      return chosen;
     }
     throw new Error(`неизвестный placeholder {{${expr}}}`);
   });
+}
+
+/** CSV-парсер (RFC 4180): кавычки, запятые и переводы строк внутри закавыченных полей. Возвращает массив записей. */
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cur = '';
+  let q = false;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i++; } else q = false;
+      } else cur += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cur.trim()); cur = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cur.trim()); cur = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else cur += ch;
+    i++;
+  }
+  if (q) throw new Error('незакрытая кавычка (файл обрывается внутри закавыченного поля)');
+  row.push(cur.trim());
+  if (row.length > 1 || row[0] !== '') rows.push(row);
+  return rows;
+}
+
+/** Значения переменной из файла: .txt (строки), .csv (колонка), .json (extract-путь) */
+function loadVarFile(scnDir, name, def) {
+  if (typeof def.file !== 'string' || !def.file) throw new Error(`vars.${name}: "file" должен быть непустой строкой-путём — прогоните validate`);
+  const p = isAbsolute(def.file) ? def.file : join(scnDir || '.', def.file);
+  let raw;
+  try { raw = readFileSync(p, 'utf8'); } catch (e) {
+    throw new Error(`vars.${name}: не удалось прочитать файл ${p}: ${e.message} (путь считается от папки сценария)`);
+  }
+  if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1); // UTF-8 BOM (PowerShell Out-File и т.п.)
+  let vals;
+  if (/\.csv$/i.test(p)) {
+    let rows;
+    try { rows = parseCsv(raw); } catch (e) { throw new Error(`vars.${name}: CSV ${p}: ${e.message}`); }
+    if (rows.length < 2) throw new Error(`vars.${name}: CSV ${p} пуст — нужен заголовок и хотя бы одна строка данных`);
+    const header = rows[0];
+    const ci = header.indexOf(def.column);
+    if (ci < 0) throw new Error(`vars.${name}: в CSV нет колонки "${def.column}". Доступные: ${header.join(', ')}`);
+    vals = rows.slice(1).map((r) => r[ci]).filter((v) => v !== undefined && v !== '');
+  } else if (/\.json$/i.test(p)) {
+    let json;
+    try { json = JSON.parse(raw); } catch (e) { throw new Error(`vars.${name}: файл ${p} — не валидный JSON: ${e.message}`); }
+    let v = def.extract ? extractPath(json, def.extract) : json;
+    if (!Array.isArray(v)) v = v == null ? [] : [v];
+    vals = v.filter((x) => x != null && typeof x !== 'object').map(String);
+    if (!vals.length) throw new Error(`vars.${name}: из ${p}${def.extract ? ` по пути "${def.extract}"` : ''} не получился список скалярных значений`);
+  } else {
+    vals = raw.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  }
+  if (!vals.length) throw new Error(`vars.${name}: файл ${p} не дал ни одного значения`);
+  return vals;
 }
 
 function listPlaceholders(str) {
@@ -169,7 +235,8 @@ function die(code, msg) {
 // ─────────────────────────────────────────────── validate ──
 
 const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'load', 'thresholds', 'allowWrites'];
-const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus'];
+const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks'];
+const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'];
 const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps'];
 const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
@@ -178,9 +245,12 @@ function loadScenario(file) {
   if (!existsSync(file)) die(1, `Файл сценария не найден: ${file}\nСоздайте его: node loadgen.mjs init --out ${file}`);
   let raw;
   try { raw = readFileSync(file, 'utf8'); } catch (e) { die(1, `Не удалось прочитать ${file}: ${e.message}`); }
-  try { return JSON.parse(raw); } catch (e) {
+  let scn;
+  try { scn = JSON.parse(raw); } catch (e) {
     die(1, `Файл ${file} — не валидный JSON: ${e.message}\nЧастые причины: лишняя запятая после последнего элемента, комментарии //, одинарные кавычки.`);
   }
+  if (scn && typeof scn === 'object' && !Array.isArray(scn)) scn._dir = dirname(file) || '.';
+  return scn;
 }
 
 /** Возвращает { errors: string[], warnings: string[] }. Мутирует scn: нормализует дефолты. */
@@ -238,23 +308,36 @@ function validateScenario(scn) {
 
   // vars
   if (scn.vars !== undefined) {
-    if (typeof scn.vars !== 'object' || Array.isArray(scn.vars)) push(errors, '"vars" должен быть объектом: { "имя": [значения] | { "setupPath": "...", "extract": "..." } }');
+    if (typeof scn.vars !== 'object' || Array.isArray(scn.vars)) push(errors, '"vars" должен быть объектом: { "имя": [значения] | { "setupPath", "extract" } | { "file", "column"?, "extract"? } }');
     else {
       for (const [name, def] of Object.entries(scn.vars)) {
+        if (name.startsWith('_')) continue;
         if (Array.isArray(def)) {
           if (!def.length) push(errors, `vars.${name}: пустой список значений`);
         } else if (typeof def === 'object' && def !== null) {
-          if (!def.setupPath) push(errors, `vars.${name}: нет setupPath (GET-запрос, из которого берём значения)`);
-          if (!def.extract) push(errors, `vars.${name}: нет extract (путь до значений в JSON, например "content[*].id")`);
+          const sources = ['setupPath', 'file'].filter((k) => def[k] !== undefined);
+          if (sources.length !== 1) {
+            push(errors, `vars.${name}: укажите ровно ОДИН источник — "setupPath" (значения из GET-запроса) или "file" (значения из файла .txt/.csv/.json)`);
+          } else if (sources[0] === 'setupPath') {
+            if (typeof def.setupPath !== 'string' || !def.setupPath) push(errors, `vars.${name}: setupPath должен быть непустой строкой-путём`);
+            if (!def.extract) push(errors, `vars.${name}: нет extract (путь до значений в JSON, например "content[*].id")`);
+          } else if (typeof def.file !== 'string' || !def.file) {
+            push(errors, `vars.${name}: "file" должен быть непустой строкой-путём к .txt/.csv/.json`);
+          } else {
+            const p = isAbsolute(def.file) ? def.file : join(scn._dir || '.', def.file);
+            if (!existsSync(p)) push(errors, `vars.${name}: файл не найден: ${p} (относительные пути считаются от папки сценария)`);
+            if (/\.csv$/i.test(def.file) && !def.column) push(errors, `vars.${name}: для CSV-файла обязателен "column" — имя колонки из заголовка`);
+            if (!/\.(csv|json)$/i.test(def.file) && def.extract) push(warnings, `vars.${name}: "extract" применяется только к .json-файлам, для .txt будет проигнорирован`);
+          }
         } else {
-          push(errors, `vars.${name}: должен быть массивом значений или объектом { setupPath, extract }`);
+          push(errors, `vars.${name}: должен быть массивом значений или объектом { setupPath, extract } / { file, column?, extract? }`);
         }
       }
     }
   }
 
   // requests
-  const varNames = Object.keys(scn.vars || {});
+  const varNames = Object.keys(scn.vars || {}).filter((k) => !k.startsWith('_'));
   if (!Array.isArray(scn.requests) || !scn.requests.length) {
     push(errors, 'Нужен непустой массив "requests". Каждый элемент: { "name": "...", "method": "GET", "path": "/..." , "weight": 1 }');
   } else {
@@ -275,8 +358,39 @@ function validateScenario(scn) {
       else if (!/^\//.test(r.path) && !/^https?:\/\//.test(r.path)) push(errors, `${label}: path должен начинаться с "/" (сейчас: "${r.path}")`);
       if (r.weight === undefined) r.weight = 1;
       if (typeof r.weight !== 'number' || r.weight <= 0) push(errors, `${label}: weight должен быть положительным числом`);
-      if (r.expectStatus !== undefined && (!Array.isArray(r.expectStatus) || r.expectStatus.some((s) => !Number.isInteger(s)))) {
-        push(errors, `${label}: expectStatus должен быть массивом целых чисел, например [200, 404]`);
+      if (r.expectStatus !== undefined && (!Array.isArray(r.expectStatus) || !r.expectStatus.length || r.expectStatus.some((s) => !Number.isInteger(s)))) {
+        push(errors, `${label}: expectStatus должен быть НЕПУСТЫМ массивом целых чисел, например [200, 404]`);
+      }
+      // checks — валидация ответов
+      if (r.checks !== undefined) {
+        if (typeof r.checks !== 'object' || r.checks === null || Array.isArray(r.checks)) {
+          push(errors, `${label}: checks должен быть объектом, например {"status":[200],"jsonPath":"content[*].id","maxMs":300}`);
+        } else {
+          const c = r.checks;
+          for (const k of Object.keys(c)) {
+            if (k.startsWith('_')) continue;
+            if (!KNOWN_CHECK_KEYS.includes(k)) {
+              const s = suggestKey(k, KNOWN_CHECK_KEYS);
+              push(warnings, `${label}: checks: неизвестный ключ "${k}"${s ? ` — возможно, "${s}"` : ''}`);
+            }
+          }
+          if (c.status !== undefined && (!Array.isArray(c.status) || !c.status.length || c.status.some((s) => !Number.isInteger(s)))) push(errors, `${label}: checks.status должен быть НЕПУСТЫМ массивом целых, например [200]`);
+          if (c.maxMs !== undefined && (typeof c.maxMs !== 'number' || c.maxMs <= 0)) push(errors, `${label}: checks.maxMs должен быть положительным числом (мс)`);
+          if (c.notEmpty !== undefined && typeof c.notEmpty !== 'boolean') push(errors, `${label}: checks.notEmpty должен быть true или false`);
+          if (c.bodyContains !== undefined && typeof c.bodyContains !== 'string') push(errors, `${label}: checks.bodyContains должен быть строкой-подстрокой`);
+          if (c.jsonPath !== undefined && typeof c.jsonPath !== 'string') push(errors, `${label}: checks.jsonPath должен быть строкой-путём, например "content[*].id"`);
+          if (c.jsonPathEquals !== undefined) {
+            const jpe = c.jsonPathEquals;
+            if (typeof jpe !== 'object' || jpe === null || jpe.path === undefined || jpe.value === undefined) {
+              push(errors, `${label}: checks.jsonPathEquals должен быть объектом { "path": "status", "value": "ACTIVE" }`);
+            } else if (jpe.value !== null && typeof jpe.value === 'object') {
+              push(errors, `${label}: checks.jsonPathEquals.value должен быть скаляром (строка/число/boolean/null), а не объектом/массивом`);
+            }
+          }
+          if (String(r.method).toUpperCase() === 'HEAD' && ['notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'].some((k) => c[k] !== undefined)) {
+            push(errors, `${label}: метод HEAD не возвращает тело — проверки notEmpty/bodyContains/jsonPath/jsonPathEquals невозможны, оставьте status/maxMs`);
+          }
+        }
       }
       // placeholders
       const used = [
@@ -289,6 +403,14 @@ function validateScenario(scn) {
           push(errors, `${label}: placeholder {{${ph}}} не объявлен в "vars". Объявлены: ${varNames.length ? varNames.join(', ') : '(ничего)'}. Встроенные: {{uuid}}, {{ts}}, {{randInt:A-B}}`);
         }
       }
+    });
+    // уникальность имён: статистика и checksSummary агрегируются по имени запроса
+    const seenNames = new Map();
+    scn.requests.forEach((r, i) => {
+      if (!r || !r.name) return;
+      if (seenNames.has(r.name)) {
+        push(errors, `requests[${i}]: имя "${r.name}" уже используется в requests[${seenNames.get(r.name)}] — имена запросов должны быть уникальны (метрики считаются по имени). Задайте разные "name".`);
+      } else seenNames.set(r.name, i);
     });
   }
 
@@ -376,7 +498,12 @@ async function doLogin(scn) {
 async function resolveVars(scn, token) {
   const out = {};
   for (const [name, def] of Object.entries(scn.vars || {})) {
+    if (name.startsWith('_')) continue;
     if (Array.isArray(def)) { out[name] = def; continue; }
+    if (def.file !== undefined) { out[name] = loadVarFile(scn._dir, name, def); continue; }
+    if (typeof def.setupPath !== 'string' || !def.setupPath) {
+      throw new Error(`vars.${name}: нет корректного источника значений (setupPath/file) — прогоните validate`);
+    }
     const url = new URL(renderTemplate(def.setupPath, out), scn.baseUrl);
     let res, text;
     try {
@@ -399,36 +526,83 @@ async function resolveVars(scn, token) {
   return out;
 }
 
+/**
+ * Оценка ответа по правилам запроса.
+ * Порядок: статус → контентные проверки (notEmpty/bodyContains/jsonPath/jsonPathEquals) → бюджет maxMs.
+ * Нарушение контентной проверки = ошибка вида 'check' (в латентность не попадает).
+ * Превышение maxMs = ответ успешный (латентность учитывается), но помечен slow.
+ */
+function evaluateResponse(req, status, text, ms, used) {
+  const c = req.checks || {};
+  const expected = c.status || req.expectStatus;
+  const statusOk = expected ? expected.includes(status) : status >= 200 && status < 400;
+  if (!statusOk) return { ms, status, ok: false, snippet: text.slice(0, 250), used };
+  const fails = [];
+  if (c.notEmpty && !(text && text.trim().length)) fails.push('notEmpty: пустое тело ответа');
+  if (c.bodyContains !== undefined && !text.includes(c.bodyContains)) fails.push(`bodyContains: в теле нет подстроки "${c.bodyContains}"`);
+  if (c.jsonPath !== undefined || c.jsonPathEquals !== undefined) {
+    let json, parsed = false;
+    try { json = JSON.parse(text); parsed = true; } catch { fails.push('jsonPath/jsonPathEquals: тело ответа — не JSON'); }
+    if (parsed) {
+      if (c.jsonPath !== undefined) {
+        let v;
+        try { v = extractPath(json, c.jsonPath); } catch { v = undefined; }
+        if (v === undefined || (Array.isArray(v) && !v.length)) fails.push(`jsonPath: путь "${c.jsonPath}" не дал значений`);
+      }
+      if (c.jsonPathEquals !== undefined) {
+        let v;
+        try { v = extractPath(json, c.jsonPathEquals.path); } catch { v = undefined; }
+        const want = c.jsonPathEquals.value;
+        // скаляры сравниваются как строки; объект/массив в значении — всегда несовпадение;
+        // для [*]-пути должны совпасть ВСЕ значения (и их должно быть > 0)
+        const eq = (x) => (x !== null && typeof x === 'object' ? false : String(x) === String(want));
+        const match = Array.isArray(v) ? v.length > 0 && v.every(eq) : eq(v);
+        if (!match) {
+          const gotShown = Array.isArray(v) ? (v.length > 4 ? [...v.slice(0, 4), '…'] : v) : v;
+          fails.push(`jsonPathEquals: ${c.jsonPathEquals.path} = ${JSON.stringify(gotShown)}, ожидалось ${JSON.stringify(want)}${Array.isArray(v) ? ' (для [*]-пути должны совпадать ВСЕ значения)' : ''}`);
+        }
+      }
+    }
+  }
+  if (fails.length) return { ms, status, ok: false, kind: 'check', errMsg: fails.join('; '), snippet: text.slice(0, 150), used };
+  const slow = c.maxMs !== undefined && ms > c.maxMs;
+  return { ms, status, ok: true, slow, used };
+}
+
 async function callOnce(scn, req, vars, token) {
   let url, body;
+  const used = {};
   const headers = { ...(scn.headers || {}), ...(req.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   try {
-    url = new URL(renderTemplate(req.path, vars), scn.baseUrl).toString();
+    url = new URL(renderTemplate(req.path, vars, used), scn.baseUrl).toString();
     if (req.body !== undefined) {
-      body = renderTemplate(typeof req.body === 'string' ? req.body : JSON.stringify(req.body), vars);
+      body = renderTemplate(typeof req.body === 'string' ? req.body : JSON.stringify(req.body), vars, used);
       if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
     }
   } catch (e) {
-    return { ms: 0, status: 0, ok: false, kind: 'config', errMsg: e.message };
+    return { ms: 0, status: 0, ok: false, kind: 'config', errMsg: e.message, used };
   }
   const t0 = performance.now();
   try {
     const res = await fetch(url, { method: req.method, headers, body, signal: AbortSignal.timeout(scn.timeoutMs) });
     const text = req.method === 'HEAD' ? '' : await res.text();
-    const ms = performance.now() - t0;
-    const ok = req.expectStatus ? req.expectStatus.includes(res.status) : res.status >= 200 && res.status < 400;
-    return { ms, status: res.status, ok, snippet: ok ? undefined : text.slice(0, 250) };
+    return evaluateResponse(req, res.status, text, performance.now() - t0, used);
   } catch (e) {
-    return { ms: performance.now() - t0, status: 0, ok: false, kind: errKind(e), errMsg: errText(e) };
+    return { ms: performance.now() - t0, status: 0, ok: false, kind: errKind(e), errMsg: errText(e), used };
   }
 }
 
 // ─────────────────────────────────────────────── статистика и отчёт ──
 
+const MAX_TRACKED_VALUES = 50; // максимум различных значений параметра в разбивке (дальше — «(прочие)»)
+const OTHERS_BUCKET = '(прочие)';
+const MAX_LAT_SAMPLES = 1_000_000; // защита памяти/spread: перцентили считаются по первым N выборкам на запрос
+const MAX_CELL_LAT = 100_000;
+
 function makeStats(requests) {
   const per = new Map();
-  for (const r of requests) per.set(r.name, { lat: [], count: 0, errors: 0, statuses: new Map(), errSamples: new Map() });
+  for (const r of requests) per.set(r.name, { lat: [], count: 0, errors: 0, slow: 0, statuses: new Map(), errSamples: new Map(), perVar: new Map() });
   return {
     per,
     startedAt: 0,
@@ -439,15 +613,28 @@ function makeStats(requests) {
       const s = this.per.get(req.name);
       this.total++;
       s.count++;
-      const key = r.status || (r.kind || 'err');
+      const key = r.kind === 'check' ? `${r.status}✗check` : (r.status || r.kind || 'err');
       s.statuses.set(key, (s.statuses.get(key) || 0) + 1);
       if (r.ok) {
-        s.lat.push([now, r.ms]);
+        if (s.lat.length < MAX_LAT_SAMPLES) s.lat.push([now, r.ms]); else s.latDropped = (s.latDropped || 0) + 1;
+        if (r.slow) s.slow++;
       } else {
         this.errors++;
         s.errors++;
-        const ek = `${r.status || r.kind}`;
+        const ek = r.kind === 'check' ? 'check' : `${r.status || r.kind}`;
         if (!s.errSamples.has(ek)) s.errSamples.set(ek, (r.errMsg || r.snippet || '').slice(0, 200));
+      }
+      // разбивка по значениям параметров ({{var}} → конкретное значение)
+      if (r.used) {
+        for (const [vn, val] of Object.entries(r.used)) {
+          let m = s.perVar.get(vn);
+          if (!m) { m = new Map(); s.perVar.set(vn, m); }
+          const bucket = m.has(val) || m.size < MAX_TRACKED_VALUES ? val : OTHERS_BUCKET;
+          let cell = m.get(bucket);
+          if (!cell) { cell = { count: 0, errors: 0, lat: [] }; m.set(bucket, cell); }
+          cell.count++;
+          if (r.ok) { if (cell.lat.length < MAX_CELL_LAT) cell.lat.push(r.ms); } else cell.errors++;
+        }
       }
     },
   };
@@ -458,9 +645,11 @@ function buildReport(scn, stats, opts = {}) {
   const allLat = [];
   const rows = [];
   const errorsDetail = [];
+  let latDroppedTotal = 0;
   for (const [name, s] of stats.per) {
     const lat = s.lat.map(([, ms]) => ms).sort((a, b) => a - b);
-    allLat.push(...s.lat);
+    for (const pair of s.lat) allLat.push(pair); // без spread: на больших прогонах spread переполняет стек
+    latDroppedTotal += s.latDropped || 0;
     const statuses = [...s.statuses.entries()].map(([k, v]) => `${k}:${v}`).join(' ');
     rows.push({
       name,
@@ -485,6 +674,59 @@ function buildReport(scn, stats, opts = {}) {
     if (h1.length > 20 && h2.length > 20) {
       const p1 = pct(h1, 95), p2 = pct(h2, 95);
       if (p2 > p1 * 1.5 && p2 - p1 > 100) degradation = { firstHalfP95: p1, secondHalfP95: p2 };
+    }
+  }
+
+  // сводка по проверкам ответов (checks)
+  const checksSummary = [];
+  for (const [name, s] of stats.per) {
+    const req = (scn.requests || []).find((r) => r.name === name);
+    if (!req || !req.checks) continue;
+    const failed = [...s.statuses.entries()].filter(([k]) => String(k).endsWith('✗check')).reduce((a, [, v]) => a + v, 0);
+    checksSummary.push({
+      request: name,
+      configured: Object.keys(req.checks).filter((k) => !k.startsWith('_')),
+      failed,
+      slowOverMaxMs: s.slow,
+      maxMs: req.checks.maxMs ?? null,
+      failSample: s.errSamples.get('check') || null,
+    });
+  }
+
+  // влияние параметров-списков: статистика по каждому значению {{var}}
+  const paramImpact = [];
+  for (const [name, s] of stats.per) {
+    for (const [vn, m] of s.perVar) {
+      if (m.size < 2) continue;
+      const values = [...m.entries()].map(([val, c]) => {
+        const sl = c.lat.slice().sort((a, b) => a - b);
+        return {
+          value: val, count: c.count, errors: c.errors,
+          errPct: c.count ? Number(((100 * c.errors) / c.count).toFixed(1)) : 0,
+          p50: Math.round(pct(sl, 50)), p95: Math.round(pct(sl, 95)),
+        };
+      });
+      // «(прочие)» — агрегат переполнения: в списке значений остаётся, но в медиану/выбросы не входит
+      const named = values.filter((v) => v.value !== OTHERS_BUCKET);
+      const withOk = named.filter((v) => v.count > v.errors); // есть хоть один успешный ответ
+      const p95sAsc = withOk.filter((v) => v.count >= 3).map((v) => v.p95).sort((a, b) => a - b);
+      const medianP95 = p95sAsc.length ? pct(p95sAsc, 50) : 0;
+      const slowOutliers = withOk.filter((v) => v.count >= 5 && medianP95 > 0 && v.p95 > 2 * medianP95 && v.p95 - medianP95 > 50);
+      const errOutliers = named.filter((v) => v.count >= 5 && v.errPct >= 10);
+      // если падает большинство значений — это свойство запроса, а не конкретных значений
+      const uniformErrors = errOutliers.length > Math.max(2, named.length / 2);
+      const byP95 = withOk.slice().sort((a, b) => b.p95 - a.p95);
+      paramImpact.push({
+        request: name, variable: vn, distinctValues: m.size,
+        p95Min: withOk.length ? Math.min(...withOk.map((v) => v.p95)) : 0,
+        p95Median: Math.round(medianP95),
+        p95Max: withOk.length ? Math.max(...withOk.map((v) => v.p95)) : 0,
+        topSlowest: byP95.slice(0, 3),
+        slowOutliers: slowOutliers.map((v) => ({ value: v.value, p95: v.p95, count: v.count })),
+        errOutliers: errOutliers.map((v) => ({ value: v.value, errPct: v.errPct, count: v.count })),
+        uniformErrors,
+        values: values.slice().sort((a, b) => b.p95 - a.p95).slice(0, MAX_TRACKED_VALUES),
+      });
     }
   }
 
@@ -513,9 +755,22 @@ function buildReport(scn, stats, opts = {}) {
   const http5xx = [...statusCount.entries()].filter(([k]) => /^5\d\d$/.test(k)).reduce((a, [, v]) => a + v, 0);
   if (http5xx > 0) hints.push(`Есть ${http5xx} ответов 5xx — серверные ошибки под нагрузкой; смотрите логи сервиса (примеры ответов в секции ОШИБКИ).`);
   if (degradation) hints.push(`Латентность растёт со временем: p95 первой половины ${fmtMs(degradation.firstHalfP95)}ms → второй ${fmtMs(degradation.secondHalfP95)}ms. Похоже на деградацию под длительной нагрузкой (пул соединений, GC, утечка).`);
+  for (const cs of checksSummary) {
+    if (cs.failed > 0) hints.push(`Проверки ответов у "${cs.request}" провалены ${cs.failed} раз: ${cs.failSample || ''} — сервер отвечает 2xx, но содержимое неверное (см. ПРОВЕРКИ ОТВЕТОВ).`);
+    if (cs.slowOverMaxMs > 0) hints.push(`"${cs.request}": ${cs.slowOverMaxMs} ответов медленнее бюджета checks.maxMs=${cs.maxMs}ms (в латентность включены, вердикт не ломают).`);
+  }
+  for (const pi of paramImpact) {
+    for (const o of pi.slowOutliers.slice(0, 3)) hints.push(`Параметр {{${pi.variable}}} в "${pi.request}": значение ${o.value} аномально медленное — p95 ${o.p95}ms при медиане ${pi.p95Median}ms по остальным значениям (n=${o.count}).`);
+    if (pi.uniformErrors) {
+      hints.push(`"${pi.request}": ошибки НЕ зависят от значения {{${pi.variable}}} — падает большинство значений (${pi.errOutliers.length} из ${pi.distinctValues}); причина в самом запросе/сервисе, а не в данных.`);
+    } else {
+      for (const o of pi.errOutliers.slice(0, 3)) hints.push(`Параметр {{${pi.variable}}} в "${pi.request}": значение ${o.value} даёт ${o.errPct}% ошибок (n=${o.count}) — проверьте данные этой сущности.`);
+    }
+  }
   if (!opts.smoke && pass && totalErrPct === 0 && p95 < th.p95Ms * 0.3 && stats.total > 50) {
     hints.push(`Система легко держит эту нагрузку (p95 ${fmtMs(p95)}ms при пороге ${th.p95Ms}ms). Чтобы найти предел — повышайте нагрузку: --vus ${Math.min(MAX_VUS, scn.load.vus * 2)}.`);
   }
+  if (latDroppedTotal > 0) hints.push(`Выборок латентности больше лимита ${MAX_LAT_SAMPLES} на запрос — перцентили посчитаны по первым ${MAX_LAT_SAMPLES} (отброшено ${latDroppedTotal}).`);
 
   return {
     tool: 'loadgen', version: VERSION,
@@ -528,7 +783,7 @@ function buildReport(scn, stats, opts = {}) {
     errors: stats.errors, errorRatePct: Number(totalErrPct.toFixed(2)),
     latencyMs: { p50: pct(latSorted, 50), p90: pct(latSorted, 90), p95, p99: pct(latSorted, 99), max: latSorted.length ? latSorted[latSorted.length - 1] : 0 },
     perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max) })),
-    errorsDetail, degradation, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
+    errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
   };
 }
@@ -545,6 +800,28 @@ function printReport(rep) {
     L('');
     L('──────────────── ОШИБКИ (по одному примеру на вид) ────');
     for (const e of rep.errorsDetail) L(`  [${e.error}] ${e.request}: ${e.sample || '(пустое тело ответа)'}`);
+  }
+  if (rep.checksSummary && rep.checksSummary.length) {
+    L('');
+    L('──────────────── ПРОВЕРКИ ОТВЕТОВ ──────────────────────');
+    for (const c of rep.checksSummary) {
+      const parts = [`настроено: ${c.configured.join(', ')}`, `провалено: ${c.failed}`];
+      if (c.maxMs != null) parts.push(`медленнее ${c.maxMs}ms: ${c.slowOverMaxMs}`);
+      L(`  ${c.request}: ${parts.join(' | ')}`);
+      if (c.failed > 0 && c.failSample) L(`    пример провала: ${c.failSample}`);
+    }
+  }
+  if (rep.paramImpact && rep.paramImpact.length) {
+    L('');
+    L('──────────────── ВЛИЯНИЕ ПАРАМЕТРОВ (списки) ───────────');
+    for (const p of rep.paramImpact) {
+      L(`  ${p.request} / {{${p.variable}}}: значений ${p.distinctValues}, p95 по значениям ${p.p95Min}..${p.p95Max}ms (медиана ${p.p95Median}ms)`);
+      const top = p.topSlowest.map((v) => `${v.value} (p95 ${v.p95}ms, n=${v.count}${v.errPct ? `, err ${v.errPct}%` : ''})`);
+      if (top.length) L(`    самые медленные: ${top.join('; ')}`);
+      for (const o of p.slowOutliers) L(`    ⚠ выброс по скорости: ${o.value} — p95 ${o.p95}ms (медиана ${p.p95Median}ms)`);
+      if (p.uniformErrors) L(`    ⚠ ошибки на большинстве значений (${p.errOutliers.length}/${p.distinctValues}) — причина не в данных, а в запросе/сервисе`);
+      else for (const o of p.errOutliers) L(`    ⚠ выброс по ошибкам: ${o.value} — ${o.errPct}% err (n=${o.count})`);
+    }
   }
   if (rep.loginFailures.length) {
     L('');
@@ -645,14 +922,21 @@ function cmdInit(flags) {
       },
     },
     vars: {
-      _hint: 'Переменные для {{placeholder}}. Либо статический список, либо {setupPath, extract} — значения возьмутся из GET-запроса перед стартом.',
+      _hint: 'Переменные для {{placeholder}}. Источники: статический список | {setupPath, extract} — из GET-запроса перед стартом | {file} — из файла (.txt построчно, .csv по column, .json по extract). Пути файлов — от папки сценария.',
       exampleId: { setupPath: '/api/v1/items?page=0&size=20', extract: 'content[*].id' },
+      _exampleFromTxt: { file: 'data/ids.txt' },
+      _exampleFromCsv: { file: 'data/users.csv', column: 'email' },
+      _exampleFromJson: { file: 'data/items.json', extract: '[*].id' },
     },
     requests: [
-      { name: 'list items', method: 'GET', path: '/api/v1/items?page=0&size=20', weight: 5 },
+      {
+        name: 'list items', method: 'GET', path: '/api/v1/items?page=0&size=20', weight: 5,
+        checks: { status: [200], jsonPath: 'content[*].id', maxMs: 500 },
+        _checks_hint: 'Валидация ответа: status [коды] | notEmpty | bodyContains "строка" | jsonPath "путь" (должен дать значения) | jsonPathEquals {path, value} | maxMs N (бюджет латентности; не ломает вердикт, но попадает в отчёт)',
+      },
       { name: 'item detail', method: 'GET', path: '/api/v1/items/{{exampleId}}', weight: 3 },
     ],
-    _requests_hint: 'weight — относительная частота. Встроенные placeholders: {{uuid}}, {{ts}}, {{randInt:1-100}}. Для POST добавьте body и allowWrites:true.',
+    _requests_hint: 'weight — относительная частота. Встроенные placeholders: {{uuid}}, {{ts}}, {{randInt:1-100}}. Для POST добавьте body и allowWrites:true. Если path/body содержит {{переменную}}-список — в отчёте будет разбивка «ВЛИЯНИЕ ПАРАМЕТРОВ» по каждому значению.',
     load: { vus: 5, durationSec: 30, rampUpSec: 5, thinkTimeMs: [100, 300] },
     _load_hint: `vus — параллельные пользователи (max ${MAX_VUS}), durationSec — длительность (max ${MAX_DURATION_SEC}), maxRps — глобальный потолок запросов/сек (опционально)`,
     thresholds: { p95Ms: 1000, errorRatePct: 1 },
@@ -709,7 +993,7 @@ async function cmdRun(positional, flags) {
   }
 
   const smoke = !!flags.smoke;
-  console.log(`loadgen v${VERSION} | сценарий "${scn.name}" | цель ${scn.baseUrl} | режим ${smoke ? 'SMOKE (по 1 запросу)' : `LOAD (${scn.load.vus} VUs, ${scn.load.durationSec}с)`}`);
+  console.log(`loadgen v${VERSION} | сценарий "${scn.name || '(без имени)'}" | цель ${scn.baseUrl} | режим ${smoke ? 'SMOKE (по 1 запросу)' : `LOAD (${scn.load.vus} VUs, ${scn.load.durationSec}с)`}`);
 
   // pre-flight: логин + переменные
   let preToken = null;
