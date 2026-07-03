@@ -29,10 +29,10 @@ import { dirname, join, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance, monitorEventLoopDelay } from 'node:perf_hooks';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -237,8 +237,9 @@ function die(code, msg) {
 
 // ─────────────────────────────────────────────── validate ──
 
-const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'load', 'thresholds', 'allowWrites'];
-const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks'];
+const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites'];
+const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture'];
+const KNOWN_FLOW_KEYS = ['name', 'weight', 'steps'];
 const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'];
 const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps', 'workers'];
 const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
@@ -339,91 +340,165 @@ function validateScenario(scn) {
     }
   }
 
-  // requests
+  // requests / flows
   const varNames = Object.keys(scn.vars || {}).filter((k) => !k.startsWith('_'));
-  if (!Array.isArray(scn.requests) || !scn.requests.length) {
-    push(errors, 'Нужен непустой массив "requests". Каждый элемент: { "name": "...", "method": "GET", "path": "/..." , "weight": 1 }');
-  } else {
+  const isBuiltinPh = (ph) => BUILTIN_PLACEHOLDERS.includes(ph) || /^randInt:-?\d+--?\d+$/.test(ph);
+
+  // валидирует один шаг/запрос; available — Set имён доступных переменных (глоб. vars + захваты ранее);
+  // возвращает Set имён, захваченных ЭТИМ шагом (для проброса дальше по цепочке).
+  const validateStepObj = (r, label, available, i) => {
+    if (typeof r !== 'object' || r === null) { push(errors, `${label}: должен быть объектом`); return new Set(); }
+    for (const k of Object.keys(r)) {
+      if (k.startsWith('_')) continue;
+      if (!KNOWN_REQ_KEYS.includes(k)) {
+        const s = suggestKey(k, KNOWN_REQ_KEYS);
+        push(warnings, `${label}: неизвестный ключ "${k}"${s ? ` — возможно, "${s}"` : ''}`);
+      }
+    }
+    if (!r.name) { r.name = `${r.method || 'GET'} ${r.path || `#${i}`}`; }
+    r.method = String(r.method || 'GET').toUpperCase();
+    if (!HTTP_METHODS.includes(r.method)) push(errors, `${label}: метод "${r.method}" не поддерживается (${HTTP_METHODS.join(', ')})`);
+    if (!r.path) push(errors, `${label}: нет "path"`);
+    else if (!/^\//.test(r.path) && !/^https?:\/\//.test(r.path)) push(errors, `${label}: path должен начинаться с "/" (сейчас: "${r.path}")`);
+    if (r.expectStatus !== undefined && (!Array.isArray(r.expectStatus) || !r.expectStatus.length || r.expectStatus.some((s) => !Number.isInteger(s)))) {
+      push(errors, `${label}: expectStatus должен быть НЕПУСТЫМ массивом целых чисел, например [200, 404]`);
+    }
+    // checks — валидация ответов
+    if (r.checks !== undefined) {
+      if (typeof r.checks !== 'object' || r.checks === null || Array.isArray(r.checks)) {
+        push(errors, `${label}: checks должен быть объектом, например {"status":[200],"jsonPath":"content[*].id","maxMs":300}`);
+      } else {
+        const c = r.checks;
+        for (const k of Object.keys(c)) {
+          if (k.startsWith('_')) continue;
+          if (!KNOWN_CHECK_KEYS.includes(k)) {
+            const s = suggestKey(k, KNOWN_CHECK_KEYS);
+            push(warnings, `${label}: checks: неизвестный ключ "${k}"${s ? ` — возможно, "${s}"` : ''}`);
+          }
+        }
+        if (c.status !== undefined && (!Array.isArray(c.status) || !c.status.length || c.status.some((s) => !Number.isInteger(s)))) push(errors, `${label}: checks.status должен быть НЕПУСТЫМ массивом целых, например [200]`);
+        if (c.maxMs !== undefined && (typeof c.maxMs !== 'number' || c.maxMs <= 0)) push(errors, `${label}: checks.maxMs должен быть положительным числом (мс)`);
+        if (c.notEmpty !== undefined && typeof c.notEmpty !== 'boolean') push(errors, `${label}: checks.notEmpty должен быть true или false`);
+        if (c.bodyContains !== undefined && typeof c.bodyContains !== 'string') push(errors, `${label}: checks.bodyContains должен быть строкой-подстрокой`);
+        if (c.jsonPath !== undefined && typeof c.jsonPath !== 'string') push(errors, `${label}: checks.jsonPath должен быть строкой-путём, например "content[*].id"`);
+        if (c.jsonPathEquals !== undefined) {
+          const jpe = c.jsonPathEquals;
+          if (typeof jpe !== 'object' || jpe === null || jpe.path === undefined || jpe.value === undefined) {
+            push(errors, `${label}: checks.jsonPathEquals должен быть объектом { "path": "status", "value": "ACTIVE" }`);
+          } else if (jpe.value !== null && typeof jpe.value === 'object') {
+            push(errors, `${label}: checks.jsonPathEquals.value должен быть скаляром (строка/число/boolean/null), а не объектом/массивом`);
+          }
+        }
+        if (r.method === 'HEAD' && ['notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'].some((k) => c[k] !== undefined)) {
+          push(errors, `${label}: метод HEAD не возвращает тело — проверки notEmpty/bodyContains/jsonPath/jsonPathEquals невозможны, оставьте status/maxMs`);
+        }
+      }
+    }
+    // capture — извлечение переменных из ответа (для цепочек)
+    const captured = new Set();
+    if (r.capture !== undefined) {
+      if (typeof r.capture !== 'object' || r.capture === null || Array.isArray(r.capture)) {
+        push(errors, `${label}: capture должен быть объектом { "имяПеременной": "json.путь" }`);
+      } else if (r.method === 'HEAD') {
+        push(errors, `${label}: capture невозможен для HEAD (нет тела ответа)`);
+      } else {
+        for (const [name, path] of Object.entries(r.capture)) {
+          if (name.startsWith('_')) continue;
+          if (isBuiltinPh(name)) push(errors, `${label}: capture "${name}" совпадает со встроенным placeholder — выберите другое имя`);
+          if (typeof path !== 'string' || !path) push(errors, `${label}: capture.${name} должен быть непустым json-путём, например "content[0].id" или "id"`);
+          if (varNames.includes(name)) push(warnings, `${label}: capture "${name}" перекрывает глобальную vars-переменную с тем же именем`);
+          captured.add(name);
+        }
+      }
+    }
+    // placeholders — доступны глобальные vars, встроенные и переменные, захваченные РАНЕЕ в цепочке
+    const used = [
+      ...listPlaceholders(r.path || ''),
+      ...(r.body !== undefined ? listPlaceholders(typeof r.body === 'string' ? r.body : JSON.stringify(r.body)) : []),
+      ...(r.headers ? listPlaceholders(JSON.stringify(r.headers)) : []),
+    ];
+    for (const ph of used) {
+      if (isBuiltinPh(ph)) continue;
+      if (!available.has(ph)) {
+        const avail = [...available];
+        push(errors, `${label}: placeholder {{${ph}}} не объявлен. Доступно: ${avail.length ? avail.join(', ') : '(ничего)'}. В цепочке переменная должна быть в "vars" ИЛИ захвачена (capture) на ПРЕДЫДУЩЕМ шаге. Встроенные: {{uuid}}, {{ts}}, {{randInt:A-B}}`);
+      }
+    }
+    return captured;
+  };
+
+  const hasRequests = Array.isArray(scn.requests) && scn.requests.length;
+  const hasFlows = Array.isArray(scn.flows) && scn.flows.length;
+  if (!hasRequests && !hasFlows) {
+    push(errors, 'Нужен непустой массив "requests" (смесь независимых запросов) ИЛИ "flows" (сценарии-цепочки). Каждый запрос: { "name","method":"GET","path":"/...","weight":1 }.');
+  }
+  if (scn.requests !== undefined && !Array.isArray(scn.requests)) push(errors, '"requests" должен быть массивом');
+  if (scn.flows !== undefined && !Array.isArray(scn.flows)) push(errors, '"flows" должен быть массивом');
+
+  const allStepNames = new Map(); // имя шага → где встретилось (глобальная уникальность для метрик)
+  const registerName = (name, where) => {
+    if (!name) return;
+    if (allStepNames.has(name)) push(errors, `${where}: имя "${name}" уже используется в ${allStepNames.get(name)} — имена шагов/запросов должны быть уникальны (метрики считаются по имени).`);
+    else allStepNames.set(name, where);
+  };
+
+  // requests → каждый как самостоятельный запрос
+  if (hasRequests) {
     scn.requests.forEach((r, i) => {
       const label = `requests[${i}]${r?.name ? ` ("${r.name}")` : ''}`;
       if (typeof r !== 'object' || r === null) { push(errors, `${label}: должен быть объектом`); return; }
-      for (const k of Object.keys(r)) {
-        if (k.startsWith('_')) continue;
-        if (!KNOWN_REQ_KEYS.includes(k)) {
-          const s = suggestKey(k, KNOWN_REQ_KEYS);
-          push(warnings, `${label}: неизвестный ключ "${k}"${s ? ` — возможно, "${s}"` : ''}`);
-        }
-      }
-      if (!r.name) { r.name = `${r.method || 'GET'} ${r.path || `#${i}`}`; }
-      r.method = String(r.method || 'GET').toUpperCase();
-      if (!HTTP_METHODS.includes(r.method)) push(errors, `${label}: метод "${r.method}" не поддерживается (${HTTP_METHODS.join(', ')})`);
-      if (!r.path) push(errors, `${label}: нет "path"`);
-      else if (!/^\//.test(r.path) && !/^https?:\/\//.test(r.path)) push(errors, `${label}: path должен начинаться с "/" (сейчас: "${r.path}")`);
       if (r.weight === undefined) r.weight = 1;
       if (typeof r.weight !== 'number' || r.weight <= 0) push(errors, `${label}: weight должен быть положительным числом`);
-      if (r.expectStatus !== undefined && (!Array.isArray(r.expectStatus) || !r.expectStatus.length || r.expectStatus.some((s) => !Number.isInteger(s)))) {
-        push(errors, `${label}: expectStatus должен быть НЕПУСТЫМ массивом целых чисел, например [200, 404]`);
-      }
-      // checks — валидация ответов
-      if (r.checks !== undefined) {
-        if (typeof r.checks !== 'object' || r.checks === null || Array.isArray(r.checks)) {
-          push(errors, `${label}: checks должен быть объектом, например {"status":[200],"jsonPath":"content[*].id","maxMs":300}`);
-        } else {
-          const c = r.checks;
-          for (const k of Object.keys(c)) {
-            if (k.startsWith('_')) continue;
-            if (!KNOWN_CHECK_KEYS.includes(k)) {
-              const s = suggestKey(k, KNOWN_CHECK_KEYS);
-              push(warnings, `${label}: checks: неизвестный ключ "${k}"${s ? ` — возможно, "${s}"` : ''}`);
-            }
-          }
-          if (c.status !== undefined && (!Array.isArray(c.status) || !c.status.length || c.status.some((s) => !Number.isInteger(s)))) push(errors, `${label}: checks.status должен быть НЕПУСТЫМ массивом целых, например [200]`);
-          if (c.maxMs !== undefined && (typeof c.maxMs !== 'number' || c.maxMs <= 0)) push(errors, `${label}: checks.maxMs должен быть положительным числом (мс)`);
-          if (c.notEmpty !== undefined && typeof c.notEmpty !== 'boolean') push(errors, `${label}: checks.notEmpty должен быть true или false`);
-          if (c.bodyContains !== undefined && typeof c.bodyContains !== 'string') push(errors, `${label}: checks.bodyContains должен быть строкой-подстрокой`);
-          if (c.jsonPath !== undefined && typeof c.jsonPath !== 'string') push(errors, `${label}: checks.jsonPath должен быть строкой-путём, например "content[*].id"`);
-          if (c.jsonPathEquals !== undefined) {
-            const jpe = c.jsonPathEquals;
-            if (typeof jpe !== 'object' || jpe === null || jpe.path === undefined || jpe.value === undefined) {
-              push(errors, `${label}: checks.jsonPathEquals должен быть объектом { "path": "status", "value": "ACTIVE" }`);
-            } else if (jpe.value !== null && typeof jpe.value === 'object') {
-              push(errors, `${label}: checks.jsonPathEquals.value должен быть скаляром (строка/число/boolean/null), а не объектом/массивом`);
-            }
-          }
-          if (String(r.method).toUpperCase() === 'HEAD' && ['notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'].some((k) => c[k] !== undefined)) {
-            push(errors, `${label}: метод HEAD не возвращает тело — проверки notEmpty/bodyContains/jsonPath/jsonPathEquals невозможны, оставьте status/maxMs`);
-          }
-        }
-      }
-      // placeholders
-      const used = [
-        ...listPlaceholders(r.path || ''),
-        ...(r.body !== undefined ? listPlaceholders(typeof r.body === 'string' ? r.body : JSON.stringify(r.body)) : []),
-      ];
-      for (const ph of used) {
-        if (BUILTIN_PLACEHOLDERS.includes(ph) || /^randInt:-?\d+--?\d+$/.test(ph)) continue;
-        if (!varNames.includes(ph)) {
-          push(errors, `${label}: placeholder {{${ph}}} не объявлен в "vars". Объявлены: ${varNames.length ? varNames.join(', ') : '(ничего)'}. Встроенные: {{uuid}}, {{ts}}, {{randInt:A-B}}`);
-        }
-      }
-    });
-    // уникальность имён: статистика и checksSummary агрегируются по имени запроса
-    const seenNames = new Map();
-    scn.requests.forEach((r, i) => {
-      if (!r || !r.name) return;
-      if (seenNames.has(r.name)) {
-        push(errors, `requests[${i}]: имя "${r.name}" уже используется в requests[${seenNames.get(r.name)}] — имена запросов должны быть уникальны (метрики считаются по имени). Задайте разные "name".`);
-      } else seenNames.set(r.name, i);
+      if (r.capture !== undefined) push(warnings, `${label}: capture в независимом запросе бесполезен (некому передать значение) — capture нужен внутри "flows"`);
+      validateStepObj(r, label, new Set(varNames), i);
+      registerName(r.name, label);
     });
   }
 
-  // writes
-  const writeReqs = (scn.requests || []).filter((r) => r && WRITE_METHODS.includes(String(r.method || '').toUpperCase()));
+  // flows → упорядоченные цепочки шагов с передачей захваченных переменных
+  if (hasFlows) {
+    scn.flows.forEach((f, fi) => {
+      const flabel = `flows[${fi}]${f?.name ? ` ("${f.name}")` : ''}`;
+      if (typeof f !== 'object' || f === null) { push(errors, `${flabel}: должен быть объектом { name, weight, steps:[...] }`); return; }
+      for (const k of Object.keys(f)) {
+        if (k.startsWith('_')) continue;
+        if (!KNOWN_FLOW_KEYS.includes(k)) { const s = suggestKey(k, KNOWN_FLOW_KEYS); push(warnings, `${flabel}: неизвестный ключ "${k}"${s ? ` — возможно, "${s}"` : ''}`); }
+      }
+      if (!f.name) f.name = `flow-${fi}`;
+      registerName(f.name, `${flabel} (имя цепочки)`); // имя flow — ключ flow-статистики, должно быть уникально
+      if (f.weight === undefined) f.weight = 1;
+      if (typeof f.weight !== 'number' || f.weight <= 0) push(errors, `${flabel}: weight должен быть положительным числом`);
+      if (!Array.isArray(f.steps) || !f.steps.length) { push(errors, `${flabel}: нужен непустой массив "steps"`); return; }
+      const available = new Set(varNames);
+      f.steps.forEach((step, si) => {
+        const slabel = `${flabel}.steps[${si}]${step?.name ? ` ("${step.name}")` : ''}`;
+        const captured = validateStepObj(step, slabel, available, si);
+        registerName(step.name, slabel);
+        for (const c of captured) available.add(c); // захваты доступны СЛЕДУЮЩИМ шагам
+      });
+    });
+  }
+
+  // writes — по всем шагам (requests + flow steps)
+  const allSteps = [
+    ...(hasRequests ? scn.requests : []),
+    ...(hasFlows ? scn.flows.flatMap((f) => (Array.isArray(f?.steps) ? f.steps : [])) : []),
+  ].filter((s) => s && typeof s === 'object');
+  const writeReqs = allSteps.filter((r) => WRITE_METHODS.includes(String(r.method || '').toUpperCase()));
   if (writeReqs.length && scn.allowWrites !== true) {
     push(errors,
       `Сценарий содержит изменяющие запросы (${writeReqs.map((r) => `"${r.name}"`).join(', ')}), но allowWrites не установлен в true.\n` +
       `  Это защита от случайной порчи данных. Если писать в систему ДЕЙСТВИТЕЛЬНО нужно и пользователь это явно разрешил:\n` +
       `  1) добавьте в сценарий "allowWrites": true;  2) запускайте с флагом --allow-writes.`);
+  }
+
+  // нормализация: единая модель — всё есть flows. Независимые requests = одношаговые flow.
+  if (errors.length === 0) {
+    const wrapped = hasRequests ? scn.requests.map((r) => ({ name: r.name, weight: r.weight, steps: [r], _track: false })) : [];
+    const explicit = hasFlows ? scn.flows.map((f) => ({ name: f.name, weight: f.weight, steps: f.steps, _track: true })) : [];
+    scn._flows = [...wrapped, ...explicit];
+    scn._steps = allSteps;
+    scn._hasExplicitFlows = !!hasFlows;
   }
 
   // load
@@ -596,10 +671,32 @@ async function callOnce(scn, req, vars, token) {
   try {
     const res = await fetch(url, { method: req.method, headers, body, signal: AbortSignal.timeout(scn.timeoutMs) });
     const text = req.method === 'HEAD' ? '' : await res.text();
-    return evaluateResponse(req, res.status, text, performance.now() - t0, used);
+    const result = evaluateResponse(req, res.status, text, performance.now() - t0, used);
+    if (req.capture) result.text = text; // тело нужно для извлечения переменных в цепочке
+    return result;
   } catch (e) {
     return { ms: performance.now() - t0, status: 0, ok: false, kind: errKind(e), errMsg: errText(e), used };
   }
+}
+
+/**
+ * Извлекает значения из тела ответа шага и связывает их с session-переменными (для цепочек).
+ * capture: { "имяПеременной": "json.путь" }. Все объявленные захваты обязаны разрешиться.
+ * Мутирует vars. Возвращает { ok, error }.
+ */
+function applyCaptures(step, text, vars) {
+  let json;
+  try { json = JSON.parse(text); } catch { return { ok: false, error: `capture: тело ответа шага "${step.name}" — не JSON` }; }
+  for (const [name, path] of Object.entries(step.capture)) {
+    let v;
+    try { v = extractPath(json, path); } catch { v = undefined; }
+    if (Array.isArray(v)) v = v[0];
+    if (v === undefined || v === null || (typeof v === 'object')) {
+      return { ok: false, error: `capture: путь "${path}" (→ {{${name}}}) не дал скалярного значения в ответе шага "${step.name}"` };
+    }
+    vars[name] = String(v);
+  }
+  return { ok: true };
 }
 
 // ─────────────────────────────────────────────── статистика и отчёт ──
@@ -636,9 +733,38 @@ function makeRateGate(maxRps) {
   };
 }
 
+/**
+ * Одна сессия цепочки: шаги по порядку, захват переменных из ответов, обрыв на первом провале.
+ * session-переменные накладываются поверх глобальных. Возвращает { interrupted } —
+ * true, если сессию оборвал конец теста/прерывание (такую сессию не считаем в flow-статистику).
+ */
+async function runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, ctx, endAt, rateGate) {
+  const vars = { ...scn._resolvedVars };
+  let completed = true, brokeAt = null, interrupted = false;
+  let svcMs = 0; // сумма ВРЕМЕНИ ОТВЕТОВ шагов — без rate-gate пауз и think-time (это латентность цели, не пейсинг генератора)
+  for (let i = 0; i < flow.steps.length; i++) {
+    if (Date.now() >= endAt || ctx.aborted) { interrupted = true; break; }
+    if (rateGate) await rateGate();
+    const step = flow.steps[i];
+    const r = await callOnce(scn, step, vars, token);
+    let rec = r;
+    if (r.ok && step.capture) {
+      const cap = applyCaptures(step, r.text, vars);
+      if (!cap.ok) rec = { ms: r.ms, status: r.status, ok: false, kind: 'capture', errMsg: cap.error, used: r.used };
+    }
+    svcMs += rec.ms || 0;
+    stats.record(step, rec, Date.now());
+    if (onSample && rec.ok) onSample(rec.ms);
+    if (!rec.ok) { completed = false; brokeAt = step.name; break; }
+    if (ttMax > 0 && i < flow.steps.length - 1) await sleep(ttMin + Math.random() * (ttMax - ttMin));
+  }
+  if (flow._track && !interrupted) stats.recordFlow(flow.name, completed, svcMs, brokeAt);
+  return { interrupted };
+}
+
 /** Гоняет vuCount виртуальных пользователей до endAt, записывая в stats. Используется и в главном потоке, и в воркере. */
 async function runLoadSlice({ scn, preToken, stats, vuCount, vuOffset, totalVus, endAt, rampMs, effectiveMaxRps, ctx, loginFailures, onSample }) {
-  const pick = makePicker(scn.requests);
+  const pick = makePicker(scn._flows);
   const rateGate = makeRateGate(effectiveMaxRps);
   const [ttMin, ttMax] = scn.load.thinkTimeMs;
   const runVU = async (localIdx) => {
@@ -649,11 +775,9 @@ async function runLoadSlice({ scn, preToken, stats, vuCount, vuOffset, totalVus,
     const token = preToken;
     void loginFailures;
     while (Date.now() < endAt && !ctx.aborted) {
-      if (rateGate) await rateGate();
-      const req = pick();
-      const r = await callOnce(scn, req, scn._resolvedVars, token);
-      stats.record(req, r, Date.now());
-      if (onSample && r.ok) onSample(r.ms);
+      const flow = pick();
+      await runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, ctx, endAt, rateGate);
+      // think-time между сессиями (для одношаговых flow = пауза между итерациями, как раньше)
       if (ttMax > 0) await sleep(ttMin + Math.random() * (ttMax - ttMin));
     }
   };
@@ -673,11 +797,12 @@ function serializeStats(stats) {
       perVar: [...s.perVar.entries()].map(([vn, m]) => [vn, [...m.entries()].map(([val, c]) => [val, { count: c.count, errors: c.errors, lat: c.lat }])]),
     };
   }
-  return { total: stats.total, errors: stats.errors, startedAt: stats.startedAt, endedAt: stats.endedAt, per };
+  const flowStats = [...stats.flowStats.entries()].map(([n, f]) => [n, { started: f.started, completed: f.completed, durations: f.durations, breaks: [...f.breaks.entries()] }]);
+  return { total: stats.total, errors: stats.errors, startedAt: stats.startedAt, endedAt: stats.endedAt, per, flowStats };
 }
 
-function mergeStats(parts, requests) {
-  const base = makeStats(requests);
+function mergeStats(parts, steps) {
+  const base = makeStats(steps);
   base.startedAt = Math.min(...parts.map((p) => p.startedAt));
   base.endedAt = Math.max(...parts.map((p) => p.endedAt));
   for (const part of parts) {
@@ -702,6 +827,13 @@ function mergeStats(parts, requests) {
           for (const ms of c.lat) if (cell.lat.length < MAX_CELL_LAT) cell.lat.push(ms);
         }
       }
+    }
+    for (const [name, pf] of part.flowStats || []) {
+      let f = base.flowStats.get(name);
+      if (!f) { f = { started: 0, completed: 0, durations: [], breaks: new Map() }; base.flowStats.set(name, f); }
+      f.started += pf.started; f.completed += pf.completed;
+      for (const d of pf.durations) if (f.durations.length < MAX_LAT_SAMPLES) f.durations.push(d);
+      for (const [step, cnt] of pf.breaks) f.breaks.set(step, (f.breaks.get(step) || 0) + cnt);
     }
   }
   return base;
@@ -752,15 +884,23 @@ function startResourceMonitor({ watchEventLoop }) {
   };
 }
 
-function makeStats(requests) {
+function makeStats(steps) {
   const per = new Map();
-  for (const r of requests) per.set(r.name, { lat: [], count: 0, errors: 0, slow: 0, statuses: new Map(), errSamples: new Map(), perVar: new Map() });
+  for (const r of steps) per.set(r.name, { lat: [], count: 0, errors: 0, slow: 0, statuses: new Map(), errSamples: new Map(), perVar: new Map() });
   return {
     per,
+    flowStats: new Map(), // имя цепочки → { started, completed, durations:[], breaks: Map(step→count) }
     startedAt: 0,
     endedAt: 0,
     total: 0,
     errors: 0,
+    recordFlow(name, completed, ms, brokeAt) {
+      let f = this.flowStats.get(name);
+      if (!f) { f = { started: 0, completed: 0, durations: [], breaks: new Map() }; this.flowStats.set(name, f); }
+      f.started++;
+      if (completed) { f.completed++; if (f.durations.length < MAX_LAT_SAMPLES) f.durations.push(ms); }
+      else if (brokeAt) f.breaks.set(brokeAt, (f.breaks.get(brokeAt) || 0) + 1);
+    },
     record(req, r, now) {
       const s = this.per.get(req.name);
       this.total++;
@@ -832,7 +972,7 @@ function buildReport(scn, stats, opts = {}) {
   // сводка по проверкам ответов (checks)
   const checksSummary = [];
   for (const [name, s] of stats.per) {
-    const req = (scn.requests || []).find((r) => r.name === name);
+    const req = (scn._steps || []).find((r) => r.name === name);
     if (!req || !req.checks) continue;
     const failed = [...s.statuses.entries()].filter(([k]) => String(k).endsWith('✗check')).reduce((a, [, v]) => a + v, 0);
     checksSummary.push({
@@ -892,6 +1032,19 @@ function buildReport(scn, stats, opts = {}) {
   const pass = checks.every((c) => c.pass) && (!opts.smoke || stats.errors === 0) && incompleteWorkers === 0;
   if (incompleteWorkers > 0) checks.push({ name: `все потоки-генераторы вернули данные (не вернули: ${incompleteWorkers})`, pass: false });
 
+  // сводка по цепочкам (flows): доля завершённых сессий, длительность journey, точка обрыва
+  const flowReport = [];
+  for (const [name, f] of stats.flowStats) {
+    const durs = f.durations.slice().sort((a, b) => a - b);
+    const breaks = [...f.breaks.entries()].sort((a, b) => b[1] - a[1]);
+    flowReport.push({
+      name, sessions: f.started, completed: f.completed,
+      completionPct: f.started ? Number(((100 * f.completed) / f.started).toFixed(1)) : 0,
+      p50Ms: Math.round(pct(durs, 50)), p95Ms: Math.round(pct(durs, 95)),
+      topBreak: breaks.length ? { step: breaks[0][0], count: breaks[0][1] } : null,
+    });
+  }
+
   // подсказки
   const hints = [];
   const statusCount = new Map();
@@ -927,6 +1080,11 @@ function buildReport(scn, stats, opts = {}) {
   if (latDroppedTotal > 0) hints.push(`Выборок латентности больше лимита ${MAX_LAT_SAMPLES} на запрос — перцентили посчитаны по первым ${MAX_LAT_SAMPLES} (отброшено ${latDroppedTotal}).`);
 
   if (incompleteWorkers > 0) hints.push(`⚠ ${incompleteWorkers} поток(ов)-генератор(ов) упали и не вернули данные — их доля нагрузки НЕ выполнена. Отчёт неполный, вердикт принудительно FAIL. Проверьте память/стабильность и повторите.`);
+  for (const fr of flowReport) {
+    if (fr.completionPct < 95 && fr.sessions >= 5) {
+      hints.push(`Цепочка "${fr.name}": доходит до конца только ${fr.completionPct}% сессий (${fr.completed}/${fr.sessions})${fr.topBreak ? `, чаще всего обрывается на шаге "${fr.topBreak.step}" (${fr.topBreak.count} раз)` : ''} — это узкое место пользовательского сценария.`);
+    }
+  }
 
   // насыщение генератора: не упёрлись ли МЫ, а не цель
   const res = opts.resource || null;
@@ -978,7 +1136,7 @@ function buildReport(scn, stats, opts = {}) {
     errors: stats.errors, errorRatePct: Number(totalErrPct.toFixed(2)),
     latencyMs: { p50: pct(latSorted, 50), p90: pct(latSorted, 90), p95, p99: pct(latSorted, 99), max: latSorted.length ? latSorted[latSorted.length - 1] : 0 },
     perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max) })),
-    workers, resource: res, incompleteWorkers,
+    workers, resource: res, incompleteWorkers, flows: flowReport,
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
   };
@@ -996,6 +1154,15 @@ function printReport(rep) {
     L('');
     L('──────────────── ОШИБКИ (по одному примеру на вид) ────');
     for (const e of rep.errorsDetail) L(`  [${e.error}] ${e.request}: ${e.sample || '(пустое тело ответа)'}`);
+  }
+  if (rep.flows && rep.flows.length) {
+    L('');
+    L('──────────────── СЦЕНАРИИ-ЦЕПОЧКИ (FLOWS) ──────────────');
+    for (const f of rep.flows) {
+      const dur = f.completed > 0 ? `сумма ответов journey p50 ${f.p50Ms}ms, p95 ${f.p95Ms}ms` : 'ни одна сессия не завершена';
+      L(`  ${f.name}: сессий ${f.sessions}, завершено ${f.completed} (${f.completionPct}%) | ${dur}`);
+      if (f.topBreak) L(`    ⚠ чаще всего обрывается на шаге "${f.topBreak.step}" (${f.topBreak.count} раз)`);
+    }
   }
   if (rep.checksSummary && rep.checksSummary.length) {
     L('');
@@ -1143,6 +1310,17 @@ function cmdInit(flags) {
       { name: 'item detail', method: 'GET', path: '/api/v1/items/{{exampleId}}', weight: 3 },
     ],
     _requests_hint: 'weight — относительная частота. Встроенные placeholders: {{uuid}}, {{ts}}, {{randInt:1-100}}. Для POST добавьте body и allowWrites:true. Если path/body содержит {{переменную}}-список — в отчёте будет разбивка «ВЛИЯНИЕ ПАРАМЕТРОВ» по каждому значению.',
+    _flows_hint: 'АЛЬТЕРНАТИВА requests для СЦЕНАРИЕВ-ЦЕПОЧЕК (user journeys): каждый VU проходит шаги ПО ПОРЯДКУ как одну сессию. "capture" извлекает значения из ответа шага в {{переменные}} для СЛЕДУЮЩИХ шагов. Пример ниже — удалите, если не нужен. Можно задавать и requests, и flows одновременно.',
+    _flows_example: [
+      {
+        name: 'user-journey',
+        weight: 1,
+        steps: [
+          { name: 'j: list', method: 'GET', path: '/api/v1/items?page=0&size=20', checks: { status: [200], jsonPath: 'content[*].id' }, capture: { itemId: 'content[0].id' } },
+          { name: 'j: open', method: 'GET', path: '/api/v1/items/{{itemId}}', checks: { status: [200] } },
+        ],
+      },
+    ],
     load: { vus: 5, durationSec: 30, rampUpSec: 5, thinkTimeMs: [100, 300], workers: 1 },
     _load_hint: `vus — параллельные пользователи (max ${MAX_VUS}), durationSec — длительность (max ${MAX_DURATION_SEC}), maxRps — глобальный потолок запросов/сек (опц.), workers — число потоков-генераторов на разные ядра (по умолч. 1; поднимайте, если генератор упирается в CPU)`,
     thresholds: { p95Ms: 1000, errorRatePct: 1 },
@@ -1163,8 +1341,9 @@ function cmdValidate(positional) {
     for (const e of errors) console.log(`  ✗ ${e}`);
     process.exit(1);
   }
-  const writes = scn.requests.filter((r) => WRITE_METHODS.includes(r.method)).length;
-  console.log(`OK: сценарий валиден. Запросов: ${scn.requests.length} (изменяющих: ${writes}), VUs: ${scn.load.vus}, длительность: ${scn.load.durationSec}с, цель: ${scn.baseUrl}`);
+  const writes = scn._steps.filter((r) => WRITE_METHODS.includes(r.method)).length;
+  const flowNote = scn._hasExplicitFlows ? `, цепочек: ${scn.flows.length}` : '';
+  console.log(`OK: сценарий валиден. Шагов: ${scn._steps.length} (изменяющих: ${writes})${flowNote}, VUs: ${scn.load.vus}, потоков: ${scn.load.workers}, длительность: ${scn.load.durationSec}с, цель: ${scn.baseUrl}`);
 }
 
 // ─────────────────────────────────────────────── profile: статистика N запросов → черновик сценария ──
@@ -1391,7 +1570,7 @@ async function cmdRun(positional, flags) {
   }
 
   // защита: запись
-  const hasWrites = scn.requests.some((r) => WRITE_METHODS.includes(r.method));
+  const hasWrites = scn._steps.some((r) => WRITE_METHODS.includes(r.method));
   if (hasWrites && !flags['allow-writes']) {
     die(1, 'Сценарий содержит изменяющие запросы (allowWrites:true задан), но для запуска нужен ещё явный флаг --allow-writes.\nЭто двойная защита: убедитесь, что пользователь явно разрешил запись в целевую систему.');
   }
@@ -1403,7 +1582,7 @@ async function cmdRun(positional, flags) {
   }
 
   const smoke = !!flags.smoke;
-  console.log(`loadgen v${VERSION} | сценарий "${scn.name || '(без имени)'}" | цель ${scn.baseUrl} | режим ${smoke ? 'SMOKE (по 1 запросу)' : `LOAD (${scn.load.vus} VUs, ${scn.load.durationSec}с)`}`);
+  console.log(`loadgen v${VERSION} | сценарий "${scn.name || '(без имени)'}" | цель ${scn.baseUrl} | режим ${smoke ? `SMOKE (${scn._hasExplicitFlows ? 'каждая цепочка' : 'каждый запрос'} по 1 разу)` : `LOAD (${scn.load.vus} VUs${scn.load.workers > 1 ? `×${scn.load.workers} потоков` : ''}, ${scn.load.durationSec}с)`}`);
 
   // pre-flight: логин + переменные
   let preToken = null;
@@ -1421,21 +1600,35 @@ async function cmdRun(positional, flags) {
     process.exit(3);
   }
 
-  let stats = makeStats(scn.requests);
+  let stats = makeStats(scn._steps);
   const loginFailures = [];
   let resource = null;
   let incompleteWorkers = 0;
 
   if (smoke) {
+    // прогоняем каждую цепочку целиком (шаги по порядку с реальным захватом переменных) по 1 разу
     stats.startedAt = Date.now();
     console.log('');
-    for (const req of scn.requests) {
-      const r = await callOnce(scn, req, scn._resolvedVars, preToken);
-      stats.record(req, r, Date.now());
-      const line = r.ok
-        ? `  [OK]   ${req.name}: ${req.method} → HTTP ${r.status} (${fmtMs(r.ms)}ms)`
-        : `  [FAIL] ${req.name}: ${req.method} → ${r.status ? `HTTP ${r.status}` : r.kind} (${fmtMs(r.ms)}ms) ${r.errMsg || r.snippet || ''}`.trimEnd();
-      console.log(line);
+    for (const flow of scn._flows) {
+      const isJourney = flow.steps.length > 1;
+      if (isJourney) console.log(`  ▸ цепочка "${flow.name}":`);
+      const vars = { ...scn._resolvedVars };
+      for (const step of flow.steps) {
+        const r = await callOnce(scn, step, vars, preToken);
+        let rec = r;
+        if (r.ok && step.capture) {
+          const cap = applyCaptures(step, r.text, vars);
+          if (!cap.ok) rec = { ms: r.ms, status: r.status, ok: false, kind: 'capture', errMsg: cap.error };
+        }
+        stats.record(step, rec, Date.now());
+        const capNote = rec.ok && step.capture ? ` [captured: ${Object.keys(step.capture).join(', ')}]` : '';
+        const pad = isJourney ? '    ' : '  ';
+        const line = rec.ok
+          ? `${pad}[OK]   ${step.name}: ${step.method} → HTTP ${rec.status} (${fmtMs(rec.ms)}ms)${capNote}`
+          : `${pad}[FAIL] ${step.name}: ${step.method} → ${rec.status ? `HTTP ${rec.status}` : rec.kind} (${fmtMs(rec.ms)}ms) ${rec.errMsg || rec.snippet || ''}`.trimEnd();
+        console.log(line);
+        if (!rec.ok && isJourney) { console.log(`    ↳ цепочка оборвана на этом шаге, остальные шаги пропущены`); break; }
+      }
     }
     stats.endedAt = Date.now();
   } else if (scn.load.workers > 1) {
@@ -1510,7 +1703,7 @@ async function cmdRun(positional, flags) {
       incompleteWorkers = workers - parts.length;
       console.log(`⚠ ВНИМАНИЕ: ${incompleteWorkers} из ${workers} потоков не вернули данные (${workerErrors.join('; ') || 'причина неизвестна'}). Результат НЕПОЛНЫЙ.`);
     }
-    stats = mergeStats(parts, scn.requests);
+    stats = mergeStats(parts, scn._steps);
     // stats.endedAt уже выставлен mergeStats = max(endedAt воркеров) — НЕ перетираем его пост-фактум
     loginFailures.push(...workerLoginFailures);
     resource = resMon.finish(elLagMaxMs);
@@ -1566,7 +1759,7 @@ async function cmdRun(positional, flags) {
 async function runWorkerSlice() {
   const { scnJson, preToken, vuCount, vuOffset, totalVus, endAt, rampMs, effectiveMaxRps } = workerData;
   const scn = JSON.parse(scnJson);
-  const stats = makeStats(scn.requests);
+  const stats = makeStats(scn._steps);
   const loginFailures = [];
   const ctx = { aborted: false };
   parentPort.on('message', (m) => { if (m === 'abort') ctx.aborted = true; });
@@ -1585,9 +1778,15 @@ async function runWorkerSlice() {
 
 // ─────────────────────────────────────────────── main ──
 
+// Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats };
+
+// Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
+const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
 if (!isMainThread && workerData && workerData.role === 'load-slice') {
   await runWorkerSlice();
-} else {
+} else if (invokedDirectly) {
   await runCli();
 }
 

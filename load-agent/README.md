@@ -14,8 +14,10 @@
 load-agent/
 ├── bin/loadgen.mjs          # CLI-генератор нагрузки (Node >= 18, ноль зависимостей)
 ├── scenarios/               # готовые сценарии (*.json)
-│   └── dlmm-read-heavy.json # демо: read-heavy браузинг DLMM через gateway :8080
+│   ├── dlmm-read-heavy.json # демо: read-heavy браузинг DLMM через gateway :8080
+│   └── dlmm-journey.json    # демо: сценарий-цепочка (list→open→bins) с capture
 ├── clients/                 # обёртки для интеграции в тесты: Node/Python/Java/Scala
+├── test/                    # регрессионные self-тесты ядра (node --test)
 ├── agent/
 │   ├── SYSTEM_PROMPT_BODY.md   # переносимый промпт агента (для любого харнесса)
 │   ├── REQUEST_ANALYSIS.md     # развёрнутый промпт разбора запроса пользователя → сценарий
@@ -142,6 +144,39 @@ Extract-пути: `content[*].id` (Spring Page), `[*].id` (массив), `data.
   «значение X аномально медленное»);
 - машиночитаемый JSON (`--out file.json`): поля checksSummary, paramImpact, hints и т.д.
 
+## Сценарии-цепочки (flows / user journeys)
+
+`requests` — независимая **смесь** (VU дёргает запросы случайно по весам). Для транзакционных
+путей, где шаги идут по порядку и связаны данными, есть `flows` — упорядоченные **цепочки**:
+
+```jsonc
+"flows": [{
+  "name": "add-liquidity",
+  "weight": 3,                              // как часто VU выбирает эту цепочку
+  "steps": [
+    { "name": "list pools", "method": "GET", "path": "/api/v1/pools?size=20",
+      "checks": { "jsonPath": "content[*].id" },
+      "capture": { "poolId": "content[0].id", "bin": "content[0].activeBinId" } },
+    { "name": "open pool", "method": "GET", "path": "/api/v1/pools/{{poolId}}" },
+    { "name": "add liquidity", "method": "POST", "path": "/api/v1/positions",
+      "body": { "poolId": "{{poolId}}", "binId": "{{bin}}", "amount": "100" } }
+  ]
+}]
+```
+
+- Каждый VU проходит `steps` **по порядку** как одну сессию, затем повторяет.
+- `capture: { "имя": "json.путь" }` извлекает значение из ответа шага в `{{имя}}` для
+  **следующих** шагов (session-scope). Захваченное недоступно текущему и прошлым шагам —
+  валидатор это проверяет.
+- Если шаг падает (статус/проверка/захват) — остальные шаги сессии пропускаются.
+- Отчёт добавляет секцию **«СЦЕНАРИИ-ЦЕПОЧКИ»**: % сессий, дошедших до конца, p50/p95
+  суммарного времени ответов journey (только латентность цели — без rate-gate пауз и
+  think-time) и **шаг, на котором чаще всего рвётся** (узкое место сценария).
+- `requests` и `flows` можно задавать вместе (фоновая смесь + журналы). Обратная
+  совместимость полная: сценарий только с `requests` работает как раньше.
+- Один прогон `--smoke` проходит каждую цепочку целиком один раз — проверяет всю проводку
+  (включая capture) до нагрузки.
+
 ## Параллелизм и ресурсы генератора
 
 `load.workers` (или `--workers N`) распределяет VU по нескольким потокам `worker_threads`,
@@ -180,6 +215,11 @@ node load-agent/bin/loadgen.mjs profile access.log --base-url http://host --top 
 Готовые обёртки в [clients/](clients/README.md): движок один, клиенты запускают его
 процессом и отдают результат в родном виде — удобно для нагрузочных тестов в CI
 (pytest / JUnit / scalatest / node:test). Единственное требование на агенте CI — Node >= 18.
+
+## Тесты самого движка
+
+Регрессионные self-тесты ядра (парсинг, проверки, захват, валидация flows, слияние
+статистики) — в [test/](test/): `cd load-agent && node --test`. Зависимостей нет.
 
 ## Предохранители (важно для командного использования)
 
