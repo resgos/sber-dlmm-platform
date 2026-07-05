@@ -6,6 +6,7 @@ import type {
   TransactionFilters,
 } from './types'
 import { scaleTransaction, scaleSuspiciousTransaction } from './scale'
+import { utcStartOfLocalDay, utcEndOfLocalDay } from '@/lib/apiDates'
 
 export const transactions = {
   getTransactions: async (
@@ -22,8 +23,12 @@ export const transactions = {
       size,
       txType: filters?.txType,
       status: filters?.status,
-      from: filters?.dateFrom ? `${filters.dateFrom}T00:00:00` : undefined,
-      to: filters?.dateTo ? `${filters.dateTo}T23:59:59` : undefined,
+      // 2026-07-06 — same contract as user-ui (fcaa07f): the picked day is a
+      // LOCAL calendar day, the ledger is UTC. Verbatim bounds shifted the
+      // admin's «за сегодня» window by the viewer's offset — an operator
+      // checking today's activity missed the late-UTC evening.
+      from: filters?.dateFrom ? utcStartOfLocalDay(filters.dateFrom) : undefined,
+      to: filters?.dateTo ? utcEndOfLocalDay(filters.dateTo) : undefined,
     }
     const response = await apiClient.get<PageResponse<Transaction>>('/admin/transactions', {
       params,
