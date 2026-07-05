@@ -215,6 +215,15 @@ export default function TransactionsPage() {
           onChange={handleDateChange}
           format="YYYY-MM-DD"
           placeholder={[t('transactions.filters.dateFrom'), t('transactions.filters.dateTo')]}
+          // 2026-07-06 — one-click ranges for the common reporting windows.
+          // Presets flow through the same onChange → the same UTC-instant
+          // bound mapping (fcaa07f), so «Сегодня» is the user's true local day.
+          presets={[
+            { label: t('transactions.filters.presets.today'), value: [dayjs(), dayjs()] },
+            { label: t('transactions.filters.presets.yesterday'), value: [dayjs().subtract(1, 'day'), dayjs().subtract(1, 'day')] },
+            { label: t('transactions.filters.presets.week'), value: [dayjs().subtract(6, 'day'), dayjs()] },
+            { label: t('transactions.filters.presets.month'), value: [dayjs().subtract(29, 'day'), dayjs()] },
+          ]}
         />
         <Button icon={<ReloadOutlined />} onClick={() => refetch()}>{t('transactions.filters.refresh')}</Button>
         <Button onClick={handleReset}>{t('transactions.filters.reset')}</Button>

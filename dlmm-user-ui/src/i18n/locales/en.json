@@ -927,6 +927,12 @@
       "poolPlaceholder": "Pool",
       "dateFrom": "Date from",
       "dateTo": "Date to",
+      "presets": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "week": "7 days",
+        "month": "30 days"
+      },
       "refresh": "Refresh",
       "reset": "Reset",
       "exportCsv": "Export CSV"

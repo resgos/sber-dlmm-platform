@@ -429,6 +429,14 @@ export default function TransactionsPage() {
               onChange={handleDateChange}
               format="YYYY-MM-DD"
               placeholder={['Начальная дата', 'Конечная дата']}
+              // 2026-07-06 — one-click операционные окна; проходят через тот же
+              // onChange → честные UTC-границы (a30b38d).
+              presets={[
+                { label: 'Сегодня', value: [dayjs(), dayjs()] },
+                { label: 'Вчера', value: [dayjs().subtract(1, 'day'), dayjs().subtract(1, 'day')] },
+                { label: '7 дней', value: [dayjs().subtract(6, 'day'), dayjs()] },
+                { label: '30 дней', value: [dayjs().subtract(29, 'day'), dayjs()] },
+              ]}
             />
           </Space>
         }

@@ -934,6 +934,12 @@
       "poolPlaceholder": "Пул",
       "dateFrom": "Дата от",
       "dateTo": "Дата до",
+      "presets": {
+        "today": "Сегодня",
+        "yesterday": "Вчера",
+        "week": "7 дней",
+        "month": "30 дней"
+      },
       "refresh": "Обновить",
       "reset": "Сбросить",
       "exportCsv": "Экспорт CSV"
