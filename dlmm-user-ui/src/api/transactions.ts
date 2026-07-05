@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { Transaction, PageResponse, TransactionFilters, PoolFeeStats } from './types'
+import { utcStartOfLocalDay, utcEndOfLocalDay } from '@/lib/apiDates'
 import { scaleTransaction } from './scale'
 
 export const transactions = {
@@ -20,8 +21,12 @@ export const transactions = {
         size,
         type: filters?.txType,
         status: filters?.status,
-        from: filters?.dateFrom ? `${filters.dateFrom}T00:00:00` : undefined,
-        to: filters?.dateTo ? `${filters.dateTo}T23:59:59` : undefined,
+        // 2026-07-06 — the picked day is a LOCAL calendar day; the ledger is
+        // UTC. Send the day bounds converted to UTC instants (zoneless format
+        // the backend parses) — verbatim local bounds shifted the window by
+        // the viewer's offset (Moscow lost 21:00–23:59 UTC of its evening).
+        from: filters?.dateFrom ? utcStartOfLocalDay(filters.dateFrom) : undefined,
+        to: filters?.dateTo ? utcEndOfLocalDay(filters.dateTo) : undefined,
         poolId: filters?.poolId,
       },
     })

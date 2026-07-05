@@ -25,6 +25,33 @@ const ZONELESS_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$/
  * to explicit-UTC (`…Z`). Mutates arrays/objects in place (the payload is
  * fresh from axios and owned by the caller); returns the same reference.
  */
+/**
+ * 2026-07-06 — the request-side half of the same contract. A day picked in
+ * the UI is a LOCAL calendar day, but the backend compares zoneless
+ * LocalDateTime bounds against a UTC ledger — sending
+ * `2026-07-06T00:00:00` verbatim shifts the window by the viewer's offset
+ * (Moscow's «сегодня» silently covered 21:00-yesterday…20:59-today UTC…
+ * actually the reverse: it MISSED 21:00–23:59 UTC of the local evening).
+ * Convert the local day bounds to their UTC instants and send those,
+ * formatted the zoneless way the backend parses.
+ */
+function toZonelessUtc(localDateTime: string): string {
+  // `new Date('YYYY-MM-DDTHH:mm:ss[.SSS]')` parses as LOCAL time by spec;
+  // toISOString() re-expresses that instant in UTC. Strip the trailing Z —
+  // the backend's LocalDateTime parser rejects zone designators.
+  return new Date(localDateTime).toISOString().replace(/Z$/, '')
+}
+
+/** UTC instant (zoneless string) of the START of a local calendar day. */
+export function utcStartOfLocalDay(date: string): string {
+  return toZonelessUtc(`${date}T00:00:00`)
+}
+
+/** UTC instant (zoneless string) of the END of a local calendar day. */
+export function utcEndOfLocalDay(date: string): string {
+  return toZonelessUtc(`${date}T23:59:59.999`)
+}
+
 export function normalizeApiDates<T>(value: T): T {
   if (typeof value === 'string') {
     return (ZONELESS_DATETIME.test(value) ? `${value}Z` : value) as unknown as T
