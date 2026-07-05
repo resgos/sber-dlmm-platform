@@ -8,6 +8,7 @@ import {
   extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment,
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
   toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart,
+  histogram, percentileFromHistogram, mergeResults,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -358,6 +359,52 @@ test('validateScenario: monitor без docker/prometheus = ошибка; кри�
   assert.ok(validateScenario(empty).errors.some((e) => /monitor/.test(e)));
   const badProm = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }], monitor: { prometheus: { url: 'http://p' } } };
   assert.ok(validateScenario(badProm).errors.some((e) => /queries/.test(e)));
+});
+
+// ─── гистограммы и слияние прогонов (merge / распределёнка) ──
+test('histogram + percentileFromHistogram: перцентиль в пределах ширины бакета', () => {
+  const samples = Array.from({ length: 1000 }, (_, i) => (i < 950 ? 10 : 200)).sort((a, b) => a - b); // 95% =10мс, 5% =200мс
+  const h = histogram(samples);
+  assert.equal(h.reduce((a, b) => a + b, 0), 1000);
+  assert.ok(percentileFromHistogram(h, 50) <= 10 && percentileFromHistogram(h, 90) <= 15);
+  assert.ok(percentileFromHistogram(h, 99) >= 100); // хвост в 200мс-бакете
+});
+test('histogram: суммируется точно (два прогона → корректная общая гистограмма)', () => {
+  const a = histogram([5, 5, 50]);
+  const b = histogram([5, 300]);
+  const sum = a.map((v, i) => v + b[i]);
+  const both = histogram([5, 5, 5, 50, 300]);
+  assert.deepEqual(sum, both);
+});
+test('mergeResults: суммарный RPS/total + вердикт из порогов', () => {
+  const mk = (rps, p95bucketFill) => ({
+    scenario: 's', baseUrl: 'http://x', total: 1000, errors: 0, rps, durationSec: 10,
+    latencyMs: { p95: 20 }, hist: histogram(Array.from({ length: 1000 }, () => p95bucketFill)), histBoundsV: 1,
+    perRequest: [{ name: 'api', count: 1000, rps, errPct: 0, hist: histogram(Array.from({ length: 1000 }, () => p95bucketFill)) }],
+    thresholds: { p95Ms: 100, errorRatePct: 1 }, tool: 'loadgen',
+  });
+  const m = mergeResults([mk(300, 20), mk(320, 20)]);
+  assert.equal(m.machines, 2);
+  assert.equal(m.rps, 620);          // суммарная пропускная
+  assert.equal(m.total, 2000);
+  assert.equal(m.verdict, 'PASS');   // p95 20 <= 100
+  assert.equal(m.perRequest[0].rps, 620);
+});
+test('mergeResults: результат без hist (старая версия) = ошибка', () => {
+  assert.throws(() => mergeResults([{ scenario: 's', baseUrl: 'x', total: 1, errors: 0, rps: 1, latencyMs: {} },
+    { scenario: 's', baseUrl: 'x', total: 1, errors: 0, rps: 1, latencyMs: {}, hist: [] }]), /гистограмм/);
+});
+test('mergeResults: несовместимая сетка бакетов (другая версия) = ошибка', () => {
+  const good = { scenario: 's', baseUrl: 'x', total: 1, errors: 0, rps: 1, latencyMs: {}, hist: histogram([5]), histBoundsV: 1, perRequest: [], thresholds: {} };
+  const wrongV = { ...good, histBoundsV: 2 };
+  assert.throws(() => mergeResults([good, wrongV]), /сетка/);
+  const wrongLen = { ...good, hist: [1, 2, 3] };
+  assert.throws(() => mergeResults([good, wrongLen]), /сетка/);
+});
+test('mergeResults: per-request без hist (частичный файл) = ошибка, не ложный PASS', () => {
+  const g = { scenario: 's', baseUrl: 'x', total: 10, errors: 0, rps: 1, latencyMs: {}, hist: histogram([5]), histBoundsV: 1,
+    perRequest: [{ name: 'slow', count: 10, errPct: 0, rps: 1 }], thresholds: { perRequest: { slow: { p95Ms: 100 } } } }; // нет pr.hist
+  assert.throws(() => mergeResults([g, g]), /гистограм/);
 });
 
 // ─── тела не-JSON: form / multipart ──

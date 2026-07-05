@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -46,6 +46,34 @@ function pct(sortedAsc, p) {
   if (!sortedAsc.length) return 0;
   const i = Math.min(sortedAsc.length - 1, Math.max(0, Math.ceil((p / 100) * sortedAsc.length) - 1));
   return sortedAsc[i];
+}
+
+// гистограмма латентности: границы в мс; складывается точно между машинами → корректная агрегация (merge)
+const HIST_BOUNDS = [1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 60, 75, 90, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 15000, 20000, 30000, 60000, 120000];
+const HIST_BOUNDS_V = 1; // версия сетки бакетов — БУМП при любом изменении HIST_BOUNDS (merge проверяет совпадение)
+
+/** sortedAsc → массив counts длиной HIST_BOUNDS.length+1 (последний бакет = >120000мс). */
+function histogram(sortedAsc) {
+  const counts = new Array(HIST_BOUNDS.length + 1).fill(0);
+  let bi = 0;
+  for (const v of sortedAsc) {
+    while (bi < HIST_BOUNDS.length && v > HIST_BOUNDS[bi]) bi++;
+    counts[bi]++;
+  }
+  return counts;
+}
+
+/** Перцентиль из гистограммы (верхняя граница бакета, консервативно). Для слияния прогонов. */
+function percentileFromHistogram(counts, p) {
+  const total = counts.reduce((a, b) => a + b, 0);
+  if (!total) return 0;
+  const target = Math.max(1, Math.ceil((p / 100) * total));
+  let cum = 0;
+  for (let i = 0; i < counts.length; i++) {
+    cum += counts[i];
+    if (cum >= target) return HIST_BOUNDS[Math.min(i, HIST_BOUNDS.length - 1)];
+  }
+  return HIST_BOUNDS[HIST_BOUNDS.length - 1];
 }
 
 function fmtMs(x) {
@@ -1357,6 +1385,7 @@ function buildReport(scn, stats, opts = {}) {
       p50: pct(lat, 50), p90: pct(lat, 90), p95: pct(lat, 95), p99: pct(lat, 99),
       max: lat.length ? lat[lat.length - 1] : 0,
       ttfbP95: pct(ttfbArr, 95), downloadP95: pct(dlArr, 95),
+      hist: histogram(lat), // для слияния прогонов (merge)
       statuses,
     });
     for (const [ek, sample] of s.errSamples) errorsDetail.push({ request: name, error: ek, sample });
@@ -1591,7 +1620,9 @@ function buildReport(scn, stats, opts = {}) {
     total: stats.total, rps: Number((stats.total / durSec).toFixed(1)),
     errors: stats.errors, errorRatePct: Number(totalErrPct.toFixed(2)),
     latencyMs: { p50: Math.round(pct(latSorted, 50)), p90: Math.round(pct(latSorted, 90)), p95: Math.round(p95), p99: Math.round(pct(latSorted, 99)), max: Math.round(latSorted.length ? latSorted[latSorted.length - 1] : 0), ttfbP95: Math.round(pct(ttfbSorted, 95)) },
+    hist: histogram(latSorted), histBoundsV: HIST_BOUNDS_V, // гистограмма латентности + версия сетки (для merge)
     perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max), ttfbP95: Math.round(r.ttfbP95), downloadP95: Math.round(r.downloadP95) })),
+    thresholds: { p95Ms: th.p95Ms, errorRatePct: th.errorRatePct, ...(th.perRequest ? { perRequest: th.perRequest } : {}) }, // значения порогов — чтобы merge пересчитал вердикт
     workers, resource: res, incompleteWorkers, flows: flowReport, targetMetrics, lifecycle: opts.lifecycle || null,
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
@@ -2284,6 +2315,100 @@ function cmdCompare(positional, flags) {
   process.exit(cmp.verdict === 'REGRESSED' ? 2 : 0);
 }
 
+// ─────────────────────────────────────────────── merge: агрегация прогонов с N машин ──
+
+/** Складывает N результатов (run --out) в один агрегат: гистограммы суммируются → корректные перцентили. */
+function mergeResults(reps) {
+  if (!Array.isArray(reps) || reps.length < 2) throw new Error('нужно минимум 2 результата');
+  const warnings = [];
+  const scenario = reps[0].scenario, baseUrl = reps[0].baseUrl;
+  const N = HIST_BOUNDS.length + 1;
+  const th0json = JSON.stringify(reps[0].thresholds || {});
+  for (const r of reps) {
+    if (!Array.isArray(r.hist) || !r.latencyMs) throw new Error('в одном из файлов нет гистограммы (hist) — это результат старой версии (<1.11); пересоберите прогоны');
+    // сетка бакетов должна совпадать — иначе поэлементная сумма молча даст мусор
+    if (r.histBoundsV !== HIST_BOUNDS_V || r.hist.length !== N) throw new Error(`несовместимая сетка гистограмм (histBoundsV=${r.histBoundsV}, длина=${r.hist.length}; ожидается ${HIST_BOUNDS_V}/${N}) — сливайте результаты ОДНОЙ версии loadgen`);
+    // per-request гистограммы обязаны быть валидны — иначе p95=0 ложно прошёл бы SLO
+    for (const pr of r.perRequest || []) {
+      if (!Array.isArray(pr.hist) || pr.hist.length !== N) throw new Error(`результат неполный: у запроса "${pr.name}" нет корректной гистограммы — пересоберите прогон на текущей версии`);
+    }
+    if (r.scenario !== scenario) warnings.push(`разные сценарии: "${scenario}" vs "${r.scenario}" — агрегат может быть некорректным`);
+    if (r.baseUrl !== baseUrl) warnings.push(`разные цели: ${baseUrl} vs ${r.baseUrl}`);
+    if (JSON.stringify(r.thresholds || {}) !== th0json) warnings.push('у результатов РАЗНЫЕ пороги — вердикт считается по первому файлу');
+  }
+  const sumHist = (arrs) => { const out = new Array(N).fill(0); for (const a of arrs) for (let i = 0; i < N; i++) out[i] += (a && a[i]) || 0; return out; };
+  const total = reps.reduce((a, r) => a + (r.total || 0), 0);
+  const errors = reps.reduce((a, r) => a + (r.errors || 0), 0);
+  const rps = Number(reps.reduce((a, r) => a + (r.rps || 0), 0).toFixed(1));
+  const durationSec = Math.max(...reps.map((r) => r.durationSec || 0));
+  const oh = sumHist(reps.map((r) => r.hist));
+  const latencyMs = { p50: percentileFromHistogram(oh, 50), p90: percentileFromHistogram(oh, 90), p95: percentileFromHistogram(oh, 95), p99: percentileFromHistogram(oh, 99) };
+  const errorRatePct = total ? Number(((100 * errors) / total).toFixed(2)) : 0;
+
+  const names = new Set();
+  reps.forEach((r) => (r.perRequest || []).forEach((x) => names.add(x.name)));
+  const perRequest = [...names].map((name) => {
+    const parts = reps.flatMap((r) => (r.perRequest || []).filter((x) => x.name === name));
+    const h = sumHist(parts.map((p) => p.hist || []));
+    const count = parts.reduce((a, p) => a + (p.count || 0), 0);
+    const errCount = parts.reduce((a, p) => a + ((p.errPct || 0) / 100) * (p.count || 0), 0);
+    return {
+      name, count, rps: Number(parts.reduce((a, p) => a + (p.rps || 0), 0).toFixed(1)),
+      errPct: count ? Number(((100 * errCount) / count).toFixed(2)) : 0,
+      p95: percentileFromHistogram(h, 95), p99: percentileFromHistogram(h, 99),
+    };
+  });
+
+  // вердикт по порогам первого результата (значения одинаковы, если сценарий один)
+  const th = reps[0].thresholds || {};
+  const checks = [];
+  if (th.p95Ms != null) checks.push({ name: `p95 ${latencyMs.p95}ms <= ${th.p95Ms}ms`, pass: latencyMs.p95 <= th.p95Ms });
+  if (th.errorRatePct != null) checks.push({ name: `errors ${errorRatePct}% <= ${th.errorRatePct}%`, pass: errorRatePct <= th.errorRatePct });
+  if (th.perRequest) for (const [n, t] of Object.entries(th.perRequest)) {
+    const r = perRequest.find((x) => x.name === n);
+    if (!r) { checks.push({ name: `[${n}] нет в результатах`, pass: false }); continue; }
+    if (r.count === 0) { checks.push({ name: `[${n}] не выполнялся ни разу — SLO не подтверждён`, pass: false }); continue; }
+    if (t.p95Ms !== undefined) checks.push({ name: `[${n}] p95 ${r.p95}ms <= ${t.p95Ms}ms`, pass: r.errPct < 100 && r.p95 <= t.p95Ms });
+    if (t.errorRatePct !== undefined) checks.push({ name: `[${n}] errors ${r.errPct}% <= ${t.errorRatePct}%`, pass: r.errPct <= t.errorRatePct });
+  }
+  const verdict = checks.length && checks.every((c) => c.pass) ? 'PASS' : (checks.length ? 'FAIL' : 'PASS');
+  return { machines: reps.length, scenario, baseUrl, total, errors, errorRatePct, rps, durationSec, latencyMs, perRequest, thresholds: th, checks, verdict, warnings };
+}
+
+function printMerge(m) {
+  const L = console.log;
+  L(`Слияние ${m.machines} прогонов | сценарий "${m.scenario}" | цель ${m.baseUrl}`);
+  for (const w of m.warnings) L(`ПРЕДУПРЕЖДЕНИЕ: ${w}`);
+  L('');
+  L('──────────────── СВОДНО ПО ЗАПРОСАМ ───────────────────');
+  const head = ['запрос', 'кол-во', 'rps', 'err%', 'p95', 'p99'];
+  const table = [head, ...m.perRequest.map((r) => [r.name.slice(0, 32), r.count, r.rps, r.errPct, r.p95, r.p99])];
+  const w = head.map((_, c) => Math.max(...table.map((row) => String(row[c]).length)));
+  for (const row of table) L('  ' + row.map((v, c) => String(v).padEnd(w[c])).join('  '));
+  L('');
+  L('==================== ИТОГ (агрегат) ====================');
+  L(`VERDICT: ${m.verdict}`);
+  L(`Машин: ${m.machines} | суммарно запросов: ${m.total} за ~${m.durationSec}с | СУММАРНЫЙ RPS: ${m.rps} | ошибок: ${m.errorRatePct}%`);
+  L(`Латентность мс (из гистограмм): p50 ${m.latencyMs.p50} | p90 ${m.latencyMs.p90} | p95 ${m.latencyMs.p95} | p99 ${m.latencyMs.p99}`);
+  for (const c of m.checks) L(`Порог: ${c.name} ${c.pass ? 'OK' : 'НАРУШЕН'}`);
+  L('========================================================');
+}
+
+function cmdMerge(positional, flags) {
+  if (positional.length < 2) die(1, 'Использование: node loadgen.mjs merge <r1.json> <r2.json> [...] [--out merged.json]\nОбъединяет результаты N машин/прогонов (run --out) в один агрегат: суммарный RPS + корректные перцентили из гистограмм.');
+  const reps = positional.map((f) => {
+    if (!existsSync(f)) die(1, `Файл результата не найден: ${f}`);
+    try { return JSON.parse(readFileSync(f, 'utf8')); } catch (e) { die(1, `${f} — не валидный JSON результата: ${e.message}`); }
+  });
+  let m;
+  try { m = mergeResults(reps); } catch (e) { die(1, `Слияние не удалось: ${e.message}`); }
+  printMerge(m);
+  if (flags.out) {
+    try { const dir = dirname(flags.out); if (dir && dir !== '.') mkdirSync(dir, { recursive: true }); writeFileSync(flags.out, JSON.stringify(m, null, 2), 'utf8'); console.log(`\nJSON-агрегат: ${flags.out}`); } catch (e) { console.log(`\nНе удалось записать ${flags.out}: ${e.message}`); }
+  }
+  process.exit(m.verdict === 'FAIL' ? 2 : 0);
+}
+
 async function cmdRun(positional, flags) {
   const file = positional[0];
   if (!file) die(1, 'Использование: node loadgen.mjs run <scenario.json> [--smoke] [--vus N] [--duration N] [--out FILE]');
@@ -2584,7 +2709,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
@@ -2614,6 +2739,9 @@ const HELP = `loadgen v${VERSION} — REST load generator (Node >= 18, без з
     --max-p95-regression-pct N       допустимый рост p95 в % (по умолч. 20)
     --max-error-increase-pp N        допустимый рост доли ошибок в пунктах (по умолч. 1)
     --out FILE                       записать сравнение в JSON
+  merge <r1.json> <r2.json> [...]   агрегировать прогоны с N машин: суммарный RPS +
+                                     корректные перцентили из гистограмм (exit 0/2)
+    --out FILE                       записать агрегат в JSON
   run <scenario.json>               прогнать нагрузку (exit 0=PASS, 2=FAIL, 3=цель недоступна)
     --smoke                          каждый запрос по 1 разу, последовательно (проверка конфига)
     --vus N --duration N             переопределить нагрузку
@@ -2639,6 +2767,7 @@ switch (cmd) {
   case 'validate': cmdValidate(positional); break;
   case 'profile': cmdProfile(positional, flags); break;
   case 'compare': cmdCompare(positional, flags); break;
+  case 'merge': cmdMerge(positional, flags); break;
   case 'run': await cmdRun(positional, flags); break;
   case undefined:
   case 'help':
