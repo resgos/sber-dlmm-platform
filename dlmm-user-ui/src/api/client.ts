@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios'
 import { authStore } from '@/store/authStore'
+import { normalizeApiDates } from '@/lib/apiDates'
 
 const apiClient = axios.create({
   baseURL: '/api/v1',
@@ -85,7 +86,13 @@ interface RetryableRequestConfig extends AxiosRequestConfig {
 }
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // 2026-07-05 — backend LocalDateTime arrives zoneless but IS UTC; append
+    // 'Z' once here so every downstream dayjs()/Date parse renders the right
+    // local time (a fresh notification read «3 часа назад» in Moscow).
+    response.data = normalizeApiDates(response.data)
+    return response
+  },
   async (error: AxiosError) => {
     const status = error.response?.status
     const originalRequest = error.config as RetryableRequestConfig | undefined

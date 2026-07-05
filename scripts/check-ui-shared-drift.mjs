@@ -57,6 +57,11 @@ const SHARED_FILES = [
     strict: false,
     why: 'user-ui widens `sub` prop to ReactNode (P2-4 — "Моя доля" multi-line sub). Admin still uses string-only. When admin needs the wider type, copy from user-ui rather than diverging further.',
   },
+  {
+    path: 'lib/apiDates.ts',
+    strict: true,
+    why: 'UTC normalizer for zoneless backend LocalDateTime strings, wired into both axios clients — the timestamp contract must not drift between the UIs.',
+  },
 ]
 
 const ADMIN_ROOT = resolve(repoRoot, 'dlmm-admin-ui/src')
