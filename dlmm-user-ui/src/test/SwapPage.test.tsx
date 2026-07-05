@@ -520,4 +520,21 @@ describe('SwapPage — market-price reference (vs oracle)', () => {
     expect(await screen.findByText('Курс')).toBeInTheDocument()
     expect(screen.queryByText(/Рыночная цена/)).not.toBeInTheDocument()
   })
+
+  it("shows the QUOTE's effective fee rate, not the pool's static base fee", async () => {
+    // 2026-07-05 — the summary line used to print baseFeeBps (30 → 0.3%) no
+    // matter what the engine actually charged; a raised dynamic fee was
+    // invisible until the transaction feed. feeBps 58 ≠ base 30 proves the
+    // quote wins.
+    quoteMock.mockResolvedValue({ ...aQuote, feeBps: 58 })
+    await renderSwap({ pools: [SBER_POOL] })
+    await selectTokenIn('SRUB — Sber Rouble')
+    await selectTokenOut('SBER — Sberbank')
+    await userEvent.type(amountInInput(), '10000')
+    expect(await screen.findByText(/комиссия 0.58% · допуск/)).toBeInTheDocument()
+    // The pool-info block legitimately keeps the static base («шаг … · комиссия
+    // 0.3%») — only the QUOTE summary line («комиссия … · допуск …») must not
+    // print the base when the quote's rate differs.
+    expect(screen.queryByText(/комиссия 0.3% · допуск/)).not.toBeInTheDocument()
+  })
 })

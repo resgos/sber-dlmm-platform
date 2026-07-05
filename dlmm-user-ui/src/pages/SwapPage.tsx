@@ -510,7 +510,13 @@ export default function SwapPage() {
                     {t('swap.quote.route', { pair: `${selectedPool.tokenXSymbol}/${selectedPool.tokenYSymbol}` })}
                   </Tag>
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                    {t('swap.quote.feeAndTolerance', { fee: bpsToPercent(selectedPool.baseFeeBps), tolerance: effectiveSlippage })}
+                    {/* 2026-07-05 — show THIS quote's effective fee rate (the engine
+                        returns estimatedFeeBps incl. the volatility surcharge and
+                        fee-floor rounding), not the pool's static base fee: the two
+                        diverge the moment the dynamic fee wakes up, and the old line
+                        understated what the trader was about to pay. Base stays as
+                        the fallback for quotes predating the field. */}
+                    {t('swap.quote.feeAndTolerance', { fee: bpsToPercent(quote.feeBps ?? selectedPool.baseFeeBps), tolerance: effectiveSlippage })}
                   </Text>
                 </div>
               )}
