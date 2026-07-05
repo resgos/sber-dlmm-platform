@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment,
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
-  toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario,
+  toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -358,6 +358,37 @@ test('validateScenario: monitor без docker/prometheus = ошибка; кри�
   assert.ok(validateScenario(empty).errors.some((e) => /monitor/.test(e)));
   const badProm = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }], monitor: { prometheus: { url: 'http://p' } } };
   assert.ok(validateScenario(badProm).errors.some((e) => /queries/.test(e)));
+});
+
+// ─── тела не-JSON: form / multipart ──
+test('encodeForm: url-кодирование и подстановка плейсхолдеров', () => {
+  assert.equal(encodeForm({ grant_type: 'password', u: '{{name}}', 'sp ace': 'a&b' }, { name: 'ivan' }, {}),
+    'grant_type=password&u=ivan&sp%20ace=a%26b');
+});
+test('encodeForm: числа и boolean приводятся к строке', () => {
+  assert.equal(encodeForm({ n: 5, b: true }, {}, {}), 'n=5&b=true');
+});
+test('validateScenario: bodyType form требует объект-body; неизвестный bodyType = ошибка', () => {
+  const bad = { baseUrl: 'http://x', requests: [{ name: 'r', method: 'POST', path: '/x', bodyType: 'form', body: 'raw' }], allowWrites: true };
+  assert.ok(validateScenario(bad).errors.some((e) => /form.*объект|объект.*form/i.test(e) || /требует body-объект/.test(e)));
+  const bad2 = { baseUrl: 'http://x', requests: [{ name: 'r', method: 'POST', path: '/x', bodyType: 'xml', body: {} }], allowWrites: true };
+  assert.ok(validateScenario(bad2).errors.some((e) => /bodyType/.test(e)));
+});
+test('buildMultipart: собирает text-поле с CRLF-фреймингом и boundary в Content-Type', () => {
+  const mp = buildMultipart('.', { field: '{{v}}' }, { v: 'hello' }, {});
+  const s = mp.body.toString();
+  assert.match(mp.contentType, /^multipart\/form-data; boundary=----loadgen/);
+  const b = mp.contentType.split('boundary=')[1];
+  assert.ok(s.includes(`--${b}\r\nContent-Disposition: form-data; name="field"\r\n\r\nhello\r\n`));
+  assert.ok(s.endsWith(`--${b}--\r\n`));
+});
+test('buildMultipart: плейсхолдеры в filename/type рендерятся', () => {
+  // файл этого теста читается как содержимое — путь абсолютный к самому себе
+  const self = new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  const mp = buildMultipart('.', { doc: { file: self, filename: '{{nm}}.csv', type: 'text/{{fmt}}' } }, { nm: 'rep', fmt: 'csv' }, {});
+  const s = mp.body.toString();
+  assert.ok(s.includes('filename="rep.csv"'), 'filename должен рендериться');
+  assert.ok(s.includes('Content-Type: text/csv'), 'type должен рендериться');
 });
 
 // ─── подстановка ${ENV} ──

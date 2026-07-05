@@ -25,7 +25,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname, join, isAbsolute } from 'node:path';
+import { dirname, join, isAbsolute, basename } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance, monitorEventLoopDelay } from 'node:perf_hooks';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.9.0';
+const VERSION = '1.10.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -239,7 +239,7 @@ function die(code, msg) {
 // ─────────────────────────────────────────────── validate ──
 
 const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor', 'setup', 'teardown'];
-const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture'];
+const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture', 'bodyType'];
 const KNOWN_FLOW_KEYS = ['name', 'weight', 'steps'];
 const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'];
 const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps', 'workers', 'stages', 'warmupSec'];
@@ -401,6 +401,25 @@ function validateScenario(scn) {
     else if (!/^\//.test(r.path) && !/^https?:\/\//.test(r.path)) push(errors, `${label}: path должен начинаться с "/" (сейчас: "${r.path}")`);
     if (r.expectStatus !== undefined && (!Array.isArray(r.expectStatus) || !r.expectStatus.length || r.expectStatus.some((s) => !Number.isInteger(s)))) {
       push(errors, `${label}: expectStatus должен быть НЕПУСТЫМ массивом целых чисел, например [200, 404]`);
+    }
+    // bodyType — формат тела (json | form | multipart)
+    if (r.bodyType !== undefined) {
+      if (!['json', 'form', 'multipart'].includes(r.bodyType)) {
+        push(errors, `${label}: bodyType должен быть "json" | "form" | "multipart", сейчас: ${JSON.stringify(r.bodyType)}`);
+      } else if (r.bodyType !== 'json') {
+        if (typeof r.body !== 'object' || r.body === null || Array.isArray(r.body)) {
+          push(errors, `${label}: bodyType "${r.bodyType}" требует body-объект { поле: значение }`);
+        } else if (r.bodyType === 'form') {
+          for (const [k, v] of Object.entries(r.body)) if (v !== null && typeof v === 'object') push(errors, `${label}: form-поле "${k}" должно быть скаляром (строка/число/boolean), не объектом`);
+        } else if (r.bodyType === 'multipart') {
+          for (const [k, v] of Object.entries(r.body)) {
+            if (v && typeof v === 'object') { // файловое поле
+              if (typeof v.file !== 'string' || !v.file) push(errors, `${label}: multipart-поле "${k}" — объект, значит файл: нужен "file": "путь"`);
+              else { const p = isAbsolute(v.file) ? v.file : join(scn._dir || '.', v.file); if (!existsSync(p)) push(errors, `${label}: multipart-файл поля "${k}" не найден: ${p} (путь от папки сценария)`); }
+            }
+          }
+        }
+      }
     }
     // checks — валидация ответов
     if (r.checks !== undefined) {
@@ -825,16 +844,61 @@ function evaluateResponse(req, status, text, ms, used) {
   return { ms, status, ok: true, slow, used };
 }
 
+const _fileCache = new Map(); // содержимое файлов multipart читается один раз
+function readCachedFile(p) { if (!_fileCache.has(p)) _fileCache.set(p, readFileSync(p)); return _fileCache.get(p); }
+
+/** application/x-www-form-urlencoded: {a:1,b:"{{x}}"} → "a=1&b=<val>" */
+function encodeForm(obj, vars, used) {
+  return Object.entries(obj)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(renderTemplate(String(v), vars, used))}`)
+    .join('&');
+}
+
+/** multipart/form-data: строковые поля + файловые { "file": "путь", filename?, type? }. Возвращает { body: Buffer, contentType }. */
+function buildMultipart(scnDir, fields, vars, used) {
+  const boundary = '----loadgen' + randomUUID().replace(/-/g, '');
+  const chunks = [];
+  for (const [name, v] of Object.entries(fields)) {
+    if (v && typeof v === 'object' && v.file !== undefined) {
+      const p = isAbsolute(v.file) ? v.file : join(scnDir || '.', v.file);
+      const content = readCachedFile(p);
+      const filename = renderTemplate(String(v.filename || basename(p)), vars, used); // плейсхолдеры в имени файла
+      const ct = renderTemplate(String(v.type || 'application/octet-stream'), vars, used);
+      chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${filename}"\r\nContent-Type: ${ct}\r\n\r\n`));
+      chunks.push(content);
+      chunks.push(Buffer.from('\r\n'));
+    } else {
+      const val = renderTemplate(String(v), vars, used);
+      chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${val}\r\n`));
+    }
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`));
+  return { body: Buffer.concat(chunks), contentType: `multipart/form-data; boundary=${boundary}` };
+}
+
 async function callOnce(scn, req, vars, token) {
   let url, body;
   const used = {};
   const headers = { ...(scn.headers || {}), ...(req.headers || {}) };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  const hasCT = () => Object.keys(headers).some((h) => h.toLowerCase() === 'content-type');
+  // form/multipart ЖЁСТКО задают свой Content-Type (глобальный/ручной JSON-CT сломал бы парсинг тела)
+  const forceCT = (v) => { for (const h of Object.keys(headers)) if (h.toLowerCase() === 'content-type') delete headers[h]; headers['Content-Type'] = v; };
   try {
     url = new URL(renderTemplate(req.path, vars, used), scn.baseUrl).toString();
     if (req.body !== undefined) {
-      body = renderTemplate(typeof req.body === 'string' ? req.body : JSON.stringify(req.body), vars, used);
-      if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
+      const bt = req.bodyType || 'json';
+      if (bt === 'form') {
+        body = encodeForm(req.body, vars, used);
+        forceCT('application/x-www-form-urlencoded');
+      } else if (bt === 'multipart') {
+        const mp = buildMultipart(scn._dir, req.body, vars, used);
+        body = mp.body;
+        forceCT(mp.contentType); // Content-Type обязан нести сгенерированный boundary
+      } else {
+        body = renderTemplate(typeof req.body === 'string' ? req.body : JSON.stringify(req.body), vars, used);
+        if (!hasCT()) headers['Content-Type'] = 'application/json'; // json — не перетираем ручной CT (напр. charset)
+      }
     }
   } catch (e) {
     return { ms: 0, status: 0, ok: false, kind: 'config', errMsg: e.message, used };
@@ -2520,7 +2584,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

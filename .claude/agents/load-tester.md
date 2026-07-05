@@ -68,6 +68,9 @@ node LOADGEN probe <baseUrl> <path1> <path2>
   `bodyContains: "строка"`, `jsonPath: "content[*].id"` (путь обязан дать значения),
   `jsonPathEquals: {"path": "status", "value": "ACTIVE"}`, `maxMs: 300` (бюджет времени).
   Если пользователь сформулировал требование к ответу — переведи его в checks, не игнорируй.
+- **Тело не-JSON**: если эндпоинт принимает форму (OAuth token, веб-форма) или файл — добавь
+  `bodyType`: `"form"` (application/x-www-form-urlencoded, body-объект скаляров) или `"multipart"`
+  (body-объект: строки = поля, `{"file":"путь", filename?, type?}` = файл). Content-Type ставится сам.
 - **Пороги на конкретный запрос (SLO)**: если пользователь задаёт разные требования по эндпоинтам
   («список < 100мс, деталь < 300мс») — `thresholds.perRequest: {"имя запроса": {"p95Ms": 100, "errorRatePct": 0}}`.
   Такой порог тоже входит в вердикт PASS/FAIL.

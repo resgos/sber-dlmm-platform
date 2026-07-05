@@ -298,6 +298,25 @@ node load-agent/bin/loadgen.mjs profile access.log --base-url http://host --top 
 процессом и отдают результат в родном виде — удобно для нагрузочных тестов в CI
 (pytest / JUnit / scalatest / node:test). Единственное требование на агенте CI — Node >= 18.
 
+## Тела не-JSON: form-urlencoded и multipart (`bodyType`)
+
+По умолчанию тело шлётся как JSON. Для API, которые его не принимают — `bodyType`:
+
+```jsonc
+// OAuth2 token endpoint (application/x-www-form-urlencoded)
+{ "method": "POST", "path": "/oauth/token", "bodyType": "form",
+  "body": { "grant_type": "password", "username": "{{user}}", "password": "${PW}" } }
+
+// загрузка файла (multipart/form-data)
+{ "method": "POST", "path": "/upload", "bodyType": "multipart",
+  "body": { "meta": "v1", "file": { "file": "data/payload.bin", "filename": "p.bin", "type": "application/octet-stream" } } }
+```
+
+- `form` — тело `key=value&…` с URL-кодированием; значения — скаляры, плейсхолдеры работают.
+- `multipart` — строковые поля + файловые `{ "file": "путь", filename?, type? }`; путь от папки
+  сценария, содержимое файла читается один раз и кэшируется; Content-Type с boundary ставится сам.
+- Content-Type проставляется автоматически (json/form/multipart), ручной не нужен.
+
 ## Секреты из окружения (`${VAR}`) — сценарий без паролей в файле
 
 Любую строку сценария можно взять из переменной окружения — пароли/токены не хранятся в JSON
