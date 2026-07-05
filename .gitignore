@@ -24,3 +24,6 @@ Thumbs.db
 
 # Skills (build tool artifacts)
 skills/
+
+# loadgen run artifact (при запуске из корня репо)
+/loadgen-result.json

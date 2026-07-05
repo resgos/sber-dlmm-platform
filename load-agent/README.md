@@ -23,7 +23,7 @@
 | `compare <base> <cur>` | регресс p95/p99/ошибок/RPS (сумм. и по запросу) | 0 · 2 REGRESSED |
 | `merge <r1> <r2> …` | агрегат прогонов с N машин (сумм. RPS + перцентили из гистограмм) | 0 / 2 |
 
-Ключевые флаги `run`: `--smoke --vus N --duration N --workers N --out FILE --baseline FILE --junit FILE --md FILE --allow-writes --confirm-external --quiet`.
+Ключевые флаги `run`: `--smoke --vus N --duration N --workers N --out FILE --baseline FILE --junit FILE --md FILE --html FILE --allow-writes --confirm-external --quiet`.
 Секреты — из env: любую строку сценария можно взять как `${VAR}` / `${VAR:-дефолт}`.
 
 **Поля сценария** (подробно — в разделах ниже): `baseUrl` · `auth` (none/bearer/login) · `vars`
@@ -31,6 +31,30 @@
 `load` (vus/durationSec/rampUpSec/thinkTimeMs/maxRps/workers/warmupSec/**stages**) · `thresholds`
 (p95Ms/p99Ms/errorRatePct/rpsMin/perRequest) · `monitor` (docker/prometheus) · `setup`/`teardown`
 (write-тесты) · `bodyType` (json/form/multipart) · `checks` (валидация ответов).
+
+## Оглавление
+
+**Начать.** [Состав](#состав) · [Быстрый старт руками](#быстрый-старт-руками-без-ии) ·
+[Конвейер агента](#конвейер-агента) · [Почему работает на слабых моделях](#почему-это-работает-на-слабых-моделях)
+
+**Писать сценарий.** [Справочник полей](#сценарий-справочник-полей) ·
+[Цепочки (flows)](#сценарии-цепочки-flows--user-journeys) ·
+[Не-JSON тела (bodyType)](#тела-не-json-form-urlencoded-и-multipart-bodytype) ·
+[Секреты `${VAR}`](#секреты-из-окружения-var--сценарий-без-паролей-в-файле) ·
+[Профиль нагрузки: stages](#многоступенчатый-профиль-loadstages--ramp--spike--soak) ·
+[setup / teardown](#жизненный-цикл-setup-и-teardown-безопасные-write-тесты)
+
+**Гнать и читать отчёт.** [Что умеет отчёт](#что-умеет-отчёт) ·
+[TTFB vs скачивание](#разбивка-латентности-ttfb-vs-скачивание-тела) ·
+[Кто узкое место (monitor)](#метрики-цели-генератор-или-сервис--кто-узкое-место-monitor) ·
+[Параллелизм и ресурсы](#параллелизм-и-ресурсы-генератора)
+
+**CI и масштаб.** [Сравнение прогонов (compare)](#регрессии-сравнение-прогонов-compare--ci-гейт) ·
+[Распределённый прогон (merge)](#распределённый-прогон-с-n-машин-merge) ·
+[Профиль из статистики (profile)](#профиль-нагрузки-из-статистики-profile)
+
+**Прочее.** [Интеграция в код](#интеграция-в-код-nodejs--python--java--scala) ·
+[Тесты движка](#тесты-самого-движка) · [Предохранители](#предохранители-важно-для-командного-использования)
 
 ## Состав
 
@@ -77,14 +101,22 @@ node load-agent/bin/loadgen.mjs profile access.log --base-url http://x  # чер
 flowchart LR
     A[Запрос пользователя] --> B[probe: цель жива?]
     B -- UNREACHABLE --> Z[Стоп: отчёт о недоступности]
-    B -- REACHABLE --> C[init / готовый сценарий]
+    B -- REACHABLE --> P{есть access-лог<br/>или метрики?}
+    P -- да --> P2[profile: черновик<br/>сценария из статистики] --> C
+    P -- нет --> C[init / готовый пресет]
     C --> D[validate]
     D -- ✗ ошибки --> C2[править JSON по подсказкам] --> D
     D -- OK --> E[run --smoke: каждый запрос 1 раз]
     E -- FAIL --> C2
     E -- все OK --> F[run: полная нагрузка]
-    F --> G[Отчёт: дословный ИТОГ + подсказки]
+    F --> G[Отчёт: дословный ИТОГ + подсказки<br/>+ out/html/junit/md]
+    G -. CI-гейт .-> H[compare с baseline]
+    G -. прогон с N машин .-> M[merge результатов]
 ```
+
+Ветки `profile`, `compare`, `merge` — опциональные (профиль когда есть статистика реального
+трафика; compare/merge — для CI и распределённого прогона). Ядро — прямая линия
+`probe → init → validate → smoke → run`.
 
 ## Сценарий: справочник полей
 
@@ -169,7 +201,11 @@ Extract-пути: `content[*].id` (Spring Page), `[*].id` (массив), `data.
   2 FAIL, 3 цель недоступна;
 - рекомендации («это rate limit — задайте maxRps», «система держит — повышайте --vus»,
   «значение X аномально медленное»);
-- машиночитаемый JSON (`--out file.json`): поля checksSummary, paramImpact, hints и т.д.
+- в консоли — ASCII-гистограмма распределения латентности и цветной вердикт
+  (PASS зелёный / FAIL красный; цвет гасится при `NO_COLOR` или пайпе в файл);
+- выгрузки одним прогоном: `--out file.json` (машиночитаемо: checksSummary, paramImpact,
+  hints, hist…), `--html report.html` (самодостаточный отчёт со SVG-графиком, без внешних
+  ресурсов), `--junit junit.xml` (для CI), `--md report.md` (для PR/тикета).
 
 ## Сценарии-цепочки (flows / user journeys)
 
@@ -378,6 +414,10 @@ node load-agent/bin/loadgen.mjs profile access.log --base-url http://host --top 
 - Пустая переменная считается незаданной (идёт дефолт). `$${VAR}` — литерал `${VAR}`.
 - Подстановка идёт по всему сценарию (baseUrl, auth, headers, тела, пути, monitor…), один раз
   при загрузке. Запуск: `LOADGEN_PW=secret node bin/loadgen.mjs run scenario.json`.
+- `{{var}}`-плейсхолдеры работают и в **заголовках** — можно прокинуть захваченный в цепочке
+  токен: `"headers": { "Authorization": "Bearer {{token}}" }` или `"X-Idempotency-Key": "{{uuid}}"`.
+- Флаг `--base-url` подменяет `baseUrl` **до** подстановки env — так `"baseUrl": "${TARGET_URL}"`
+  без дефолта можно закрыть из CLI (`--base-url http://host`), не экспортируя переменную.
 
 ## Разбивка латентности: TTFB vs скачивание тела
 

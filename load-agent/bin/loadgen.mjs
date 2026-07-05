@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.13.0';
+const VERSION = '1.15.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -99,8 +99,13 @@ function suggestKey(key, known) {
   return best;
 }
 
-/** Извлечение по dot-пути с поддержкой [*] и [N]: "content[*].id", "data.accessToken", "[0].id" */
-function extractPath(root, path) {
+/**
+ * Извлечение по dot-пути с поддержкой [*] и [N]: "content[*].id", "data.accessToken", "[0].id".
+ * opts.keepNulls=true — в режиме фана [*] НЕ выкидывать null/отсутствующие листья, а сохранять их слотом
+ * (нужно jsonPathEquals: "все значения = X" должно ловить битый элемент со status:null, а не молча его терять).
+ */
+function extractPath(root, path, opts = {}) {
+  const keepNulls = opts.keepNulls === true;
   let nodes = [root];
   let fan = false;
   for (const part of String(path).split('.')) {
@@ -108,9 +113,9 @@ function extractPath(root, path) {
     if (!m) throw new Error(`некорректный extract-путь "${path}" (сегмент "${part}")`);
     const [, key, idx] = m;
     nodes = nodes.flatMap((n) => {
-      if (n == null) return [];
+      if (n == null) return fan && keepNulls ? [null] : [];
       let v = key === '' ? n : n[key];
-      if (v == null) return [];
+      if (v == null) return fan && keepNulls ? [null] : [];
       if (idx === undefined) return [v];
       if (!Array.isArray(v)) return [];
       if (idx === '*') { fan = true; return v; }
@@ -245,7 +250,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const name = a.slice(2);
-      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format', 'baseline', 'max-p95-regression-pct', 'max-error-increase-pp', 'junit', 'md', 'preset'].includes(name);
+      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format', 'baseline', 'max-p95-regression-pct', 'max-error-increase-pp', 'junit', 'md', 'html', 'preset'].includes(name);
       if (needsValue) {
         flags[name] = argv[++i];
         if (flags[name] === undefined) die(1, `Опции --${name} нужно значение. Пример: --${name} <значение>`);
@@ -302,7 +307,7 @@ function resolveEnvInScenario(node, env, missing) {
   return missing;
 }
 
-function loadScenario(file) {
+function loadScenario(file, overrides = {}) {
   if (!existsSync(file)) die(1, `Файл сценария не найден: ${file}\nСоздайте его: node loadgen.mjs init --out ${file}`);
   let raw;
   try { raw = readFileSync(file, 'utf8'); } catch (e) { die(1, `Не удалось прочитать ${file}: ${e.message}`); }
@@ -310,12 +315,16 @@ function loadScenario(file) {
   try { scn = JSON.parse(raw); } catch (e) {
     die(1, `Файл ${file} — не валидный JSON: ${e.message}\nЧастые причины: лишняя запятая после последнего элемента, комментарии //, одинарные кавычки.`);
   }
+  // сценарий обязан быть объектом — иначе CLI-override'ы (--vus/--base-url) и подстановка env
+  // упали бы сырым TypeError вместо диагностируемого сообщения (критично для ИИ-агента, парсящего вывод)
+  if (typeof scn !== 'object' || scn === null || Array.isArray(scn)) die(1, 'Сценарий должен быть JSON-объектом {...}');
+  // CLI-override'ы env-шаблонных полей применяем ДО подстановки: напр. baseUrl:"${TARGET_URL}" + --base-url —
+  // тогда TARGET_URL не считается пропущенной, и «шаблон URL + инъекция из CLI» работает без экспорта переменной
+  if (overrides.baseUrl) scn.baseUrl = overrides.baseUrl;
   // подстановка ${ENV_VAR} из окружения (секреты не в файле)
-  if (scn && typeof scn === 'object') {
-    const missing = resolveEnvInScenario(scn, process.env, new Set());
-    if (missing.size) die(1, `Не заданы переменные окружения, на которые ссылается сценарий: ${[...missing].join(', ')}.\n  Задайте их (например: ${[...missing][0]}=... node loadgen.mjs ...) или укажите дефолт в сценарии: "\${${[...missing][0]}:-значение}".`);
-  }
-  if (scn && typeof scn === 'object' && !Array.isArray(scn)) scn._dir = dirname(file) || '.';
+  const missing = resolveEnvInScenario(scn, process.env, new Set());
+  if (missing.size) die(1, `Не заданы переменные окружения, на которые ссылается сценарий: ${[...missing].join(', ')}.\n  Задайте их (например: ${[...missing][0]}=... node loadgen.mjs ...) или укажите дефолт в сценарии: "\${${[...missing][0]}:-значение}".`);
+  scn._dir = dirname(file) || '.';
   return scn;
 }
 
@@ -429,6 +438,11 @@ function validateScenario(scn) {
     else if (!/^\//.test(r.path) && !/^https?:\/\//.test(r.path)) push(errors, `${label}: path должен начинаться с "/" (сейчас: "${r.path}")`);
     if (r.expectStatus !== undefined && (!Array.isArray(r.expectStatus) || !r.expectStatus.length || r.expectStatus.some((s) => !Number.isInteger(s)))) {
       push(errors, `${label}: expectStatus должен быть НЕПУСТЫМ массивом целых чисел, например [200, 404]`);
+    }
+    // GET/HEAD не могут нести тело — иначе fetch бросит "Request with GET/HEAD method cannot have body"
+    // на КАЖДОМ запросе (100% ошибок). Ловим в валидации, а не в рантайме.
+    if ((r.method === 'GET' || r.method === 'HEAD') && (r.body !== undefined || r.bodyType !== undefined)) {
+      push(errors, `${label}: метод ${r.method} не может нести тело (body/bodyType) — уберите body/bodyType или смените метод на POST/PUT/PATCH`);
     }
     // bodyType — формат тела (json | form | multipart)
     if (r.bodyType !== undefined) {
@@ -649,19 +663,19 @@ function validateScenario(scn) {
     scn.load.rampUpSec = scn.load.rampUpSec ?? 0;
     if (!Number.isInteger(scn.load.vus) || scn.load.vus < 1) push(errors, `load.vus должен быть целым >= 1, сейчас: ${JSON.stringify(scn.load.vus)}`);
     if (scn.load.vus > MAX_VUS) push(errors, `load.vus=${scn.load.vus} превышает жёсткий лимит ${MAX_VUS} (защита от случайного DoS)`);
-    if (typeof scn.load.durationSec !== 'number' || scn.load.durationSec < 1) push(errors, `load.durationSec должен быть числом >= 1`);
+    if (!Number.isFinite(scn.load.durationSec) || scn.load.durationSec < 1) push(errors, `load.durationSec должен быть числом >= 1 (например, --duration 30 без суффикса единицы)`);
     if (scn.load.durationSec > MAX_DURATION_SEC) push(errors, `load.durationSec=${scn.load.durationSec} превышает жёсткий лимит ${MAX_DURATION_SEC} сек`);
-    if (typeof scn.load.rampUpSec !== 'number' || scn.load.rampUpSec < 0) push(errors, `load.rampUpSec должен быть числом >= 0`);
+    if (!Number.isFinite(scn.load.rampUpSec) || scn.load.rampUpSec < 0) push(errors, `load.rampUpSec должен быть числом >= 0`);
     scn.load.warmupSec = scn.load.warmupSec ?? 0;
-    if (typeof scn.load.warmupSec !== 'number' || scn.load.warmupSec < 0) push(errors, 'load.warmupSec должен быть числом >= 0 (сколько секунд разогрева исключить из метрик)');
+    if (!Number.isFinite(scn.load.warmupSec) || scn.load.warmupSec < 0) push(errors, 'load.warmupSec должен быть числом >= 0 (сколько секунд разогрева исключить из метрик)');
     else if (scn.load.warmupSec >= scn.load.durationSec) push(errors, `load.warmupSec=${scn.load.warmupSec} должен быть меньше длительности ${scn.load.durationSec}с`);
     if (scn.load.warmupSec > 0 && scn.load.stages) push(warnings, 'load.warmupSec со stages не применяется (нагрузка не постоянна) — будет проигнорирован');
     let tt = scn.load.thinkTimeMs ?? 0;
     if (typeof tt === 'number') tt = [tt, tt];
-    if (!Array.isArray(tt) || tt.length !== 2 || tt.some((x) => typeof x !== 'number' || x < 0) || tt[0] > tt[1]) {
+    if (!Array.isArray(tt) || tt.length !== 2 || tt.some((x) => !Number.isFinite(x) || x < 0) || tt[0] > tt[1]) {
       push(errors, 'load.thinkTimeMs должен быть числом или парой [minМс, maxМс], min <= max');
     } else scn.load.thinkTimeMs = tt;
-    if (scn.load.maxRps !== undefined && (typeof scn.load.maxRps !== 'number' || scn.load.maxRps < 1)) push(errors, 'load.maxRps должен быть числом >= 1');
+    if (scn.load.maxRps !== undefined && (!Number.isFinite(scn.load.maxRps) || scn.load.maxRps < 1)) push(errors, 'load.maxRps должен быть числом >= 1 (например, --max-rps 50 без суффикса)');
     scn.load.workers = scn.load.workers ?? 1;
     const cores = os.cpus().length;
     if (!Number.isInteger(scn.load.workers) || scn.load.workers < 1) push(errors, `load.workers должен быть целым >= 1 (число потоков-генераторов), сейчас: ${JSON.stringify(scn.load.workers)}`);
@@ -857,7 +871,8 @@ function evaluateResponse(req, status, text, ms, used) {
       }
       if (c.jsonPathEquals !== undefined) {
         let v;
-        try { v = extractPath(json, c.jsonPathEquals.path); } catch { v = undefined; }
+        // keepNulls: битый элемент (status:null / без поля) в [*]-пути обязан ПРОВАЛИТЬ "все = X", а не потеряться
+        try { v = extractPath(json, c.jsonPathEquals.path, { keepNulls: true }); } catch { v = undefined; }
         const want = c.jsonPathEquals.value;
         // скаляры сравниваются как строки; объект/массив в значении — всегда несовпадение;
         // для [*]-пути должны совпасть ВСЕ значения (и их должно быть > 0)
@@ -910,12 +925,16 @@ function buildMultipart(scnDir, fields, vars, used) {
 async function callOnce(scn, req, vars, token) {
   let url, body;
   const used = {};
-  const headers = { ...(scn.headers || {}), ...(req.headers || {}) };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const rawHeaders = { ...(scn.headers || {}), ...(req.headers || {}) };
+  const headers = {};
   const hasCT = () => Object.keys(headers).some((h) => h.toLowerCase() === 'content-type');
   // form/multipart ЖЁСТКО задают свой Content-Type (глобальный/ручной JSON-CT сломал бы парсинг тела)
   const forceCT = (v) => { for (const h of Object.keys(headers)) if (h.toLowerCase() === 'content-type') delete headers[h]; headers['Content-Type'] = v; };
   try {
+    // плейсхолдеры в заголовках подставляем так же, как в path/body (общий used → одно значение на вызов):
+    // без этого capture→заголовок и {{uuid}}/{{var}} в headers уходили бы литералом "Bearer {{tok}}"
+    for (const [k, v] of Object.entries(rawHeaders)) headers[k] = renderTemplate(String(v), vars, used);
+    if (token) headers['Authorization'] = `Bearer ${token}`; // токен задаётся программно, поверх заголовков
     url = new URL(renderTemplate(req.path, vars, used), scn.baseUrl).toString();
     if (req.body !== undefined) {
       const bt = req.bodyType || 'json';
@@ -1238,14 +1257,21 @@ function startTargetMonitor(scn) {
   return { stop() { stopped = true; clearInterval(iv); return { intervalSec, samples, errors: [...errors] }; } };
 }
 
-/** Сводка по метрикам цели: min/avg/max/last/пик для каждой метрики + флаг насыщения. */
-function summarizeTargetMetrics(monitorData) {
+/** Сводка по метрикам цели: min/avg/max/last/пик для каждой метрики + флаг насыщения.
+ *  warmupSec>0 — исключаем выборки первых N секунд (как и латентность генератора): cold-start пик
+ *  CPU/памяти на прогреве не должен ложно ронять monitor.thresholds. */
+function summarizeTargetMetrics(monitorData, warmupSec = 0) {
   if (!monitorData || !monitorData.samples.length) return null;
+  let samples = monitorData.samples;
+  if (warmupSec > 0) {
+    const kept = samples.filter((s) => s.t >= warmupSec);
+    if (kept.length) samples = kept; // если ВСЕ выборки попали в разогрев — оставляем сырые (лучше, чем пусто)
+  }
   const names = new Set();
-  for (const s of monitorData.samples) for (const k of Object.keys(s.values)) names.add(k);
+  for (const s of samples) for (const k of Object.keys(s.values)) names.add(k);
   const metrics = [];
   for (const name of names) {
-    const pts = monitorData.samples.filter((s) => s.values[name] !== undefined).map((s) => [s.t, s.values[name]]);
+    const pts = samples.filter((s) => s.values[name] !== undefined).map((s) => [s.t, s.values[name]]);
     if (!pts.length) continue;
     const vals = pts.map(([, v]) => v);
     const max = Math.max(...vals);
@@ -1401,7 +1427,9 @@ function buildReport(scn, stats, opts = {}) {
   // при stages рост латентности к концу — следствие роста нагрузки, а не деградации)
   let degradation = null;
   if (allLat.length > 100 && !scn.load?.stages) {
-    const mid = stats.startedAt + (stats.endedAt - stats.startedAt) / 2;
+    // середину считаем от конца разогрева (measureStart), а не от старта: иначе при warmupSec>0
+    // префикс окна пуст, h1 недобирает выборки и детектор деградации не срабатывает
+    const mid = measureStart + (stats.endedAt - measureStart) / 2;
     const h1 = allLat.filter(([t]) => t < mid).map(([, ms]) => ms).sort((a, b) => a - b);
     const h2 = allLat.filter(([t]) => t >= mid).map(([, ms]) => ms).sort((a, b) => a - b);
     if (h1.length > 20 && h2.length > 20) {
@@ -1716,6 +1744,94 @@ function toMarkdown(rep) {
   return L.join('\n') + '\n';
 }
 
+// ─── консольные цвета (ANSI), уважают NO_COLOR и не-TTY (в файл/пайп красят без ESC) ──
+const COLOR_ON = process.stdout && process.stdout.isTTY && !process.env.NO_COLOR;
+function clr(s, code) { const E = String.fromCharCode(27); return COLOR_ON ? `${E}[${code}m${s}${E}[0m` : s; }
+const green = (s) => clr(s, 32), red = (s) => clr(s, '31;1'), yellow = (s) => clr(s, 33), dim = (s) => clr(s, 90), bold = (s) => clr(s, 1);
+
+/** Компактная ASCII-гистограмма распределения латентности (только непустые бакеты). */
+function asciiHistogram(hist, maxRows = 12) {
+  if (!Array.isArray(hist) || !hist.length) return [];
+  const rows = [];
+  for (let i = 0; i < hist.length; i++) {
+    if (!hist[i]) continue;
+    const lo = i === 0 ? 0 : HIST_BOUNDS[i - 1];
+    const hi = i < HIST_BOUNDS.length ? HIST_BOUNDS[i] : Infinity;
+    rows.push({ label: hi === Infinity ? `>${lo}ms` : `${lo}-${hi}ms`, count: hist[i] });
+  }
+  if (!rows.length) return [];
+  // если бакетов больше maxRows — оставляем самые населённые
+  const shown = rows.length > maxRows ? [...rows].sort((a, b) => b.count - a.count).slice(0, maxRows).sort((a, b) => rows.indexOf(a) - rows.indexOf(b)) : rows;
+  const max = Math.max(...shown.map((r) => r.count));
+  const lblW = Math.max(...shown.map((r) => r.label.length));
+  const out = [];
+  for (const r of shown) {
+    const bars = max ? Math.round((r.count / max) * 32) : 0;
+    out.push(`  ${r.label.padStart(lblW)} │${'█'.repeat(bars)}${'·'.repeat(32 - bars)} ${r.count}`);
+  }
+  return out;
+}
+
+/** Самодостаточный HTML-отчёт (инлайн CSS + SVG бар-чарт гистограммы). */
+function toHtml(rep) {
+  const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+  const ok = rep.verdict === 'PASS';
+  const lm = rep.latencyMs || {};
+  // SVG-гистограмма из rep.hist
+  const hist = Array.isArray(rep.hist) ? rep.hist : [];
+  const bars = [];
+  for (let i = 0; i < hist.length; i++) {
+    if (!hist[i]) continue;
+    const lo = i === 0 ? 0 : HIST_BOUNDS[i - 1];
+    const hi = i < HIST_BOUNDS.length ? HIST_BOUNDS[i] : Infinity;
+    bars.push({ label: hi === Infinity ? `>${lo}` : `${hi}`, count: hist[i] });
+  }
+  const maxC = Math.max(1, ...bars.map((b) => b.count));
+  const bw = bars.length ? Math.max(6, Math.floor(760 / bars.length)) : 6;
+  const svg = bars.map((b, i) => {
+    const h = Math.round((b.count / maxC) * 160);
+    return `<rect x="${i * bw}" y="${180 - h}" width="${bw - 1}" height="${h}" fill="${ok ? '#2ea043' : '#d1242f'}"><title>&lt;=${b.label}ms: ${b.count}</title></rect>`;
+  }).join('');
+  const rows = (rep.perRequest || []).map((r) => `<tr><td>${esc(r.name)}</td><td>${r.count}</td><td>${r.rps}</td><td>${r.errPct}%</td><td>${r.p95}ms</td><td>${r.p99}ms</td></tr>`).join('');
+  const checks = (rep.checks || []).map((c) => `<li class="${c.pass ? 'ok' : 'bad'}">${c.pass ? '✅' : '❌'} ${esc(c.name)}</li>`).join('');
+  const hints = (rep.hints || []).map((h) => `<li>${esc(h)}</li>`).join('');
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>loadgen: ${esc(rep.scenario)} — ${rep.verdict}</title><style>
+body{font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f6f8fa;color:#1f2328}
+.wrap{max-width:900px;margin:0 auto;padding:24px}
+.badge{display:inline-block;padding:4px 14px;border-radius:16px;font-weight:700;color:#fff;background:${ok ? '#2ea043' : '#d1242f'}}
+h1{font-size:20px;margin:8px 0}.sub{color:#656d76}
+.cards{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
+.card{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:12px 16px;min-width:120px}
+.card b{display:block;font-size:22px}.card span{color:#656d76;font-size:12px}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #d0d7de;border-radius:8px;overflow:hidden;margin:12px 0}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid #eaeef2}th{background:#f6f8fa}
+td:not(:first-child),th:not(:first-child){text-align:right}
+svg{background:#fff;border:1px solid #d0d7de;border-radius:8px;max-width:100%}
+ul{list-style:none;padding:0}li{padding:3px 0}.ok{color:#1a7f37}.bad{color:#cf222e;font-weight:600}
+h2{font-size:15px;margin:20px 0 6px}.mono{font-family:ui-monospace,monospace}
+</style></head><body><div class="wrap">
+<div><span class="badge">${rep.verdict}</span></div>
+<h1>${esc(rep.scenario)}</h1>
+<div class="sub">${esc(rep.baseUrl)} · ${rep.mode} · ${rep.durationSec}с${rep.workers > 1 ? ` · ${rep.workers} потоков` : ''} · ${esc(rep.startedAt || '')}</div>
+<div class="cards">
+<div class="card"><b>${rep.total}</b><span>запросов</span></div>
+<div class="card"><b>${rep.rps}</b><span>RPS</span></div>
+<div class="card"><b>${rep.errorRatePct}%</b><span>ошибок</span></div>
+<div class="card"><b>${lm.p95}ms</b><span>p95</span></div>
+<div class="card"><b>${lm.p99}ms</b><span>p99</span></div>
+</div>
+<h2>Распределение латентности</h2>
+<svg viewBox="0 0 ${Math.max(1, bars.length) * bw} 200" width="100%" height="200">${svg}</svg>
+<h2>По запросам</h2>
+<table><tr><th>запрос</th><th>кол-во</th><th>rps</th><th>err%</th><th>p95</th><th>p99</th></tr>${rows}</table>
+<h2>Пороги</h2><ul>${checks || '<li>—</li>'}</ul>
+${hints ? `<h2>Подсказки</h2><ul>${hints}</ul>` : ''}
+<p class="sub">loadgen v${esc(rep.version || '')}</p>
+</div></body></html>
+`;
+}
+
 function printReport(rep) {
   const L = console.log;
   L('');
@@ -1789,19 +1905,23 @@ function printReport(rep) {
     if (r.saturated && r.saturated.length) L(`  СТАТУС: ⚠ УПЁРЛИСЬ В (${r.saturated.join(', ')}) — цифрам латентности доверять нельзя`);
     else L(`  СТАТУС: OK — генератор не был узким местом`);
   }
+  if (!rep.mode || rep.mode !== 'smoke') {
+    const distro = asciiHistogram(rep.hist);
+    if (distro.length) { L(''); L('──────────────── РАСПРЕДЕЛЕНИЕ ЛАТЕНТНОСТИ ─────────────'); for (const d of distro) L(d); }
+  }
   L('');
   L('==================== ИТОГ ====================');
-  L(`VERDICT: ${rep.verdict}`);
+  L(`VERDICT: ${rep.verdict === 'PASS' ? green(bold('PASS')) : red(bold('FAIL'))}`);
   L(`Сценарий: ${rep.scenario} | Режим: ${rep.mode} | Цель: ${rep.baseUrl}`);
-  L(`Запросов: ${rep.total} за ${rep.durationSec}с (RPS ${rep.rps}, VUs ${rep.vus}) | Ошибок: ${rep.errors} (${rep.errorRatePct}%)`);
+  L(`Запросов: ${rep.total} за ${rep.durationSec}с (RPS ${bold(rep.rps)}, VUs ${rep.vus}) | Ошибок: ${rep.errors} (${rep.errorRatePct}%)`);
   const lm = rep.latencyMs;
-  L(`Латентность мс: p50 ${fmtMs(lm.p50)} | p90 ${fmtMs(lm.p90)} | p95 ${fmtMs(lm.p95)} | p99 ${fmtMs(lm.p99)} | max ${fmtMs(lm.max)}`);
-  if (lm.ttfbP95 != null && lm.p95 > 0) L(`  из p95: TTFB (сервер+сеть до 1-го байта) ~${fmtMs(lm.ttfbP95)}ms, скачивание тела ~${fmtMs(Math.max(0, lm.p95 - lm.ttfbP95))}ms`);
-  for (const c of rep.checks) L(`Порог: ${c.name} ${c.pass ? 'OK' : 'НАРУШЕН'}`);
+  L(`Латентность мс: p50 ${fmtMs(lm.p50)} | p90 ${fmtMs(lm.p90)} | p95 ${bold(fmtMs(lm.p95))} | p99 ${fmtMs(lm.p99)} | max ${fmtMs(lm.max)}`);
+  if (lm.ttfbP95 != null && lm.p95 > 0) L(dim(`  из p95: TTFB (сервер+сеть до 1-го байта) ~${fmtMs(lm.ttfbP95)}ms, скачивание тела ~${fmtMs(Math.max(0, lm.p95 - lm.ttfbP95))}ms`));
+  for (const c of rep.checks) L(`Порог: ${c.name} ${c.pass ? green('OK') : red('НАРУШЕН')}`);
   L('==============================================');
   if (rep.hints.length) {
     L('ПОДСКАЗКИ:');
-    for (const h of rep.hints) L(`  • ${h}`);
+    for (const h of rep.hints) L(`  ${yellow('•')} ${h}`);
   }
 }
 
@@ -1864,7 +1984,21 @@ async function cmdProbe(positional) {
 
 const PRESET_NAMES = ['smoke', 'browse', 'journey', 'stress', 'ci', 'write'];
 
+const PRESET_DESC = {
+  smoke: 'быстрая проверка конфига (пара GET, run --smoke)',
+  browse: 'read-heavy смесь запросов по весам',
+  journey: 'сценарий-цепочка (user journey) с capture',
+  stress: 'многоступенчатый профиль load.stages (ramp/spike/soak)',
+  ci: 'CI-гейт: жёсткие пороги p95/p99/rpsMin + perRequest SLO',
+  write: 'write-тест с setup/teardown (allowWrites)',
+};
+
 function cmdInit(flags) {
+  if (flags['list-presets']) {
+    console.log('Доступные пресеты (init --preset <name>):');
+    for (const n of PRESET_NAMES) console.log(`  ${n.padEnd(8)} — ${PRESET_DESC[n]}`);
+    return;
+  }
   const out = flags.out || (flags.preset ? `${flags.preset}.json` : 'scenario.json');
   if (existsSync(out) && !flags.force) die(1, `Файл ${out} уже существует. Используйте --force для перезаписи или другое имя через --out.`);
   // --preset <name>: копируем готовый сценарий из presets/<name>.json (валидный, с _comment)
@@ -2360,8 +2494,11 @@ function mergeResults(reps) {
   const sumHist = (arrs) => { const out = new Array(N).fill(0); for (const a of arrs) for (let i = 0; i < N; i++) out[i] += (a && a[i]) || 0; return out; };
   const total = reps.reduce((a, r) => a + (r.total || 0), 0);
   const errors = reps.reduce((a, r) => a + (r.errors || 0), 0);
-  const rps = Number(reps.reduce((a, r) => a + (r.rps || 0), 0).toFixed(1));
   const durationSec = Math.max(...reps.map((r) => r.durationSec || 0));
+  // суммарный RPS = все запросы / объединённое окно, а НЕ сумма per-window rps: окна машин могут
+  // различаться (warmup / ранний финиш воркеров), и сумма rps завысила бы пропускную → ложный PASS
+  // порога rpsMin. Math.max(длительностей) слегка занижает → ошибка консервативна (только ложный FAIL).
+  const rps = durationSec > 0 ? Number((total / durationSec).toFixed(1)) : 0;
   const oh = sumHist(reps.map((r) => r.hist));
   const latencyMs = { p50: percentileFromHistogram(oh, 50), p90: percentileFromHistogram(oh, 90), p95: percentileFromHistogram(oh, 95), p99: percentileFromHistogram(oh, 99) };
   const errorRatePct = total ? Number(((100 * errors) / total).toFixed(2)) : 0;
@@ -2374,7 +2511,7 @@ function mergeResults(reps) {
     const count = parts.reduce((a, p) => a + (p.count || 0), 0);
     const errCount = parts.reduce((a, p) => a + ((p.errPct || 0) / 100) * (p.count || 0), 0);
     return {
-      name, count, rps: Number(parts.reduce((a, p) => a + (p.rps || 0), 0).toFixed(1)),
+      name, count, rps: durationSec > 0 ? Number((count / durationSec).toFixed(1)) : 0, // из объединённого окна, не сумма per-run rps
       errPct: count ? Number(((100 * errCount) / count).toFixed(2)) : 0,
       p95: percentileFromHistogram(h, 95), p99: percentileFromHistogram(h, 99),
     };
@@ -2436,10 +2573,11 @@ function cmdMerge(positional, flags) {
 async function cmdRun(positional, flags) {
   const file = positional[0];
   if (!file) die(1, 'Использование: node loadgen.mjs run <scenario.json> [--smoke] [--vus N] [--duration N] [--out FILE]');
-  const scn = loadScenario(file);
+  // --base-url прокидываем в loadScenario (применяется ДО подстановки env, чтобы baseUrl:"${VAR}" + --base-url работал);
+  // loadScenario уже гарантирует, что scn — объект (иначе die), поэтому override'ы ниже безопасны
+  const scn = loadScenario(file, { baseUrl: flags['base-url'] });
 
-  // переопределения CLI
-  if (flags['base-url']) scn.baseUrl = flags['base-url'];
+  // переопределения CLI (числовые; нечисловой --duration/--max-rps → NaN поймает validateScenario)
   if (flags.vus) { scn.load = scn.load || {}; scn.load.vus = Number(flags.vus); }
   if (flags.duration) { scn.load = scn.load || {}; scn.load.durationSec = Number(flags.duration); }
   if (flags['max-rps']) { scn.load = scn.load || {}; scn.load.maxRps = Number(flags['max-rps']); }
@@ -2499,6 +2637,18 @@ async function cmdRun(positional, flags) {
     for (const x of tr.results) console.log(`  ${x.ok ? '[OK]  ' : '[FAIL]'} ${x.name}${x.ok ? '' : ` — ${x.error}`}`);
   };
 
+  // Ctrl+C во время setup/подготовки: без раннего обработчика Node выходит НЕМЕДЛЕННО и teardown
+  // не успевает откатить созданное в setup → сущности утекают. Перед стартом нагрузки его снимаем
+  // (там свои обработчики прерывания). Идемпотентность гарантирует _teardownRan внутри runTeardownPhase.
+  let _tearingDown = false;
+  const earlySigint = () => {
+    if (_tearingDown) return;
+    _tearingDown = true;
+    console.log('\nПрерывание на этапе подготовки — откат созданного (teardown)…');
+    runTeardownPhase().catch(() => {}).finally(() => process.exit(130));
+  };
+  process.on('SIGINT', earlySigint);
+
   // setup — фаза подготовки (создать сущности, захватить id) до нагрузки; захваты идут в _resolvedVars
   if (scn._setup && scn._setup.length) {
     console.log(`Setup (${scn._setup.length} шаг.):`);
@@ -2549,6 +2699,7 @@ async function cmdRun(positional, flags) {
     stats.endedAt = Date.now();
   } else if (scn.load.workers > 1) {
     // ─── многопоточный режим: worker_threads на несколько ядер ──
+    process.removeListener('SIGINT', earlySigint); // дальше — свой обработчик прерывания нагрузки
     const workers = Math.min(scn.load.workers, scn.load.vus);
     console.log(`Потоков-генераторов: ${workers} (ядер доступно: ${os.cpus().length})`);
     const resMon = startResourceMonitor({ watchEventLoop: false });
@@ -2625,6 +2776,7 @@ async function cmdRun(positional, flags) {
     resource = resMon.finish(elLagMaxMs);
   } else {
     // ─── однопоточный режим ──
+    process.removeListener('SIGINT', earlySigint); // дальше — свой обработчик прерывания нагрузки
     const resMon = startResourceMonitor({ watchEventLoop: true });
     const ctx = { aborted: false };
     process.on('SIGINT', () => { ctx.aborted = true; console.log('\nПрерывание — формирую отчёт по собранным данным...'); });
@@ -2649,14 +2801,15 @@ async function cmdRun(positional, flags) {
     await runLoadSlice({
       scn, preToken, stats, vuCount: scn.load.vus, vuBase: 0, vuStride: 1, totalVus: scn.load.vus,
       endAt, rampMs, effectiveMaxRps: scn.load.maxRps || 0, ctx, loginFailures,
-      onSample: (ms) => winLat.push(ms), startedAt: stats.startedAt,
+      // при --quiet winLat никогда не сливается (нет прогресс-таймера) — не копим его вовсе, иначе утечёт
+      onSample: flags.quiet ? null : (ms) => winLat.push(ms), startedAt: stats.startedAt,
     });
     stats.endedAt = Date.now();
     if (progress) clearInterval(progress);
     resource = resMon.finish();
   }
 
-  if (targetMon) targetMetrics = summarizeTargetMetrics(targetMon.stop());
+  if (targetMon) targetMetrics = summarizeTargetMetrics(targetMon.stop(), scn.load.warmupSec && !scn.load.stages ? scn.load.warmupSec : 0);
 
   // teardown — очистка (best-effort, выполняется после нагрузки, даже если она упала/прервана)
   await runTeardownPhase();
@@ -2683,6 +2836,7 @@ async function cmdRun(positional, flags) {
   };
   if (flags.junit) writeReport(flags.junit, toJUnitXml(rep), 'JUnit XML');
   if (flags.md) writeReport(flags.md, toMarkdown(rep), 'Markdown-отчёт');
+  if (flags.html) writeReport(flags.html, toHtml(rep), 'HTML-отчёт');
 
   // --baseline: сразу сравнить с эталонным прогоном (CI-гейт регрессий)
   let regressed = false;
@@ -2733,7 +2887,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
@@ -2753,6 +2907,7 @@ const HELP = `loadgen v${VERSION} — REST load generator (Node >= 18, без з
   probe <baseUrl> [path ...]        проверить доступность цели (exit 0/3)
   init [--out FILE] [--force]        создать шаблон сценария
     --preset NAME                    готовый сценарий: smoke|browse|journey|stress|ci|write
+    --list-presets                   показать доступные пресеты с описанием
   validate <scenario.json>          проверить сценарий (exit 0/1)
   profile <log|csv|json>            построить черновик сценария из статистики N запросов
     --format access|csv|json         формат входа (по умолчанию — автоопределение)
@@ -2775,6 +2930,7 @@ const HELP = `loadgen v${VERSION} — REST load generator (Node >= 18, без з
     --out FILE                       файл JSON-результата (по умолч. loadgen-result.json)
     --junit FILE                     дополнительно записать отчёт в JUnit XML (для CI)
     --md FILE                        дополнительно записать отчёт в Markdown (для PR-комментария)
+    --html FILE                      дополнительно записать красивый HTML-отчёт (бар-чарт латентности)
     --baseline FILE                  сравнить результат с эталоном (регресс → exit 2)
     --allow-writes                   подтвердить изменяющие запросы
     --confirm-external               подтвердить нагрузку на внешний хост

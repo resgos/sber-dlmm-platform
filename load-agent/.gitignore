@@ -1,0 +1,4 @@
+# артефакты прогонов loadgen (не коммитим)
+loadgen-result.json
+results/*.json
+!results/.gitkeep

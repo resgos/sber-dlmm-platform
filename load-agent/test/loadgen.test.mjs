@@ -8,7 +8,7 @@ import {
   extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment,
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
   toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart,
-  histogram, percentileFromHistogram, mergeResults,
+  histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -76,6 +76,15 @@ test('evaluateResponse: jsonPathEquals с [*] требует ВСЕ значен
   assert.equal(bad.ok, false);
   const good = evaluateResponse({ checks: { jsonPathEquals: { path: 'items[*].s', value: 'A' } } }, 200, JSON.stringify({ items: [{ s: 'A' }, { s: 'A' }] }), 5, {});
   assert.equal(good.ok, true);
+});
+test('evaluateResponse: jsonPathEquals [*] — битый элемент (null/без поля) ПРОВАЛивает, не теряется (фикс ревью)', () => {
+  const chk = { checks: { jsonPathEquals: { path: 'orders[*].status', value: 'ACTIVE' } } };
+  // средний элемент null — раньше молча выкидывался и давал ложный PASS
+  const withNull = evaluateResponse(chk, 200, JSON.stringify({ orders: [{ status: 'ACTIVE' }, { status: null }, { status: 'ACTIVE' }] }), 5, {});
+  assert.equal(withNull.ok, false, 'элемент со status:null должен провалить "все = ACTIVE"');
+  // средний элемент без поля status вовсе
+  const missing = evaluateResponse(chk, 200, JSON.stringify({ orders: [{ status: 'ACTIVE' }, {}, { status: 'ACTIVE' }] }), 5, {});
+  assert.equal(missing.ok, false, 'элемент без поля status должен провалить проверку');
 });
 test('evaluateResponse: maxMs помечает slow, но ok', () => {
   const r = evaluateResponse({ checks: { status: [200], maxMs: 5 } }, 200, '{}', 50, {});
@@ -172,6 +181,30 @@ test('validateScenario: обратная совместимость — requests
   assert.equal(scn._hasExplicitFlows, false);
   assert.equal(scn._flows[0]._track, false);
   assert.equal(scn._flows[0].steps.length, 1);
+});
+test('validateScenario: NaN durationSec/maxRps ловится (напр. --duration 30s → Number=NaN) — не ложный зелёный (фикс ревью)', () => {
+  // так cmdRun пишет нечисловой CLI-флаг: Number("30s") = NaN. Раньше typeof NaN==="number" пролезал.
+  const dur = validateScenario({ baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x' }], load: { durationSec: NaN } });
+  assert.ok(dur.errors.some((e) => /durationSec/.test(e)), 'NaN durationSec должен быть ошибкой');
+  const rps = validateScenario({ baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x' }], load: { maxRps: NaN } });
+  assert.ok(rps.errors.some((e) => /maxRps/.test(e)), 'NaN maxRps должен быть ошибкой');
+});
+test('validateScenario: тело на GET/HEAD — ошибка конфига, а не 100% ошибок в рантайме (фикс ревью)', () => {
+  const getBody = validateScenario({ baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x', body: { q: 'hi' } }] });
+  assert.ok(getBody.errors.some((e) => /GET.*не может нести тело|тело/.test(e)), 'GET+body должен быть ошибкой');
+  const headBt = validateScenario({ baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'HEAD', path: '/x', bodyType: 'form', body: { q: 'hi' } }] });
+  assert.ok(headBt.errors.some((e) => /HEAD.*не может нести тело|тело/.test(e)), 'HEAD+bodyType должен быть ошибкой');
+});
+test('summarizeTargetMetrics: warmupSec исключает cold-start пик метрик цели (фикс ревью)', () => {
+  const data = { intervalSec: 5, errors: [], samples: [
+    { t: 0, values: { 'svc CPU %': 120 } },  // прогрев — пик
+    { t: 15, values: { 'svc CPU %': 40 } },
+    { t: 20, values: { 'svc CPU %': 45 } },
+  ] };
+  const noWarmup = summarizeTargetMetrics(data, 0);
+  assert.equal(noWarmup.metrics[0].max, 120, 'без warmup пик виден');
+  const warmed = summarizeTargetMetrics(data, 10);
+  assert.equal(warmed.metrics[0].max, 45, 'с warmupSec=10 пик t=0 исключён');
 });
 
 // ─── makeStats / mergeStats + flowStats ──
@@ -398,6 +431,33 @@ test('mergeResults: p99Ms и rpsMin входят в вердикт агрега�
   assert.ok(m.checks.some((c) => /RPS/.test(c.name) && !c.pass));
 });
 
+// ─── красивый вывод: toHtml / asciiHistogram ──
+test('asciiHistogram: непустые бакеты с барами', () => {
+  const h = histogram([5, 5, 5, 40, 40, 300]); // три группы
+  const rows = asciiHistogram(h);
+  assert.ok(rows.length >= 2);
+  assert.ok(rows.some((r) => r.includes('█')), 'должны быть бары');
+  assert.ok(rows.every((r) => /\d+$/.test(r)), 'в конце строки — счётчик');
+});
+test('asciiHistogram: пустая гистограмма → []', () => {
+  assert.deepEqual(asciiHistogram([]), []);
+  assert.deepEqual(asciiHistogram(histogram([])), []);
+});
+test('toHtml: валидный самодостаточный HTML с вердиктом, экранированием и баром', () => {
+  const rep = {
+    scenario: 'demo <x> & y', baseUrl: 'http://t', mode: 'load', verdict: 'FAIL', durationSec: 10, startedAt: '2026-01-01', workers: 1,
+    total: 100, rps: 5, errorRatePct: 2, latencyMs: { p95: 30, p99: 40 }, hist: histogram([10, 10, 40, 300]),
+    perRequest: [{ name: 'GET /a<b>', count: 100, rps: 5, errPct: 2, p95: 30, p99: 40 }],
+    checks: [{ name: 'p95 30 <= 20', pass: false }], hints: ['подсказка'], version: '1.14.0',
+  };
+  const html = toHtml(rep);
+  assert.match(html, /^<!doctype html>/i);
+  assert.ok(html.includes('demo &lt;x&gt; &amp; y'), 'спецсимволы экранированы');
+  assert.ok(html.includes('class="badge">FAIL'), 'бейдж вердикта');
+  assert.ok(html.includes('<rect'), 'SVG-бары гистограммы');
+  assert.ok(!html.includes('<script'), 'без скриптов (самодостаточный статичный отчёт)');
+});
+
 // ─── гистограммы и слияние прогонов (merge / распределёнка) ──
 test('histogram + percentileFromHistogram: перцентиль в пределах ширины бакета', () => {
   const samples = Array.from({ length: 1000 }, (_, i) => (i < 950 ? 10 : 200)).sort((a, b) => a - b); // 95% =10мс, 5% =200мс
@@ -422,10 +482,25 @@ test('mergeResults: суммарный RPS/total + вердикт из поро�
   });
   const m = mergeResults([mk(300, 20), mk(320, 20)]);
   assert.equal(m.machines, 2);
-  assert.equal(m.rps, 620);          // суммарная пропускная
+  // RPS считается из объединённого окна (total / max(durationSec)), а НЕ суммой per-window rps:
+  // 2000 запросов / 10с = 200 (сумма 300+320=620 была бы завышена и дала ложный PASS порога rpsMin)
+  assert.equal(m.rps, 200);
   assert.equal(m.total, 2000);
   assert.equal(m.verdict, 'PASS');   // p95 20 <= 100
-  assert.equal(m.perRequest[0].rps, 620);
+  assert.equal(m.perRequest[0].rps, 200); // 2000 / 10с
+});
+test('mergeResults: rpsMin из объединённого окна — рассинхрон окон НЕ даёт ложный PASS (фикс ревью)', () => {
+  // две машины: у каждой 1000 запросов, но окна 10с и 30с (типичный рассинхрон warmup/раннего финиша).
+  // Сумма per-window rps (100+33=133) прошла бы порог rpsMin:120. Честно: 2000/30 ≈ 66.7 < 120 → FAIL.
+  const mk = (durationSec, rps) => ({
+    scenario: 's', baseUrl: 'http://x', total: 1000, errors: 0, rps, durationSec,
+    latencyMs: { p95: 20 }, hist: histogram(Array.from({ length: 1000 }, () => 20)), histBoundsV: 1,
+    perRequest: [{ name: 'api', count: 1000, rps, errPct: 0, hist: histogram(Array.from({ length: 1000 }, () => 20)) }],
+    thresholds: { rpsMin: 120 }, tool: 'loadgen',
+  });
+  const m = mergeResults([mk(10, 100), mk(30, 33.3)]);
+  assert.equal(m.rps, Number((2000 / 30).toFixed(1))); // 66.7, а не 133
+  assert.equal(m.verdict, 'FAIL');                       // 66.7 < 120 — порог честно нарушен
 });
 test('mergeResults: результат без hist (старая версия) = ошибка', () => {
   assert.throws(() => mergeResults([{ scenario: 's', baseUrl: 'x', total: 1, errors: 0, rps: 1, latencyMs: {} },
