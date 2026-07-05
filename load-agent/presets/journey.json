@@ -1,0 +1,24 @@
+{
+  "_comment": "ПРЕСЕТ journey — упорядоченная ЦЕПОЧКА (user journey): VU проходит steps ПО ПОРЯДКУ как одну сессию, capture передаёт значение из ответа шага в {{переменную}} для СЛЕДУЮЩИХ шагов. Упал шаг — остаток сессии пропущен. Отчёт даёт секцию СЦЕНАРИИ-ЦЕПОЧКИ (% завершения + где чаще рвётся). Только чтение.",
+  "name": "journey",
+  "baseUrl": "${TARGET_URL:-http://localhost:8080}",
+  "timeoutMs": 10000,
+  "auth": {
+    "type": "login",
+    "login": { "path": "/api/v1/auth/login", "method": "POST", "body": { "email": "ivanov@example.com", "password": "${LOADGEN_PW:-Demo1234}" }, "tokenField": "accessToken" }
+  },
+  "flows": [
+    {
+      "name": "browse-pool",
+      "weight": 1,
+      "steps": [
+        { "name": "j: list pools", "method": "GET", "path": "/api/v1/pools?page=0&size=20", "checks": { "status": [200], "jsonPath": "content[*].id" }, "capture": { "poolId": "content[0].id", "activeBin": "content[0].activeBinId" } },
+        { "name": "j: open pool", "method": "GET", "path": "/api/v1/pools/{{poolId}}", "checks": { "status": [200], "jsonPath": "pool.activeBinId" } },
+        { "name": "j: inspect bins", "method": "GET", "path": "/api/v1/pools/{{poolId}}/bins?from={{activeBin}}&to={{activeBin}}", "checks": { "status": [200] } }
+      ]
+    }
+  ],
+  "load": { "vus": 10, "durationSec": 60, "rampUpSec": 5, "thinkTimeMs": [100, 400], "maxRps": 8 },
+  "thresholds": { "p95Ms": 500, "errorRatePct": 1 },
+  "allowWrites": false
+}

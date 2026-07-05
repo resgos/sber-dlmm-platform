@@ -1,0 +1,22 @@
+{
+  "_comment": "ПРЕСЕТ write — БЕЗОПАСНЫЙ write-тест через жизненный цикл. setup (1 раз ДО): захватывает poolId+tokenInId, capture виден нагрузке и teardown. Нагрузка шлёт реальный POST swap/quote. teardown (1 раз ПОСЛЕ, best-effort): проверяет позиции. Если setup упал — нагрузка НЕ стартует, exit 3. ДВОЙНАЯ ЗАЩИТА: allowWrites:true И флаг --allow-writes при запуске. Правьте пути/тела под свой транзакционный API.",
+  "name": "write",
+  "baseUrl": "${TARGET_URL:-http://localhost:8080}",
+  "timeoutMs": 10000,
+  "auth": {
+    "type": "login",
+    "login": { "path": "/api/v1/auth/login", "method": "POST", "body": { "email": "ivanov@example.com", "password": "${LOADGEN_PW:-Demo1234}" }, "tokenField": "accessToken" }
+  },
+  "setup": [
+    { "name": "capture pool+token", "method": "GET", "path": "/api/v1/pools?page=0&size=20", "checks": { "jsonPath": "content[0].id" }, "capture": { "poolId": "content[0].id", "tokenInId": "content[0].tokenXId" } }
+  ],
+  "requests": [
+    { "name": "swap quote", "method": "POST", "path": "/api/v1/pools/swap/quote", "body": { "poolId": "{{poolId}}", "tokenInId": "{{tokenInId}}", "amountIn": 1000 }, "checks": { "status": [200] } }
+  ],
+  "teardown": [
+    { "name": "verify positions clean", "method": "GET", "path": "/api/v1/pools/positions/me", "checks": { "status": [200] } }
+  ],
+  "load": { "vus": 5, "durationSec": 30, "rampUpSec": 5, "thinkTimeMs": [30, 100], "maxRps": 8 },
+  "thresholds": { "p95Ms": 500, "errorRatePct": 1 },
+  "allowWrites": true
+}

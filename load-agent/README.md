@@ -8,6 +8,30 @@
 диагностика зашиты в детерминированный CLI без зависимостей. Модели остаётся выполнить
 6 шагов конвейера и дословно пересказать блок «ИТОГ».
 
+## loadgen за 30 секунд
+
+**Конвейер:** `probe → (profile) → init → validate → run --smoke → run` → (`compare`/`merge` для CI/сетки).
+Быстрый старт с готового пресета: `node bin/loadgen.mjs init --preset ci --out my.json`.
+
+| Команда | Что делает | Exit |
+|---|---|---|
+| `probe <baseUrl> [пути…]` | цель жива? какие пути отвечают (пути без ведущего `/`) | 0 / 3 |
+| `init [--preset smoke\|browse\|journey\|stress\|ci\|write]` | шаблон или готовый пресет-сценарий | 0 / 1 |
+| `validate <scn.json>` | точные ошибки конфига (`✗ …`) | 0 / 1 |
+| `profile <log\|csv\|json>` | черновик сценария из статистики хитов | 0 / 1 |
+| `run <scn.json>` | нагрузка + вердикт PASS/FAIL | 0 PASS · 1 конфиг · 2 FAIL/регресс · 3 недоступна |
+| `compare <base> <cur>` | регресс p95/p99/ошибок/RPS (сумм. и по запросу) | 0 · 2 REGRESSED |
+| `merge <r1> <r2> …` | агрегат прогонов с N машин (сумм. RPS + перцентили из гистограмм) | 0 / 2 |
+
+Ключевые флаги `run`: `--smoke --vus N --duration N --workers N --out FILE --baseline FILE --junit FILE --md FILE --allow-writes --confirm-external --quiet`.
+Секреты — из env: любую строку сценария можно взять как `${VAR}` / `${VAR:-дефолт}`.
+
+**Поля сценария** (подробно — в разделах ниже): `baseUrl` · `auth` (none/bearer/login) · `vars`
+(с сервера/список/файл) · `requests[]` (смесь по weight) **или** `flows[]` (цепочки с capture) ·
+`load` (vus/durationSec/rampUpSec/thinkTimeMs/maxRps/workers/warmupSec/**stages**) · `thresholds`
+(p95Ms/p99Ms/errorRatePct/rpsMin/perRequest) · `monitor` (docker/prometheus) · `setup`/`teardown`
+(write-тесты) · `bodyType` (json/form/multipart) · `checks` (валидация ответов).
+
 ## Состав
 
 ```
@@ -16,6 +40,7 @@ load-agent/
 ├── scenarios/               # готовые сценарии (*.json)
 │   ├── dlmm-read-heavy.json # демо: read-heavy браузинг DLMM через gateway :8080
 │   └── dlmm-journey.json    # демо: сценарий-цепочка (list→open→bins) с capture
+├── presets/                 # готовые сценарии: init --preset smoke|browse|journey|stress|ci|write
 ├── clients/                 # обёртки для интеграции в тесты: Node/Python/Java/Scala
 ├── test/                    # регрессионные self-тесты ядра (node --test)
 ├── agent/

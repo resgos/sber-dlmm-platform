@@ -361,6 +361,22 @@ test('validateScenario: monitor без docker/prometheus = ошибка; кри�
   assert.ok(validateScenario(badProm).errors.some((e) => /queries/.test(e)));
 });
 
+// ─── пресеты init --preset обязаны быть валидны (защита от дрейфа схемы) ──
+test('presets: все встроенные пресеты валидируются', async () => {
+  const { readFileSync, existsSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'presets');
+  for (const name of ['smoke', 'browse', 'journey', 'stress', 'ci', 'write']) {
+    const p = join(dir, `${name}.json`);
+    assert.ok(existsSync(p), `нет файла пресета ${name}.json`);
+    const scn = JSON.parse(readFileSync(p, 'utf8'));
+    resolveEnvInScenario(scn, { LOADGEN_PW: 'x', TARGET_URL: 'http://localhost:8080' }, new Set());
+    const { errors } = validateScenario(scn);
+    assert.deepEqual(errors, [], `пресет ${name} невалиден: ${errors.join('; ')}`);
+  }
+});
+
 // ─── SLO-пороги: p99Ms / rpsMin ──
 test('validateScenario: p99Ms/rpsMin валидируются, per-request p99Ms тоже', () => {
   const ok = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }],

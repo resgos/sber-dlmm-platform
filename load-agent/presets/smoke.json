@@ -1,0 +1,17 @@
+{
+  "_comment": "ПРЕСЕТ smoke — быстрая проверка, что цель жива и сценарий корректен. Запуск: node bin/loadgen.mjs run smoke.json --smoke (каждый запрос 1 раз), затем при желании короткий run. Только GET, безопасен. Отредактируйте пути под свой API.",
+  "name": "smoke",
+  "baseUrl": "${TARGET_URL:-http://localhost:8080}",
+  "timeoutMs": 10000,
+  "auth": {
+    "type": "login",
+    "login": { "path": "/api/v1/auth/login", "method": "POST", "body": { "email": "ivanov@example.com", "password": "${LOADGEN_PW:-Demo1234}" }, "tokenField": "accessToken" }
+  },
+  "requests": [
+    { "name": "health", "method": "GET", "path": "/actuator/health", "weight": 1, "checks": { "status": [200], "jsonPathEquals": { "path": "status", "value": "UP" } } },
+    { "name": "pools list", "method": "GET", "path": "/api/v1/pools?page=0&size=20", "weight": 1, "checks": { "status": [200], "jsonPath": "content[*].id", "maxMs": 500 } }
+  ],
+  "load": { "vus": 2, "durationSec": 5, "thinkTimeMs": [50, 150], "maxRps": 8 },
+  "thresholds": { "p95Ms": 1000, "errorRatePct": 0 },
+  "allowWrites": false
+}

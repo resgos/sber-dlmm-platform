@@ -1,0 +1,29 @@
+{
+  "_comment": "ПРЕСЕТ ci — гейт для пайплайна. Постоянная нагрузка + warmupSec (первые секунды прогрева НЕ учитываются). Жёсткие пороги (p95/p99/errorRate/rpsMin) + perRequest SLO — любое нарушение = FAIL, exit 2. Запуск в CI: node bin/loadgen.mjs run ci.json --baseline baseline.json --junit report.xml --md report.md. ВАЖНО: имена в perRequest должны ТОЧНО совпадать с name запросов. Только чтение.",
+  "name": "ci",
+  "baseUrl": "${TARGET_URL:-http://localhost:8080}",
+  "timeoutMs": 10000,
+  "auth": {
+    "type": "login",
+    "login": { "path": "/api/v1/auth/login", "method": "POST", "body": { "email": "ivanov@example.com", "password": "${LOADGEN_PW:-Demo1234}" }, "tokenField": "accessToken" }
+  },
+  "vars": {
+    "poolId": { "setupPath": "/api/v1/pools?page=0&size=20", "extract": "content[*].id" }
+  },
+  "requests": [
+    { "name": "pools list", "method": "GET", "path": "/api/v1/pools?page=0&size=20", "weight": 5, "checks": { "status": [200], "jsonPath": "content[*].id" } },
+    { "name": "pool detail", "method": "GET", "path": "/api/v1/pools/{{poolId}}", "weight": 3, "checks": { "status": [200] } }
+  ],
+  "load": { "vus": 10, "durationSec": 60, "rampUpSec": 5, "thinkTimeMs": [50, 150], "maxRps": 8, "warmupSec": 10 },
+  "thresholds": {
+    "p95Ms": 500,
+    "p99Ms": 1000,
+    "errorRatePct": 1,
+    "rpsMin": 5,
+    "perRequest": {
+      "pools list": { "p95Ms": 200, "errorRatePct": 0 },
+      "pool detail": { "p95Ms": 300, "p99Ms": 600 }
+    }
+  },
+  "allowWrites": false
+}

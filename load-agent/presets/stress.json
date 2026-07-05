@@ -1,0 +1,29 @@
+{
+  "_comment": "ПРЕСЕТ stress — ищем точку излома через load.stages (ramp/spike/soak/спад). stages ЗАМЕНЯЕТ vus/durationSec/rampUpSec: число активных VU интерполируется линейно (старт с 0), пик выводит vus, сумма длительностей — общее время. maxRps НАМЕРЕННО не задан. Только чтение.",
+  "name": "stress",
+  "baseUrl": "${TARGET_URL:-http://localhost:8080}",
+  "timeoutMs": 10000,
+  "auth": {
+    "type": "login",
+    "login": { "path": "/api/v1/auth/login", "method": "POST", "body": { "email": "ivanov@example.com", "password": "${LOADGEN_PW:-Demo1234}" }, "tokenField": "accessToken" }
+  },
+  "vars": {
+    "poolId": { "setupPath": "/api/v1/pools?page=0&size=20", "extract": "content[*].id" }
+  },
+  "requests": [
+    { "name": "pools list", "method": "GET", "path": "/api/v1/pools?page=0&size=20", "weight": 5, "checks": { "status": [200], "jsonPath": "content[*].id" } },
+    { "name": "pool detail", "method": "GET", "path": "/api/v1/pools/{{poolId}}", "weight": 5 }
+  ],
+  "load": {
+    "stages": [
+      { "vus": 50, "durationSec": 30 },
+      { "vus": 200, "durationSec": 60 },
+      { "vus": 200, "durationSec": 120 },
+      { "vus": 0, "durationSec": 30 }
+    ],
+    "thinkTimeMs": [50, 200],
+    "workers": 4
+  },
+  "thresholds": { "p95Ms": 1500, "p99Ms": 3000, "errorRatePct": 5 },
+  "allowWrites": false
+}

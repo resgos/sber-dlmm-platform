@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.12.0';
+const VERSION = '1.13.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -245,7 +245,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const name = a.slice(2);
-      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format', 'baseline', 'max-p95-regression-pct', 'max-error-increase-pp', 'junit', 'md'].includes(name);
+      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format', 'baseline', 'max-p95-regression-pct', 'max-error-increase-pp', 'junit', 'md', 'preset'].includes(name);
       if (needsValue) {
         flags[name] = argv[++i];
         if (flags[name] === undefined) die(1, `Опции --${name} нужно значение. Пример: --${name} <значение>`);
@@ -1862,9 +1862,23 @@ async function cmdProbe(positional) {
   console.log(`ИТОГ PROBE: REACHABLE${authNeeded ? ' (часть путей требует авторизацию — настройте блок auth в сценарии)' : ''}`);
 }
 
+const PRESET_NAMES = ['smoke', 'browse', 'journey', 'stress', 'ci', 'write'];
+
 function cmdInit(flags) {
-  const out = flags.out || 'scenario.json';
+  const out = flags.out || (flags.preset ? `${flags.preset}.json` : 'scenario.json');
   if (existsSync(out) && !flags.force) die(1, `Файл ${out} уже существует. Используйте --force для перезаписи или другое имя через --out.`);
+  // --preset <name>: копируем готовый сценарий из presets/<name>.json (валидный, с _comment)
+  if (flags.preset) {
+    if (!PRESET_NAMES.includes(flags.preset)) die(1, `Неизвестный пресет "${flags.preset}". Доступны: ${PRESET_NAMES.join(', ')}.`);
+    const src = join(dirname(fileURLToPath(import.meta.url)), '..', 'presets', `${flags.preset}.json`);
+    if (!existsSync(src)) die(1, `Файл пресета не найден: ${src}`);
+    try {
+      writeFileSync(out, readFileSync(src, 'utf8'), 'utf8');
+      console.log(`Создан сценарий из пресета "${flags.preset}": ${out}`);
+      console.log(`Дальше: 1) отредактируйте под свой API; 2) node loadgen.mjs validate ${out}; 3) run --smoke; 4) run.`);
+    } catch (e) { die(1, `Не удалось создать ${out} из пресета: ${e.message}`); }
+    return;
+  }
   const template = {
     _comment: 'Шаблон сценария loadgen. Ключи с _ игнорируются. Удалите ненужные блоки.',
     name: 'my-load-test',
@@ -2738,6 +2752,7 @@ const HELP = `loadgen v${VERSION} — REST load generator (Node >= 18, без з
 Команды:
   probe <baseUrl> [path ...]        проверить доступность цели (exit 0/3)
   init [--out FILE] [--force]        создать шаблон сценария
+    --preset NAME                    готовый сценарий: smoke|browse|journey|stress|ci|write
   validate <scenario.json>          проверить сценарий (exit 0/1)
   profile <log|csv|json>            построить черновик сценария из статистики N запросов
     --format access|csv|json         формат входа (по умолчанию — автоопределение)

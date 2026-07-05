@@ -49,6 +49,9 @@ node LOADGEN probe <baseUrl> <path1> <path2>
 - `REACHABLE` → дальше. Пометка про авторизацию → в сценарии понадобится блок auth.
 
 ### Шаг 2. Сценарий
+- Быстрый старт под типовую задачу — готовый пресет: `node LOADGEN init --preset <name> --out my.json`,
+  где name = smoke | browse (read-heavy смесь) | journey (цепочка) | stress (stages) | ci
+  (жёсткие пороги+CI) | write (setup/teardown). Затем правь под свой API.
 - Если в `load-agent/scenarios/` есть подходящий *.json — **скопируй его в свой файл** и правь копию
   (`node LOADGEN init` не нужен; просто Read исходник и Write в новый `my-scenario.json`). НЕ редактируй
   файлы из `scenarios/` на месте — это общие эталоны.
