@@ -360,6 +360,34 @@ test('validateScenario: monitor без docker/prometheus = ошибка; кри�
   assert.ok(validateScenario(badProm).errors.some((e) => /queries/.test(e)));
 });
 
+// ─── setup / teardown (жизненный цикл) ──
+test('validateScenario: setup-захват доступен нагрузке (нет ошибки placeholder)', () => {
+  const scn = { baseUrl: 'http://x',
+    setup: [{ name: 's', method: 'GET', path: '/list', capture: { pid: 'content[0].id' } }],
+    requests: [{ name: 'use', method: 'GET', path: '/item/{{pid}}' }] };
+  assert.deepEqual(validateScenario(scn).errors, []);
+});
+test('validateScenario: setup НЕ видит свой будущий захват (forward-ref = ошибка)', () => {
+  const scn = { baseUrl: 'http://x',
+    setup: [{ name: 's', method: 'GET', path: '/x/{{pid}}', capture: { pid: 'id' } }],
+    requests: [{ name: 'r', method: 'GET', path: '/y' }] };
+  assert.ok(validateScenario(scn).errors.some((e) => /\{\{pid\}\}/.test(e)));
+});
+test('validateScenario: teardown видит захваты setup', () => {
+  const scn = { baseUrl: 'http://x',
+    setup: [{ name: 's', method: 'POST', path: '/create', capture: { pid: 'id' } }],
+    requests: [{ name: 'r', method: 'GET', path: '/y' }],
+    teardown: [{ name: 't', method: 'DELETE', path: '/item/{{pid}}' }],
+    allowWrites: true };
+  assert.deepEqual(validateScenario(scn).errors, []);
+});
+test('validateScenario: write в setup без allowWrites = ошибка', () => {
+  const scn = { baseUrl: 'http://x',
+    setup: [{ name: 's', method: 'POST', path: '/create' }],
+    requests: [{ name: 'r', method: 'GET', path: '/y' }] };
+  assert.ok(validateScenario(scn).errors.some((e) => /allowWrites/.test(e)));
+});
+
 // ─── stageTargetAt (профиль нагрузки) ──
 test('stageTargetAt: линейный разгон/плато/спад', () => {
   const stages = [{ vus: 20, durationSec: 10 }, { vus: 20, durationSec: 10 }, { vus: 0, durationSec: 10 }];

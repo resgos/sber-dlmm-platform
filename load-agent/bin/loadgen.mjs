@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -238,7 +238,7 @@ function die(code, msg) {
 
 // ─────────────────────────────────────────────── validate ──
 
-const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor'];
+const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor', 'setup', 'teardown'];
 const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture'];
 const KNOWN_FLOW_KEYS = ['name', 'weight', 'steps'];
 const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'];
@@ -342,7 +342,12 @@ function validateScenario(scn) {
   }
 
   // requests / flows
-  const varNames = Object.keys(scn.vars || {}).filter((k) => !k.startsWith('_'));
+  const globalVarNames = Object.keys(scn.vars || {}).filter((k) => !k.startsWith('_'));
+  // setup-захваты доступны НАГРУЗКЕ (и teardown), но не самой setup-фазе (там — только предыдущие шаги)
+  const setupCaptureNames = Array.isArray(scn.setup)
+    ? scn.setup.flatMap((s) => (s && typeof s.capture === 'object' && s.capture ? Object.keys(s.capture) : []))
+    : [];
+  const varNames = [...globalVarNames, ...setupCaptureNames];
   const isBuiltinPh = (ph) => BUILTIN_PLACEHOLDERS.includes(ph) || /^randInt:-?\d+--?\d+$/.test(ph);
 
   // валидирует один шаг/запрос; available — Set имён доступных переменных (глоб. vars + захваты ранее);
@@ -407,7 +412,7 @@ function validateScenario(scn) {
           if (name.startsWith('_')) continue;
           if (isBuiltinPh(name)) push(errors, `${label}: capture "${name}" совпадает со встроенным placeholder — выберите другое имя`);
           if (typeof path !== 'string' || !path) push(errors, `${label}: capture.${name} должен быть непустым json-путём, например "content[0].id" или "id"`);
-          if (varNames.includes(name)) push(warnings, `${label}: capture "${name}" перекрывает глобальную vars-переменную с тем же именем`);
+          if (globalVarNames.includes(name)) push(warnings, `${label}: capture "${name}" перекрывает глобальную vars-переменную с тем же именем`);
           captured.add(name);
         }
       }
@@ -480,12 +485,31 @@ function validateScenario(scn) {
     });
   }
 
-  // writes — по всем шагам (requests + flow steps)
+  // setup / teardown — фазы жизненного цикла (выполняются один раз ДО/ПОСЛЕ нагрузки).
+  // Захваты setup доступны и нагрузке, и teardown (создать сущность → нагрузить → удалить).
+  const validatePhase = (arr, key, baseAvailable) => {
+    if (arr === undefined) return baseAvailable;
+    if (!Array.isArray(arr)) { push(errors, `"${key}" должен быть массивом шагов [{ name, method, path, body?, capture?, checks? }]`); return baseAvailable; }
+    const available = new Set(baseAvailable);
+    arr.forEach((step, si) => {
+      const captured = validateStepObj(step, `${key}[${si}]${step?.name ? ` ("${step.name}")` : ''}`, available, si);
+      for (const c of captured) available.add(c); // захваты доступны следующим шагам фазы
+    });
+    return available;
+  };
+  const afterSetupVars = validatePhase(scn.setup, 'setup', new Set(globalVarNames)); // setup видит только vars + свои прошлые шаги
+  validatePhase(scn.teardown, 'teardown', afterSetupVars); // teardown видит vars + все захваты setup
+
+  // writes — по всем шагам (requests + flow steps + setup + teardown)
+  const lifecycleSteps = [
+    ...(Array.isArray(scn.setup) ? scn.setup : []),
+    ...(Array.isArray(scn.teardown) ? scn.teardown : []),
+  ].filter((s) => s && typeof s === 'object');
   const allSteps = [
     ...(hasRequests ? scn.requests : []),
     ...(hasFlows ? scn.flows.flatMap((f) => (Array.isArray(f?.steps) ? f.steps : [])) : []),
   ].filter((s) => s && typeof s === 'object');
-  const writeReqs = allSteps.filter((r) => WRITE_METHODS.includes(String(r.method || '').toUpperCase()));
+  const writeReqs = [...allSteps, ...lifecycleSteps].filter((r) => WRITE_METHODS.includes(String(r.method || '').toUpperCase()));
   if (writeReqs.length && scn.allowWrites !== true) {
     push(errors,
       `Сценарий содержит изменяющие запросы (${writeReqs.map((r) => `"${r.name}"`).join(', ')}), но allowWrites не установлен в true.\n` +
@@ -499,6 +523,8 @@ function validateScenario(scn) {
     const explicit = hasFlows ? scn.flows.map((f) => ({ name: f.name, weight: f.weight, steps: f.steps, _track: true })) : [];
     scn._flows = [...wrapped, ...explicit];
     scn._steps = allSteps;
+    scn._setup = Array.isArray(scn.setup) ? scn.setup : [];
+    scn._teardown = Array.isArray(scn.teardown) ? scn.teardown : [];
     scn._hasExplicitFlows = !!hasFlows;
   }
 
@@ -697,6 +723,30 @@ async function resolveVars(scn, token) {
     out[name] = vals;
   }
   return out;
+}
+
+/**
+ * Выполняет фазу жизненного цикла (setup/teardown): шаги по порядку, один раз.
+ * Захваты пишутся в общий vars (мутирует его), доступны нагрузке и следующим фазам.
+ * abortOnFail=true (setup): остановиться на первом провале. false (teardown): best-effort, идём дальше.
+ */
+async function runLifecyclePhase(scn, steps, token, vars, { abortOnFail }) {
+  const results = [];
+  for (const step of steps) {
+    const r = await callOnce(scn, step, vars, token);
+    let rec = r, capErr = null;
+    if (r.ok && step.capture) {
+      const cap = applyCaptures(step, r.text, vars); // мутирует vars — значение доступно дальше
+      if (!cap.ok) { rec = { ms: r.ms, status: r.status, ok: false, kind: 'capture' }; capErr = cap.error; }
+    }
+    results.push({
+      name: step.name, method: step.method, ok: rec.ok, status: rec.status || 0,
+      ms: Math.round(rec.ms || 0), error: rec.ok ? null : (rec.errMsg || capErr || rec.snippet || `HTTP ${rec.status}`),
+      captured: rec.ok && step.capture ? Object.keys(step.capture) : [],
+    });
+    if (!rec.ok && abortOnFail) break;
+  }
+  return { results, allOk: results.length === steps.length && results.every((x) => x.ok) };
 }
 
 /**
@@ -1355,6 +1405,10 @@ function buildReport(scn, stats, opts = {}) {
   }
   if (latDroppedTotal > 0) hints.push(`Выборок латентности больше лимита ${MAX_LAT_SAMPLES} на запрос — перцентили посчитаны по первым ${MAX_LAT_SAMPLES} (отброшено ${latDroppedTotal}).`);
   if ((stats.warmupSkipped || 0) > 0) hints.push(`Разогрев ${scn.load.warmupSec}с: ${stats.warmupSkipped} запросов на прогреве НЕ учтены в метриках (честные перцентили без JIT/прогрева пула соединений).`);
+  if (opts.lifecycle && opts.lifecycle.teardown && opts.lifecycle.teardown.some((x) => !x.ok)) {
+    const failed = opts.lifecycle.teardown.filter((x) => !x.ok).map((x) => `"${x.name}"`).join(', ');
+    hints.push(`⚠ TEARDOWN НЕ ПОЛНОСТЬЮ УДАЛСЯ (${failed}) — созданные при setup сущности могли остаться в системе, проверьте вручную.`);
+  }
 
   if (incompleteWorkers > 0) hints.push(`⚠ ${incompleteWorkers} поток(ов)-генератор(ов) упали и не вернули данные — их доля нагрузки НЕ выполнена. Отчёт неполный, вердикт принудительно FAIL. Проверьте память/стабильность и повторите.`);
   for (const fr of flowReport) {
@@ -1428,7 +1482,7 @@ function buildReport(scn, stats, opts = {}) {
     errors: stats.errors, errorRatePct: Number(totalErrPct.toFixed(2)),
     latencyMs: { p50: Math.round(pct(latSorted, 50)), p90: Math.round(pct(latSorted, 90)), p95: Math.round(p95), p99: Math.round(pct(latSorted, 99)), max: Math.round(latSorted.length ? latSorted[latSorted.length - 1] : 0) },
     perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max) })),
-    workers, resource: res, incompleteWorkers, flows: flowReport, targetMetrics,
+    workers, resource: res, incompleteWorkers, flows: flowReport, targetMetrics, lifecycle: opts.lifecycle || null,
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
   };
@@ -1561,6 +1615,12 @@ function printReport(rep) {
   if (rep.loginFailures.length) {
     L('');
     L(`  ЛОГИН НЕ УДАЛСЯ у ${rep.loginFailures.length} VU: ${rep.loginFailures[0]}`);
+  }
+  if (rep.lifecycle && (rep.lifecycle.setup.length || rep.lifecycle.teardown.length)) {
+    L('');
+    L('──────────────── ЖИЗНЕННЫЙ ЦИКЛ (setup/teardown) ───────');
+    for (const x of rep.lifecycle.setup) L(`  setup ${x.ok ? 'OK  ' : 'FAIL'} ${x.name}${x.captured && x.captured.length ? ` [${x.captured.join(', ')}]` : ''}${x.ok ? '' : ` — ${x.error}`}`);
+    for (const x of rep.lifecycle.teardown) L(`  teardown ${x.ok ? 'OK  ' : 'FAIL'} ${x.name}${x.ok ? '' : ` — ${x.error}`}`);
   }
   if (rep.targetMetrics && (rep.targetMetrics.metrics.length || rep.targetMetrics.errors.length)) {
     L('');
@@ -2133,8 +2193,8 @@ async function cmdRun(positional, flags) {
     process.exit(1);
   }
 
-  // защита: запись
-  const hasWrites = scn._steps.some((r) => WRITE_METHODS.includes(r.method));
+  // защита: запись (нагрузка + setup + teardown)
+  const hasWrites = [...scn._steps, ...(scn._setup || []), ...(scn._teardown || [])].some((r) => WRITE_METHODS.includes(String(r.method || '').toUpperCase()));
   if (hasWrites && !flags['allow-writes']) {
     die(1, 'Сценарий содержит изменяющие запросы (allowWrites:true задан), но для запуска нужен ещё явный флаг --allow-writes.\nЭто двойная защита: убедитесь, что пользователь явно разрешил запись в целевую систему.');
   }
@@ -2165,6 +2225,31 @@ async function cmdRun(positional, flags) {
     console.log(`PRE-FLIGHT ОШИБКА: ${e.message}`);
     console.log('Запуск нагрузки отменён — сначала почините конфигурацию (см. сообщение выше).');
     process.exit(3);
+  }
+
+  // teardown — идемпотентный запуск очистки; зовём и на нормальном пути, и перед аварийным exit,
+  // чтобы созданные в setup сущности не утекли (best-effort, одна упавшая уборка не рушит остальные).
+  const lifecycle = { setup: [], teardown: [], _teardownRan: false };
+  const runTeardownPhase = async () => {
+    if (!scn._teardown || !scn._teardown.length || lifecycle._teardownRan) return;
+    lifecycle._teardownRan = true;
+    console.log(`\nTeardown (${scn._teardown.length} шаг.):`);
+    const tr = await runLifecyclePhase(scn, scn._teardown, preToken, scn._resolvedVars, { abortOnFail: false });
+    lifecycle.teardown = tr.results;
+    for (const x of tr.results) console.log(`  ${x.ok ? '[OK]  ' : '[FAIL]'} ${x.name}${x.ok ? '' : ` — ${x.error}`}`);
+  };
+
+  // setup — фаза подготовки (создать сущности, захватить id) до нагрузки; захваты идут в _resolvedVars
+  if (scn._setup && scn._setup.length) {
+    console.log(`Setup (${scn._setup.length} шаг.):`);
+    const sr = await runLifecyclePhase(scn, scn._setup, preToken, scn._resolvedVars, { abortOnFail: true });
+    lifecycle.setup = sr.results;
+    for (const x of sr.results) console.log(`  ${x.ok ? '[OK]  ' : '[FAIL]'} ${x.name}${x.captured.length ? ` [captured: ${x.captured.join(', ')}]` : ''}${x.ok ? '' : ` — ${x.error}`}`);
+    if (!sr.allOk) {
+      console.log('SETUP ПРОВАЛЕН — нагрузка не запускается.');
+      await runTeardownPhase(); // откат того, что успело создаться
+      process.exit(3);
+    }
   }
 
   let stats = makeStats(scn._steps);
@@ -2267,7 +2352,7 @@ async function cmdRun(positional, flags) {
     });
     void runResult;
 
-    if (!parts.length) { console.log('Ни один поток не вернул результат — прогон не удался.'); process.exit(2); }
+    if (!parts.length) { console.log('Ни один поток не вернул результат — прогон не удался.'); await runTeardownPhase(); process.exit(2); }
     // частичный крах: часть нагрузки не выполнена — нельзя выдавать это за валидный результат
     if (parts.length < workers) {
       incompleteWorkers = workers - parts.length;
@@ -2312,7 +2397,11 @@ async function cmdRun(positional, flags) {
   }
 
   if (targetMon) targetMetrics = summarizeTargetMetrics(targetMon.stop());
-  const rep = buildReport(scn, stats, { smoke, loginFailures, resource, incompleteWorkers, targetMetrics });
+
+  // teardown — очистка (best-effort, выполняется после нагрузки, даже если она упала/прервана)
+  await runTeardownPhase();
+
+  const rep = buildReport(scn, stats, { smoke, loginFailures, resource, incompleteWorkers, targetMetrics, lifecycle });
   printReport(rep);
 
   const outFile = flags.out || 'loadgen-result.json';

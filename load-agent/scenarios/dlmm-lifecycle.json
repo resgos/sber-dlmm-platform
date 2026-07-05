@@ -1,0 +1,29 @@
+{
+  "_comment": "Демо жизненного цикла: setup захватывает pool+token, нагрузка шлёт реальный POST swap/quote по захваченным данным, teardown проверяет позиции. Запуск: node bin/loadgen.mjs run scenarios/dlmm-lifecycle.json --allow-writes",
+  "name": "dlmm-lifecycle-write-demo",
+  "baseUrl": "http://localhost:8080",
+  "auth": {
+    "type": "login",
+    "login": { "path": "/api/v1/auth/login", "method": "POST", "body": { "email": "ivanov@example.com", "password": "Demo1234" }, "tokenField": "accessToken" }
+  },
+  "setup": [
+    {
+      "name": "capture pool+token", "method": "GET", "path": "/api/v1/pools?page=0&size=20",
+      "checks": { "jsonPath": "content[0].id" },
+      "capture": { "poolId": "content[0].id", "tokenInId": "content[0].tokenXId" }
+    }
+  ],
+  "requests": [
+    {
+      "name": "swap quote", "method": "POST", "path": "/api/v1/pools/swap/quote",
+      "body": { "poolId": "{{poolId}}", "tokenInId": "{{tokenInId}}", "amountIn": 1000 },
+      "checks": { "status": [200] }
+    }
+  ],
+  "teardown": [
+    { "name": "verify positions clean", "method": "GET", "path": "/api/v1/pools/positions/me", "checks": { "status": [200] } }
+  ],
+  "load": { "vus": 5, "durationSec": 30, "thinkTimeMs": [30, 100], "maxRps": 8 },
+  "thresholds": { "p95Ms": 500, "errorRatePct": 1 },
+  "allowWrites": true
+}
