@@ -361,6 +361,27 @@ test('validateScenario: monitor без docker/prometheus = ошибка; кри�
   assert.ok(validateScenario(badProm).errors.some((e) => /queries/.test(e)));
 });
 
+// ─── SLO-пороги: p99Ms / rpsMin ──
+test('validateScenario: p99Ms/rpsMin валидируются, per-request p99Ms тоже', () => {
+  const ok = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }],
+    thresholds: { p99Ms: 300, rpsMin: 100, perRequest: { a: { p99Ms: 200 } } } };
+  assert.deepEqual(validateScenario(ok).errors, []);
+  const bad = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }], thresholds: { p99Ms: -5 } };
+  assert.ok(validateScenario(bad).errors.some((e) => /p99Ms/.test(e)));
+  const bad2 = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }], thresholds: { rpsMin: 'x' } };
+  assert.ok(validateScenario(bad2).errors.some((e) => /rpsMin/.test(e)));
+});
+test('mergeResults: p99Ms и rpsMin входят в вердикт агрегата', () => {
+  const mk = (rps) => ({ scenario: 's', baseUrl: 'x', total: 1000, errors: 0, rps, durationSec: 10, latencyMs: {},
+    hist: histogram(Array.from({ length: 1000 }, () => 20)), histBoundsV: 1,
+    perRequest: [{ name: 'a', count: 1000, errPct: 0, rps, hist: histogram(Array.from({ length: 1000 }, () => 20)) }],
+    thresholds: { p95Ms: 1000, errorRatePct: 1, p99Ms: 10, rpsMin: 1000 } }); // p99 20>10 нарушит; RPS сумма 600<1000 нарушит
+  const m = mergeResults([mk(300), mk(300)]);
+  assert.equal(m.verdict, 'FAIL');
+  assert.ok(m.checks.some((c) => /p99/.test(c.name) && !c.pass));
+  assert.ok(m.checks.some((c) => /RPS/.test(c.name) && !c.pass));
+});
+
 // ─── гистограммы и слияние прогонов (merge / распределёнка) ──
 test('histogram + percentileFromHistogram: перцентиль в пределах ширины бакета', () => {
   const samples = Array.from({ length: 1000 }, (_, i) => (i < 950 ? 10 : 200)).sort((a, b) => a - b); // 95% =10мс, 5% =200мс

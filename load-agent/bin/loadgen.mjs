@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -677,19 +677,22 @@ function validateScenario(scn) {
   th.errorRatePct = th.errorRatePct ?? 1;
   if (typeof th.p95Ms !== 'number' || th.p95Ms <= 0) push(errors, 'thresholds.p95Ms должен быть положительным числом (мс)');
   if (typeof th.errorRatePct !== 'number' || th.errorRatePct < 0) push(errors, 'thresholds.errorRatePct должен быть числом >= 0 (проценты)');
-  // per-request пороги: { "имя запроса": { p95Ms?, errorRatePct? } } — вердикт enforce'ит SLO на эндпоинт
+  if (th.p99Ms !== undefined && (typeof th.p99Ms !== 'number' || th.p99Ms <= 0)) push(errors, 'thresholds.p99Ms должен быть положительным числом (мс) — SLO по хвосту латентности');
+  if (th.rpsMin !== undefined && (typeof th.rpsMin !== 'number' || th.rpsMin < 0)) push(errors, 'thresholds.rpsMin должен быть числом >= 0 (минимальная пропускная способность, запросов/сек)');
+  // per-request пороги: { "имя запроса": { p95Ms?, p99Ms?, errorRatePct? } } — вердикт enforce'ит SLO на эндпоинт
   if (th.perRequest !== undefined) {
     if (typeof th.perRequest !== 'object' || th.perRequest === null || Array.isArray(th.perRequest)) {
-      push(errors, 'thresholds.perRequest должен быть объектом { "имя запроса": { "p95Ms": N, "errorRatePct": N } }');
+      push(errors, 'thresholds.perRequest должен быть объектом { "имя запроса": { "p95Ms": N, "p99Ms": N, "errorRatePct": N } }');
     } else {
       // имена шагов берём из allSteps (есть всегда, даже при других ошибках), НЕ из scn._steps
       const stepNames = new Set(allSteps.map((s) => s.name).filter(Boolean));
       for (const [name, t] of Object.entries(th.perRequest)) {
         if (name.startsWith('_')) continue;
-        if (typeof t !== 'object' || t === null || Array.isArray(t)) { push(errors, `thresholds.perRequest["${name}"] должен быть объектом { p95Ms?, errorRatePct? }`); continue; }
+        if (typeof t !== 'object' || t === null || Array.isArray(t)) { push(errors, `thresholds.perRequest["${name}"] должен быть объектом { p95Ms?, p99Ms?, errorRatePct? }`); continue; }
         if (t.p95Ms !== undefined && (typeof t.p95Ms !== 'number' || t.p95Ms <= 0)) push(errors, `thresholds.perRequest["${name}"].p95Ms должен быть положительным числом`);
+        if (t.p99Ms !== undefined && (typeof t.p99Ms !== 'number' || t.p99Ms <= 0)) push(errors, `thresholds.perRequest["${name}"].p99Ms должен быть положительным числом`);
         if (t.errorRatePct !== undefined && (typeof t.errorRatePct !== 'number' || t.errorRatePct < 0)) push(errors, `thresholds.perRequest["${name}"].errorRatePct должен быть числом >= 0`);
-        if (t.p95Ms === undefined && t.errorRatePct === undefined) push(errors, `thresholds.perRequest["${name}"]: задайте хотя бы p95Ms или errorRatePct`);
+        if (t.p95Ms === undefined && t.p99Ms === undefined && t.errorRatePct === undefined) push(errors, `thresholds.perRequest["${name}"]: задайте хотя бы p95Ms, p99Ms или errorRatePct`);
         // опечатка в имени = ОШИБКА (иначе SLO молча не enforce'ится → ложный PASS)
         if (!stepNames.has(name)) push(errors, `thresholds.perRequest["${name}"]: нет запроса/шага с таким именем — порог не был бы применён. Есть: ${[...stepNames].join(', ') || 'нет шагов'}`);
       }
@@ -1462,10 +1465,13 @@ function buildReport(scn, stats, opts = {}) {
 
   const th = scn.thresholds;
   const p95 = pct(latSorted, 95);
+  const p99 = pct(latSorted, 99);
   const checks = opts.smoke ? [] : [
     { name: `p95 ${fmtMs(p95)}ms <= ${th.p95Ms}ms`, pass: p95 <= th.p95Ms },
     { name: `errors ${totalErrPct.toFixed(2)}% <= ${th.errorRatePct}%`, pass: totalErrPct <= th.errorRatePct },
   ];
+  if (!opts.smoke && th.p99Ms !== undefined) checks.push({ name: `p99 ${fmtMs(p99)}ms <= ${th.p99Ms}ms`, pass: p99 <= th.p99Ms });
+  if (!opts.smoke && th.rpsMin !== undefined) { const achievedRps = stats.total / durSec; checks.push({ name: `RPS ${achievedRps.toFixed(1)} >= ${th.rpsMin}`, pass: achievedRps >= th.rpsMin }); }
   // per-request пороги (SLO на конкретный эндпоинт) — тоже в вердикт
   if (!opts.smoke && th.perRequest) {
     for (const r of rows) {
@@ -1473,8 +1479,9 @@ function buildReport(scn, stats, opts = {}) {
       if (!t) continue;
       // запрос ни разу не выполнился (например, шаг цепочки после обрыва) — SLO нельзя считать пройденным
       if (r.count === 0) { checks.push({ name: `[${r.name}] не выполнялся ни разу (0 запросов) — SLO не подтверждён`, pass: false }); continue; }
-      // если у запроса НЕТ успешных выборок (100% ошибок), p95=0 — не даём порогу p95 ложно пройти
+      // если у запроса НЕТ успешных выборок (100% ошибок), p95/p99=0 — не даём порогу ложно пройти
       if (t.p95Ms !== undefined) checks.push({ name: `[${r.name}] p95 ${fmtMs(r.p95)}ms <= ${t.p95Ms}ms`, pass: r.errPct < 100 && r.p95 <= t.p95Ms });
+      if (t.p99Ms !== undefined) checks.push({ name: `[${r.name}] p99 ${fmtMs(r.p99)}ms <= ${t.p99Ms}ms`, pass: r.errPct < 100 && r.p99 <= t.p99Ms });
       if (t.errorRatePct !== undefined) checks.push({ name: `[${r.name}] errors ${r.errPct.toFixed(2)}% <= ${t.errorRatePct}%`, pass: r.errPct <= t.errorRatePct });
     }
   }
@@ -1622,7 +1629,7 @@ function buildReport(scn, stats, opts = {}) {
     latencyMs: { p50: Math.round(pct(latSorted, 50)), p90: Math.round(pct(latSorted, 90)), p95: Math.round(p95), p99: Math.round(pct(latSorted, 99)), max: Math.round(latSorted.length ? latSorted[latSorted.length - 1] : 0), ttfbP95: Math.round(pct(ttfbSorted, 95)) },
     hist: histogram(latSorted), histBoundsV: HIST_BOUNDS_V, // гистограмма латентности + версия сетки (для merge)
     perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max), ttfbP95: Math.round(r.ttfbP95), downloadP95: Math.round(r.downloadP95) })),
-    thresholds: { p95Ms: th.p95Ms, errorRatePct: th.errorRatePct, ...(th.perRequest ? { perRequest: th.perRequest } : {}) }, // значения порогов — чтобы merge пересчитал вердикт
+    thresholds: { p95Ms: th.p95Ms, errorRatePct: th.errorRatePct, ...(th.p99Ms !== undefined ? { p99Ms: th.p99Ms } : {}), ...(th.rpsMin !== undefined ? { rpsMin: th.rpsMin } : {}), ...(th.perRequest ? { perRequest: th.perRequest } : {}) }, // значения порогов — чтобы merge пересчитал вердикт
     workers, resource: res, incompleteWorkers, flows: flowReport, targetMetrics, lifecycle: opts.lifecycle || null,
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
@@ -1909,7 +1916,7 @@ function cmdInit(flags) {
     _stages_hint: 'АЛЬТЕРНАТИВА vus/durationSec: многоступенчатый профиль (ramp→плато→спад). Линейная интерполяция между уровнями, старт с 0. Пример ниже (разгон до 20, плато, спад) — вставьте внутрь "load" вместо vus/durationSec.',
     _stages_example: [{ vus: 20, durationSec: 20 }, { vus: 20, durationSec: 30 }, { vus: 0, durationSec: 10 }],
     thresholds: { p95Ms: 1000, errorRatePct: 1 },
-    _thresholds_hint: 'Пороги для вердикта PASS/FAIL. Можно задать SLO на конкретный запрос: "perRequest": { "имя запроса": { "p95Ms": 200, "errorRatePct": 0 } } — тоже войдёт в вердикт.',
+    _thresholds_hint: 'Пороги для вердикта PASS/FAIL: p95Ms, errorRatePct, а также опц. p99Ms (хвост латентности) и rpsMin (минимальная пропускная). SLO на конкретный запрос: "perRequest": { "имя запроса": { "p95Ms": 200, "p99Ms": 400, "errorRatePct": 0 } } — тоже в вердикт.',
     _monitor_hint: 'Опц. метрики ЦЕЛИ во время прогона (генератор vs сервис). docker — через `docker stats`; prometheus — произвольный PromQL. thresholds по метрике цели входят в вердикт. Пример ниже — вставьте на верхний уровень как "monitor".',
     _monitor_example: {
       intervalSec: 5,
@@ -2363,12 +2370,15 @@ function mergeResults(reps) {
   const th = reps[0].thresholds || {};
   const checks = [];
   if (th.p95Ms != null) checks.push({ name: `p95 ${latencyMs.p95}ms <= ${th.p95Ms}ms`, pass: latencyMs.p95 <= th.p95Ms });
+  if (th.p99Ms != null) checks.push({ name: `p99 ${latencyMs.p99}ms <= ${th.p99Ms}ms`, pass: latencyMs.p99 <= th.p99Ms });
   if (th.errorRatePct != null) checks.push({ name: `errors ${errorRatePct}% <= ${th.errorRatePct}%`, pass: errorRatePct <= th.errorRatePct });
+  if (th.rpsMin != null) checks.push({ name: `RPS ${rps} >= ${th.rpsMin}`, pass: rps >= th.rpsMin }); // суммарный RPS всех машин
   if (th.perRequest) for (const [n, t] of Object.entries(th.perRequest)) {
     const r = perRequest.find((x) => x.name === n);
     if (!r) { checks.push({ name: `[${n}] нет в результатах`, pass: false }); continue; }
     if (r.count === 0) { checks.push({ name: `[${n}] не выполнялся ни разу — SLO не подтверждён`, pass: false }); continue; }
     if (t.p95Ms !== undefined) checks.push({ name: `[${n}] p95 ${r.p95}ms <= ${t.p95Ms}ms`, pass: r.errPct < 100 && r.p95 <= t.p95Ms });
+    if (t.p99Ms !== undefined) checks.push({ name: `[${n}] p99 ${r.p99}ms <= ${t.p99Ms}ms`, pass: r.errPct < 100 && r.p99 <= t.p99Ms });
     if (t.errorRatePct !== undefined) checks.push({ name: `[${n}] errors ${r.errPct}% <= ${t.errorRatePct}%`, pass: r.errPct <= t.errorRatePct });
   }
   const verdict = checks.length && checks.every((c) => c.pass) ? 'PASS' : (checks.length ? 'FAIL' : 'PASS');

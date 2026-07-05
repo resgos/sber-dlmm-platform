@@ -411,6 +411,16 @@ node load-agent/bin/loadgen.mjs run scenario.json --junit report.xml --md report
 ```
 Нарушение per-request порога тоже валит вердикт (и виден отдельным test-case'ом в JUnit).
 
+Кроме `p95Ms`/`errorRatePct` доступны SLO по хвосту и пропускной:
+```jsonc
+"thresholds": {
+  "p95Ms": 500, "p99Ms": 1000,   // хвост латентности (p99 — стандарт для SLO)
+  "errorRatePct": 1,
+  "rpsMin": 500,                  // минимальная пропускная (fail, если ниже) — в merge это СУММАРНЫЙ RPS
+  "perRequest": { "checkout": { "p99Ms": 800 } }
+}
+```
+
 ### Разогрев (`load.warmupSec`)
 
 `"load": { ..., "warmupSec": 10 }` — первые 10 секунд (JIT, прогрев пула соединений, кэшей)

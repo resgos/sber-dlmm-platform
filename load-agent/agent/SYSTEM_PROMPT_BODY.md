@@ -71,9 +71,10 @@ node LOADGEN probe <baseUrl> <path1> <path2>
 - **Тело не-JSON**: если эндпоинт принимает форму (OAuth token, веб-форма) или файл — добавь
   `bodyType`: `"form"` (application/x-www-form-urlencoded, body-объект скаляров) или `"multipart"`
   (body-объект: строки = поля, `{"file":"путь", filename?, type?}` = файл). Content-Type ставится сам.
-- **Пороги на конкретный запрос (SLO)**: если пользователь задаёт разные требования по эндпоинтам
-  («список < 100мс, деталь < 300мс») — `thresholds.perRequest: {"имя запроса": {"p95Ms": 100, "errorRatePct": 0}}`.
-  Такой порог тоже входит в вердикт PASS/FAIL.
+- **Пороги/SLO**: помимо `thresholds.p95Ms`/`errorRatePct` есть `p99Ms` (хвост латентности — частый
+  SLO), `rpsMin` (минимальная пропускная, fail если ниже), и per-request:
+  `thresholds.perRequest: {"имя запроса": {"p95Ms": 100, "p99Ms": 300, "errorRatePct": 0}}`. Всё в вердикт.
+  «99% быстрее X», «не медленнее X на хвосте» → p99Ms; «держать не меньше N rps» → rpsMin.
 - **Разогрев**: если просят «без прогрева / честные цифры» — `load.warmupSec: N` исключит первые N секунд
   (JIT/прогрев пула) из метрик.
 - **Отчёты для CI**: флаги `--junit FILE` (XML для Jenkins/GitLab/GitHub) и `--md FILE` (для PR-комментария)
