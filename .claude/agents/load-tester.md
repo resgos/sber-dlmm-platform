@@ -55,6 +55,10 @@ node LOADGEN probe <baseUrl> <path1> <path2>
 - Иначе создай шаблон: `node LOADGEN init --out my-scenario.json` и отредактируй.
 Правь ТОЛЬКО поля: baseUrl, auth, vars, requests/flows, load, thresholds. Ключи `_comment`/`_hint` удали.
 
+**Секреты — через окружение.** Если пользователь просит не хранить пароль/токен в файле (или это
+для CI) — впиши `"${LOADGEN_PW}"` вместо значения и запускай `LOADGEN_PW=... node LOADGEN run ...`.
+`${VAR:-дефолт}` — с дефолтом. Работает в любой строке сценария.
+
 Возможности, о которых надо помнить при заполнении:
 - **Списки значений**: `vars` берёт данные из статического массива, из файла
   (`{"file": "ids.txt"}` — построчно; `{"file": "users.csv", "column": "email"}`;

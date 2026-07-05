@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.8.0';
+const VERSION = '1.9.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -246,6 +246,34 @@ const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxR
 const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
+/**
+ * Подстановка переменных окружения в строки сценария: ${VAR} и ${VAR:-default}.
+ * Секреты (пароли/токены) не хранятся в JSON — инжектятся из env в CI. $${VAR} — литерал ${VAR}.
+ * Возвращает { missing: string[] } — имена незаданных переменных без дефолта.
+ */
+function resolveEnvInScenario(node, env, missing) {
+  const subst = (s) => s.replace(/(\$?)\$\{([A-Za-z_]\w*)(?::-([^}]*))?\}/g, (full, dollar, name, def) => {
+    if (dollar === '$') return full.slice(1); // $${VAR} → литерал ${VAR}
+    const v = env[name];
+    if (v !== undefined && v !== '') return v;
+    if (def !== undefined) return def;
+    missing.add(name);
+    return full;
+  });
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i++) {
+      if (typeof node[i] === 'string') node[i] = subst(node[i]);
+      else if (node[i] && typeof node[i] === 'object') resolveEnvInScenario(node[i], env, missing);
+    }
+  } else if (node && typeof node === 'object') {
+    for (const k of Object.keys(node)) {
+      if (typeof node[k] === 'string') node[k] = subst(node[k]);
+      else if (node[k] && typeof node[k] === 'object') resolveEnvInScenario(node[k], env, missing);
+    }
+  }
+  return missing;
+}
+
 function loadScenario(file) {
   if (!existsSync(file)) die(1, `Файл сценария не найден: ${file}\nСоздайте его: node loadgen.mjs init --out ${file}`);
   let raw;
@@ -253,6 +281,11 @@ function loadScenario(file) {
   let scn;
   try { scn = JSON.parse(raw); } catch (e) {
     die(1, `Файл ${file} — не валидный JSON: ${e.message}\nЧастые причины: лишняя запятая после последнего элемента, комментарии //, одинарные кавычки.`);
+  }
+  // подстановка ${ENV_VAR} из окружения (секреты не в файле)
+  if (scn && typeof scn === 'object') {
+    const missing = resolveEnvInScenario(scn, process.env, new Set());
+    if (missing.size) die(1, `Не заданы переменные окружения, на которые ссылается сценарий: ${[...missing].join(', ')}.\n  Задайте их (например: ${[...missing][0]}=... node loadgen.mjs ...) или укажите дефолт в сценарии: "\${${[...missing][0]}:-значение}".`);
   }
   if (scn && typeof scn === 'object' && !Array.isArray(scn)) scn._dir = dirname(file) || '.';
   return scn;
@@ -1734,7 +1767,7 @@ function cmdInit(flags) {
     _comment: 'Шаблон сценария loadgen. Ключи с _ игнорируются. Удалите ненужные блоки.',
     name: 'my-load-test',
     baseUrl: 'http://localhost:8080',
-    _baseUrl_hint: 'Только схема://хост:порт, без пути.',
+    _baseUrl_hint: 'Только схема://хост:порт, без пути. Секреты — из окружения: "${LOADGEN_TOKEN}" или "${LOADGEN_PW:-дефолт}" (подставляются при запуске, в файл не коммитятся).',
     timeoutMs: 10000,
     headers: {},
     auth: {
@@ -2487,7 +2520,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

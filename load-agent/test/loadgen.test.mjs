@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment,
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
-  toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics,
+  toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -358,6 +358,27 @@ test('validateScenario: monitor без docker/prometheus = ошибка; кри�
   assert.ok(validateScenario(empty).errors.some((e) => /monitor/.test(e)));
   const badProm = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }], monitor: { prometheus: { url: 'http://p' } } };
   assert.ok(validateScenario(badProm).errors.some((e) => /queries/.test(e)));
+});
+
+// ─── подстановка ${ENV} ──
+test('resolveEnvInScenario: подставляет заданные env и дефолты, ловит недостающие', () => {
+  const scn = { baseUrl: 'http://${HOST:-localhost}:8080', auth: { token: '${TOK}' },
+    headers: { 'X-Key': '${MISSING}' }, requests: [{ path: '/x/${TOK}' }] };
+  const missing = resolveEnvInScenario(scn, { TOK: 'secret' }, new Set());
+  assert.equal(scn.baseUrl, 'http://localhost:8080');   // дефолт
+  assert.equal(scn.auth.token, 'secret');               // из env
+  assert.equal(scn.requests[0].path, '/x/secret');      // вложенно
+  assert.deepEqual([...missing], ['MISSING']);          // без env и без дефолта
+});
+test('resolveEnvInScenario: $${VAR} остаётся литералом ${VAR}', () => {
+  const scn = { name: 'literal $${KEEP} here' };
+  resolveEnvInScenario(scn, {}, new Set());
+  assert.equal(scn.name, 'literal ${KEEP} here');
+});
+test('resolveEnvInScenario: пустая env-строка считается незаданной (идёт дефолт)', () => {
+  const scn = { a: '${EMPTY:-fallback}' };
+  resolveEnvInScenario(scn, { EMPTY: '' }, new Set());
+  assert.equal(scn.a, 'fallback');
 });
 
 // ─── setup / teardown (жизненный цикл) ──
