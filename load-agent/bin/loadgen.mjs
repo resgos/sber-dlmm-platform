@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.7.0';
+const VERSION = '1.8.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -809,8 +809,11 @@ async function callOnce(scn, req, vars, token) {
   const t0 = performance.now();
   try {
     const res = await fetch(url, { method: req.method, headers, body, signal: AbortSignal.timeout(scn.timeoutMs) });
+    const ttfb = performance.now() - t0; // fetch резолвится по приходу ЗАГОЛОВКОВ = время до первого байта
     const text = req.method === 'HEAD' ? '' : await res.text();
-    const result = evaluateResponse(req, res.status, text, performance.now() - t0, used);
+    const total = performance.now() - t0;
+    const result = evaluateResponse(req, res.status, text, total, used);
+    result.ttfb = Math.min(ttfb, total); // TTFB (сервер+сеть до 1-го байта); остаток total-ttfb = скачивание тела
     if (req.capture) result.text = text; // тело нужно для извлечения переменных в цепочке
     return result;
   } catch (e) {
@@ -1210,7 +1213,7 @@ function makeStats(steps) {
       const key = r.kind === 'check' ? `${r.status}✗check` : (r.status || r.kind || 'err');
       s.statuses.set(key, (s.statuses.get(key) || 0) + 1);
       if (r.ok) {
-        if (s.lat.length < MAX_LAT_SAMPLES) s.lat.push([now, r.ms]); else s.latDropped = (s.latDropped || 0) + 1;
+        if (s.lat.length < MAX_LAT_SAMPLES) s.lat.push([now, r.ms, r.ttfb ?? r.ms]); else s.latDropped = (s.latDropped || 0) + 1;
         if (r.slow) s.slow++;
       } else {
         this.errors++;
@@ -1244,6 +1247,8 @@ function buildReport(scn, stats, opts = {}) {
   let latDroppedTotal = 0;
   for (const [name, s] of stats.per) {
     const lat = s.lat.map(([, ms]) => ms).sort((a, b) => a - b);
+    const ttfbArr = s.lat.map(([, , tf]) => tf ?? 0).sort((a, b) => a - b);
+    const dlArr = s.lat.map(([, ms, tf]) => Math.max(0, ms - (tf ?? ms))).sort((a, b) => a - b);
     for (const pair of s.lat) allLat.push(pair); // без spread: на больших прогонах spread переполняет стек
     latDroppedTotal += s.latDropped || 0;
     const statuses = [...s.statuses.entries()].map(([k, v]) => `${k}:${v}`).join(' ');
@@ -1254,11 +1259,13 @@ function buildReport(scn, stats, opts = {}) {
       errPct: s.count ? (100 * s.errors) / s.count : 0,
       p50: pct(lat, 50), p90: pct(lat, 90), p95: pct(lat, 95), p99: pct(lat, 99),
       max: lat.length ? lat[lat.length - 1] : 0,
+      ttfbP95: pct(ttfbArr, 95), downloadP95: pct(dlArr, 95),
       statuses,
     });
     for (const [ek, sample] of s.errSamples) errorsDetail.push({ request: name, error: ek, sample });
   }
   const latSorted = allLat.map(([, ms]) => ms).sort((a, b) => a - b);
+  const ttfbSorted = allLat.map(([, , tf]) => tf ?? 0).sort((a, b) => a - b);
   const totalErrPct = stats.total ? (100 * stats.errors) / stats.total : 0;
 
   // деградация: p95 первой половины vs второй (только при ПОСТОЯННОЙ нагрузке;
@@ -1388,6 +1395,12 @@ function buildReport(scn, stats, opts = {}) {
   const http5xx = [...statusCount.entries()].filter(([k]) => /^5\d\d$/.test(k)).reduce((a, [, v]) => a + v, 0);
   if (http5xx > 0) hints.push(`Есть ${http5xx} ответов 5xx — серверные ошибки под нагрузкой; смотрите логи сервиса (примеры ответов в секции ОШИБКИ).`);
   if (degradation) hints.push(`Латентность растёт со временем: p95 первой половины ${fmtMs(degradation.firstHalfP95)}ms → второй ${fmtMs(degradation.secondHalfP95)}ms. Похоже на деградацию под длительной нагрузкой (пул соединений, GC, утечка).`);
+  // тяжёлое тело: если скачивание занимает заметную долю p95 — узкое место в размере ответа, не в обработке
+  for (const r of rows) {
+    if (r.count >= 10 && r.downloadP95 >= 15 && r.downloadP95 >= 0.35 * r.p95) {
+      hints.push(`"${r.name}": из p95 ${Math.round(r.p95)}ms скачивание тела ~${Math.round(r.downloadP95)}ms (TTFB ~${Math.round(r.ttfbP95)}ms) — узкое место в РАЗМЕРЕ ответа, не в обработке; рассмотрите пагинацию/выборку полей/сжатие.`);
+    }
+  }
   for (const cs of checksSummary) {
     if (cs.failed > 0) hints.push(`Проверки ответов у "${cs.request}" провалены ${cs.failed} раз: ${cs.failSample || ''} — сервер отвечает 2xx, но содержимое неверное (см. ПРОВЕРКИ ОТВЕТОВ).`);
     if (cs.slowOverMaxMs > 0) hints.push(`"${cs.request}": ${cs.slowOverMaxMs} ответов медленнее бюджета checks.maxMs=${cs.maxMs}ms (в латентность включены, вердикт не ломают).`);
@@ -1480,8 +1493,8 @@ function buildReport(scn, stats, opts = {}) {
     vus: opts.smoke ? 1 : scn.load.vus,
     total: stats.total, rps: Number((stats.total / durSec).toFixed(1)),
     errors: stats.errors, errorRatePct: Number(totalErrPct.toFixed(2)),
-    latencyMs: { p50: Math.round(pct(latSorted, 50)), p90: Math.round(pct(latSorted, 90)), p95: Math.round(p95), p99: Math.round(pct(latSorted, 99)), max: Math.round(latSorted.length ? latSorted[latSorted.length - 1] : 0) },
-    perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max) })),
+    latencyMs: { p50: Math.round(pct(latSorted, 50)), p90: Math.round(pct(latSorted, 90)), p95: Math.round(p95), p99: Math.round(pct(latSorted, 99)), max: Math.round(latSorted.length ? latSorted[latSorted.length - 1] : 0), ttfbP95: Math.round(pct(ttfbSorted, 95)) },
+    perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max), ttfbP95: Math.round(r.ttfbP95), downloadP95: Math.round(r.downloadP95) })),
     workers, resource: res, incompleteWorkers, flows: flowReport, targetMetrics, lifecycle: opts.lifecycle || null,
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
@@ -1648,6 +1661,7 @@ function printReport(rep) {
   L(`Запросов: ${rep.total} за ${rep.durationSec}с (RPS ${rep.rps}, VUs ${rep.vus}) | Ошибок: ${rep.errors} (${rep.errorRatePct}%)`);
   const lm = rep.latencyMs;
   L(`Латентность мс: p50 ${fmtMs(lm.p50)} | p90 ${fmtMs(lm.p90)} | p95 ${fmtMs(lm.p95)} | p99 ${fmtMs(lm.p99)} | max ${fmtMs(lm.max)}`);
+  if (lm.ttfbP95 != null && lm.p95 > 0) L(`  из p95: TTFB (сервер+сеть до 1-го байта) ~${fmtMs(lm.ttfbP95)}ms, скачивание тела ~${fmtMs(Math.max(0, lm.p95 - lm.ttfbP95))}ms`);
   for (const c of rep.checks) L(`Порог: ${c.name} ${c.pass ? 'OK' : 'НАРУШЕН'}`);
   L('==============================================');
   if (rep.hints.length) {

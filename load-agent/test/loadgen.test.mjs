@@ -415,6 +415,26 @@ test('validateScenario: пустой/битый stages = ошибка', () => {
   assert.ok(validateScenario(bad2).errors.some((e) => /stages/.test(e)));
 });
 
+// ─── разбивка латентности TTFB/download (запись в статистику) ──
+test('makeStats.record: сохраняет TTFB третьим элементом выборки', () => {
+  const st = makeStats([{ name: 'r' }]);
+  st.record({ name: 'r' }, { ok: true, ms: 100, ttfb: 60, status: 200 }, 1000);
+  const lat = st.per.get('r').lat;
+  assert.deepEqual(lat[0], [1000, 100, 60]);
+});
+test('makeStats.record: без TTFB подставляет ms (для старых/ошибочных выборок)', () => {
+  const st = makeStats([{ name: 'r' }]);
+  st.record({ name: 'r' }, { ok: true, ms: 42, status: 200 }, 5);
+  assert.deepEqual(st.per.get('r').lat[0], [5, 42, 42]);
+});
+test('mergeStats: тройки [now,ms,ttfb] переносятся при слиянии воркеров', () => {
+  const a = makeStats([{ name: 'r' }]);
+  a.record({ name: 'r' }, { ok: true, ms: 10, ttfb: 8, status: 200 }, 1);
+  a.startedAt = 0; a.endedAt = 1;
+  const merged = mergeStats([serializeStats(a)], [{ name: 'r' }]);
+  assert.deepEqual(merged.per.get('r').lat[0], [1, 10, 8]);
+});
+
 test('mergeStats: складывает per-step и flowStats из нескольких частей', () => {
   const steps = [{ name: 's1' }, { name: 's2' }];
   const a = makeStats(steps); a.startedAt = 100; a.endedAt = 200;
