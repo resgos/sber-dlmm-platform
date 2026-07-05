@@ -46,7 +46,7 @@ export interface UpdateProfileRequest {
 }
 
 // Token
-export type TokenType = 'STABLE_TOKEN' | 'EQUITY_TOKEN' | 'LP_TOKEN' | 'GOVERNANCE_TOKEN'
+export type TokenType = 'FIAT_BACKED' | 'COMMODITY_BACKED' | 'UTILITY' | 'SECURITY'
 
 export interface Token {
   id: string
@@ -61,12 +61,11 @@ export interface Token {
 
 // Balances
 export interface TokenBalance {
-  userId: string
   tokenId: string
-  symbol: string
+  tokenSymbol: string
+  tokenName: string
   available: number
   locked: number
-  total: number
 }
 
 // Bin Data

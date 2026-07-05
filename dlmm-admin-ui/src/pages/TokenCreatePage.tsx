@@ -18,10 +18,10 @@ import type { CreateTokenRequest, TokenType } from '@/api/types'
 const { Title } = Typography
 
 const tokenTypeOptions: { value: TokenType; label: string }[] = [
-  { value: 'STABLE_TOKEN', label: 'Стейблкоин' },
-  { value: 'EQUITY_TOKEN', label: 'Товарный' },
-  { value: 'LP_TOKEN', label: 'LP-токен' },
-  { value: 'GOVERNANCE_TOKEN', label: 'Управление' },
+  { value: 'FIAT_BACKED', label: 'Фиатный' },
+  { value: 'COMMODITY_BACKED', label: 'Товарный' },
+  { value: 'UTILITY', label: 'Утилитарный' },
+  { value: 'SECURITY', label: 'Секьюрити' },
 ]
 
 export default function TokenCreatePage() {

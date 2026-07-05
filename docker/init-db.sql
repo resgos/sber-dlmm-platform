@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS price_feeds (
     source VARCHAR(50) NOT NULL,
     current_price DECIMAL(30,18) NOT NULL,
     twap_price DECIMAL(30,18) NOT NULL,
-    price_change24h_pct DECIMAL(10,4) NOT NULL DEFAULT 0,
+    price_change_24h_pct DECIMAL(10,4) NOT NULL DEFAULT 0,
     updated_at_epoch_ms BIGINT NOT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -254,20 +254,20 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (create
 
 -- users (default password for all seed users: Demo1234)
 INSERT INTO users (id, sber_id, email, phone, first_name, last_name, kyc_status, role, password_hash) VALUES
-  ('a0000000-0000-0000-0000-000000000001', 'SBER-ADMIN-001', 'admin@sber-dlmm.ru',  '+79001000001', 'Иван',   'Петров',   'VERIFIED', 'ADMIN',     '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
-  ('a0000000-0000-0000-0000-000000000002', 'SBER-USR-10042', 'ivanov@example.com',  '+79001000002', 'Алексей','Иванов',   'VERIFIED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
-  ('a0000000-0000-0000-0000-000000000003', 'SBER-USR-20017', 'sidorov@example.com', '+79001000003', 'Мария',  'Сидорова', 'VERIFIED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
+  ('a0000000-0000-0000-0000-000000000001', 'SBER-ADMIN-001', 'admin@sber-dlmm.ru',  '+79001000001', 'Иван',   'Петров',   'APPROVED', 'ADMIN',     '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
+  ('a0000000-0000-0000-0000-000000000002', 'SBER-USR-10042', 'ivanov@example.com',  '+79001000002', 'Алексей','Иванов',   'APPROVED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
+  ('a0000000-0000-0000-0000-000000000003', 'SBER-USR-20017', 'sidorov@example.com', '+79001000003', 'Мария',  'Сидорова', 'APPROVED', 'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS'),
   ('a0000000-0000-0000-0000-000000000004', 'SBER-USR-99901', 'suspect@example.com', '+79001000099', 'Сергей', 'Попов',    'PENDING',  'USER',      '$2a$10$9yl5HJIDyYpur.jYZsCcr.kuisxXpzcpe.tgKvvFyRySHQrdBWBeS')
 ON CONFLICT DO NOTHING;
 
 -- tokens
 INSERT INTO tokens (id, name, symbol, decimals, total_supply, max_supply, token_type, underlying_asset, price_oracle_id, mintable, burnable, active, created_by) VALUES
-  ('b0000000-0000-0000-0000-000000000001',  'Sber Ruble',    'SRUB',  2,  500000000000,  1000000000000, 'STABLE_TOKEN',      'RUB',  'MOEX_USDRUB',  true,  true,  true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000002',  'Sber Bitcoin',  'SBTC',  8,    100000000,     2100000000, 'EQUITY_TOKEN', 'BTC',  'BINANCE_BTC',  false, true,  true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000003',  'Sber Ethereum', 'SETH',  8,   1200000000,   1200000000, 'GOVERNANCE_TOKEN',          'ETH',  'BINANCE_ETH',  false, true,  true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000004', 'Sber Gold',     'SGOLD', 4,     10000000,    100000000, 'EQUITY_TOKEN', 'XAU',  'MOEX_GOLD',    false, false, true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000005', 'Sber Silver',   'SSILV', 4,    200000000,   2000000000, 'EQUITY_TOKEN', 'XAG',  'MOEX_SILVER',  false, false, true, 'a0000000-0000-0000-0000-000000000001'),
-  ('b0000000-0000-0000-0000-000000000006',  'Sber Oil',      'SOIL',  4,    500000000,   5000000000, 'EQUITY_TOKEN', 'BRENT','MOEX_OIL',     false, false, true, 'a0000000-0000-0000-0000-000000000001')
+  ('b0000000-0000-0000-0000-000000000001',  'Sber Ruble',    'SRUB',  2,  500000000000,  1000000000000, 'FIAT_BACKED',      'RUB',  'MOEX_USDRUB',  true,  true,  true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000002',  'Sber Bitcoin',  'SBTC',  8,    100000000,     2100000000, 'COMMODITY_BACKED', 'BTC',  'BINANCE_BTC',  false, true,  true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000003',  'Sber Ethereum', 'SETH',  8,   1200000000,   1200000000, 'UTILITY',          'ETH',  'BINANCE_ETH',  false, true,  true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000004', 'Sber Gold',     'SGOLD', 4,     10000000,    100000000, 'COMMODITY_BACKED', 'XAU',  'MOEX_GOLD',    false, false, true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000005', 'Sber Silver',   'SSILV', 4,    200000000,   2000000000, 'COMMODITY_BACKED', 'XAG',  'MOEX_SILVER',  false, false, true, 'a0000000-0000-0000-0000-000000000001'),
+  ('b0000000-0000-0000-0000-000000000006',  'Sber Oil',      'SOIL',  4,    500000000,   5000000000, 'COMMODITY_BACKED', 'BRENT','MOEX_OIL',     false, false, true, 'a0000000-0000-0000-0000-000000000001')
 ON CONFLICT DO NOTHING;
 
 -- user_balances
@@ -451,7 +451,7 @@ INSERT INTO transactions (id, tx_type, status, user_id, pool_id, token_in_id, am
 ON CONFLICT DO NOTHING;
 
 -- price_feeds
-INSERT INTO price_feeds (id, asset_symbol, source, current_price, twap_price, price_change24h_pct, updated_at_epoch_ms) VALUES
+INSERT INTO price_feeds (id, asset_symbol, source, current_price, twap_price, price_change_24h_pct, updated_at_epoch_ms) VALUES
   ('f0000000-0000-0000-0000-000000000001',  'SRUB',  'MOEX_USDRUB',  1.000000000000000000, 1.000000000000000000,  0.0000, 1744090000000),
   ('f0000000-0000-0000-0000-000000000002',  'SBTC',  'BINANCE_BTC',  5000000.000000000000000000, 4980000.000000000000000000,  2.4500, 1744090000000),
   ('f0000000-0000-0000-0000-000000000003',  'SETH',  'BINANCE_ETH',  300000.000000000000000000,  298000.000000000000000000,   1.8200, 1744090000000),
@@ -462,9 +462,9 @@ ON CONFLICT DO NOTHING;
 
 -- notifications
 INSERT INTO notifications (id, user_id, type, title, message, read) VALUES
-  ('bb000001-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', 'SWAP_COMPLETED',        'Своп выполнен',             'Обмен 1 SBTC → 498 750 SRUB успешно проведён.', false),
-  ('bb000001-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'FEE_ACCRUED',           'Ликвидность добавлена',     'Позиция в пуле SBTC/SRUB открыта.', true),
-  ('bb000001-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', 'SWAP_COMPLETED',        'Своп выполнен',             'Обмен 100 000 SRUB → 1.9975 SBTC успешно проведён.', false),
-  ('bb000001-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004', 'SYSTEM_ALERT',          'Подозрительная активность','Обнаружена необычная торговая активность. Обратитесь в поддержку.', false),
+  ('bb000001-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', 'SWAP_CONFIRMED',        'Своп выполнен',             'Обмен 1 SBTC → 498 750 SRUB успешно проведён.', false),
+  ('bb000001-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'LIQUIDITY_ADDED',       'Ликвидность добавлена',     'Позиция в пуле SBTC/SRUB открыта.', true),
+  ('bb000001-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', 'SWAP_CONFIRMED',        'Своп выполнен',             'Обмен 100 000 SRUB → 1.9975 SBTC успешно проведён.', false),
+  ('bb000001-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004', 'SUSPICIOUS_ACTIVITY',   'Подозрительная активность','Обнаружена необычная торговая активность. Обратитесь в поддержку.', false),
   ('bb000001-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000001', 'SYSTEM_ALERT',          'Системный алерт',           'Пользователь SBER-USR-99901 совершил 3 подозрительных транзакции.', false)
 ON CONFLICT DO NOTHING;

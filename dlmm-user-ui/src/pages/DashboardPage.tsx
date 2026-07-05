@@ -64,7 +64,7 @@ export default function DashboardPage() {
   const priceMap = new Map((prices || []).map((p: TokenPrice) => [p.symbol, p]))
 
   const totalBalanceRub = (myBalances || []).reduce((sum: number, b: TokenBalance) => {
-    const price = priceMap.get(b.symbol)?.price || 0
+    const price = priceMap.get(b.tokenSymbol)?.price || 0
     return sum + (b.available + b.locked) * price
   }, 0)
 
@@ -109,17 +109,21 @@ export default function DashboardPage() {
           columns={[
             {
               title: 'Токен',
-              dataIndex: 'symbol',
-              render: (sym: string) => (
+              dataIndex: 'tokenSymbol',
+              render: (sym: string, row: TokenBalance) => (
                 <Space>
                   <div style={{
                     width: 32, height: 32, borderRadius: 16,
                     background: '#E8F5E9', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontWeight: 700, fontSize: 12, color: '#21A038',
                   }}>
-                    {sym?.slice(0, 2)}
+                    {sym.slice(0, 2)}
                   </div>
-                  <Text strong>{sym}</Text>
+                  <div>
+                    <Text strong>{sym}</Text>
+                    <br />
+                    <Text type="secondary" style={{ fontSize: 12 }}>{row.tokenName}</Text>
+                  </div>
                 </Space>
               ),
             },
@@ -140,7 +144,7 @@ export default function DashboardPage() {
               key: 'price',
               align: 'right' as const,
               render: (_: unknown, row: TokenBalance) => {
-                const p = priceMap.get(row.symbol)
+                const p = priceMap.get(row.tokenSymbol)
                 return p ? `${p.price.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽` : '—'
               },
             },
@@ -149,7 +153,7 @@ export default function DashboardPage() {
               key: 'value',
               align: 'right' as const,
               render: (_: unknown, row: TokenBalance) => {
-                const p = priceMap.get(row.symbol)
+                const p = priceMap.get(row.tokenSymbol)
                 if (!p) return '—'
                 const val = (row.available + row.locked) * p.price
                 return <Text strong>{formatRub(val)}</Text>

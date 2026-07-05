@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment,
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
-  toJUnitXml, toMarkdown,
+  toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -311,6 +311,53 @@ test('toMarkdown: пайп | в имени экранируется (не лом
   rep.perRequest = [{ name: 'GET /a|b', count: 1, rps: 1, errPct: 0, p95: 5, p99: 5, statuses: '200:1' }];
   const md = toMarkdown(rep);
   assert.ok(md.includes('GET /a\\|b'), 'пайп должен быть экранирован');
+});
+
+// ─── монитор цели: parseMemMB / summarizeTargetMetrics ──
+test('parseMemMB: разные единицы docker stats', () => {
+  assert.equal(parseMemMB('616MiB / 7.606GiB'), 616);
+  assert.equal(parseMemMB('1.5GiB'), 1536);
+  assert.equal(parseMemMB('512KiB'), Number((512 / 1024).toFixed(1)));
+  assert.equal(parseMemMB('мусор'), null);
+});
+test('summarizeTargetMetrics: min/avg/max/last/пик + насыщение CPU', () => {
+  const data = { intervalSec: 5, errors: [], samples: [
+    { t: 0, values: { 'svc CPU %': 10, 'svc MEM МБ': 500 } },
+    { t: 5, values: { 'svc CPU %': 92, 'svc MEM МБ': 520 } },
+    { t: 10, values: { 'svc CPU %': 40, 'svc MEM МБ': 510 } },
+  ] };
+  const s = summarizeTargetMetrics(data);
+  const cpu = s.metrics.find((m) => m.name === 'svc CPU %');
+  assert.equal(cpu.max, 92);
+  assert.equal(cpu.peakAtSec, 5);
+  assert.equal(cpu.last, 40);
+  assert.equal(cpu.saturatedCpu, true);
+  const mem = s.metrics.find((m) => m.name === 'svc MEM МБ');
+  assert.equal(mem.saturatedCpu, false); // не CPU-метрика
+});
+test('summarizeTargetMetrics: нет сэмплов → null', () => {
+  assert.equal(summarizeTargetMetrics({ intervalSec: 5, errors: [], samples: [] }), null);
+});
+test('summarizeTargetMetrics: дробная шкала CPU (0-1) — насыщение при >=0.85', () => {
+  const s = summarizeTargetMetrics({ intervalSec: 5, errors: [], samples: [
+    { t: 0, values: { 'svc CPU': 0.3 } }, { t: 5, values: { 'svc CPU': 0.95 } } ] });
+  assert.equal(s.metrics[0].saturatedCpu, true);
+});
+test('summarizeTargetMetrics: счётчик с "cpu" в имени (max>100) НЕ флагуется как насыщение', () => {
+  const s = summarizeTargetMetrics({ intervalSec: 5, errors: [], samples: [
+    { t: 0, values: { 'cpu_seconds_total': 1200 } }, { t: 5, values: { 'cpu_seconds_total': 5000 } } ] });
+  assert.equal(s.metrics[0].saturatedCpu, false);
+});
+test('validateScenario: опечатка в monitor.thresholds имени = ОШИБКА', () => {
+  const scn = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }],
+    monitor: { docker: { containers: ['svc'] }, thresholds: { 'svc CPU': { max: 85 } } } }; // без " %"
+  assert.ok(validateScenario(scn).errors.some((e) => /svc CPU/.test(e) && /нет такой метрики/.test(e)));
+});
+test('validateScenario: monitor без docker/prometheus = ошибка; кривой prometheus = ошибка', () => {
+  const empty = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }], monitor: {} };
+  assert.ok(validateScenario(empty).errors.some((e) => /monitor/.test(e)));
+  const badProm = { baseUrl: 'http://x', requests: [{ name: 'a', method: 'GET', path: '/x' }], monitor: { prometheus: { url: 'http://p' } } };
+  assert.ok(validateScenario(badProm).errors.some((e) => /queries/.test(e)));
 });
 
 // ─── stageTargetAt (профиль нагрузки) ──

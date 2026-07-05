@@ -118,16 +118,7 @@ public class TransactionService {
                                                                    int page,
                                                                    int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Transaction> transactionPage;
-        if (type != null && status != null) {
-            transactionPage = transactionRepository.findByUserIdAndTxTypeAndStatus(userId, type, status, pageRequest);
-        } else if (type != null) {
-            transactionPage = transactionRepository.findByUserIdAndTxType(userId, type, pageRequest);
-        } else if (status != null) {
-            transactionPage = transactionRepository.findByUserIdAndStatus(userId, status, pageRequest);
-        } else {
-            transactionPage = transactionRepository.findByUserId(userId, pageRequest);
-        }
+        Page<Transaction> transactionPage = transactionRepository.findFiltered(userId, type, status, from, to, pageRequest);
 
         return new PageResponse<>(
                 transactionPage.getContent().stream().map(this::toResponse).toList(),

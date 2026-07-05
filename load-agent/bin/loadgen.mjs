@@ -29,10 +29,11 @@ import { dirname, join, isAbsolute } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { performance, monitorEventLoopDelay } from 'node:perf_hooks';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -237,7 +238,7 @@ function die(code, msg) {
 
 // ─────────────────────────────────────────────── validate ──
 
-const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites'];
+const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor'];
 const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture'];
 const KNOWN_FLOW_KEYS = ['name', 'weight', 'steps'];
 const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'];
@@ -589,6 +590,47 @@ function validateScenario(scn) {
     }
   }
 
+  // monitor — метрики цели во время прогона (docker stats / Prometheus)
+  if (scn.monitor !== undefined) {
+    const mo = scn.monitor;
+    if (typeof mo !== 'object' || mo === null || Array.isArray(mo)) {
+      push(errors, 'monitor должен быть объектом { docker?: {...}, prometheus?: {...}, intervalSec?: N, thresholds?: {...} }');
+    } else {
+      if (mo.intervalSec !== undefined && (typeof mo.intervalSec !== 'number' || mo.intervalSec < 1)) push(errors, 'monitor.intervalSec должен быть числом >= 1 (секунды между опросами)');
+      if (!mo.docker && !mo.prometheus) push(errors, 'monitor задан, но пуст — укажите monitor.docker (контейнеры) и/или monitor.prometheus (url+queries)');
+      if (mo.docker !== undefined) {
+        if (typeof mo.docker !== 'object' || mo.docker === null || !Array.isArray(mo.docker.containers) || !mo.docker.containers.length) {
+          push(errors, 'monitor.docker должен быть { "containers": ["имя-контейнера", ...] } (метрики через `docker stats`)');
+        } else if (mo.docker.containers.some((c) => typeof c !== 'string' || !c)) push(errors, 'monitor.docker.containers: имена контейнеров — непустые строки');
+      }
+      if (mo.prometheus !== undefined) {
+        const pm = mo.prometheus;
+        if (typeof pm !== 'object' || pm === null) push(errors, 'monitor.prometheus должен быть { "url": "...", "queries": { "имя": "PromQL" } }');
+        else {
+          if (!pm.url) push(errors, 'monitor.prometheus.url обязателен (адрес Prometheus, например http://localhost:9090)');
+          else { try { new URL(pm.url); } catch { push(errors, `monitor.prometheus.url "${pm.url}" — не валидный URL`); } }
+          if (typeof pm.queries !== 'object' || pm.queries === null || Array.isArray(pm.queries) || !Object.keys(pm.queries).length) {
+            push(errors, 'monitor.prometheus.queries должен быть непустым объектом { "имя метрики": "PromQL-запрос" }');
+          } else for (const [k, v] of Object.entries(pm.queries)) if (typeof v !== 'string' || !v) push(errors, `monitor.prometheus.queries["${k}"] должен быть непустой строкой-PromQL`);
+        }
+      }
+      if (mo.thresholds !== undefined) {
+        if (typeof mo.thresholds !== 'object' || mo.thresholds === null || Array.isArray(mo.thresholds)) push(errors, 'monitor.thresholds должен быть объектом { "имя метрики": { "max": N } }');
+        else {
+          // предсказуемые имена метрик: docker → "<контейнер> CPU %" / "<контейнер> MEM МБ"; prometheus → имя запроса
+          const known = new Set();
+          if (mo.docker && Array.isArray(mo.docker.containers)) for (const c of mo.docker.containers) { known.add(`${c} CPU %`); known.add(`${c} MEM МБ`); }
+          if (mo.prometheus && mo.prometheus.queries && typeof mo.prometheus.queries === 'object') for (const q of Object.keys(mo.prometheus.queries)) known.add(q);
+          for (const [k, t] of Object.entries(mo.thresholds)) {
+            if (typeof t !== 'object' || t === null || typeof t.max !== 'number') { push(errors, `monitor.thresholds["${k}"] должен быть { "max": число } (порог по метрике войдёт в вердикт)`); continue; }
+            // опечатка в имени = ОШИБКА (иначе после целого прогона получили бы ложный FAIL «метрика не собрана»)
+            if (!known.has(k)) push(errors, `monitor.thresholds["${k}"]: нет такой метрики. Доступны: ${[...known].join(', ') || '(нет)'} (docker: "<контейнер> CPU %"/"<контейнер> MEM МБ", prometheus: имя запроса)`);
+          }
+        }
+      }
+    }
+  }
+
   return { errors, warnings };
 }
 
@@ -908,6 +950,143 @@ function mergeStats(parts, steps) {
   return base;
 }
 
+// ─── монитор метрик ЦЕЛИ (docker stats / Prometheus) во время прогона ──
+
+/** "616MiB / 7.606GiB" → 616 (МБ). Поддерживает B/KiB/MiB/GiB/kB/MB/GB. Возвращает null, если не распознал. */
+function parseMemMB(s) {
+  const m = String(s).trim().match(/^([\d.]+)\s*([KMGT]?i?B)/i);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  if (Number.isNaN(n)) return null;
+  const unit = m[2].toLowerCase();
+  const factor = {
+    b: 1 / 1048576, kib: 1 / 1024, mib: 1, gib: 1024, tib: 1048576,
+    kb: 1e3 / 1048576, mb: 1e6 / 1048576, gb: 1e9 / 1048576, tb: 1e12 / 1048576,
+  }[unit];
+  if (factor === undefined) return null;
+  return Number((n * factor).toFixed(1));
+}
+
+/** Запускает захват вывода команды с таймаутом (для `docker stats`). */
+function execCapture(cmd, args, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let p;
+    try { p = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] }); }
+    catch (e) { reject(e); return; }
+    let out = '', err = '';
+    p.stdout.on('data', (d) => { out += d; });
+    p.stderr.on('data', (d) => { err += d; });
+    const t = setTimeout(() => { p.kill(); reject(new Error('таймаут')); }, timeoutMs);
+    p.on('close', (code) => { clearTimeout(t); code === 0 ? resolve(out) : reject(new Error(err.trim() || `exit ${code}`)); });
+    p.on('error', (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+/**
+ * Опрашивает метрики ЦЕЛИ во время прогона (на главном потоке, независимо от нагрузки).
+ * Возвращает { stop() → { intervalSec, samples:[{t,values}], errors:[] } } или null, если monitor не задан.
+ */
+function startTargetMonitor(scn) {
+  const m = scn.monitor;
+  if (!m || (!m.docker && !m.prometheus)) return null;
+  const intervalSec = m.intervalSec || 5;
+  const t0 = Date.now();
+  const samples = [];
+  const errors = new Set();
+  let stopped = false;
+
+  const pollDocker = async () => {
+    const values = {};
+    // опрашиваем КАЖДЫЙ контейнер отдельно: иначе один отсутствующий/упавший (docker stats exit 1,
+    // пустой stdout) обнулил бы метрики ВСЕХ контейнеров на этом опросе.
+    await Promise.all(m.docker.containers.map(async (c) => {
+      try {
+        const out = await execCapture('docker', ['stats', '--no-stream', '--format', '{{.Name}};{{.CPUPerc}};{{.MemUsage}}', c], 8000);
+        for (const line of out.trim().split(/\r?\n/)) {
+          const [name, cpu, mem] = line.split(';');
+          if (!name) continue;
+          const cpuN = parseFloat(cpu);
+          const memMB = parseMemMB(mem);
+          if (!Number.isNaN(cpuN)) values[`${name} CPU %`] = cpuN;
+          if (memMB != null) values[`${name} MEM МБ`] = memMB;
+        }
+      } catch (e) { errors.add(`docker stats "${c}": ${errText(e)} (контейнер запущен? docker в PATH?)`); }
+    }));
+    return values;
+  };
+
+  const pollProm = async () => {
+    const values = {};
+    for (const [name, q] of Object.entries(m.prometheus.queries || {})) {
+      try {
+        const url = new URL('/api/v1/query', m.prometheus.url);
+        url.searchParams.set('query', q);
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        const j = await res.json();
+        const rt = j?.data?.resultType;
+        const r = j?.data?.result || [];
+        if (rt && rt !== 'vector' && rt !== 'scalar') {
+          errors.add(`prometheus "${name}": результат типа "${rt}" (не мгновенный вектор) — оберните в функцию/агрегацию (например rate(...), sum(...)), чтобы получить одно значение`);
+        } else if (rt === 'scalar') {
+          const v = Number(r?.[1]);
+          if (!Number.isNaN(v)) values[name] = Number(v.toFixed(2));
+          else errors.add(`prometheus "${name}": scalar-значение не число (${JSON.stringify(r?.[1])})`);
+        } else if (r.length) {
+          const v = Number(r[0].value?.[1]);
+          if (!Number.isNaN(v)) values[name] = Number(v.toFixed(2));
+          else errors.add(`prometheus "${name}": значение не число (${JSON.stringify(r[0].value?.[1])})`);
+          if (r.length > 1) errors.add(`prometheus "${name}": запрос вернул ${r.length} рядов, взят первый — добавьте агрегацию (sum/avg by) в PromQL`);
+        } else errors.add(`prometheus "${name}": запрос не вернул данных (проверьте PromQL и что цель скрейпится)`);
+      } catch (e) { errors.add(`prometheus "${name}": ${errText(e)}`); }
+    }
+    return values;
+  };
+
+  let inFlight = false;
+  const poll = async () => {
+    if (stopped || inFlight) return; // не запускаем новый опрос, пока не завершился прошлый (docker stats может быть дольше интервала)
+    inFlight = true;
+    try {
+      const [d, p] = await Promise.all([m.docker ? pollDocker() : {}, m.prometheus ? pollProm() : {}]);
+      if (!stopped) samples.push({ t: Math.round((Date.now() - t0) / 1000), values: { ...d, ...p } });
+    } finally { inFlight = false; }
+  };
+  poll(); // первый замер сразу
+  const iv = setInterval(poll, intervalSec * 1000);
+  if (iv.unref) iv.unref();
+  return { stop() { stopped = true; clearInterval(iv); return { intervalSec, samples, errors: [...errors] }; } };
+}
+
+/** Сводка по метрикам цели: min/avg/max/last/пик для каждой метрики + флаг насыщения. */
+function summarizeTargetMetrics(monitorData) {
+  if (!monitorData || !monitorData.samples.length) return null;
+  const names = new Set();
+  for (const s of monitorData.samples) for (const k of Object.keys(s.values)) names.add(k);
+  const metrics = [];
+  for (const name of names) {
+    const pts = monitorData.samples.filter((s) => s.values[name] !== undefined).map((s) => [s.t, s.values[name]]);
+    if (!pts.length) continue;
+    const vals = pts.map(([, v]) => v);
+    const max = Math.max(...vals);
+    const peakAtSec = pts.find(([, v]) => v === max)?.[0] ?? 0;
+    const isCpu = /cpu/i.test(name);
+    const isDockerCpu = / CPU %$/.test(name); // мои docker-метрики: проценты, могут быть >100 (мультиядро)
+    // шкалу выводим из значений (имя её не знает): docker — проценты (>=85);
+    // prometheus: <=1.5 → доля (>=0.85), 0..100 → проценты (>=85), >100 → скорее счётчик, не флагуем
+    let saturatedCpu = false;
+    if (isDockerCpu) saturatedCpu = max >= 85;
+    else if (isCpu) {
+      if (max <= 1.5) saturatedCpu = max >= 0.85;
+      else if (max <= 100) saturatedCpu = max >= 85;
+    }
+    metrics.push({
+      name, min: Math.min(...vals), avg: Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)),
+      max, last: vals[vals.length - 1], peakAtSec, samples: pts.length, saturatedCpu,
+    });
+  }
+  return { intervalSec: monitorData.intervalSec, errors: monitorData.errors || [], metrics };
+}
+
 // ─── монитор ресурсов генератора (CPU процесса, event-loop lag, память) ──
 
 function startResourceMonitor({ watchEventLoop }) {
@@ -1116,6 +1295,15 @@ function buildReport(scn, stats, opts = {}) {
       if (t.errorRatePct !== undefined) checks.push({ name: `[${r.name}] errors ${r.errPct.toFixed(2)}% <= ${t.errorRatePct}%`, pass: r.errPct <= t.errorRatePct });
     }
   }
+  // пороги по метрикам ЦЕЛИ (monitor.thresholds) — тоже в вердикт
+  const targetMetrics = opts.targetMetrics || null;
+  if (!opts.smoke && targetMetrics && scn.monitor?.thresholds) {
+    for (const [name, t] of Object.entries(scn.monitor.thresholds)) {
+      const mtr = targetMetrics.metrics.find((x) => x.name === name);
+      if (!mtr) { checks.push({ name: `[цель] метрика "${name}" не собрана — порог не подтверждён`, pass: false }); continue; }
+      checks.push({ name: `[цель] ${name} макс ${mtr.max} <= ${t.max}`, pass: mtr.max <= t.max });
+    }
+  }
   const incompleteWorkers = opts.incompleteWorkers || 0;
   const pass = checks.every((c) => c.pass) && (!opts.smoke || stats.errors === 0) && incompleteWorkers === 0;
   if (incompleteWorkers > 0) checks.push({ name: `все потоки-генераторы вернули данные (не вернули: ${incompleteWorkers})`, pass: false });
@@ -1214,6 +1402,19 @@ function buildReport(scn, stats, opts = {}) {
     }
   }
 
+  // корреляция: метрики цели vs генератор — кто узкое место
+  if (targetMetrics) {
+    for (const e of targetMetrics.errors) hints.push(`Монитор цели: ${e}`);
+    const genSaturated = res && res.saturated && res.saturated.length;
+    const targetCpuBound = targetMetrics.metrics.filter((mt) => mt.saturatedCpu);
+    for (const mt of targetCpuBound) {
+      hints.push(`⚠ ЦЕЛЬ упёрлась: ${mt.name} достигал ${mt.max}% (пик t=${mt.peakAtSec}с)${genSaturated ? '' : ' — при этом генератор НЕ был узким местом, значит предел упирается в САМ СЕРВИС (нужно оптимизировать/масштабировать цель)'}.`);
+    }
+    if (!genSaturated && !targetCpuBound.length && p95 > th.p95Ms && targetMetrics.metrics.length) {
+      hints.push(`Латентность выше порога, но ни генератор, ни CPU цели не насыщены — узкое место, вероятно, вне CPU (БД, блокировки, сеть, GC, внешний сервис). Смотрите метрики цели и её зависимостей.`);
+    }
+  }
+
   return {
     tool: 'loadgen', version: VERSION,
     scenario: scn.name || '(без имени)', baseUrl: scn.baseUrl,
@@ -1227,7 +1428,7 @@ function buildReport(scn, stats, opts = {}) {
     errors: stats.errors, errorRatePct: Number(totalErrPct.toFixed(2)),
     latencyMs: { p50: Math.round(pct(latSorted, 50)), p90: Math.round(pct(latSorted, 90)), p95: Math.round(p95), p99: Math.round(pct(latSorted, 99)), max: Math.round(latSorted.length ? latSorted[latSorted.length - 1] : 0) },
     perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max) })),
-    workers, resource: res, incompleteWorkers, flows: flowReport,
+    workers, resource: res, incompleteWorkers, flows: flowReport, targetMetrics,
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
   };
@@ -1360,6 +1561,15 @@ function printReport(rep) {
   if (rep.loginFailures.length) {
     L('');
     L(`  ЛОГИН НЕ УДАЛСЯ у ${rep.loginFailures.length} VU: ${rep.loginFailures[0]}`);
+  }
+  if (rep.targetMetrics && (rep.targetMetrics.metrics.length || rep.targetMetrics.errors.length)) {
+    L('');
+    L('──────────────── МЕТРИКИ ЦЕЛИ (во время прогона) ───────');
+    for (const mt of rep.targetMetrics.metrics) {
+      L(`  ${mt.name}: сред. ${mt.avg}, макс. ${mt.max} (t=${mt.peakAtSec}с), последн. ${mt.last}${mt.saturatedCpu ? '  ⚠ насыщение' : ''}`);
+    }
+    if (!rep.targetMetrics.metrics.length) L('  (не собрано ни одной метрики — см. ошибки ниже)');
+    for (const e of rep.targetMetrics.errors) L(`  (!) ${e}`);
   }
   if (rep.resource) {
     const r = rep.resource;
@@ -1498,6 +1708,13 @@ function cmdInit(flags) {
     _stages_example: [{ vus: 20, durationSec: 20 }, { vus: 20, durationSec: 30 }, { vus: 0, durationSec: 10 }],
     thresholds: { p95Ms: 1000, errorRatePct: 1 },
     _thresholds_hint: 'Пороги для вердикта PASS/FAIL. Можно задать SLO на конкретный запрос: "perRequest": { "имя запроса": { "p95Ms": 200, "errorRatePct": 0 } } — тоже войдёт в вердикт.',
+    _monitor_hint: 'Опц. метрики ЦЕЛИ во время прогона (генератор vs сервис). docker — через `docker stats`; prometheus — произвольный PromQL. thresholds по метрике цели входят в вердикт. Пример ниже — вставьте на верхний уровень как "monitor".',
+    _monitor_example: {
+      intervalSec: 5,
+      docker: { containers: ['my-service-container'] },
+      prometheus: { url: 'http://localhost:9090', queries: { 'service CPU %': 'rate(process_cpu_seconds_total[1m])*100' } },
+      thresholds: { 'my-service-container CPU %': { max: 85 } },
+    },
     allowWrites: false,
   };
   writeFileSync(out, JSON.stringify(template, null, 2), 'utf8');
@@ -1954,6 +2171,10 @@ async function cmdRun(positional, flags) {
   const loginFailures = [];
   let resource = null;
   let incompleteWorkers = 0;
+  // монитор метрик ЦЕЛИ (docker/prometheus) — только для полноценного прогона, не smoke
+  const targetMon = !smoke ? startTargetMonitor(scn) : null;
+  if (targetMon) console.log(`Монитор цели: ${scn.monitor.docker ? `docker[${scn.monitor.docker.containers.join(',')}]` : ''}${scn.monitor.docker && scn.monitor.prometheus ? ' + ' : ''}${scn.monitor.prometheus ? `prometheus[${Object.keys(scn.monitor.prometheus.queries).length} запр.]` : ''}`);
+  let targetMetrics = null;
 
   if (smoke) {
     // прогоняем каждую цепочку целиком (шаги по порядку с реальным захватом переменных) по 1 разу
@@ -2090,7 +2311,8 @@ async function cmdRun(positional, flags) {
     resource = resMon.finish();
   }
 
-  const rep = buildReport(scn, stats, { smoke, loginFailures, resource, incompleteWorkers });
+  if (targetMon) targetMetrics = summarizeTargetMetrics(targetMon.stop());
+  const rep = buildReport(scn, stats, { smoke, loginFailures, resource, incompleteWorkers, targetMetrics });
   printReport(rep);
 
   const outFile = flags.out || 'loadgen-result.json';
@@ -2162,7 +2384,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
