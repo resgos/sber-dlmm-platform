@@ -490,6 +490,7 @@
       "fees24h": "Комиссии 24ч",
       "apy": "APY",
       "binStep": "шаг {{value}}",
+      "effFee": "эфф. {{value}} bps",
       "fee": "комиссия {{value}}",
       "addLiquidity": "Добавить ликвидность"
     },

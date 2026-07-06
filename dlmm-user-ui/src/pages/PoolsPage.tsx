@@ -5,8 +5,9 @@ import { SearchOutlined, ArrowRightOutlined, ThunderboltFilled, BarChartOutlined
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { pools } from '@/api/services'
-import type { Pool } from '@/api/types'
+import { pools, transactions } from '@/api/services'
+import type { Pool, PoolFeeStats } from '@/api/types'
+import { classifyFeeRate } from './TransactionsPage'
 import { formatRub } from '@/components/StatCard'
 import TokenIcon from '@/components/TokenIcon'
 import { bpsToPercent } from '@/utils/format'
@@ -26,8 +27,10 @@ const statusColors: Record<string, string> = {
 // duplicated here AND in SwapPage). PoolsPage uses just the function for
 // PoolCard gradient backgrounds; SwapPage uses the full TokenChip component.
 
-function PoolCard({ pool, onOpen, onAddLiquidity }: {
+function PoolCard({ pool, effFeeBps, onOpen, onAddLiquidity }: {
   pool: Pool
+  /** Realized avg fee (bps) over the pool's recent swaps; null/undefined → omitted. */
+  effFeeBps?: number | null
   onOpen: () => void
   onAddLiquidity: () => void
 }) {
@@ -54,6 +57,24 @@ function PoolCard({ pool, onOpen, onAddLiquidity }: {
             <Text strong style={{ fontSize: 'var(--text-md)' }}>{x}/{y}</Text>
             <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
               {t('pools.card.binStep', { value: bpsToPercent(pool.binStep) })} · {t('pools.card.fee', { value: bpsToPercent(pool.baseFeeBps) })}
+              {/* 2026-07-06 — realized rate from actual swaps beside the
+                  advertised base; tinted (same thresholds as the tx feed)
+                  only when it materially exceeds the base. */}
+              {effFeeBps != null && (() => {
+                const sev = classifyFeeRate(effFeeBps, pool.baseFeeBps)
+                return (
+                  <>
+                    {' · '}
+                    <Text
+                      type="secondary"
+                      className={sev !== 'normal' ? `fee-rate-${sev}` : ''}
+                      style={{ fontSize: 'var(--text-xs)' }}
+                    >
+                      {t('pools.card.effFee', { value: effFeeBps.toFixed(2) })}{sev !== 'normal' ? ' ⚠' : ''}
+                    </Text>
+                  </>
+                )
+              })()}
             </Text>
           </div>
         </div>
@@ -131,6 +152,22 @@ export default function PoolsPage() {
     queryFn: () => pools.getPools(0, 100),
     staleTime: 30_000,
   })
+
+  // 2026-07-06 — realized effective fee per pool (avg of the last 50 swaps'
+  // fee_rate), ONE batch round-trip for the whole card grid — N parallel
+  // single-pool calls would squeeze through the gateway rate limit (burst 15)
+  // alongside the page's own queries. Fail-open: no stats → cards just omit
+  // the eff-fee figure.
+  const poolIdsKey = (data?.content ?? []).map((p: Pool) => p.id).sort().join(',')
+  const { data: feeStatsList } = useQuery({
+    queryKey: ['poolsFeeStats', poolIdsKey],
+    queryFn: () => transactions.getPoolsFeeStats((data?.content ?? []).map((p: Pool) => p.id)),
+    enabled: (data?.content?.length ?? 0) > 0,
+    staleTime: 60_000,
+  })
+  const feeStatsByPool = new Map<string, PoolFeeStats>(
+    (feeStatsList ?? []).map((s) => [s.poolId, s]),
+  )
 
   // Batch #6 unit 5 — sort options. Default sort by Volume24h DESC
   // (most active first) — institutional users пришли смотреть «где
@@ -219,6 +256,7 @@ export default function PoolsPage() {
               <Col key={p.id} xs={24} sm={12} lg={8} xxl={6}>
                 <PoolCard
                   pool={p}
+                  effFeeBps={feeStatsByPool.get(p.id)?.avgFeeRateBps ?? null}
                   onOpen={() => navigate(`/pools/${p.id}`)}
                   onAddLiquidity={() => navigate(`/pools/${p.id}/liquidity`)}
                 />

@@ -253,6 +253,29 @@ public class TransactionController {
     }
 
     /**
+     * 2026-07-06 — batch effective-fee stats for the pools LIST page: one
+     * round-trip for every visible card instead of N parallel single-pool
+     * calls squeezing through the gateway rate limit. Same public-read
+     * rationale as the single-pool endpoint. The id list is capped at 50
+     * (extras silently ignored — the FE sends one page of cards).
+     */
+    @GetMapping("/pools/fee-stats")
+    @Operation(
+            summary = "Effective fee statistics for multiple pools",
+            description = "Batch form of /pool/{poolId}/fee-stats: aggregates fee_rate (bps) over each pool's "
+                    + "most recent CONFIRMED swaps (last N, N clamped to [1, 200]). Accepts up to 50 pool ids "
+                    + "(comma-separated); duplicates are collapsed, extras beyond the cap are ignored.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Fee statistics list returned"),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid access token")
+    })
+    public ResponseEntity<List<com.sber.dlmm.transaction.dto.PoolFeeStatsResponse>> getPoolsFeeStats(
+            @Parameter(description = "Pool ids (comma-separated, max 50)") @RequestParam List<UUID> poolIds,
+            @Parameter(description = "Sample size per pool (last N swaps); clamped to [1, 200]") @RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(transactionService.getPoolsFeeStats(poolIds, limit));
+    }
+
+    /**
      * Sprint 9-DS-r4 (P2-12) — admin "Mark reviewed" action for the
      * SuspiciousTransactionsPage. Stamps reviewedAt/reviewedBy on the
      * transaction so admin-bff's on-the-fly suspicious detection

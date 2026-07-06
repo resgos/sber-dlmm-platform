@@ -487,6 +487,7 @@
       "fees24h": "Fees 24h",
       "apy": "APY",
       "binStep": "step {{value}}",
+      "effFee": "eff. {{value}} bps",
       "fee": "fee {{value}}",
       "addLiquidity": "Add liquidity"
     },

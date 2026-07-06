@@ -66,4 +66,17 @@ export const transactions = {
     )
     return data
   },
+
+  /**
+   * 2026-07-06 — batch form for the pools LIST page: one round-trip for all
+   * visible cards (≤50 ids) instead of N parallel calls through the gateway
+   * rate limit. Rates are bps — never amount-scaled.
+   */
+  getPoolsFeeStats: async (poolIds: string[], limit = 50): Promise<PoolFeeStats[]> => {
+    const { data } = await apiClient.get<PoolFeeStats[]>(
+      '/transactions/pools/fee-stats',
+      { params: { poolIds: poolIds.join(','), limit } },
+    )
+    return data
+  },
 }

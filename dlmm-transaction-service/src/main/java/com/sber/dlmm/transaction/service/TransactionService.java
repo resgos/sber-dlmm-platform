@@ -443,6 +443,29 @@ public class TransactionService {
      * Java over a ≤200-row single-column projection — no schema, no money
      * path. Empty sample (new pool / pre-backfill data) → null aggregates.
      */
+    /**
+     * 2026-07-06 — batch form of {@link #getPoolFeeStats} for the pools
+     * LIST page: one HTTP round-trip for all visible cards instead of N
+     * parallel calls squeezing through the gateway rate limit (burst 15 —
+     * a 20-card grid plus the page's own queries would trip it). The id
+     * list is capped at {@code MAX_BATCH_POOLS}; at demo scale a per-id
+     * loop over the existing ≤200-row projection is plenty (a LATERAL
+     * single-query + cache is the documented next step if the catalogue
+     * grows).
+     */
+    @Transactional(readOnly = true)
+    public java.util.List<com.sber.dlmm.transaction.dto.PoolFeeStatsResponse> getPoolsFeeStats(
+            java.util.List<UUID> poolIds, int limit) {
+        return poolIds.stream()
+                .distinct()
+                .limit(MAX_BATCH_POOLS)
+                .map(id -> getPoolFeeStats(id, limit))
+                .toList();
+    }
+
+    /** Cap on the batch fee-stats id list — bounds the per-request DB work. */
+    private static final int MAX_BATCH_POOLS = 50;
+
     @Transactional(readOnly = true)
     public com.sber.dlmm.transaction.dto.PoolFeeStatsResponse getPoolFeeStats(UUID poolId, int limit) {
         int clamped = Math.max(1, Math.min(limit, 200));
