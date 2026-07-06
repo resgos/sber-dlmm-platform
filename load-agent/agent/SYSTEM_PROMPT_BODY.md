@@ -74,6 +74,11 @@ node LOADGEN probe <baseUrl> <path1> <path2>
 - **Тело не-JSON**: если эндпоинт принимает форму (OAuth token, веб-форма) или файл — добавь
   `bodyType`: `"form"` (application/x-www-form-urlencoded, body-объект скаляров) или `"multipart"`
   (body-объект: строки = поля, `{"file":"путь", filename?, type?}` = файл). Content-Type ставится сам.
+- **Нагрузка на СУБД напрямую** (не через REST): если просят «нагрузить Postgres/Ignite/базу»,
+  «сколько QPS держит БД» — используй `kind:"sql"`. Блок `sql: {"driver":"psql","command":[...]}`
+  (клиент СУБД в PATH или через `docker exec`), шаги задаются полем `sql` вместо method/path,
+  checks — `minRows`/`notEmpty`/`maxMs`. Быстрый старт: `init --preset sql-postgres`. Латентность
+  серверная. Запись (INSERT/UPDATE/DDL) — как HTTP: `allowWrites:true` + `--allow-writes`.
 - **Пороги/SLO**: помимо `thresholds.p95Ms`/`errorRatePct` есть `p99Ms` (хвост латентности — частый
   SLO), `rpsMin` (минимальная пропускная, fail если ниже), и per-request:
   `thresholds.perRequest: {"имя запроса": {"p95Ms": 100, "p99Ms": 300, "errorRatePct": 0}}`. Всё в вердикт.

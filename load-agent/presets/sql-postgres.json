@@ -1,0 +1,25 @@
+{
+  "name": "postgres-load",
+  "kind": "sql",
+  "_comment": "Нагрузка ПРЯМО на СУБД (не через REST). Транспорт — persistent psql на каждый VU, латентность серверная (\\timing). Требуется psql в PATH ЛИБО docker exec. Замените command под свою цель.",
+  "sql": {
+    "driver": "psql",
+    "command": ["psql", "${PGURL:-postgresql://postgres:postgres@localhost:5432/postgres}"],
+    "_command_docker": ["docker", "exec", "-i", "my-postgres", "psql", "-U", "app", "-d", "app"]
+  },
+  "vars": {
+    "lim": [10, 50, 100]
+  },
+  "requests": [
+    { "name": "count", "sql": "select count(*) from information_schema.tables", "weight": 3, "checks": { "minRows": 1, "maxMs": 50 } },
+    { "name": "scan", "sql": "select table_name from information_schema.tables limit {{lim}}", "weight": 2, "checks": { "minRows": 1 } },
+    { "name": "now", "sql": "select now()", "weight": 1 }
+  ],
+  "load": { "vus": 8, "durationSec": 20, "warmupSec": 3, "thinkTimeMs": [1, 10] },
+  "thresholds": {
+    "p95Ms": 50,
+    "p99Ms": 150,
+    "errorRatePct": 0,
+    "perRequest": { "count": { "p95Ms": 20 } }
+  }
+}

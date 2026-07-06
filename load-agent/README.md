@@ -49,6 +49,8 @@
 [Кто узкое место (monitor)](#метрики-цели-генератор-или-сервис--кто-узкое-место-monitor) ·
 [Параллелизм и ресурсы](#параллелизм-и-ресурсы-генератора)
 
+**СУБД напрямую.** [Нагрузка на Postgres/Ignite (`kind:"sql"`)](#нагрузка-на-субд-напрямую-kindsql--postgresignite)
+
 **CI и масштаб.** [Сравнение прогонов (compare)](#регрессии-сравнение-прогонов-compare--ci-гейт) ·
 [Распределённый прогон (merge)](#распределённый-прогон-с-n-машин-merge) ·
 [Профиль из статистики (profile)](#профиль-нагрузки-из-статистики-profile)
@@ -491,6 +493,57 @@ node load-agent/bin/loadgen.mjs run scenario.json --junit report.xml --md report
 `"load": { ..., "warmupSec": 10 }` — первые 10 секунд (JIT, прогрев пула соединений, кэшей)
 **не учитываются** в метриках. Перцентили считаются по установившемуся режиму; RPS — по окну
 после разогрева. С `stages` не применяется (нагрузка не постоянна).
+
+## Нагрузка на СУБД напрямую (`kind:"sql"`) — Postgres/Ignite
+
+Иногда узкое место не в REST-слое, а в самой базе. `kind:"sql"` гоняет нагрузку **прямо на СУБД**,
+переиспользуя весь движок (VUs/workers/stages/warmup/перцентили/пороги/param-impact/отчёт) — меняется
+только транспорт. **Zero-dep сохраняется**: инструмент шелится в родной CLI СУБД (как для `docker stats`),
+поэтому нужен клиент в PATH (`psql`, `sqlline`) — или запуск через `docker exec`.
+
+```jsonc
+{
+  "kind": "sql",
+  "sql": {
+    "driver": "psql",                                  // psql | sqlline | custom
+    "command": ["psql", "postgresql://user:pass@localhost:5432/db"]
+    // или через docker: ["docker","exec","-i","pg","psql","-U","app","-d","app"]
+  },
+  "vars": { "lim": [10, 50, 100] },                    // {{var}} работают и в SQL
+  "requests": [
+    { "name": "count", "sql": "select count(*) from orders", "weight": 3,
+      "checks": { "minRows": 1, "maxMs": 20 } },        // проверки: minRows / notEmpty / maxMs
+    { "name": "scan",  "sql": "select id from orders limit {{lim}}", "weight": 1 }
+  ],
+  "load": { "vus": 8, "durationSec": 20, "warmupSec": 3 },
+  "thresholds": { "p95Ms": 50, "p99Ms": 150, "errorRatePct": 0, "perRequest": { "count": { "p95Ms": 20 } } }
+}
+```
+
+Быстрый старт: `node bin/loadgen.mjs init --preset sql-postgres --out pg.json`.
+
+- **Персистентное соединение на VU:** каждый VU держит ОДИН клиентский процесс (= одно соединение),
+  как реальный пул — а не «форк psql на каждый запрос». Латентность берётся **серверная** (таймер
+  драйвера, напр. psql `\timing`), без шума pipe; если драйвер её не печатает — падаем на wall-clock.
+- **Шаг** задаётся полем `sql` (вместо `method`/`path`). `checks`: `minRows` (>= N строк), `notEmpty`,
+  `maxMs` (бюджет). Отчёт — те же перцентили/гистограмма/«ВЛИЯНИЕ ПАРАМЕТРОВ» по `{{var}}`.
+- **Запись** (INSERT/UPDATE/DELETE/DDL) распознаётся по ключевым словам и требует `allowWrites:true` +
+  `--allow-writes` (та же двойная защита). `setup`/`teardown` работают — удобно создать таблицу до
+  нагрузки и удалить после.
+- **Ошибки и надёжность:** для `psql` статус запроса читается **в канале stdout** (`:ERROR`/`:SQLSTATE`),
+  а не по гонке stderr — детект ошибок точный. Для `sqlline`/`custom` без `statusRegex` ошибка берётся
+  из stderr (best-effort, validate предупредит). Плюс на `psql` ставится серверный `statement_timeout` =
+  `timeoutMs`: даже если клиент убьют по таймауту, backend СУБД сам снимет затянувшийся запрос — генератор
+  не «завешивает» цель на `max_connections`.
+- **Ignite:** `driver:"sqlline"` (thin JDBC) — рабочая заготовка; тонкости под версию переопределяются
+  в `sql`-блоке (`init`/`mark`/`timeRegex`/`rowsRegex`/`errorRegex`/`statusRegex`). Либо Ignite REST — обычным `kind:"http"`.
+- **`driver:"custom"`** — любой клиент с интерактивным вводом (mysql, clickhouse-client, redis-cli…):
+  задайте `command` + `mark` (маркер конца результата) + при желании `timeRegex`/`rowsRegex`/`errorRegex`/`statusRegex`.
+- **Write-guard** для SQL — эвристика по ключевым словам (`insert/update/…/vacuum/refresh/select…into`),
+  заведомо неполная: read-only у SQL не гарантируется как у HTTP-метода, поэтому лучше пере-флагнуть.
+  `minRows`/`notEmpty` считают ВОЗВРАЩЁННЫЕ строки (SELECT/RETURNING) — на чистом INSERT их не будет.
+- ⚠ `{{var}}` подставляются в текст запроса как есть (не bind-параметры) — значения из доверенных
+  списков/файлов, не из недоверенного ввода (иначе SQL-инъекция в самом сценарии).
 
 ## Тесты самого движка
 

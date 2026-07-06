@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.15.0';
+const VERSION = '1.16.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -271,10 +271,11 @@ function die(code, msg) {
 
 // ─────────────────────────────────────────────── validate ──
 
-const KNOWN_ROOT_KEYS = ['name', 'baseUrl', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor', 'setup', 'teardown'];
-const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture', 'bodyType'];
+const KNOWN_ROOT_KEYS = ['name', 'kind', 'baseUrl', 'sql', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor', 'setup', 'teardown'];
+const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'sql', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture', 'bodyType'];
 const KNOWN_FLOW_KEYS = ['name', 'weight', 'steps'];
-const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals'];
+const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals', 'minRows'];
+const KNOWN_SQL_KEYS = ['driver', 'command', 'flags', 'init', 'stmtTimeout', 'mark', 'timeRegex', 'rowsRegex', 'errorRegex', 'statusRegex', 'label'];
 const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps', 'workers', 'stages', 'warmupSec'];
 const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
@@ -346,17 +347,55 @@ function validateScenario(scn) {
     }
   }
 
-  // baseUrl
-  if (!scn.baseUrl) push(errors, 'Нет обязательного поля "baseUrl". Пример: "baseUrl": "http://localhost:8080"');
-  else {
-    try {
-      const u = new URL(scn.baseUrl);
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-        push(errors, `baseUrl "${scn.baseUrl}" — нет схемы http:// или https://. Пример: "http://localhost:8080"`);
-      } else if (u.pathname !== '/' && u.pathname !== '') {
-        push(warnings, `baseUrl содержит путь "${u.pathname}" — пути запросов задаются от корня хоста и НЕ будут дописаны к нему. Оставьте в baseUrl только схему://хост:порт.`);
+  // kind — транспорт: "http" (по умолчанию) или "sql" (нагрузка на СУБД через персистентный CLI)
+  scn.kind = scn.kind ?? 'http';
+  if (!['http', 'sql'].includes(scn.kind)) push(errors, `kind должен быть "http" | "sql", сейчас: ${JSON.stringify(scn.kind)}`);
+
+  // baseUrl — обязателен только для HTTP (у SQL цель = команда клиента СУБД в sql.command)
+  if (scn.kind !== 'sql') {
+    if (!scn.baseUrl) push(errors, 'Нет обязательного поля "baseUrl". Пример: "baseUrl": "http://localhost:8080"');
+    else {
+      try {
+        const u = new URL(scn.baseUrl);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+          push(errors, `baseUrl "${scn.baseUrl}" — нет схемы http:// или https://. Пример: "http://localhost:8080"`);
+        } else if (u.pathname !== '/' && u.pathname !== '') {
+          push(warnings, `baseUrl содержит путь "${u.pathname}" — пути запросов задаются от корня хоста и НЕ будут дописаны к нему. Оставьте в baseUrl только схему://хост:порт.`);
+        }
+      } catch { push(errors, `baseUrl "${scn.baseUrl}" — не валидный URL. Нужен вид http://host:port`); }
+    }
+  }
+
+  // sql — блок транспорта СУБД (только для kind:"sql")
+  if (scn.kind === 'sql') {
+    const sql = scn.sql;
+    if (!sql || typeof sql !== 'object' || Array.isArray(sql)) {
+      push(errors, 'kind:"sql" требует блок "sql": { "driver":"psql", "command":["psql","-h","host","-U","user","-d","db"] }');
+    } else {
+      for (const k of Object.keys(sql)) if (!k.startsWith('_') && !KNOWN_SQL_KEYS.includes(k)) push(warnings, `sql: неизвестный ключ "${k}"`);
+      if (!Array.isArray(sql.command) || !sql.command.length || sql.command.some((x) => typeof x !== 'string')) {
+        push(errors, 'sql.command должен быть НЕПУСТЫМ массивом строк — команда запуска клиента СУБД (напр. ["psql","-h","localhost","-U","dlmm","-d","dlmm"] или ["docker","exec","-i","pg","psql","-U","dlmm","-d","dlmm"])');
       }
-    } catch { push(errors, `baseUrl "${scn.baseUrl}" — не валидный URL. Нужен вид http://host:port`); }
+      const knownDrivers = Object.keys(SQL_DRIVERS);
+      if (sql.driver !== undefined && !knownDrivers.includes(sql.driver) && sql.driver !== 'custom') {
+        push(errors, `sql.driver должен быть ${knownDrivers.map((d) => `"${d}"`).join(' | ')} | "custom", сейчас: ${JSON.stringify(sql.driver)}`);
+      }
+      if ((sql.driver === 'custom' || sql.driver === undefined) && !SQL_DRIVERS[sql.driver]) {
+        // для custom без пресета нужны хотя бы mark и timeRegex, иначе не распарсим результат/латентность
+        if (!sql.mark) push(errors, 'sql.driver:"custom" требует "mark" — команду-маркер конца результата (напр. "\\\\echo __LOADGEN_ROW_DONE__")');
+        if (!sql.timeRegex) push(warnings, 'sql.driver:"custom" без timeRegex — латентность будет измеряться по wall-clock (включая накладные pipe), а не серверным таймером');
+      }
+      for (const rk of ['init', 'flags']) if (sql[rk] !== undefined && (!Array.isArray(sql[rk]) || sql[rk].some((x) => typeof x !== 'string'))) push(errors, `sql.${rk} должен быть массивом строк`);
+      for (const rk of ['timeRegex', 'rowsRegex', 'errorRegex']) {
+        if (sql[rk] !== undefined) { try { new RegExp(sql[rk]); } catch (e) { push(errors, `sql.${rk} — некорректное регулярное выражение: ${e.message}`); } }
+      }
+      if (errors.length === 0) {
+        scn._sqlDriver = resolveSqlDriver(sql); // компилируем драйвер один раз
+        // без in-band статуса (как у psql :ERROR) ошибка берётся из stderr — из-за гонки stdout↔stderr
+        // статистика ошибок best-effort и под нагрузкой может искажаться. Надёжнее всего driver:"psql".
+        if (!scn._sqlDriver.statusRe) push(warnings, `sql.driver:"${sql.driver || 'custom'}" без in-band статуса ошибки (statusRegex) — признак ошибки берётся из stderr, статистика ошибок best-effort (возможна гонка stdout↔stderr под нагрузкой). Максимально надёжно — driver:"psql".`);
+      }
+    }
   }
 
   // timeout
@@ -430,6 +469,32 @@ function validateScenario(scn) {
         const s = suggestKey(k, KNOWN_REQ_KEYS);
         push(warnings, `${label}: неизвестный ключ "${k}"${s ? ` — возможно, "${s}"` : ''}`);
       }
+    }
+    // ── SQL-шаг (kind:"sql"): вместо method/path — текст запроса в поле "sql" ──
+    if (scn.kind === 'sql') {
+      if (typeof r.sql !== 'string' || !r.sql.trim()) push(errors, `${label}: нет "sql" (текст запроса) — для kind:"sql" шаг задаётся полем "sql", а не method/path`);
+      if (!r.name) r.name = r.sql ? String(r.sql).replace(/\s+/g, ' ').trim().slice(0, 40) : `#${i}`;
+      for (const bad of ['method', 'path', 'body', 'bodyType', 'expectStatus']) if (r[bad] !== undefined) push(warnings, `${label}: поле "${bad}" в kind:"sql" не используется (шаг задаётся полем sql)`);
+      if (r.checks !== undefined) {
+        if (typeof r.checks !== 'object' || r.checks === null || Array.isArray(r.checks)) push(errors, `${label}: checks должен быть объектом, например {"minRows":1,"maxMs":300}`);
+        else {
+          const c = r.checks;
+          if (c.minRows !== undefined && (!Number.isInteger(c.minRows) || c.minRows < 0)) push(errors, `${label}: checks.minRows должен быть целым >= 0`);
+          if (c.maxMs !== undefined && (typeof c.maxMs !== 'number' || c.maxMs <= 0)) push(errors, `${label}: checks.maxMs должен быть положительным числом (мс)`);
+          if (c.notEmpty !== undefined && typeof c.notEmpty !== 'boolean') push(errors, `${label}: checks.notEmpty должен быть true/false`);
+          for (const k of ['status', 'bodyContains', 'jsonPath', 'jsonPathEquals']) if (c[k] !== undefined) push(warnings, `${label}: checks.${k} к SQL не применяется — доступны minRows/notEmpty/maxMs`);
+          // minRows/notEmpty считают ВОЗВРАЩЁННЫЕ строки: чистый INSERT/UPDATE/DELETE без RETURNING их не даёт → проверка всегда провалится
+          if ((c.minRows !== undefined || c.notEmpty) && /\b(insert|update|delete|merge)\b/i.test(r.sql || '') && !/\breturning\b/i.test(r.sql || '')) {
+            push(warnings, `${label}: minRows/notEmpty на изменяющем запросе без RETURNING — он не возвращает строк, проверка всегда провалится. Уберите её или добавьте RETURNING.`);
+          }
+        }
+      }
+      if (r.capture !== undefined) push(warnings, `${label}: capture в kind:"sql" пока не поддержан — игнорируется (появится в pipeline-режиме)`);
+      for (const ph of listPlaceholders(r.sql || '')) { // {{var}} в тексте запроса — те же правила видимости
+        if (isBuiltinPh(ph)) continue;
+        if (!available.has(ph)) push(errors, `${label}: placeholder {{${ph}}} в sql не объявлен. Доступно: ${[...available].join(', ') || '(ничего)'}. Переменная должна быть в "vars" или захвачена ранее.`);
+      }
+      return new Set(); // SQL-шаг захватов пока не даёт
     }
     if (!r.name) { r.name = `${r.method || 'GET'} ${r.path || `#${i}`}`; }
     r.method = String(r.method || 'GET').toUpperCase();
@@ -603,7 +668,9 @@ function validateScenario(scn) {
     ...(hasRequests ? scn.requests : []),
     ...(hasFlows ? scn.flows.flatMap((f) => (Array.isArray(f?.steps) ? f.steps : [])) : []),
   ].filter((s) => s && typeof s === 'object');
-  const writeReqs = [...allSteps, ...lifecycleSteps].filter((r) => WRITE_METHODS.includes(String(r.method || '').toUpperCase()));
+  // мутирующие шаги: для SQL — по ключевым словам DML/DDL, для HTTP — по методу (двойная защита: allowWrites + --allow-writes)
+  const isWriteStep = (r) => scn.kind === 'sql' ? SQL_WRITE_RE.test(r.sql || '') : WRITE_METHODS.includes(String(r.method || '').toUpperCase());
+  const writeReqs = [...allSteps, ...lifecycleSteps].filter(isWriteStep);
   if (writeReqs.length && scn.allowWrites !== true) {
     push(errors,
       `Сценарий содержит изменяющие запросы (${writeReqs.map((r) => `"${r.name}"`).join(', ')}), но allowWrites не установлен в true.\n` +
@@ -829,20 +896,23 @@ async function resolveVars(scn, token) {
  */
 async function runLifecyclePhase(scn, steps, token, vars, { abortOnFail }) {
   const results = [];
-  for (const step of steps) {
-    const r = await callOnce(scn, step, vars, token);
-    let rec = r, capErr = null;
-    if (r.ok && step.capture) {
-      const cap = applyCaptures(step, r.text, vars); // мутирует vars — значение доступно дальше
-      if (!cap.ok) { rec = { ms: r.ms, status: r.status, ok: false, kind: 'capture' }; capErr = cap.error; }
+  const conn = scn.kind === 'sql' ? openSqlSession(scn) : null; // отдельное соединение на фазу
+  try {
+    for (const step of steps) {
+      const r = await callOnce(scn, step, vars, token, conn);
+      let rec = r, capErr = null;
+      if (r.ok && step.capture && scn.kind !== 'sql') { // capture в SQL пока не поддержан — не пытаемся (у SQL-записи нет r.text)
+        const cap = applyCaptures(step, r.text, vars); // мутирует vars — значение доступно дальше
+        if (!cap.ok) { rec = { ms: r.ms, status: r.status, ok: false, kind: 'capture' }; capErr = cap.error; }
+      }
+      results.push({
+        name: step.name, method: step.method, ok: rec.ok, status: rec.status || 0,
+        ms: Math.round(rec.ms || 0), error: rec.ok ? null : (rec.errMsg || capErr || rec.snippet || `HTTP ${rec.status}`),
+        captured: rec.ok && step.capture ? Object.keys(step.capture) : [],
+      });
+      if (!rec.ok && abortOnFail) break;
     }
-    results.push({
-      name: step.name, method: step.method, ok: rec.ok, status: rec.status || 0,
-      ms: Math.round(rec.ms || 0), error: rec.ok ? null : (rec.errMsg || capErr || rec.snippet || `HTTP ${rec.status}`),
-      captured: rec.ok && step.capture ? Object.keys(step.capture) : [],
-    });
-    if (!rec.ok && abortOnFail) break;
-  }
+  } finally { if (conn) await conn.close(); }
   return { results, allOk: results.length === steps.length && results.every((x) => x.ok) };
 }
 
@@ -922,7 +992,157 @@ function buildMultipart(scnDir, fields, vars, used) {
   return { body: Buffer.concat(chunks), contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
-async function callOnce(scn, req, vars, token) {
+// ─────────────────────────────────────────── SQL-транспорт (kind:"sql") ──
+// Движок «думает» тот же (VUs/workers/stages/warmup/перцентили/вердикт) — меняется лишь транспорт:
+// на VU держим ОДИН персистентный клиент СУБД (psql/sqlline/…) = одно соединение. Латентность —
+// СЕРВЕРНАЯ (парсим таймер драйвера), а не wall-clock (без шума docker-exec pipe). Zero-dep: шелимся
+// в родной CLI СУБД (как уже делаем для docker stats). Рамка SQL_MARK (echo после запроса) отделяет
+// результат одного запроса от следующего в общем потоке stdout (+ merge stderr → ошибки СУБД в тот же буфер).
+const SQL_MARK = '__LOADGEN_ROW_DONE__';
+// markCmd: команды после КАЖДОГО запроса. Для psql статус берём В КАНАЛЕ stdout через :ERROR/:SQLSTATE
+// (echo ПЕРЕД маркером) — это надёжно, в отличие от парсинга stderr: stderr и stdout — разные пайпы,
+// порядок их data-событий не гарантирован, поэтому ошибка могла «протечь» в соседний запрос (ложный OK/ошибка).
+const SQL_DRIVERS = {
+  psql: { flags: ['-q', '-A'], init: ['\\timing on'],
+    // серверный лимит на запрос: даже если убьём локальный клиент (docker exec НЕ пробрасывает сигнал
+    // в контейнерный psql), backend Postgres сам снимет запрос по statement_timeout и освободится —
+    // иначе осиротевшие backend'ы копятся к max_connections и кладут ту самую цель, что мы измеряем.
+    stmtTimeout: 'SET statement_timeout = {ms}',
+    markCmd: '\\echo LGSTAT=:ERROR :SQLSTATE\n\\echo ' + SQL_MARK,
+    statusRe: 'LGSTAT=(true|false)\\s+(\\S*)', // in-band статус: авторитетный признак ошибки
+    timeRe: 'Time:\\s*([\\d.]+)\\s*ms', rowsRe: '\\((\\d+) rows?\\)', errRe: '^(?:ERROR|FATAL|PANIC):' },
+  // sqlline (Apache Ignite thin JDBC) — рабочая заготовка; in-band статуса как :ERROR нет, поэтому ошибка
+  // распознаётся по stderr (best-effort). Тонкости под версию переопределяются в sql-блоке.
+  sqlline: { flags: ['--silent=true', '--outputformat=csv'], init: ['!set timing true'], markCmd: '!echo ' + SQL_MARK,
+    timeRe: '\\(([\\d.]+)\\s*seconds?\\)', rowsRe: '(\\d+)\\s+rows? selected', errRe: '^(?:Error|Exception)' },
+};
+// Детект мутирующего SQL для write-guard. Эвристика по ключевым словам — заведомо неполна (например
+// `select pg_terminate_backend(...)` не поймать), поэтому лучше пере-флагнуть, чем пропустить: включаем
+// и операционные команды (VACUUM/REFRESH/…), и `SELECT ... INTO`. Для SQL read-only не гарантируется —
+// в отличие от HTTP, где метод авторитетен (см. предупреждение в validateScenario).
+const SQL_WRITE_RE = /\b(insert|update|delete|create|drop|truncate|alter|merge|grant|revoke|copy|call|into|vacuum|refresh|reindex|cluster|comment|lock|do)\b/i;
+
+/** Разбор ответа драйвера из общего буфера (до рамки MARK): серверная латентность / строки / ошибка. Чистая — тестируемая. */
+function parseSqlChunk(chunk, cfg, wallMs) {
+  const tm = cfg.timeRe && chunk.match(cfg.timeRe);
+  let ms = tm ? Number(tm[1]) : wallMs; // серверное время драйвера точнее wall-clock (без шума pipe)
+  if (tm && cfg.timeUnit === 'sec') ms *= 1000; // sqlline печатает секунды
+  if (!Number.isFinite(ms)) ms = wallMs;
+  const errLine = () => (cfg.errRe && chunk.split('\n').find((l) => cfg.errRe.test(l)) || '').trim();
+  // 1) НАДЁЖНЫЙ путь: in-band статус в stdout (psql :ERROR) — не зависит от гонки stderr↔stdout
+  if (cfg.statusRe) {
+    const sm = chunk.match(cfg.statusRe);
+    if (sm) {
+      if (sm[1] === 'true') return { ms, ok: false, kind: 'query', errMsg: (errLine() || `ошибка SQL (SQLSTATE ${sm[2] || '?'})`).slice(0, 200), rows: 0 };
+      const rm = cfg.rowsRe && chunk.match(cfg.rowsRe); // статус=false авторитетен: игнорируем «протёкший» из соседа ERROR-текст
+      return { ms, ok: true, rows: rm ? Number(rm[1]) : 0 };
+    }
+    // статус ожидался, но не найден (частичный вывод) — падаем на stderr-эвристику ниже
+  }
+  // 2) FALLBACK для драйверов без in-band статуса (custom/sqlline): признак ошибки — текст на stderr
+  if (cfg.errRe && cfg.errRe.test(chunk)) return { ms, ok: false, kind: 'query', errMsg: (errLine() || 'ошибка SQL').slice(0, 200), rows: 0 };
+  const rm = cfg.rowsRe && chunk.match(cfg.rowsRe);
+  return { ms, ok: true, rows: rm ? Number(rm[1]) : 0 };
+}
+
+/** Конфиг драйвера SQL: пресет по имени + переопределения из sql-блока. Резолвится ОДИН раз в validate. */
+function resolveSqlDriver(sql) {
+  const preset = SQL_DRIVERS[sql.driver] || {};
+  const reOrNull = (v, presetStr, flags) => v ? new RegExp(v, flags) : (presetStr ? new RegExp(presetStr, flags) : null);
+  return {
+    command: [...sql.command, ...(sql.flags || preset.flags || [])],
+    init: sql.init || preset.init || [],
+    stmtTimeout: sql.stmtTimeout || preset.stmtTimeout || null, // серверный лимит на запрос ({ms} → timeoutMs)
+    markCmd: sql.mark || preset.markCmd || ('\\echo ' + SQL_MARK),
+    mark: SQL_MARK,
+    statusRe: reOrNull(sql.statusRegex, preset.statusRe), // надёжный in-band статус (psql :ERROR)
+    timeRe: reOrNull(sql.timeRegex, preset.timeRe),
+    rowsRe: reOrNull(sql.rowsRegex, preset.rowsRe),
+    errRe: reOrNull(sql.errorRegex, preset.errRe, 'm'),
+    timeUnit: (sql.driver === 'sqlline') ? 'sec' : 'ms', // sqlline печатает секунды
+  };
+}
+
+/** Открыть персистентную SQL-сессию: один клиентский процесс = одно соединение. */
+function openSqlSession(scn) {
+  const cfg = scn._sqlDriver;
+  const [cmd, ...args] = cfg.command;
+  const sess = { dead: false, _err: null, _pending: null, _buf: '' };
+  let ps;
+  try { ps = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] }); }
+  catch (e) { sess.dead = true; sess._err = `не удалось запустить клиент СУБД (${cmd}): ${e.message}`; return sess; }
+  sess._ps = ps;
+  const onData = (d) => {
+    sess._buf += d.toString();
+    let i;
+    while ((i = sess._buf.indexOf(cfg.mark)) >= 0) {
+      const chunk = sess._buf.slice(0, i);
+      sess._buf = sess._buf.slice(i + cfg.mark.length);
+      const p = sess._pending; sess._pending = null;
+      if (p) p(chunk);
+    }
+  };
+  ps.stdout.on('data', onData);
+  ps.stderr.on('data', onData); // merge: ошибки СУБД (stderr) в тот же буфер — рамка mark ловит их до себя
+  const fail = (msg) => { sess.dead = true; if (!sess._err) sess._err = msg; const p = sess._pending; sess._pending = null; if (p) p(null); };
+  ps.on('error', (e) => fail(`клиент СУБД: ${e.message}`));
+  ps.on('exit', (code) => fail(code ? `клиент СУБД вышел с кодом ${code}` : 'клиент СУБД закрыл соединение'));
+  // серверный statement_timeout (если драйвер его поддерживает) идёт ПЕРВЫМ — бэкенд сам снимет затянувшийся запрос
+  const initLines = cfg.stmtTimeout ? [cfg.stmtTimeout.replace('{ms}', String(scn.timeoutMs)), ...cfg.init] : cfg.init;
+  try { for (const line of initLines) ps.stdin.write(line + '\n'); } catch (e) { fail(`init СУБД: ${e.message}`); }
+
+  sess.query = (sql, timeoutMs) => new Promise((resolve) => {
+    if (sess.dead) return resolve({ ms: 0, ok: false, kind: 'conn', errMsg: sess._err || 'соединение закрыто' });
+    const t0 = performance.now();
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return; done = true; sess._pending = null; sess.dead = true;
+      try { ps.kill(); } catch { /* уже мёртв */ }
+      resolve({ ms: performance.now() - t0, ok: false, kind: 'timeout', errMsg: `запрос не завершился за ${timeoutMs}ms` });
+    }, timeoutMs);
+    sess._pending = (chunk) => {
+      if (done) return; done = true; clearTimeout(timer);
+      if (chunk == null) return resolve({ ms: performance.now() - t0, ok: false, kind: 'conn', errMsg: sess._err || 'клиент СУБД закрылся' });
+      resolve(parseSqlChunk(chunk, cfg, performance.now() - t0));
+    };
+    try { ps.stdin.write(sql + ';\n' + cfg.markCmd + '\n'); }
+    catch (e) { done = true; clearTimeout(timer); sess.dead = true; resolve({ ms: 0, ok: false, kind: 'conn', errMsg: `запись в клиент СУБД: ${e.message}` }); }
+  });
+
+  sess.close = () => new Promise((res) => {
+    // закрываем, даже если sess.dead: процесс мог быть помечен мёртвым, но ещё жив (напр. init-ошибка) —
+    // важно не оставить сироту. Если процесс уже реально завершён (exitCode/signalCode) — выходим сразу.
+    if (!ps || ps.exitCode !== null || ps.signalCode !== null) return res();
+    let settled = false;
+    const fin = () => { if (settled) return; settled = true; res(); };
+    ps.on('exit', fin);
+    try { ps.stdin.end(); } catch { /* ignore */ }
+    setTimeout(() => { try { ps.kill(); } catch { /* ignore */ } fin(); }, 500);
+  });
+  return sess;
+}
+
+/** Один SQL-«вызов»: рендер запроса ({{var}}), выполнение в персистентной сессии, checks (minRows/maxMs). */
+async function sqlCallOnce(scn, req, vars, conn) {
+  const used = {};
+  let sql;
+  try { sql = renderTemplate(req.sql, vars, used); }
+  catch (e) { return { ms: 0, status: 0, ok: false, kind: 'config', errMsg: e.message, used }; }
+  if (!conn || conn.dead) return { ms: 0, status: 0, ok: false, kind: 'conn', errMsg: (conn && conn._err) || 'нет живого SQL-соединения', used };
+  const r = await conn.query(sql, scn.timeoutMs);
+  r.used = used;
+  if (!r.ok) { r.status = r.status ?? 0; return r; }
+  const c = req.checks || {};
+  const fails = [];
+  if (c.minRows !== undefined && (r.rows || 0) < c.minRows) fails.push(`minRows: вернулось ${r.rows}, ожидалось >= ${c.minRows}`);
+  if (c.notEmpty === true && (r.rows || 0) < 1) fails.push('notEmpty: запрос не вернул строк');
+  if (fails.length) return { ms: r.ms, status: 'OK', ok: false, kind: 'check', errMsg: fails.join('; '), snippet: `rows=${r.rows}`, used, rows: r.rows };
+  const slow = c.maxMs !== undefined && r.ms > c.maxMs;
+  return { ms: r.ms, status: 'OK', ok: true, slow, used, rows: r.rows };
+}
+
+async function callOnce(scn, req, vars, token, conn) {
+  if (scn.kind === 'sql') return sqlCallOnce(scn, req, vars, conn);
   let url, body;
   const used = {};
   const rawHeaders = { ...(scn.headers || {}), ...(req.headers || {}) };
@@ -1041,7 +1261,7 @@ function makeRateGate(maxRps) {
  * session-переменные накладываются поверх глобальных. Возвращает { interrupted } —
  * true, если сессию оборвал конец теста/прерывание (такую сессию не считаем в flow-статистику).
  */
-async function runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, ctx, endAt, rateGate) {
+async function runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, ctx, endAt, rateGate, conn) {
   const vars = { ...scn._resolvedVars };
   let completed = true, brokeAt = null, interrupted = false;
   let svcMs = 0; // сумма ВРЕМЕНИ ОТВЕТОВ шагов — без rate-gate пауз и think-time (это латентность цели, не пейсинг генератора)
@@ -1049,9 +1269,9 @@ async function runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, c
     if (Date.now() >= endAt || ctx.aborted) { interrupted = true; break; }
     if (rateGate) await rateGate();
     const step = flow.steps[i];
-    const r = await callOnce(scn, step, vars, token);
+    const r = await callOnce(scn, step, vars, token, conn);
     let rec = r;
-    if (r.ok && step.capture) {
+    if (r.ok && step.capture && scn.kind !== 'sql') { // capture в SQL пока не поддержан — не пытаемся (у SQL-записи нет r.text)
       const cap = applyCaptures(step, r.text, vars);
       if (!cap.ok) rec = { ms: r.ms, status: r.status, ok: false, kind: 'capture', errMsg: cap.error, used: r.used };
     }
@@ -1073,6 +1293,7 @@ async function runLoadSlice({ scn, preToken, stats, vuCount, vuBase, vuStride, t
   const stages = scn.load.stages;
   const t0 = startedAt || Date.now();
   const stride = vuStride || 1;
+  const isSql = scn.kind === 'sql';
   const runVU = async (localIdx) => {
     // round-robin по глобальному индексу: активный набор ступеней [0,target) равномерно
     // ложится на все потоки (иначе на ramp работал бы только поток с младшими индексами)
@@ -1080,16 +1301,20 @@ async function runLoadSlice({ scn, preToken, stats, vuCount, vuBase, vuStride, t
     const token = preToken; // общий токен из pre-flight (логин один раз, без шторма на старте)
     void loginFailures;
     if (!stages && rampMs) await sleep((rampMs * globalIdx) / Math.max(1, totalVus));
-    while (Date.now() < endAt && !ctx.aborted) {
-      if (stages) {
-        // VU активен, только если его глобальный индекс попадает в текущий целевой уровень ступеней
-        if (globalIdx >= stageTargetAt(stages, Date.now() - t0)) { await sleep(200); continue; }
+    let conn = isSql ? openSqlSession(scn) : null; // персистентное соединение на VU (для SQL)
+    try {
+      while (Date.now() < endAt && !ctx.aborted) {
+        if (stages) {
+          // VU активен, только если его глобальный индекс попадает в текущий целевой уровень ступеней
+          if (globalIdx >= stageTargetAt(stages, Date.now() - t0)) { await sleep(200); continue; }
+        }
+        if (isSql && (!conn || conn.dead)) { if (conn) await conn.close(); conn = openSqlSession(scn); } // закрыть мёртвую (не оставить сироту) и переоткрыть
+        const flow = pick();
+        await runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, ctx, endAt, rateGate, conn);
+        // think-time между сессиями (для одношаговых flow = пауза между итерациями, как раньше)
+        if (ttMax > 0) await sleep(ttMin + Math.random() * (ttMax - ttMin));
       }
-      const flow = pick();
-      await runFlowSession(scn, flow, token, stats, ttMin, ttMax, onSample, ctx, endAt, rateGate);
-      // think-time между сессиями (для одношаговых flow = пауза между итерациями, как раньше)
-      if (ttMax > 0) await sleep(ttMin + Math.random() * (ttMax - ttMin));
-    }
+    } finally { if (conn) await conn.close(); }
   };
   await Promise.all(Array.from({ length: vuCount }, (_, i) => runVU(i)));
 }
@@ -1644,8 +1869,9 @@ function buildReport(scn, stats, opts = {}) {
   }
 
   return {
-    tool: 'loadgen', version: VERSION,
-    scenario: scn.name || '(без имени)', baseUrl: scn.baseUrl,
+    tool: 'loadgen', version: VERSION, kind: scn.kind || 'http',
+    scenario: scn.name || '(без имени)',
+    baseUrl: scn.baseUrl || (scn.kind === 'sql' ? `SQL[${scn.sql?.driver || 'custom'}]` : ''),
     mode: opts.smoke ? 'smoke' : 'load',
     startedAt: new Date(stats.startedAt).toISOString(),
     durationSec: Number(durSec.toFixed(1)),
@@ -1916,7 +2142,7 @@ function printReport(rep) {
   L(`Запросов: ${rep.total} за ${rep.durationSec}с (RPS ${bold(rep.rps)}, VUs ${rep.vus}) | Ошибок: ${rep.errors} (${rep.errorRatePct}%)`);
   const lm = rep.latencyMs;
   L(`Латентность мс: p50 ${fmtMs(lm.p50)} | p90 ${fmtMs(lm.p90)} | p95 ${bold(fmtMs(lm.p95))} | p99 ${fmtMs(lm.p99)} | max ${fmtMs(lm.max)}`);
-  if (lm.ttfbP95 != null && lm.p95 > 0) L(dim(`  из p95: TTFB (сервер+сеть до 1-го байта) ~${fmtMs(lm.ttfbP95)}ms, скачивание тела ~${fmtMs(Math.max(0, lm.p95 - lm.ttfbP95))}ms`));
+  if (rep.kind !== 'sql' && lm.ttfbP95 != null && lm.p95 > 0) L(dim(`  из p95: TTFB (сервер+сеть до 1-го байта) ~${fmtMs(lm.ttfbP95)}ms, скачивание тела ~${fmtMs(Math.max(0, lm.p95 - lm.ttfbP95))}ms`));
   for (const c of rep.checks) L(`Порог: ${c.name} ${c.pass ? green('OK') : red('НАРУШЕН')}`);
   L('==============================================');
   if (rep.hints.length) {
@@ -1982,7 +2208,7 @@ async function cmdProbe(positional) {
   console.log(`ИТОГ PROBE: REACHABLE${authNeeded ? ' (часть путей требует авторизацию — настройте блок auth в сценарии)' : ''}`);
 }
 
-const PRESET_NAMES = ['smoke', 'browse', 'journey', 'stress', 'ci', 'write'];
+const PRESET_NAMES = ['smoke', 'browse', 'journey', 'stress', 'ci', 'write', 'sql-postgres'];
 
 const PRESET_DESC = {
   smoke: 'быстрая проверка конфига (пара GET, run --smoke)',
@@ -1991,6 +2217,7 @@ const PRESET_DESC = {
   stress: 'многоступенчатый профиль load.stages (ramp/spike/soak)',
   ci: 'CI-гейт: жёсткие пороги p95/p99/rpsMin + perRequest SLO',
   write: 'write-тест с setup/teardown (allowWrites)',
+  'sql-postgres': 'kind:"sql" — нагрузка прямо на Postgres через persistent psql',
 };
 
 function cmdInit(flags) {
@@ -2088,9 +2315,10 @@ function cmdValidate(positional) {
     for (const e of errors) console.log(`  ✗ ${e}`);
     process.exit(1);
   }
-  const writes = scn._steps.filter((r) => WRITE_METHODS.includes(r.method)).length;
+  const writes = scn._steps.filter((r) => scn.kind === 'sql' ? SQL_WRITE_RE.test(r.sql || '') : WRITE_METHODS.includes(r.method)).length;
   const flowNote = scn._hasExplicitFlows ? `, цепочек: ${scn.flows.length}` : '';
-  console.log(`OK: сценарий валиден. Шагов: ${scn._steps.length} (изменяющих: ${writes})${flowNote}, VUs: ${scn.load.vus}, потоков: ${scn.load.workers}, длительность: ${scn.load.durationSec}с, цель: ${scn.baseUrl}`);
+  const tgt = scn.kind === 'sql' ? `SQL[${scn.sql.driver || 'custom'}]` : scn.baseUrl;
+  console.log(`OK: сценарий валиден. Шагов: ${scn._steps.length} (изменяющих: ${writes})${flowNote}, VUs: ${scn.load.vus}, потоков: ${scn.load.workers}, длительность: ${scn.load.durationSec}с, цель: ${tgt}`);
 }
 
 // ─────────────────────────────────────────────── profile: статистика N запросов → черновик сценария ──
@@ -2591,23 +2819,27 @@ async function cmdRun(positional, flags) {
     process.exit(1);
   }
 
-  // защита: запись (нагрузка + setup + teardown)
-  const hasWrites = [...scn._steps, ...(scn._setup || []), ...(scn._teardown || [])].some((r) => WRITE_METHODS.includes(String(r.method || '').toUpperCase()));
+  // защита: запись (нагрузка + setup + teardown). Для SQL — по ключевым словам DML/DDL, для HTTP — по методу.
+  const stepWrites = (r) => scn.kind === 'sql' ? SQL_WRITE_RE.test(r.sql || '') : WRITE_METHODS.includes(String(r.method || '').toUpperCase());
+  const hasWrites = [...scn._steps, ...(scn._setup || []), ...(scn._teardown || [])].some(stepWrites);
   if (hasWrites && !flags['allow-writes']) {
     die(1, 'Сценарий содержит изменяющие запросы (allowWrites:true задан), но для запуска нужен ещё явный флаг --allow-writes.\nЭто двойная защита: убедитесь, что пользователь явно разрешил запись в целевую систему.');
   }
-  // защита: внешний хост
-  const host = new URL(scn.baseUrl).hostname;
-  if (!isPrivateHost(host) && !flags['confirm-external']) {
-    die(1, `Цель ${scn.baseUrl} — внешний хост (не localhost/приватная сеть).\n` +
-      'Нагрузка на чужие системы без разрешения недопустима. Если это ВАШ сервер и тест согласован — добавьте флаг --confirm-external.');
+  // защита: внешний хост — только для HTTP (у SQL цель = локальный CLI-клиент, не URL)
+  if (scn.kind !== 'sql') {
+    const host = new URL(scn.baseUrl).hostname;
+    if (!isPrivateHost(host) && !flags['confirm-external']) {
+      die(1, `Цель ${scn.baseUrl} — внешний хост (не localhost/приватная сеть).\n` +
+        'Нагрузка на чужие системы без разрешения недопустима. Если это ВАШ сервер и тест согласован — добавьте флаг --confirm-external.');
+    }
   }
 
   const smoke = !!flags.smoke;
+  const targetLabel = scn.kind === 'sql' ? `SQL[${scn.sql.driver || 'custom'}] ${scn.sql.command.slice(-3).join(' ')}` : scn.baseUrl;
   const loadDesc = scn.load.stages
     ? `STAGES (${scn.load.stages.length} ступ., пик ${scn.load.vus} VUs, ${scn.load.durationSec}с${scn.load.workers > 1 ? `, ×${scn.load.workers} потоков` : ''})`
     : `LOAD (${scn.load.vus} VUs${scn.load.workers > 1 ? `×${scn.load.workers} потоков` : ''}, ${scn.load.durationSec}с)`;
-  console.log(`loadgen v${VERSION} | сценарий "${scn.name || '(без имени)'}" | цель ${scn.baseUrl} | режим ${smoke ? `SMOKE (${scn._hasExplicitFlows ? 'каждая цепочка' : 'каждый запрос'} по 1 разу)` : loadDesc}`);
+  console.log(`loadgen v${VERSION} | сценарий "${scn.name || '(без имени)'}" | цель ${targetLabel} | режим ${smoke ? `SMOKE (${scn._hasExplicitFlows ? 'каждая цепочка' : 'каждый запрос'} по 1 разу)` : loadDesc}`);
 
   // pre-flight: логин + переменные
   let preToken = null;
@@ -2675,27 +2907,34 @@ async function cmdRun(positional, flags) {
     // прогоняем каждую цепочку целиком (шаги по порядку с реальным захватом переменных) по 1 разу
     stats.startedAt = Date.now();
     console.log('');
-    for (const flow of scn._flows) {
-      const isJourney = flow.steps.length > 1;
-      if (isJourney) console.log(`  ▸ цепочка "${flow.name}":`);
-      const vars = { ...scn._resolvedVars };
-      for (const step of flow.steps) {
-        const r = await callOnce(scn, step, vars, preToken);
-        let rec = r;
-        if (r.ok && step.capture) {
-          const cap = applyCaptures(step, r.text, vars);
-          if (!cap.ok) rec = { ms: r.ms, status: r.status, ok: false, kind: 'capture', errMsg: cap.error };
+    const isSql = scn.kind === 'sql';
+    const smokeConn = isSql ? openSqlSession(scn) : null;
+    try {
+      for (const flow of scn._flows) {
+        const isJourney = flow.steps.length > 1;
+        if (isJourney) console.log(`  ▸ цепочка "${flow.name}":`);
+        const vars = { ...scn._resolvedVars };
+        for (const step of flow.steps) {
+          const r = await callOnce(scn, step, vars, preToken, smokeConn);
+          let rec = r;
+          if (r.ok && step.capture && scn.kind !== 'sql') { // capture в SQL пока не поддержан — не пытаемся (у SQL-записи нет r.text)
+            const cap = applyCaptures(step, r.text, vars);
+            if (!cap.ok) rec = { ms: r.ms, status: r.status, ok: false, kind: 'capture', errMsg: cap.error };
+          }
+          stats.record(step, rec, Date.now());
+          const capNote = rec.ok && step.capture ? ` [captured: ${Object.keys(step.capture).join(', ')}]` : '';
+          const pad = isJourney ? '    ' : '  ';
+          const verb = isSql ? 'SQL' : step.method;
+          const okDesc = isSql ? `OK${rec.rows != null ? ` rows=${rec.rows}` : ''}` : `HTTP ${rec.status}`;
+          const badDesc = (rec.status && !isSql) ? `HTTP ${rec.status}` : rec.kind;
+          const line = rec.ok
+            ? `${pad}[OK]   ${step.name}: ${verb} → ${okDesc} (${fmtMs(rec.ms)}ms)${capNote}`
+            : `${pad}[FAIL] ${step.name}: ${verb} → ${badDesc} (${fmtMs(rec.ms)}ms) ${rec.errMsg || rec.snippet || ''}`.trimEnd();
+          console.log(line);
+          if (!rec.ok && isJourney) { console.log(`    ↳ цепочка оборвана на этом шаге, остальные шаги пропущены`); break; }
         }
-        stats.record(step, rec, Date.now());
-        const capNote = rec.ok && step.capture ? ` [captured: ${Object.keys(step.capture).join(', ')}]` : '';
-        const pad = isJourney ? '    ' : '  ';
-        const line = rec.ok
-          ? `${pad}[OK]   ${step.name}: ${step.method} → HTTP ${rec.status} (${fmtMs(rec.ms)}ms)${capNote}`
-          : `${pad}[FAIL] ${step.name}: ${step.method} → ${rec.status ? `HTTP ${rec.status}` : rec.kind} (${fmtMs(rec.ms)}ms) ${rec.errMsg || rec.snippet || ''}`.trimEnd();
-        console.log(line);
-        if (!rec.ok && isJourney) { console.log(`    ↳ цепочка оборвана на этом шаге, остальные шаги пропущены`); break; }
       }
-    }
+    } finally { if (smokeConn) await smokeConn.close(); }
     stats.endedAt = Date.now();
   } else if (scn.load.workers > 1) {
     // ─── многопоточный режим: worker_threads на несколько ядер ──
@@ -2866,6 +3105,7 @@ async function cmdRun(positional, flags) {
 async function runWorkerSlice() {
   const { scnJson, preToken, vuCount, vuBase, vuStride, totalVus, endAt, rampMs, effectiveMaxRps, startedAt } = workerData;
   const scn = JSON.parse(scnJson);
+  if (scn.kind === 'sql') scn._sqlDriver = resolveSqlDriver(scn.sql); // RegExp не переживает JSON — пересобираем драйвер в воркере
   const stats = makeStats(scn._steps);
   const loginFailures = [];
   const ctx = { aborted: false };
@@ -2887,7 +3127,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram, resolveSqlDriver, parseSqlChunk };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

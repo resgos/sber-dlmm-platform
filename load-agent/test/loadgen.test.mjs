@@ -9,6 +9,7 @@ import {
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
   toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart,
   histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram,
+  resolveSqlDriver, parseSqlChunk,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -663,4 +664,123 @@ test('mergeStats: складывает per-step и flowStats из несколь
   assert.equal(f.started, 2);
   assert.equal(f.completed, 1);
   assert.equal(f.breaks.get('s2'), 1);
+});
+
+// ─── SQL-режим (kind:"sql") ──
+test('resolveSqlDriver: пресет psql + переопределения custom', () => {
+  const pg = resolveSqlDriver({ driver: 'psql', command: ['psql', '-d', 'x'] });
+  assert.deepEqual(pg.command, ['psql', '-d', 'x', '-q', '-A']); // флаги пресета дописаны
+  assert.match(pg.markCmd, /__LOADGEN_ROW_DONE__/); // маркер конца результата
+  assert.match(pg.markCmd, /LGSTAT=:ERROR/);         // in-band статус для надёжного детекта ошибки
+  assert.ok(pg.statusRe instanceof RegExp && pg.timeRe instanceof RegExp && pg.errRe instanceof RegExp);
+  assert.equal(pg.timeUnit, 'ms');
+  const custom = resolveSqlDriver({ driver: 'custom', command: ['mysql'], mark: '-- DONE', timeRegex: 'took (\\d+)ms' });
+  assert.equal(custom.markCmd, '-- DONE');
+  assert.ok(custom.timeRe.test('took 5ms'));
+});
+test('parseSqlChunk: psql SELECT — строки из футера, латентность из Time, LGSTAT=false → ok', () => {
+  const cfg = resolveSqlDriver({ driver: 'psql', command: ['psql'] });
+  const r = parseSqlChunk('n\n1\n2\n3\n(3 rows)\nTime: 4.029 ms\nLGSTAT=false 00000\n', cfg, 99);
+  assert.equal(r.ok, true);
+  assert.equal(r.rows, 3);
+  assert.equal(r.ms, 4.029); // серверное время, НЕ wall-clock 99
+});
+test('parseSqlChunk: psql LGSTAT=true → провал вида query (in-band статус, не stderr)', () => {
+  const cfg = resolveSqlDriver({ driver: 'psql', command: ['psql'] });
+  const r = parseSqlChunk('ERROR:  column "x" does not exist\nTime: 1.1 ms\nLGSTAT=true 42703\n', cfg, 50);
+  assert.equal(r.ok, false);
+  assert.equal(r.kind, 'query');
+  assert.match(r.errMsg, /column "x" does not exist/);
+});
+test('parseSqlChunk: LGSTAT=true даже без текста ошибки (используем SQLSTATE)', () => {
+  const cfg = resolveSqlDriver({ driver: 'psql', command: ['psql'] });
+  const r = parseSqlChunk('\nTime: 1.0 ms\nLGSTAT=true 23505\n', cfg, 50); // stderr-текст ушёл по гонке
+  assert.equal(r.ok, false);
+  assert.match(r.errMsg, /23505/);
+});
+test('parseSqlChunk: LGSTAT=false АВТОРИТЕТЕН — «протёкший» из соседа ERROR-текст НЕ даёт ложную ошибку (фикс гонки)', () => {
+  const cfg = resolveSqlDriver({ driver: 'psql', command: ['psql'] });
+  // в чанке есть строка ERROR: (припозднившийся stderr предыдущего запроса), но LGSTAT говорит false
+  const r = parseSqlChunk('ERROR:  relation "prev" does not exist\n1\n(1 row)\nTime: 0.5 ms\nLGSTAT=false 00000\n', cfg, 50);
+  assert.equal(r.ok, true, 'статус=false важнее протёкшего ERROR-текста');
+  assert.equal(r.rows, 1);
+});
+test('parseSqlChunk: без statusRe (custom-драйвер) — ошибка по stderr-regex (fallback)', () => {
+  const cfg = resolveSqlDriver({ driver: 'custom', command: ['mysql'], mark: '-- D', errorRegex: '^ERROR' });
+  const r = parseSqlChunk('ERROR 1146: table missing\n', cfg, 20);
+  assert.equal(r.ok, false);
+  assert.equal(r.kind, 'query');
+});
+test('parseSqlChunk: write без футера строк → ok, rows 0; wall-clock fallback если нет Time', () => {
+  const cfg = resolveSqlDriver({ driver: 'psql', command: ['psql'] });
+  const ins = parseSqlChunk('\nTime: 0.7 ms\n', cfg, 50);
+  assert.equal(ins.ok, true); assert.equal(ins.rows, 0); assert.equal(ins.ms, 0.7);
+  const noTime = parseSqlChunk('somerow\n(1 row)\n', cfg, 42); // нет строки Time — берём wall
+  assert.equal(noTime.ms, 42);
+});
+test('parseSqlChunk: sqlline печатает секунды → переводим в мс', () => {
+  const cfg = resolveSqlDriver({ driver: 'sqlline', command: ['sqlline'] });
+  const r = parseSqlChunk('X\n1 row selected (0.05 seconds)\n', cfg, 999);
+  assert.equal(r.ok, true);
+  assert.equal(r.ms, 50); // 0.05 сек × 1000
+});
+test('validateScenario: корректный kind:"sql" проходит без baseUrl и резолвит драйвер', () => {
+  const scn = { kind: 'sql', sql: { driver: 'psql', command: ['psql', '-d', 'x'] },
+    requests: [{ name: 'q', sql: 'select 1', checks: { minRows: 1, maxMs: 50 } }], load: { vus: 2, durationSec: 2 } };
+  const { errors } = validateScenario(scn);
+  assert.deepEqual(errors, []);
+  assert.ok(scn._sqlDriver, 'драйвер скомпилирован');
+  assert.equal(scn._steps.length, 1);
+});
+test('validateScenario: kind:"sql" без блока sql / без command = ошибка', () => {
+  const noSql = validateScenario({ kind: 'sql', requests: [{ name: 'q', sql: 'select 1' }], load: { vus: 1, durationSec: 1 } });
+  assert.ok(noSql.errors.some((e) => /sql/.test(e)), 'нет блока sql — ошибка');
+  const noCmd = validateScenario({ kind: 'sql', sql: { driver: 'psql' }, requests: [{ name: 'q', sql: 'select 1' }], load: { vus: 1, durationSec: 1 } });
+  assert.ok(noCmd.errors.some((e) => /command/.test(e)), 'нет command — ошибка');
+});
+test('validateScenario: SQL-шаг без поля sql = ошибка; неверный minRows = ошибка', () => {
+  const noQuery = validateScenario({ kind: 'sql', sql: { driver: 'psql', command: ['psql'] }, requests: [{ name: 'x' }], load: { vus: 1, durationSec: 1 } });
+  assert.ok(noQuery.errors.some((e) => /нет "sql"|sql/.test(e)));
+  const badRows = validateScenario({ kind: 'sql', sql: { driver: 'psql', command: ['psql'] }, requests: [{ name: 'x', sql: 'select 1', checks: { minRows: -1 } }], load: { vus: 1, durationSec: 1 } });
+  assert.ok(badRows.errors.some((e) => /minRows/.test(e)));
+});
+test('validateScenario: {{var}} в тексте SQL проверяется на объявленность', () => {
+  const undef = validateScenario({ kind: 'sql', sql: { driver: 'psql', command: ['psql'] }, requests: [{ name: 'x', sql: 'select * from t limit {{missing}}' }], load: { vus: 1, durationSec: 1 } });
+  assert.ok(undef.errors.some((e) => /\{\{missing\}\}/.test(e)), 'необъявленный placeholder в sql — ошибка');
+  const ok = validateScenario({ kind: 'sql', sql: { driver: 'psql', command: ['psql'] }, vars: { lim: [1, 2] }, requests: [{ name: 'x', sql: 'select * from t limit {{lim}}' }], load: { vus: 1, durationSec: 1 } });
+  assert.deepEqual(ok.errors, []);
+});
+
+// ─── SQL-режим: фиксы адверсариального ревью ──
+test('resolveSqlDriver: psql задаёт серверный statement_timeout (защита от утечки backend при таймауте)', () => {
+  const pg = resolveSqlDriver({ driver: 'psql', command: ['psql'] });
+  assert.match(pg.stmtTimeout, /statement_timeout/);
+  assert.match(pg.stmtTimeout, /\{ms\}/); // подставляется timeoutMs при открытии сессии
+});
+test('validateScenario: SQL-запись без allowWrites = ошибка (двойная защита и для SQL)', () => {
+  const scn = { kind: 'sql', sql: { driver: 'psql', command: ['psql'] },
+    requests: [{ name: 'ins', sql: 'insert into t(v) values (1)' }], load: { vus: 1, durationSec: 1 } };
+  const { errors } = validateScenario(scn);
+  assert.ok(errors.some((e) => /allowWrites/.test(e)), 'INSERT без allowWrites должен блокироваться на уровне сценария');
+});
+test('validateScenario: write-guard SQL ловит VACUUM/REFRESH/SELECT INTO (не только DML)', () => {
+  for (const q of ['vacuum analyze t', 'refresh materialized view mv', 'select * into backup from t']) {
+    const { errors } = validateScenario({ kind: 'sql', sql: { driver: 'psql', command: ['psql'] },
+      requests: [{ name: 'q', sql: q }], load: { vus: 1, durationSec: 1 } });
+    assert.ok(errors.some((e) => /allowWrites/.test(e)), `«${q}» должен считаться изменяющим`);
+  }
+  // чистый SELECT остаётся read-only (не требует allowWrites)
+  const ro = validateScenario({ kind: 'sql', sql: { driver: 'psql', command: ['psql'] },
+    requests: [{ name: 'q', sql: 'select count(*) from information_schema.tables' }], load: { vus: 1, durationSec: 1 } });
+  assert.deepEqual(ro.errors, []);
+});
+test('validateScenario: minRows на INSERT без RETURNING = предупреждение (не вернёт строк)', () => {
+  const { warnings } = validateScenario({ kind: 'sql', sql: { driver: 'psql', command: ['psql'] }, allowWrites: true,
+    requests: [{ name: 'ins', sql: 'insert into t(v) values (1)', checks: { minRows: 1 } }], load: { vus: 1, durationSec: 1 } });
+  assert.ok(warnings.some((w) => /RETURNING|не возвращает строк/.test(w)));
+});
+test('validateScenario: custom SQL-драйвер без statusRegex = предупреждение best-effort по ошибкам', () => {
+  const { warnings } = validateScenario({ kind: 'sql', sql: { driver: 'custom', command: ['mysql'], mark: '-- D' },
+    requests: [{ name: 'q', sql: 'select 1' }], load: { vus: 1, durationSec: 1 } });
+  assert.ok(warnings.some((w) => /best-effort|statusRegex|stderr/.test(w)));
 });
