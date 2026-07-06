@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { notifications as notificationsApi } from '@/api/services'
 import { NOTIFICATION_TYPE_COLORS, NOTIFICATION_TAG_DEFAULT } from '@/styles/palette'
 import { notificationDeepLink } from '@/lib/notificationLink'
+import { compactNotificationAmounts } from '@/lib/notificationText'
 import type { Notification as NotifType } from '@/api/types'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -120,7 +121,8 @@ export default function NotificationBell() {
                   </Text>
                 </div>
                 <Text strong style={{ fontSize: 'var(--text-sm)' }}>{item.title}</Text>
-                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{item.message}</Text>
+                {/* 2026-07-06 — compact ledger-precision amounts at render. */}
+                <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{compactNotificationAmounts(item.message)}</Text>
                 {/* Any actionable notification (not just margin) gets an "open"
                     link, routed via the shared notificationDeepLink. */}
                 {link && (

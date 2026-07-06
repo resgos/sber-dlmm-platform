@@ -10,6 +10,7 @@ import 'dayjs/locale/ru'
 import { notifications as notificationsApi } from '@/api/services'
 import { NOTIFICATION_TYPE_COLORS, NOTIFICATION_TAG_DEFAULT } from '@/styles/palette'
 import { notificationDeepLink } from '@/lib/notificationLink'
+import { compactNotificationAmounts } from '@/lib/notificationText'
 import { PageHeader } from '@/components/sber'
 import type { Notification as NotifType } from '@/api/types'
 
@@ -189,7 +190,9 @@ export default function NotificationsPage() {
                       </Text>
                     </div>
                     <Text strong style={{ fontSize: 'var(--text-sm)' }}>{item.title}</Text>
-                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{item.message}</Text>
+                    {/* 2026-07-06 — ledger-precision amounts in backend copy
+                        compact at render («4 866 041,7865» → «4.87 млн»). */}
+                    <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{compactNotificationAmounts(item.message)}</Text>
                     {link && (
                       <Button
                         type="link"
