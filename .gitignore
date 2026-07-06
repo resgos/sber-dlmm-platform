@@ -27,3 +27,7 @@ skills/
 
 # loadgen run artifact (при запуске из корня репо)
 /loadgen-result.json
+
+# Claude Code project skills must be versioned (общий skills/ выше — про артефакты сборки)
+!.claude/skills/
+!.claude/skills/**
