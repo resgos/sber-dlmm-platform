@@ -79,6 +79,11 @@ node LOADGEN probe <baseUrl> <path1> <path2>
   (клиент СУБД в PATH или через `docker exec`), шаги задаются полем `sql` вместо method/path,
   checks — `minRows`/`notEmpty`/`maxMs`. Быстрый старт: `init --preset sql-postgres`. Латентность
   серверная. Запись (INSERT/UPDATE/DDL) — как HTTP: `allowWrites:true` + `--allow-writes`.
+- **Сквозной лаг конвейера** (Kafka→PG/Ignite): если просят «за сколько событие долетает до витрины»,
+  «лаг конвейера», «сколько сообщений теряется» — используй `kind:"pipeline"`. Блок `produce`
+  (клиент-продьюсер + `message` с `{{corr}}`) + `verify` (`sql` + `query` с `{{corr}}`) +
+  `pipeline.{pollIntervalMs,timeoutMs}`. Требует `allowWrites`+`--allow-writes` (publish=запись).
+  Быстрый старт: `init --preset pipeline-kafka-pg`. Отчёт даёт лаг p50/p95/p99 и % «застряло».
 - **Пороги/SLO**: помимо `thresholds.p95Ms`/`errorRatePct` есть `p99Ms` (хвост латентности — частый
   SLO), `rpsMin` (минимальная пропускная, fail если ниже), и per-request:
   `thresholds.perRequest: {"имя запроса": {"p95Ms": 100, "p99Ms": 300, "errorRatePct": 0}}`. Всё в вердикт.

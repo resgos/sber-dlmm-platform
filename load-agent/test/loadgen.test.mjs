@@ -784,3 +784,57 @@ test('validateScenario: custom SQL-драйвер без statusRegex = пред�
     requests: [{ name: 'q', sql: 'select 1' }], load: { vus: 1, durationSec: 1 } });
   assert.ok(warnings.some((w) => /best-effort|statusRegex|stderr/.test(w)));
 });
+
+// ─── pipeline-режим (kind:"pipeline") ──
+function basePipe(over = {}) {
+  return {
+    kind: 'pipeline', allowWrites: true,
+    produce: { command: ['kafka-console-producer', '--topic', 't'], message: '{{corr}}:v' },
+    verify: { sql: { driver: 'psql', command: ['psql'] }, query: "select 1 from t where corr='{{corr}}'" },
+    pipeline: { pollIntervalMs: 50, timeoutMs: 3000 },
+    load: { vus: 2, durationSec: 5 }, ...over,
+  };
+}
+test('validateScenario: корректный kind:"pipeline" проходит, резолвит verify-драйвер, _steps=[pipeline]', () => {
+  const scn = basePipe();
+  const { errors } = validateScenario(scn);
+  assert.deepEqual(errors, []);
+  assert.ok(scn._verifyDriver, 'verify-драйвер скомпилирован');
+  assert.equal(scn._steps.length, 1);
+  assert.equal(scn._steps[0].name, 'pipeline');
+  assert.equal(scn.pipeline.pollIntervalMs, 50);
+});
+test('validateScenario: pipeline без produce.command / без {{corr}} в message = ошибка', () => {
+  const noCmd = validateScenario(basePipe({ produce: { message: '{{corr}}:v' } }));
+  assert.ok(noCmd.errors.some((e) => /produce/.test(e)));
+  const noCorr = validateScenario(basePipe({ produce: { command: ['p'], message: 'no-key' } }));
+  assert.ok(noCorr.errors.some((e) => /\{\{corr\}\}/.test(e)));
+});
+test('validateScenario: pipeline без verify / без {{corr}} в query = ошибка', () => {
+  const noVer = validateScenario(basePipe({ verify: undefined }));
+  assert.ok(noVer.errors.some((e) => /verify/.test(e)));
+  const noCorr = validateScenario(basePipe({ verify: { sql: { driver: 'psql', command: ['psql'] }, query: 'select 1' } }));
+  assert.ok(noCorr.errors.some((e) => /\{\{corr\}\}/.test(e)));
+});
+test('validateScenario: pipeline без allowWrites = ошибка (produce = запись)', () => {
+  const { errors } = validateScenario(basePipe({ allowWrites: undefined }));
+  assert.ok(errors.some((e) => /allowWrites/.test(e)));
+});
+
+// ─── pipeline: фиксы адверсариального ревью ──
+test('validateScenario: pipeline с необъявленным {{плейсхолдером}} в message = ошибка (не краш в рантайме)', () => {
+  const bad = validateScenario(basePipe({ produce: { command: ['p'], message: '{{corr}}:{{typo}}' } }));
+  assert.ok(bad.errors.some((e) => /\{\{typo\}\}/.test(e)), 'опечатка плейсхолдера должна ловиться на validate');
+  const ok = validateScenario(basePipe({
+    vars: { region: ['eu', 'us'] },
+    produce: { command: ['p'], message: '{{corr}}:{{region}}' },
+    verify: { sql: { driver: 'psql', command: ['psql'] }, query: "select 1 from t where corr='{{corr}}' and r='{{region}}'" },
+  }));
+  assert.deepEqual(ok.errors, [], 'объявленный list-var + corr — валидно');
+});
+test('renderTemplate: общий used согласует list-переменную между двумя шаблонами (фикс рассинхрона pipeline)', () => {
+  const u = {};
+  const a = renderTemplate('{{region}}', { region: ['eu', 'us', 'asia', 'af'] }, u);
+  const b = renderTemplate('prefix-{{region}}', { region: ['eu', 'us', 'asia', 'af'] }, u);
+  assert.equal(b, 'prefix-' + a, 'второй шаблон переиспользует значение из общего used — produce и verify видят одно значение');
+});

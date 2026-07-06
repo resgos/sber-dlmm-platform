@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.16.0';
+const VERSION = '1.17.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -271,7 +271,7 @@ function die(code, msg) {
 
 // ─────────────────────────────────────────────── validate ──
 
-const KNOWN_ROOT_KEYS = ['name', 'kind', 'baseUrl', 'sql', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor', 'setup', 'teardown'];
+const KNOWN_ROOT_KEYS = ['name', 'kind', 'baseUrl', 'sql', 'produce', 'verify', 'pipeline', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor', 'setup', 'teardown'];
 const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'sql', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture', 'bodyType'];
 const KNOWN_FLOW_KEYS = ['name', 'weight', 'steps'];
 const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals', 'minRows'];
@@ -347,12 +347,12 @@ function validateScenario(scn) {
     }
   }
 
-  // kind — транспорт: "http" (по умолчанию) или "sql" (нагрузка на СУБД через персистентный CLI)
+  // kind — транспорт: "http" (по умолч.) | "sql" (нагрузка на СУБД) | "pipeline" (сквозной лаг Kafka→PG/Ignite)
   scn.kind = scn.kind ?? 'http';
-  if (!['http', 'sql'].includes(scn.kind)) push(errors, `kind должен быть "http" | "sql", сейчас: ${JSON.stringify(scn.kind)}`);
+  if (!['http', 'sql', 'pipeline'].includes(scn.kind)) push(errors, `kind должен быть "http" | "sql" | "pipeline", сейчас: ${JSON.stringify(scn.kind)}`);
 
-  // baseUrl — обязателен только для HTTP (у SQL цель = команда клиента СУБД в sql.command)
-  if (scn.kind !== 'sql') {
+  // baseUrl — только для HTTP (у SQL/pipeline цель = команды CLI-клиентов)
+  if (scn.kind === 'http') {
     if (!scn.baseUrl) push(errors, 'Нет обязательного поля "baseUrl". Пример: "baseUrl": "http://localhost:8080"');
     else {
       try {
@@ -395,6 +395,31 @@ function validateScenario(scn) {
         // статистика ошибок best-effort и под нагрузкой может искажаться. Надёжнее всего driver:"psql".
         if (!scn._sqlDriver.statusRe) push(warnings, `sql.driver:"${sql.driver || 'custom'}" без in-band статуса ошибки (statusRegex) — признак ошибки берётся из stderr, статистика ошибок best-effort (возможна гонка stdout↔stderr под нагрузкой). Максимально надёжно — driver:"psql".`);
       }
+    }
+  }
+
+  // pipeline — сквозной лаг конвейера: produce (Kafka) → verify (SQL-поллинг до материализации)
+  if (scn.kind === 'pipeline') {
+    const pr = scn.produce, ve = scn.verify, pl = scn.pipeline || {};
+    if (!pr || typeof pr !== 'object' || !Array.isArray(pr.command) || !pr.command.length || pr.command.some((x) => typeof x !== 'string')) {
+      push(errors, 'kind:"pipeline" требует "produce": { "command":[...клиент-продьюсер...], "message":"{{corr}}:..." } — command непустой массив строк');
+    }
+    if (!pr || typeof pr.message !== 'string' || !pr.message.includes('{{corr}}')) {
+      push(errors, 'produce.message должен быть строкой и содержать {{corr}} — корреляционный ключ (uuid на итерацию), по которому verify ищет материализацию');
+    }
+    if (!ve || typeof ve !== 'object' || !ve.sql || typeof ve.sql !== 'object' || !Array.isArray(ve.sql.command) || !ve.sql.command.length) {
+      push(errors, 'kind:"pipeline" требует "verify": { "sql":{ "driver":"psql","command":[...] }, "query":"select 1 from t where corr=\'{{corr}}\' limit 1" }');
+    } else if (typeof ve.query !== 'string' || !ve.query.includes('{{corr}}')) {
+      push(errors, 'verify.query должен быть строкой и содержать {{corr}} — иначе поллинг не свяжет запись с посланным сообщением');
+    }
+    pl.pollIntervalMs = pl.pollIntervalMs ?? 100;
+    pl.timeoutMs = pl.timeoutMs ?? 5000;
+    scn.pipeline = pl;
+    if (!Number.isFinite(pl.pollIntervalMs) || pl.pollIntervalMs < 1) push(errors, 'pipeline.pollIntervalMs должен быть числом >= 1');
+    if (!Number.isFinite(pl.timeoutMs) || pl.timeoutMs < 1) push(errors, 'pipeline.timeoutMs (макс. ожидание материализации) должен быть числом >= 1');
+    if (errors.length === 0) {
+      scn._verifyDriver = resolveSqlDriver(ve.sql); // verify-драйвер (обычно psql)
+      if (!scn._verifyDriver.statusRe) push(warnings, `verify.sql.driver:"${ve.sql.driver || 'custom'}" без in-band статуса — ошибки verify-запроса best-effort. Надёжнее psql.`);
     }
   }
 
@@ -594,9 +619,11 @@ function validateScenario(scn) {
 
   const hasRequests = Array.isArray(scn.requests) && scn.requests.length;
   const hasFlows = Array.isArray(scn.flows) && scn.flows.length;
-  if (!hasRequests && !hasFlows) {
+  if (!hasRequests && !hasFlows && scn.kind !== 'pipeline') { // pipeline задаётся produce/verify, а не requests/flows
     push(errors, 'Нужен непустой массив "requests" (смесь независимых запросов) ИЛИ "flows" (сценарии-цепочки). Каждый запрос: { "name","method":"GET","path":"/...","weight":1 }.');
   }
+  if (scn.kind === 'pipeline' && (hasRequests || hasFlows)) push(warnings, 'в kind:"pipeline" requests/flows игнорируются — конвейер задаётся produce/verify');
+  if (scn.kind === 'pipeline' && (scn.setup !== undefined || scn.teardown !== undefined)) push(warnings, 'setup/teardown в kind:"pipeline" пока не выполняются — подготовьте sink-таблицу отдельным kind:"sql"-сценарием или вручную');
   if (scn.requests !== undefined && !Array.isArray(scn.requests)) push(errors, '"requests" должен быть массивом');
   if (scn.flows !== undefined && !Array.isArray(scn.flows)) push(errors, '"flows" должен быть массивом');
 
@@ -606,6 +633,17 @@ function validateScenario(scn) {
     if (allStepNames.has(name)) push(errors, `${where}: имя "${name}" уже используется в ${allStepNames.get(name)} — имена шагов/запросов должны быть уникальны (метрики считаются по имени).`);
     else allStepNames.set(name, where);
   };
+
+  // pipeline: плейсхолдеры produce.message/verify.query — ловим опечатки ({{crr}}) и забытые vars до запуска (иначе smoke/load падали бы в рантайме)
+  if (scn.kind === 'pipeline' && scn.produce && scn.verify) {
+    const availPipe = new Set([...varNames, 'corr']); // corr — встроенный для pipeline
+    for (const [field, txt] of [['produce.message', scn.produce.message], ['verify.query', scn.verify.query]]) {
+      for (const ph of listPlaceholders(String(txt || ''))) {
+        if (isBuiltinPh(ph) || ph === 'corr' || availPipe.has(ph)) continue;
+        push(errors, `${field}: placeholder {{${ph}}} не объявлен. Доступно: ${[...varNames].join(', ') || '(нет vars)'} + {{corr}} + встроенные ({{uuid}},{{ts}},{{randInt:A-B}})`);
+      }
+    }
+  }
 
   // requests → каждый как самостоятельный запрос
   if (hasRequests) {
@@ -671,22 +709,31 @@ function validateScenario(scn) {
   // мутирующие шаги: для SQL — по ключевым словам DML/DDL, для HTTP — по методу (двойная защита: allowWrites + --allow-writes)
   const isWriteStep = (r) => scn.kind === 'sql' ? SQL_WRITE_RE.test(r.sql || '') : WRITE_METHODS.includes(String(r.method || '').toUpperCase());
   const writeReqs = [...allSteps, ...lifecycleSteps].filter(isWriteStep);
-  if (writeReqs.length && scn.allowWrites !== true) {
+  // pipeline produce'ит сообщения в топик — это запись, требует такой же двойной защиты
+  if ((writeReqs.length || scn.kind === 'pipeline') && scn.allowWrites !== true) {
+    const what = scn.kind === 'pipeline' ? 'публикует сообщения в топик (это запись)' : `содержит изменяющие запросы (${writeReqs.map((r) => `"${r.name}"`).join(', ')})`;
     push(errors,
-      `Сценарий содержит изменяющие запросы (${writeReqs.map((r) => `"${r.name}"`).join(', ')}), но allowWrites не установлен в true.\n` +
+      `Сценарий ${what}, но allowWrites не установлен в true.\n` +
       `  Это защита от случайной порчи данных. Если писать в систему ДЕЙСТВИТЕЛЬНО нужно и пользователь это явно разрешил:\n` +
       `  1) добавьте в сценарий "allowWrites": true;  2) запускайте с флагом --allow-writes.`);
   }
 
   // нормализация: единая модель — всё есть flows. Независимые requests = одношаговые flow.
   if (errors.length === 0) {
-    const wrapped = hasRequests ? scn.requests.map((r) => ({ name: r.name, weight: r.weight, steps: [r], _track: false })) : [];
-    const explicit = hasFlows ? scn.flows.map((f) => ({ name: f.name, weight: f.weight, steps: f.steps, _track: true })) : [];
-    scn._flows = [...wrapped, ...explicit];
-    scn._steps = allSteps;
-    scn._setup = Array.isArray(scn.setup) ? scn.setup : [];
-    scn._teardown = Array.isArray(scn.teardown) ? scn.teardown : [];
-    scn._hasExplicitFlows = !!hasFlows;
+    if (scn.kind === 'pipeline') {
+      scn._steps = [{ name: 'pipeline' }]; // единственный «шаг» — сквозной цикл; метрики по нему
+      scn._flows = [];
+      scn._setup = []; scn._teardown = [];
+      scn._hasExplicitFlows = false;
+    } else {
+      const wrapped = hasRequests ? scn.requests.map((r) => ({ name: r.name, weight: r.weight, steps: [r], _track: false })) : [];
+      const explicit = hasFlows ? scn.flows.map((f) => ({ name: f.name, weight: f.weight, steps: f.steps, _track: true })) : [];
+      scn._flows = [...wrapped, ...explicit];
+      scn._steps = allSteps;
+      scn._setup = Array.isArray(scn.setup) ? scn.setup : [];
+      scn._teardown = Array.isArray(scn.teardown) ? scn.teardown : [];
+      scn._hasExplicitFlows = !!hasFlows;
+    }
   }
 
   // load
@@ -1063,9 +1110,9 @@ function resolveSqlDriver(sql) {
   };
 }
 
-/** Открыть персистентную SQL-сессию: один клиентский процесс = одно соединение. */
-function openSqlSession(scn) {
-  const cfg = scn._sqlDriver;
+/** Открыть персистентную SQL-сессию: один клиентский процесс = одно соединение.
+ *  cfg по умолчанию — драйвер сценария (kind:"sql"); для pipeline verify передаётся scn._verifyDriver. */
+function openSqlSession(scn, cfg = scn._sqlDriver) {
   const [cmd, ...args] = cfg.command;
   const sess = { dead: false, _err: null, _pending: null, _buf: '' };
   let ps;
@@ -1139,6 +1186,97 @@ async function sqlCallOnce(scn, req, vars, conn) {
   if (fails.length) return { ms: r.ms, status: 'OK', ok: false, kind: 'check', errMsg: fails.join('; '), snippet: `rows=${r.rows}`, used, rows: r.rows };
   const slow = c.maxMs !== undefined && r.ms > c.maxMs;
   return { ms: r.ms, status: 'OK', ok: true, slow, used, rows: r.rows };
+}
+
+// ─────────────────────────────────── pipeline-режим (kind:"pipeline") ──
+// Сквозная задержка конвейера: produce сообщение с корреляционным ключом {{corr}} → поллим целевой
+// verify-запрос, пока запись не материализуется → лаг = produce→видно. Это SLA конвейеров Kafka→PG/Ignite:
+// «за сколько событие долетает от брокера до витрины и сколько теряется». produce/verify — те же
+// persistent-клиенты через CLI (zero-dep). produce fire-and-forget (нет ack), время старта ≈ момент записи в stdin.
+
+/** Персистентный продьюсер (kafka-console-producer/kcat -P): пишем сообщения построчно в stdin. */
+function openProducer(scn) {
+  const [cmd, ...args] = scn.produce.command;
+  const p = { dead: false, _err: null };
+  let ps;
+  try { ps = spawn(cmd, args, { stdio: ['pipe', 'ignore', 'pipe'] }); }
+  catch (e) { p.dead = true; p._err = `не удалось запустить продьюсер (${cmd}): ${e.message}`; return p; }
+  p._ps = ps;
+  let errTail = '';
+  ps.stderr.on('data', (d) => { errTail = (errTail + d.toString()).slice(-500); });
+  ps.on('error', (e) => { p.dead = true; if (!p._err) p._err = `продьюсер: ${e.message}`; });
+  ps.on('exit', (code) => { p.dead = true; if (!p._err && code) p._err = `продьюсер вышел (код ${code}): ${errTail.trim().slice(-160)}`; });
+  p.send = (msg) => { try { ps.stdin.write(msg + '\n'); return true; } catch (e) { p.dead = true; p._err = e.message; return false; } };
+  p.close = () => new Promise((res) => {
+    if (!ps || ps.exitCode !== null || ps.signalCode !== null) return res();
+    let s = false; const fin = () => { if (s) return; s = true; res(); };
+    ps.on('exit', fin);
+    try { ps.stdin.end(); } catch { /* ignore */ } // end флашит буфер продьюсера и завершает процесс
+    setTimeout(() => { try { ps.kill(); } catch { /* ignore */ } fin(); }, 800);
+  });
+  return p;
+}
+
+/** Гоняет vuCount конвейерных VU: produce→poll→лаг. Совместимо с single и worker-режимом. */
+async function runPipelineSlice({ scn, stats, vuCount, vuBase, vuStride, totalVus, endAt, rampMs, effectiveMaxRps, ctx, startedAt }) {
+  const rateGate = makeRateGate(effectiveMaxRps);
+  const [ttMin, ttMax] = scn.load.thinkTimeMs;
+  const stages = scn.load.stages;
+  const t0 = startedAt || Date.now();
+  const stride = vuStride || 1;
+  const pollMs = scn.pipeline.pollIntervalMs;
+  const lagTimeoutMs = scn.pipeline.timeoutMs;
+  const step = { name: 'pipeline' }; // единственный «запрос» — сквозной цикл конвейера
+  const runVU = async (localIdx) => {
+    const globalIdx = (vuBase || 0) + localIdx * stride;
+    if (!stages && rampMs) await sleep((rampMs * globalIdx) / Math.max(1, totalVus));
+    let producer = openProducer(scn);
+    let verify = openSqlSession(scn, scn._verifyDriver);
+    try {
+      while (Date.now() < endAt && !ctx.aborted) {
+        if (stages && globalIdx >= stageTargetAt(stages, Date.now() - t0)) { await sleep(200); continue; }
+        if (rateGate) await rateGate();
+        if (producer.dead) { await producer.close(); producer = openProducer(scn); }
+        if (verify.dead) { await verify.close(); verify = openSqlSession(scn, scn._verifyDriver); }
+        const corr = randomUUID();
+        const vars = { ...scn._resolvedVars, corr };
+        const used = {};
+        let msg, query;
+        // ОБЩИЙ used: list-переменная должна дать ОДНО значение и в message, и в query, иначе verify ищет не то, что послали → ложное «застряло»
+        try { msg = renderTemplate(scn.produce.message, vars, used); query = renderTemplate(scn.verify.query, vars, used); }
+        catch (e) { stats.record(step, { ms: 0, status: 0, ok: false, kind: 'config', errMsg: e.message }, Date.now()); break; }
+        delete used.corr; // corr уникален на итерацию — не засоряем разбивку «ВЛИЯНИЕ ПАРАМЕТРОВ»
+        const tProduce = performance.now();
+        if (!producer.send(msg)) { stats.record(step, { ms: 0, status: 0, ok: false, kind: 'produce', errMsg: producer._err || 'produce не удался', used }, Date.now()); continue; }
+        // поллим verify до появления записи или ТАЙМАУТА ЛАГА. Отличаем «застряло» (timeout истёк) от
+        // «прервано концом теста» (endAt/abort раньше timeout): последнее НЕ считаем застрявшим — событие
+        // уже в топике и материализуется позже, просто тест закончился (как прерванная flow-сессия).
+        let materialized = false, lastErr = null, stuck = false, verifyFailed = false;
+        while (!ctx.aborted && Date.now() < endAt) {
+          const lagLeft = lagTimeoutMs - (performance.now() - tProduce);
+          if (lagLeft <= 0) { stuck = true; break; }
+          if (verify.dead) { // verify-клиент умер (таймаут/обрыв) — переоткрываем; не поднялся → сбой инфраструктуры verify, НЕ «застряло»
+            await verify.close(); verify = openSqlSession(scn, scn._verifyDriver);
+            if (verify.dead) { lastErr = verify._err; verifyFailed = true; break; }
+          }
+          // бюджет одного verify-запроса — не больше остатка окна лага (иначе зависший verify раздул бы лаг до scn.timeoutMs)
+          const r = await verify.query(query, Math.max(1, Math.min(scn.timeoutMs, lagLeft)));
+          if (r.ok && (r.rows || 0) >= 1) { materialized = true; break; }
+          if (!r.ok) lastErr = r.errMsg;
+          if ((performance.now() - tProduce) >= lagTimeoutMs) { stuck = true; break; }
+          await sleep(pollMs);
+        }
+        const lagMs = performance.now() - tProduce;
+        if (materialized) stats.record(step, { ms: lagMs, status: 'OK', ok: true, used }, Date.now());
+        else if (producer.dead) stats.record(step, { ms: lagMs, status: 0, ok: false, kind: 'produce', errMsg: producer._err || 'продьюсер упал после send — сообщение потеряно на стороне отправителя', used }, Date.now());
+        else if (verifyFailed) stats.record(step, { ms: lagMs, status: 0, ok: false, kind: 'verify', errMsg: `verify-клиент недоступен: ${lastErr || ''}`.trim(), used }, Date.now());
+        else if (stuck) stats.record(step, { ms: lagMs, status: 0, ok: false, kind: 'stuck', errMsg: lastErr || `не материализовалось за ${lagTimeoutMs}ms`, used }, Date.now());
+        // else: прервано концом теста/abort — в статистику не идёт (лаг не измерен до конца)
+        if (ttMax > 0) await sleep(ttMin + Math.random() * (ttMax - ttMin));
+      }
+    } finally { await producer.close(); await verify.close(); }
+  };
+  await Promise.all(Array.from({ length: vuCount }, (_, i) => runVU(i)));
 }
 
 async function callOnce(scn, req, vars, token, conn) {
@@ -1871,7 +2009,7 @@ function buildReport(scn, stats, opts = {}) {
   return {
     tool: 'loadgen', version: VERSION, kind: scn.kind || 'http',
     scenario: scn.name || '(без имени)',
-    baseUrl: scn.baseUrl || (scn.kind === 'sql' ? `SQL[${scn.sql?.driver || 'custom'}]` : ''),
+    baseUrl: scn.baseUrl || (scn.kind === 'sql' ? `SQL[${scn.sql?.driver || 'custom'}]` : scn.kind === 'pipeline' ? 'PIPELINE (Kafka→verify)' : ''),
     mode: opts.smoke ? 'smoke' : 'load',
     startedAt: new Date(stats.startedAt).toISOString(),
     durationSec: Number(durSec.toFixed(1)),
@@ -2139,10 +2277,13 @@ function printReport(rep) {
   L('==================== ИТОГ ====================');
   L(`VERDICT: ${rep.verdict === 'PASS' ? green(bold('PASS')) : red(bold('FAIL'))}`);
   L(`Сценарий: ${rep.scenario} | Режим: ${rep.mode} | Цель: ${rep.baseUrl}`);
-  L(`Запросов: ${rep.total} за ${rep.durationSec}с (RPS ${bold(rep.rps)}, VUs ${rep.vus}) | Ошибок: ${rep.errors} (${rep.errorRatePct}%)`);
+  const isPipe = rep.kind === 'pipeline';
+  // throughput конвейера = ДОСТАВЛЕННЫЕ события / окно (не всего попыток: застрявшие не доставлены). Лейбл ошибок нейтральный — не все они «застряло» (бывают produce/verify/config).
+  const delivered = isPipe ? ((rep.total - rep.errors) / Math.max(0.001, rep.durationSec)).toFixed(1) : rep.rps;
+  L(`${isPipe ? 'Событий' : 'Запросов'}: ${rep.total} за ${rep.durationSec}с (${isPipe ? `доставлено ${bold(delivered)}/с` : `RPS ${bold(rep.rps)}`}, VUs ${rep.vus}) | ${isPipe ? 'Не долетело/ошибок' : 'Ошибок'}: ${rep.errors} (${rep.errorRatePct}%)`);
   const lm = rep.latencyMs;
-  L(`Латентность мс: p50 ${fmtMs(lm.p50)} | p90 ${fmtMs(lm.p90)} | p95 ${bold(fmtMs(lm.p95))} | p99 ${fmtMs(lm.p99)} | max ${fmtMs(lm.max)}`);
-  if (rep.kind !== 'sql' && lm.ttfbP95 != null && lm.p95 > 0) L(dim(`  из p95: TTFB (сервер+сеть до 1-го байта) ~${fmtMs(lm.ttfbP95)}ms, скачивание тела ~${fmtMs(Math.max(0, lm.p95 - lm.ttfbP95))}ms`));
+  L(`${isPipe ? 'Лаг распространения (produce→видно) мс' : 'Латентность мс'}: p50 ${fmtMs(lm.p50)} | p90 ${fmtMs(lm.p90)} | p95 ${bold(fmtMs(lm.p95))} | p99 ${fmtMs(lm.p99)} | max ${fmtMs(lm.max)}`);
+  if (rep.kind === 'http' && lm.ttfbP95 != null && lm.p95 > 0) L(dim(`  из p95: TTFB (сервер+сеть до 1-го байта) ~${fmtMs(lm.ttfbP95)}ms, скачивание тела ~${fmtMs(Math.max(0, lm.p95 - lm.ttfbP95))}ms`));
   for (const c of rep.checks) L(`Порог: ${c.name} ${c.pass ? green('OK') : red('НАРУШЕН')}`);
   L('==============================================');
   if (rep.hints.length) {
@@ -2208,7 +2349,7 @@ async function cmdProbe(positional) {
   console.log(`ИТОГ PROBE: REACHABLE${authNeeded ? ' (часть путей требует авторизацию — настройте блок auth в сценарии)' : ''}`);
 }
 
-const PRESET_NAMES = ['smoke', 'browse', 'journey', 'stress', 'ci', 'write', 'sql-postgres'];
+const PRESET_NAMES = ['smoke', 'browse', 'journey', 'stress', 'ci', 'write', 'sql-postgres', 'pipeline-kafka-pg'];
 
 const PRESET_DESC = {
   smoke: 'быстрая проверка конфига (пара GET, run --smoke)',
@@ -2218,6 +2359,7 @@ const PRESET_DESC = {
   ci: 'CI-гейт: жёсткие пороги p95/p99/rpsMin + perRequest SLO',
   write: 'write-тест с setup/teardown (allowWrites)',
   'sql-postgres': 'kind:"sql" — нагрузка прямо на Postgres через persistent psql',
+  'pipeline-kafka-pg': 'kind:"pipeline" — сквозной лаг Kafka→Postgres (produce→видно в витрине)',
 };
 
 function cmdInit(flags) {
@@ -2317,7 +2459,8 @@ function cmdValidate(positional) {
   }
   const writes = scn._steps.filter((r) => scn.kind === 'sql' ? SQL_WRITE_RE.test(r.sql || '') : WRITE_METHODS.includes(r.method)).length;
   const flowNote = scn._hasExplicitFlows ? `, цепочек: ${scn.flows.length}` : '';
-  const tgt = scn.kind === 'sql' ? `SQL[${scn.sql.driver || 'custom'}]` : scn.baseUrl;
+  const tgt = scn.kind === 'sql' ? `SQL[${scn.sql.driver || 'custom'}]` : scn.kind === 'pipeline' ? 'PIPELINE (Kafka→verify)' : scn.baseUrl;
+  if (scn.kind === 'pipeline') { console.log(`OK: сценарий валиден. Конвейер produce→verify, VUs: ${scn.load.vus}, длительность: ${scn.load.durationSec}с, таймаут лага: ${scn.pipeline.timeoutMs}ms, цель: ${tgt}`); return; }
   console.log(`OK: сценарий валиден. Шагов: ${scn._steps.length} (изменяющих: ${writes})${flowNote}, VUs: ${scn.load.vus}, потоков: ${scn.load.workers}, длительность: ${scn.load.durationSec}с, цель: ${tgt}`);
 }
 
@@ -2819,14 +2962,14 @@ async function cmdRun(positional, flags) {
     process.exit(1);
   }
 
-  // защита: запись (нагрузка + setup + teardown). Для SQL — по ключевым словам DML/DDL, для HTTP — по методу.
+  // защита: запись (нагрузка + setup + teardown). Для SQL — по ключевым словам DML/DDL, для HTTP — по методу; pipeline всегда пишет (produce).
   const stepWrites = (r) => scn.kind === 'sql' ? SQL_WRITE_RE.test(r.sql || '') : WRITE_METHODS.includes(String(r.method || '').toUpperCase());
-  const hasWrites = [...scn._steps, ...(scn._setup || []), ...(scn._teardown || [])].some(stepWrites);
+  const hasWrites = scn.kind === 'pipeline' || [...scn._steps, ...(scn._setup || []), ...(scn._teardown || [])].some(stepWrites);
   if (hasWrites && !flags['allow-writes']) {
-    die(1, 'Сценарий содержит изменяющие запросы (allowWrites:true задан), но для запуска нужен ещё явный флаг --allow-writes.\nЭто двойная защита: убедитесь, что пользователь явно разрешил запись в целевую систему.');
+    die(1, 'Сценарий содержит изменяющие операции (allowWrites:true задан), но для запуска нужен ещё явный флаг --allow-writes.\nЭто двойная защита: убедитесь, что пользователь явно разрешил запись в целевую систему.');
   }
-  // защита: внешний хост — только для HTTP (у SQL цель = локальный CLI-клиент, не URL)
-  if (scn.kind !== 'sql') {
+  // защита: внешний хост — только для HTTP (у SQL/pipeline цель = локальные CLI-клиенты, не URL)
+  if (scn.kind === 'http') {
     const host = new URL(scn.baseUrl).hostname;
     if (!isPrivateHost(host) && !flags['confirm-external']) {
       die(1, `Цель ${scn.baseUrl} — внешний хост (не localhost/приватная сеть).\n` +
@@ -2835,7 +2978,8 @@ async function cmdRun(positional, flags) {
   }
 
   const smoke = !!flags.smoke;
-  const targetLabel = scn.kind === 'sql' ? `SQL[${scn.sql.driver || 'custom'}] ${scn.sql.command.slice(-3).join(' ')}` : scn.baseUrl;
+  const targetLabel = scn.kind === 'sql' ? `SQL[${scn.sql.driver || 'custom'}] ${scn.sql.command.slice(-3).join(' ')}`
+    : scn.kind === 'pipeline' ? `PIPELINE produce[${scn.produce.command.slice(-1)}] → verify[${scn.verify.sql.driver || 'custom'}]` : scn.baseUrl;
   const loadDesc = scn.load.stages
     ? `STAGES (${scn.load.stages.length} ступ., пик ${scn.load.vus} VUs, ${scn.load.durationSec}с${scn.load.workers > 1 ? `, ×${scn.load.workers} потоков` : ''})`
     : `LOAD (${scn.load.vus} VUs${scn.load.workers > 1 ? `×${scn.load.workers} потоков` : ''}, ${scn.load.durationSec}с)`;
@@ -2903,7 +3047,57 @@ async function cmdRun(positional, flags) {
   if (targetMon) console.log(`Монитор цели: ${scn.monitor.docker ? `docker[${scn.monitor.docker.containers.join(',')}]` : ''}${scn.monitor.docker && scn.monitor.prometheus ? ' + ' : ''}${scn.monitor.prometheus ? `prometheus[${Object.keys(scn.monitor.prometheus.queries).length} запр.]` : ''}`);
   let targetMetrics = null;
 
-  if (smoke) {
+  if (scn.kind === 'pipeline') {
+    // ─── конвейерный режим: produce→poll→лаг (всегда однопоточно — поллинг I/O-bound) ───
+    process.removeListener('SIGINT', earlySigint);
+    const ctx = { aborted: false };
+    process.on('SIGINT', () => { ctx.aborted = true; console.log('\nПрерывание — формирую отчёт по собранным данным...'); });
+    const resMon = startResourceMonitor({ watchEventLoop: true });
+    stats.startedAt = Date.now();
+    if (!smoke && scn.load.warmupSec && !scn.load.stages) stats.warmupUntil = stats.startedAt + scn.load.warmupSec * 1000;
+    if (smoke) {
+      console.log('');
+      const producer = openProducer(scn);
+      const verify = openSqlSession(scn, scn._verifyDriver);
+      const corr = randomUUID();
+      const vars = { ...scn._resolvedVars, corr };
+      let msg, query;
+      try { const u = {}; msg = renderTemplate(scn.produce.message, vars, u); query = renderTemplate(scn.verify.query, vars, u); } // общий used + try/catch: неизвестный плейсхолдер = чистый FAIL, не краш
+      catch (e) {
+        stats.record({ name: 'pipeline' }, { ms: 0, status: 0, ok: false, kind: 'config', errMsg: e.message }, Date.now());
+        console.log(`  [FAIL] pipeline: ошибка шаблона produce/verify — ${e.message}`);
+      }
+      if (msg !== undefined) {
+        const t0 = performance.now();
+        producer.send(msg);
+        let materialized = false;
+        while (performance.now() - t0 < scn.pipeline.timeoutMs) {
+          const r = await verify.query(query, Math.max(1, Math.min(scn.timeoutMs, scn.pipeline.timeoutMs - (performance.now() - t0))));
+          if (r.ok && (r.rows || 0) >= 1) { materialized = true; break; }
+          await sleep(scn.pipeline.pollIntervalMs);
+        }
+        const lag = performance.now() - t0;
+        stats.record({ name: 'pipeline' }, materialized ? { ms: lag, status: 'OK', ok: true } : { ms: lag, status: 0, ok: false, kind: 'stuck', errMsg: `не материализовалось за ${scn.pipeline.timeoutMs}ms` }, Date.now());
+        console.log(materialized
+          ? `  [OK]   pipeline: сообщение материализовалось за ${fmtMs(lag)}ms (corr=${corr.slice(0, 8)}…)`
+          : `  [FAIL] pipeline: НЕ материализовалось за ${scn.pipeline.timeoutMs}ms — проверьте топик/консьюмер/verify.query (corr=${corr.slice(0, 8)}…)`);
+      }
+      await producer.close(); await verify.close();
+    } else {
+      if (scn.load.workers > 1) console.log('ПРЕДУПРЕЖДЕНИЕ: kind:"pipeline" выполняется однопоточно (поллинг I/O-bound) — load.workers игнорируется');
+      const endAt = stats.startedAt + scn.load.durationSec * 1000;
+      const rampMs = scn.load.rampUpSec * 1000;
+      let lastTotal = 0;
+      const progress = flags.quiet ? null : setInterval(() => {
+        const rps = (stats.total - lastTotal) / 5; lastTotal = stats.total;
+        console.log(`  t=${Math.round((Date.now() - stats.startedAt) / 1000)}с событий=${stats.total} rps=${rps.toFixed(0)} не долетело/ошибок=${stats.errors}`);
+      }, 5000);
+      await runPipelineSlice({ scn, stats, vuCount: scn.load.vus, vuBase: 0, vuStride: 1, totalVus: scn.load.vus, endAt, rampMs, effectiveMaxRps: scn.load.maxRps || 0, ctx, startedAt: stats.startedAt });
+      if (progress) clearInterval(progress);
+    }
+    stats.endedAt = Date.now();
+    resource = resMon.finish();
+  } else if (smoke) {
     // прогоняем каждую цепочку целиком (шаги по порядку с реальным захватом переменных) по 1 разу
     stats.startedAt = Date.now();
     console.log('');

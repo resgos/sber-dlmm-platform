@@ -1,0 +1,18 @@
+{
+  "name": "kafka-to-pg-lag",
+  "kind": "pipeline",
+  "allowWrites": true,
+  "_comment": "Сквозной лаг конвейера: produce сообщение в Kafka с корр-ключом {{corr}} → поллим витрину (Postgres/Ignite), пока запись не появится → лаг = produce→видно. Замените команды/топик/таблицу под свой стенд. produce и verify — родные CLI (kafka-console-producer/psql), в PATH или через docker exec.",
+  "produce": {
+    "command": ["kafka-console-producer", "--bootstrap-server", "${KAFKA:-localhost:9092}", "--topic", "events", "--property", "parse.key=true", "--property", "key.separator=:"],
+    "_command_docker": ["docker", "exec", "-i", "kafka", "kafka-console-producer", "--bootstrap-server", "localhost:9092", "--topic", "events", "--property", "parse.key=true", "--property", "key.separator=:"],
+    "message": "{{corr}}:{\"id\":\"{{corr}}\",\"v\":{{randInt:1-1000}}}"
+  },
+  "verify": {
+    "sql": { "driver": "psql", "command": ["psql", "${PGURL:-postgresql://postgres:postgres@localhost:5432/postgres}"] },
+    "query": "select 1 from events_sink where corr = '{{corr}}' limit 1"
+  },
+  "pipeline": { "pollIntervalMs": 50, "timeoutMs": 10000 },
+  "load": { "vus": 4, "durationSec": 30, "warmupSec": 3 },
+  "thresholds": { "p95Ms": 2000, "p99Ms": 5000, "errorRatePct": 1 }
+}

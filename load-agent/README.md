@@ -49,7 +49,8 @@
 [Кто узкое место (monitor)](#метрики-цели-генератор-или-сервис--кто-узкое-место-monitor) ·
 [Параллелизм и ресурсы](#параллелизм-и-ресурсы-генератора)
 
-**СУБД напрямую.** [Нагрузка на Postgres/Ignite (`kind:"sql"`)](#нагрузка-на-субд-напрямую-kindsql--postgresignite)
+**СУБД и конвейеры.** [Нагрузка на Postgres/Ignite (`kind:"sql"`)](#нагрузка-на-субд-напрямую-kindsql--postgresignite) ·
+[Сквозной лаг Kafka→PG (`kind:"pipeline"`)](#сквозной-лаг-конвейера-kindpipeline--kafkapgignite)
 
 **CI и масштаб.** [Сравнение прогонов (compare)](#регрессии-сравнение-прогонов-compare--ci-гейт) ·
 [Распределённый прогон (merge)](#распределённый-прогон-с-n-машин-merge) ·
@@ -544,6 +545,43 @@ node load-agent/bin/loadgen.mjs run scenario.json --junit report.xml --md report
   `minRows`/`notEmpty` считают ВОЗВРАЩЁННЫЕ строки (SELECT/RETURNING) — на чистом INSERT их не будет.
 - ⚠ `{{var}}` подставляются в текст запроса как есть (не bind-параметры) — значения из доверенных
   списков/файлов, не из недоверенного ввода (иначе SQL-инъекция в самом сценарии).
+
+## Сквозной лаг конвейера (`kind:"pipeline"`) — Kafka→PG/Ignite
+
+REST-тест не видит асинхронный конвейер. `kind:"pipeline"` меряет **сквозную задержку**: publish
+сообщение с корреляционным ключом `{{corr}}` → поллит витрину, пока запись не появится → лаг =
+«отправлено → видно». Это SLA конвейеров вроде Kafka→Postgres: «за сколько событие долетает до
+витрины и **сколько теряется** под нагрузкой». Быстрый старт: `init --preset pipeline-kafka-pg`.
+
+```jsonc
+{
+  "kind": "pipeline",
+  "allowWrites": true,                                  // publish = запись, нужен ещё --allow-writes
+  "produce": {
+    "command": ["kafka-console-producer","--bootstrap-server","localhost:9092","--topic","events","--property","parse.key=true","--property","key.separator=:"],
+    "message": "{{corr}}:{\"id\":\"{{corr}}\",\"v\":{{randInt:1-999}}}"   // {{corr}} — уникальный ключ на событие
+  },
+  "verify": {
+    "sql": { "driver":"psql", "command":["psql","postgresql://user:pass@host/db"] },
+    "query": "select 1 from events_sink where corr='{{corr}}' limit 1"   // строка появилась = долетело
+  },
+  "pipeline": { "pollIntervalMs": 50, "timeoutMs": 10000 },
+  "load": { "vus": 4, "durationSec": 30, "warmupSec": 3 },
+  "thresholds": { "p95Ms": 2000, "p99Ms": 5000, "errorRatePct": 1 }
+}
+```
+
+- Каждый VU: сгенерировать `{{corr}}` (uuid) → publish → поллить `verify.query` каждые `pollIntervalMs`,
+  пока не вернёт строку (или `pipeline.timeoutMs`). Лаг = время до материализации.
+- Отчёт — те же перцентили/гистограмма, но подписаны как **«лаг распространения»**; ошибки = **«застряло»**
+  (не долетело за timeout). Событие, посланное под конец теста и не успевшее материализоваться, НЕ
+  считается застрявшим (как прерванная flow-сессия) — иначе хвост ложно раздул бы потери.
+- `produce` — persistent-клиент (kafka-console-producer/`kcat -P`), сообщения построчно в stdin;
+  fire-and-forget, момент старта ≈ запись в stdin (буфер продьюсера добавляет небольшую константу).
+- `verify` — persistent SQL-сессия (тот же движок, что `kind:"sql"`; надёжнее `driver:"psql"`).
+  Для Ignite витрины — sqlline/REST; сообщение можно проверять и в самой Kafka (consumer как verify — на будущее).
+- Всегда **однопоточно** (поллинг I/O-bound, `load.workers` игнорируется). `setup`/`teardown` пока не
+  выполняются — sink-таблицу подготовьте отдельным `kind:"sql"`-сценарием или вручную.
 
 ## Тесты самого движка
 
