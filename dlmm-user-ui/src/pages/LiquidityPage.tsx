@@ -6,6 +6,7 @@ import {
 } from 'antd'
 import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined, DollarOutlined, WarningOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { pools, balances, fees } from '@/api/services'
 import type { Position, LiquidityStrategy } from '@/api/types'
 import StrategySelector from '@/components/StrategySelector'
@@ -23,6 +24,9 @@ import { uuid } from '../lib/uuid'
 const { Title, Text } = Typography
 
 export default function LiquidityPage() {
+  // 2026-07-06 — page wired to i18n (was hardcoded Russian; an EN investor
+  // hit a Russian add-liquidity flow). Copy lives under liquidityPage.*.
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -97,7 +101,7 @@ export default function LiquidityPage() {
         idempotencyKey: uuid(),
       }),
     onSuccess: () => {
-      message.success('Ликвидность успешно добавлена')
+      message.success(t('liquidityPage.messages.added'))
       setAmountX(null)
       setAmountY(null)
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
@@ -105,7 +109,7 @@ export default function LiquidityPage() {
       queryClient.invalidateQueries({ queryKey: ['poolDetail', id] })
     },
     onError: (err: any) => {
-      message.error(apiErrorMessage(err, 'Ошибка при добавлении ликвидности'))
+      message.error(apiErrorMessage(err, t('liquidityPage.messages.addError')))
     },
   })
 
@@ -117,47 +121,47 @@ export default function LiquidityPage() {
         idempotencyKey: uuid(),
       }),
     onSuccess: () => {
-      message.success('Ликвидность удалена')
+      message.success(t('liquidityPage.messages.removed'))
       setRemoveModalPos(null)
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
       queryClient.invalidateQueries({ queryKey: ['myPositions'] })
       queryClient.invalidateQueries({ queryKey: ['poolDetail', id] })
     },
     onError: (err: any) => {
-      message.error(apiErrorMessage(err, 'Ошибка при удалении ликвидности'))
+      message.error(apiErrorMessage(err, t('liquidityPage.messages.removeError')))
     },
   })
 
   const claimMutation = useMutation({
     mutationFn: (positionId: string) => fees.claimFees({ positionId }),
     onSuccess: () => {
-      message.success('Комиссии забраны')
+      message.success(t('liquidityPage.messages.feesClaimed'))
       queryClient.invalidateQueries({ queryKey: ['myPositions'] })
       queryClient.invalidateQueries({ queryKey: ['myBalances'] })
     },
     onError: (err: any) => {
-      message.error(apiErrorMessage(err, 'Ошибка'))
+      message.error(apiErrorMessage(err, t('liquidityPage.messages.error')))
     },
   })
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '80px 0' }}><Spin size="large" /></div>
-  if (!pool) return <Alert message="Пул не найден" type="error" showIcon />
+  if (!pool) return <Alert message={t('liquidityPage.poolNotFound')} type="error" showIcon />
 
   const canAdd = amountX && amountY && binMin != null && binMax != null && binMin < binMax
 
   const tabItems = [
     {
       key: 'add',
-      label: 'Добавить ликвидность',
+      label: t('liquidityPage.tabs.add'),
       children: (
         <Space direction="vertical" size={20} style={{ width: '100%' }}>
           <div>
-            <Text strong style={{ display: 'block', marginBottom: 12 }}>Стратегия распределения</Text>
+            <Text strong style={{ display: 'block', marginBottom: 12 }}>{t('liquidityPage.strategyTitle')}</Text>
             <StrategySelector value={strategy} onChange={setStrategy} />
           </div>
 
           <div>
-            <Text strong style={{ display: 'block', marginBottom: 8 }}>Диапазон бинов</Text>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>{t('liquidityPage.binRangeTitle')}</Text>
             {/* One-click range presets around the active bin — investors pick a
                 concentration band (±N bins) instead of typing raw bin indices.
                 Neutral "±N" labels keep this gate-safe on an otherwise RU page. */}
@@ -179,33 +183,32 @@ export default function LiquidityPage() {
             </Space>
             <Space>
               <InputNumber
-                placeholder="Мин бин"
+                placeholder={t('liquidityPage.binMinPlaceholder')}
                 value={binMin}
                 onChange={(v) => setBinMin(v)}
                 style={{ width: 140 }}
               />
               <Text type="secondary">—</Text>
               <InputNumber
-                placeholder="Макс бин"
+                placeholder={t('liquidityPage.binMaxPlaceholder')}
                 value={binMax}
                 onChange={(v) => setBinMax(v)}
                 style={{ width: 140 }}
               />
             </Space>
             <div style={{ fontSize: 'var(--text-xs)', color: '#9CA3AF', marginTop: 4 }}>
-              Текущая цена в бине #{pool.activeBinId}. Рекомендуемый диапазон концентрации:
-              {' '}±10 бинов вокруг текущей цены (узкий диапазон = выше комиссии, но риск выхода из диапазона).
+              {t('liquidityPage.binHint', { bin: pool.activeBinId })}
             </div>
           </div>
 
           <div>
-            <Text strong style={{ display: 'block', marginBottom: 8 }}>Суммы токенов</Text>
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>{t('liquidityPage.amountsTitle')}</Text>
             <Space direction="vertical" size={12} style={{ width: '100%' }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text>{pool.tokenXSymbol}</Text>
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                    Доступно: {formatCompact(balanceX?.available ?? 0)}
+                    {t('liquidityPage.available', { value: formatCompact(balanceX?.available ?? 0) })}
                     {balanceX && (
                       <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 'var(--text-xs)' }}
                         onClick={() => setAmountX(balanceX.available)}>MAX</Button>
@@ -226,7 +229,7 @@ export default function LiquidityPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text>{pool.tokenYSymbol}</Text>
                   <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                    Доступно: {formatCompact(balanceY?.available ?? 0)}
+                    {t('liquidityPage.available', { value: formatCompact(balanceY?.available ?? 0) })}
                     {balanceY && (
                       <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 'var(--text-xs)' }}
                         onClick={() => setAmountY(balanceY.available)}>MAX</Button>
@@ -270,7 +273,7 @@ export default function LiquidityPage() {
             onClick={() => addMutation.mutate()}
             style={{ height: 48, fontSize: 15, fontWeight: 600, borderRadius: 'var(--radius-sm)' }}
           >
-            Добавить ликвидность
+            {t('liquidityPage.addButton')}
           </Button>
           {/* G-22 — surface warning chip near Submit so user sees the
               flag even if they scrolled past the preview card. Submit
@@ -278,9 +281,7 @@ export default function LiquidityPage() {
           {previewData && previewData.warnings.length > 0 && (
             <div style={{ textAlign: 'center', marginTop: -8 }}>
               <Tag icon={<WarningOutlined />} color="orange">
-                {previewData.warnings.length === 1
-                  ? '1 предупреждение — проверьте превью'
-                  : `${previewData.warnings.length} предупреждений — проверьте превью`}
+                {t('liquidityPage.warningsCheck', { count: previewData.warnings.length })}
               </Tag>
             </div>
           )}
@@ -289,9 +290,9 @@ export default function LiquidityPage() {
     },
     {
       key: 'positions',
-      label: `Мои позиции (${poolPositions.length})`,
+      label: t('liquidityPage.tabs.positions', { count: poolPositions.length }),
       children: poolPositions.length === 0 ? (
-        <Text type="secondary">У вас нет позиций в этом пуле</Text>
+        <Text type="secondary">{t('liquidityPage.noPositions')}</Text>
       ) : (
         <Table
           className="sber-table"
@@ -300,10 +301,10 @@ export default function LiquidityPage() {
           pagination={false}
           size="middle"
           columns={[
-            { title: 'Стратегия', dataIndex: 'strategy', render: (s: string) => <Tag color="green">{strategyLabel(s)}</Tag> },
-            { title: 'Диапазон', key: 'range', render: (_: unknown, r: Position) => `${r.binRangeMin} — ${r.binRangeMax}` },
+            { title: t('liquidityPage.table.strategy'), dataIndex: 'strategy', render: (s: string) => <Tag color="green">{strategyLabel(s)}</Tag> },
+            { title: t('liquidityPage.table.range'), key: 'range', render: (_: unknown, r: Position) => `${r.binRangeMin} — ${r.binRangeMax}` },
             {
-              title: `Незабранные ${pool.tokenXSymbol}`,
+              title: t('liquidityPage.table.unclaimed', { symbol: pool.tokenXSymbol }),
               dataIndex: 'unclaimedFeeX', align: 'right' as const,
               render: (v: number) => (
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -312,7 +313,7 @@ export default function LiquidityPage() {
               ),
             },
             {
-              title: `Незабранные ${pool.tokenYSymbol}`,
+              title: t('liquidityPage.table.unclaimed', { symbol: pool.tokenYSymbol }),
               dataIndex: 'unclaimedFeeY', align: 'right' as const,
               render: (v: number) => (
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -321,17 +322,17 @@ export default function LiquidityPage() {
               ),
             },
             {
-              title: 'Действия',
+              title: t('liquidityPage.table.actions'),
               key: 'actions',
               render: (_: unknown, r: Position) => (
                 <Space>
                   <Button size="small" icon={<DollarOutlined />} onClick={() => claimMutation.mutate(r.id)}
                     loading={claimMutation.isPending}
                     disabled={r.unclaimedFeeX === 0 && r.unclaimedFeeY === 0}>
-                    Забрать
+                    {t('liquidityPage.table.claim')}
                   </Button>
                   <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setRemoveModalPos(r)}>
-                    Удалить
+                    {t('liquidityPage.table.remove')}
                   </Button>
                 </Space>
               ),
@@ -347,11 +348,11 @@ export default function LiquidityPage() {
       <Space>
         <Button icon={<ArrowLeftOutlined />} type="text" onClick={() => navigate(`/pools/${id}`)} />
         <Title level={4} className="sber-page-title" style={{ margin: 0 }}>
-          Ликвидность: {pool.tokenXSymbol}/{pool.tokenYSymbol}
+          {t('liquidityPage.title', { pair: `${pool.tokenXSymbol}/${pool.tokenYSymbol}` })}
         </Title>
       </Space>
 
-      <Card className="sber-card" title={<Text strong>Распределение ликвидности</Text>}>
+      <Card className="sber-card" title={<Text strong>{t('liquidityPage.chartTitle')}</Text>}>
         <BinLiquidityChart poolId={pool.id} />
       </Card>
 
@@ -364,17 +365,17 @@ export default function LiquidityPage() {
       </Card>
 
       <Modal
-        title={<ModalHeader title="Удаление ликвидности" severity="danger" />}
+        title={<ModalHeader title={t('liquidityPage.removeModal.title')} severity="danger" />}
         open={!!removeModalPos}
         onCancel={() => setRemoveModalPos(null)}
         onOk={() => removeModalPos && removeMutation.mutate(removeModalPos.id)}
         confirmLoading={removeMutation.isPending}
-        okText="Удалить"
-        cancelText="Отмена"
+        okText={t('liquidityPage.removeModal.okText')}
+        cancelText={t('common.cancel')}
         okButtonProps={{ danger: true }}
       >
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          <Text>Какой процент ликвидности удалить?</Text>
+          <Text>{t('liquidityPage.removeModal.percentQuestion')}</Text>
           <Slider
             min={1}
             max={100}

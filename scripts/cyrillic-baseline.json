@@ -25,7 +25,6 @@
   "dlmm-user-ui/src/components/sberkot/SberkotAssistant.tsx": 20,
   "dlmm-user-ui/src/components/sberkot/SberkotMascot.tsx": 1,
   "dlmm-user-ui/src/pages/HedgePage.tsx": 222,
-  "dlmm-user-ui/src/pages/LiquidityPage.tsx": 88,
   "dlmm-user-ui/src/pages/PoolComparePage.tsx": 139,
   "dlmm-user-ui/src/pages/PricingPage.tsx": 158,
   "dlmm-user-ui/src/pages/RebalancePage.tsx": 125,

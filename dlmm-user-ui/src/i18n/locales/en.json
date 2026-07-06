@@ -510,6 +510,47 @@
     }
   },
 
+  "liquidityPage": {
+    "title": "Liquidity: {{pair}}",
+    "chartTitle": "Liquidity distribution",
+    "poolNotFound": "Pool not found",
+    "tabs": {
+      "add": "Add liquidity",
+      "positions": "My positions ({{count}})"
+    },
+    "strategyTitle": "Distribution strategy",
+    "binRangeTitle": "Bin range",
+    "binMinPlaceholder": "Min bin",
+    "binMaxPlaceholder": "Max bin",
+    "binHint": "Current price is in bin #{{bin}}. Recommended concentration range: ±10 bins around the current price (a narrow range earns more fees but risks falling out of range).",
+    "amountsTitle": "Token amounts",
+    "available": "Available: {{value}}",
+    "addButton": "Add liquidity",
+    "warningsCheck_one": "{{count}} warning — check the preview",
+    "warningsCheck_other": "{{count}} warnings — check the preview",
+    "noPositions": "You have no positions in this pool",
+    "table": {
+      "strategy": "Strategy",
+      "range": "Range",
+      "unclaimed": "Unclaimed {{symbol}}",
+      "actions": "Actions",
+      "claim": "Claim",
+      "remove": "Remove"
+    },
+    "removeModal": {
+      "title": "Remove liquidity",
+      "okText": "Remove",
+      "percentQuestion": "What percentage of the liquidity should be removed?"
+    },
+    "messages": {
+      "added": "Liquidity added successfully",
+      "addError": "Failed to add liquidity",
+      "removed": "Liquidity removed",
+      "removeError": "Failed to remove liquidity",
+      "feesClaimed": "Fees claimed",
+      "error": "Error"
+    }
+  },
   "poolDetail": {
     "backToPools": "Back to pool list",
     "txHistory": "Pool transactions",
