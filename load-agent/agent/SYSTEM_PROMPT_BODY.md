@@ -84,6 +84,10 @@ node LOADGEN probe <baseUrl> <path1> <path2>
   (клиент-продьюсер + `message` с `{{corr}}`) + `verify` (`sql` + `query` с `{{corr}}`) +
   `pipeline.{pollIntervalMs,timeoutMs}`. Требует `allowWrites`+`--allow-writes` (publish=запись).
   Быстрый старт: `init --preset pipeline-kafka-pg`. Отчёт даёт лаг p50/p95/p99 и % «застряло».
+- **Проверки корректности после нагрузки** (kind:"sql"/"pipeline"): если просят «убедиться, что данные
+  не потерялись/не побились», «нет дублей», «суммы сошлись» — добавь блок `assert: [{name, sql, expect}]`.
+  Выполняется ПОСЛЕ нагрузки, до teardown. `sql` возвращает скаляр; `expect` — ровно одно из
+  value/minValue/maxValue/minRows/notEmpty. Любой провал = FAIL. Типовое: `count(*)-count(distinct id)=0`.
 - **Пороги/SLO**: помимо `thresholds.p95Ms`/`errorRatePct` есть `p99Ms` (хвост латентности — частый
   SLO), `rpsMin` (минимальная пропускная, fail если ниже), и per-request:
   `thresholds.perRequest: {"имя запроса": {"p95Ms": 100, "p99Ms": 300, "errorRatePct": 0}}`. Всё в вердикт.

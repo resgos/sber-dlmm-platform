@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.18.0';
+const VERSION = '1.19.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -271,11 +271,11 @@ function die(code, msg) {
 
 // ─────────────────────────────────────────────── validate ──
 
-const KNOWN_ROOT_KEYS = ['name', 'kind', 'baseUrl', 'sql', 'produce', 'verify', 'pipeline', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor', 'setup', 'teardown'];
+const KNOWN_ROOT_KEYS = ['name', 'kind', 'baseUrl', 'sql', 'produce', 'verify', 'pipeline', 'headers', 'timeoutMs', 'auth', 'vars', 'requests', 'flows', 'load', 'thresholds', 'allowWrites', 'monitor', 'setup', 'teardown', 'assert'];
 const KNOWN_REQ_KEYS = ['name', 'method', 'path', 'sql', 'weight', 'body', 'headers', 'expectStatus', 'checks', 'capture', 'bodyType'];
 const KNOWN_FLOW_KEYS = ['name', 'weight', 'steps'];
 const KNOWN_CHECK_KEYS = ['status', 'maxMs', 'notEmpty', 'bodyContains', 'jsonPath', 'jsonPathEquals', 'minRows'];
-const KNOWN_SQL_KEYS = ['driver', 'command', 'flags', 'init', 'stmtTimeout', 'mark', 'timeRegex', 'rowsRegex', 'errorRegex', 'statusRegex', 'label'];
+const KNOWN_SQL_KEYS = ['driver', 'command', 'flags', 'init', 'stmtTimeout', 'assertFlags', 'mark', 'timeRegex', 'rowsRegex', 'errorRegex', 'statusRegex', 'label'];
 const KNOWN_LOAD_KEYS = ['vus', 'durationSec', 'rampUpSec', 'thinkTimeMs', 'maxRps', 'workers', 'stages', 'warmupSec'];
 const HTTP_METHODS = ['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'];
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
@@ -420,6 +420,32 @@ function validateScenario(scn) {
     if (errors.length === 0) {
       scn._verifyDriver = resolveSqlDriver(ve.sql); // verify-драйвер (обычно psql)
       if (!scn._verifyDriver.statusRe) push(warnings, `verify.sql.driver:"${ve.sql.driver || 'custom'}" без in-band статуса — ошибки verify-запроса best-effort. Надёжнее psql.`);
+    }
+  }
+
+  // assert — проверки КОРРЕКТНОСТИ витрины после нагрузки (счётчики/дубли/суммы). Выполняются SQL-запросом.
+  if (scn.assert !== undefined) {
+    if (!Array.isArray(scn.assert) || !scn.assert.length) push(errors, '"assert" должен быть непустым массивом проверок [{ "name", "sql", "expect": {...} }]');
+    else if (!['sql', 'pipeline'].includes(scn.kind)) push(errors, 'assert поддержан только для kind:"sql"/"pipeline" (проверка — SQL-запрос к витрине; для HTTP используйте отдельный kind:"sql"-сценарий)');
+    else {
+      const drv = scn.kind === 'pipeline' ? scn._verifyDriver : scn._sqlDriver;
+      if (drv && !drv.assertFlags) push(errors, `assert требует драйвер с one-shot флагами (сейчас — "psql"): ${scn.kind === 'pipeline' ? 'verify.sql' : 'sql'}.driver не psql. Задайте sql.assertFlags вручную (напр. ["-t","-A"]) или используйте psql.`);
+      const EXPECT_KEYS = ['value', 'minValue', 'maxValue', 'minRows', 'notEmpty'];
+      scn.assert.forEach((a, i) => {
+        const lbl = `assert[${i}]${a?.name ? ` ("${a.name}")` : ''}`;
+        if (typeof a !== 'object' || a === null) { push(errors, `${lbl}: должен быть объектом { name, sql, expect }`); return; }
+        if (!a.name) a.name = `assert-${i}`;
+        if (typeof a.sql !== 'string' || !a.sql.trim()) push(errors, `${lbl}: нужен непустой "sql" (проверочный запрос, обычно select одного скаляра)`);
+        if (typeof a.expect !== 'object' || a.expect === null || Array.isArray(a.expect)) push(errors, `${lbl}: нужен "expect" — { "value" } | { "minValue" } | { "maxValue" } | { "minRows" } | { "notEmpty": true }`);
+        else {
+          const present = EXPECT_KEYS.filter((k) => a.expect[k] !== undefined);
+          if (present.length !== 1) push(errors, `${lbl}: expect должен содержать РОВНО ОДНО из ${EXPECT_KEYS.join('/')}, сейчас: ${present.join(',') || '(ничего)'}`);
+          if (a.expect.minValue !== undefined && typeof a.expect.minValue !== 'number') push(errors, `${lbl}: expect.minValue — число`);
+          if (a.expect.maxValue !== undefined && typeof a.expect.maxValue !== 'number') push(errors, `${lbl}: expect.maxValue — число`);
+          if (a.expect.minRows !== undefined && (!Number.isInteger(a.expect.minRows) || a.expect.minRows < 0)) push(errors, `${lbl}: expect.minRows — целое >= 0`);
+        }
+      });
+      scn._assert = scn.assert; // нормализуем для рантайма
     }
   }
 
@@ -643,6 +669,18 @@ function validateScenario(scn) {
         push(errors, `${field}: placeholder {{${ph}}} не объявлен. Доступно: ${[...varNames].join(', ') || '(нет vars)'} + {{corr}} + встроенные ({{uuid}},{{ts}},{{randInt:A-B}})`);
       }
     }
+  }
+
+  // assert: плейсхолдеры в проверочных запросах — те же правила видимости (vars + setup-захваты + corr для pipeline)
+  if (Array.isArray(scn.assert)) {
+    const availA = new Set([...varNames, ...(scn.kind === 'pipeline' ? ['corr'] : [])]);
+    scn.assert.forEach((a, i) => {
+      if (!a || typeof a.sql !== 'string') return;
+      for (const ph of listPlaceholders(a.sql)) {
+        if (isBuiltinPh(ph) || availA.has(ph)) continue;
+        push(errors, `assert[${i}]: placeholder {{${ph}}} в sql не объявлен. Доступно: ${[...varNames].join(', ') || '(нет vars)'}${scn.kind === 'pipeline' ? ' + {{corr}}' : ''} + встроенные`);
+      }
+    });
   }
 
   // requests → каждый как самостоятельный запрос
@@ -973,6 +1011,42 @@ async function runLifecyclePhase(scn, steps, token, vars, { abortOnFail }) {
   return { results, allOk: results.length === steps.length && results.every((x) => x.ok) };
 }
 
+/** Проверка одного assert против ожидания: скаляр из первой ячейки результата ИЛИ число строк. */
+function checkAssertExpect(firstCell, rowCount, expect) {
+  if (expect.value !== undefined) return String(firstCell) === String(expect.value);
+  if (expect.minValue !== undefined) { const n = Number(firstCell); return Number.isFinite(n) && n >= expect.minValue; }
+  if (expect.maxValue !== undefined) { const n = Number(firstCell); return Number.isFinite(n) && n <= expect.maxValue; }
+  if (expect.minRows !== undefined) return rowCount >= expect.minRows;
+  if (expect.notEmpty) return rowCount >= 1 && String(firstCell) !== '';
+  return false;
+}
+
+/** assert-фаза: проверки КОРРЕКТНОСТИ витрины ПОСЛЕ нагрузки (счётчики сошлись, нет дублей, суммы бьются).
+ *  SQL one-shot через флаги драйвера (psql: -t -A -c, ON_ERROR_STOP=1 → ошибка запроса = провал проверки).
+ *  Возвращает [{name, ok, got, err, expect}]. Любой провал валит вердикт (данные под нагрузкой битые = FAIL). */
+async function runAssertPhase(scn, vars) {
+  const results = [];
+  const drv = scn.kind === 'pipeline' ? scn._verifyDriver : scn._sqlDriver;
+  const rawCmd = scn.kind === 'pipeline' ? scn.verify.sql.command : scn.sql.command; // база БЕЗ load-флагов (-q -A)
+  for (const a of scn._assert) {
+    let ok = false, got = null, err = null;
+    try {
+      const sql = renderTemplate(a.sql, vars);
+      const [cmd, ...base] = rawCmd;
+      // серверный statement_timeout и для one-shot: при docker exec kill клиента НЕ снимает backend (см. персистентную сессию)
+      const pre = drv.stmtTimeout ? ['-c', drv.stmtTimeout.replace('{ms}', String(scn.timeoutMs))] : [];
+      const out = await execCapture(cmd, [...base, ...drv.assertFlags, ...pre, '-c', sql], scn.timeoutMs);
+      // режем ТОЛЬКО хвостовой перевод строки: NULL/пустая ячейка = значимая строка, её нельзя выкидывать из счёта rowCount
+      const raw = out.replace(/\r?\n$/, '');
+      const lines = raw.length ? raw.split(/\r?\n/) : [];
+      got = lines[0] ?? '';
+      ok = checkAssertExpect(got, lines.length, a.expect);
+    } catch (e) { err = errText(e); } // ненулевой выход (ON_ERROR_STOP) или недоступность клиента = провал
+    results.push({ name: a.name, ok: ok && !err, got, err, expect: a.expect });
+  }
+  return results;
+}
+
 /**
  * Оценка ответа по правилам запроса.
  * Порядок: статус → контентные проверки (notEmpty/bodyContains/jsonPath/jsonPathEquals) → бюджет maxMs.
@@ -1064,7 +1138,8 @@ const SQL_DRIVERS = {
     // серверный лимит на запрос: даже если убьём локальный клиент (docker exec НЕ пробрасывает сигнал
     // в контейнерный psql), backend Postgres сам снимет запрос по statement_timeout и освободится —
     // иначе осиротевшие backend'ы копятся к max_connections и кладут ту самую цель, что мы измеряем.
-    stmtTimeout: 'SET statement_timeout = {ms}',
+    stmtTimeout: 'SET statement_timeout = {ms};', // ';' ОБЯЗАТЕЛЕН: без него psql буферизует незавершённый SET и склеивает со следующим запросом → syntax error
+    assertFlags: ['-q', '-v', 'ON_ERROR_STOP=1', '-t', '-A'], // assert one-shot: -q глушит теги команд (SET/…), -t -A — только значение, ON_ERROR_STOP → ошибка = ненулевой выход
     markCmd: '\\echo LGSTAT=:ERROR :SQLSTATE\n\\echo ' + SQL_MARK,
     statusRe: 'LGSTAT=(true|false)\\s+(\\S*)', // in-band статус: авторитетный признак ошибки
     timeRe: 'Time:\\s*([\\d.]+)\\s*ms', rowsRe: '\\((\\d+) rows?\\)', errRe: '^(?:ERROR|FATAL|PANIC):' },
@@ -1110,6 +1185,7 @@ function resolveSqlDriver(sql) {
     command: [...sql.command, ...(sql.flags || preset.flags || [])],
     init: sql.init || preset.init || [],
     stmtTimeout: sql.stmtTimeout || preset.stmtTimeout || null, // серверный лимит на запрос ({ms} → timeoutMs)
+    assertFlags: sql.assertFlags || preset.assertFlags || null, // one-shot флаги для assert-фазы (только psql)
     markCmd: sql.mark || preset.markCmd || ('\\echo ' + SQL_MARK),
     mark: SQL_MARK,
     statusRe: reOrNull(sql.statusRegex, preset.statusRe), // надёжный in-band статус (psql :ERROR)
@@ -1930,7 +2006,9 @@ function buildReport(scn, stats, opts = {}) {
     }
   }
   const incompleteWorkers = opts.incompleteWorkers || 0;
-  const pass = checks.every((c) => c.pass) && (!opts.smoke || stats.errors === 0) && incompleteWorkers === 0;
+  const assertResults = opts.assertResults || null;
+  const assertOk = !assertResults || assertResults.every((a) => a.ok); // любой провал корректности = FAIL
+  const pass = checks.every((c) => c.pass) && (!opts.smoke || stats.errors === 0) && incompleteWorkers === 0 && assertOk;
   if (incompleteWorkers > 0) checks.push({ name: `все потоки-генераторы вернули данные (не вернули: ${incompleteWorkers})`, pass: false });
 
   // сводка по цепочкам (flows): доля завершённых сессий, длительность journey, точка обрыва
@@ -2069,7 +2147,7 @@ function buildReport(scn, stats, opts = {}) {
     hist: histogram(latSorted), histBoundsV: HIST_BOUNDS_V, // гистограмма латентности + версия сетки (для merge)
     perRequest: rows.map((r) => ({ ...r, rps: Number(r.rps.toFixed(1)), errPct: Number(r.errPct.toFixed(2)), p50: Math.round(r.p50), p90: Math.round(r.p90), p95: Math.round(r.p95), p99: Math.round(r.p99), max: Math.round(r.max), ttfbP95: Math.round(r.ttfbP95), downloadP95: Math.round(r.downloadP95) })),
     thresholds: { p95Ms: th.p95Ms, errorRatePct: th.errorRatePct, ...(th.p99Ms !== undefined ? { p99Ms: th.p99Ms } : {}), ...(th.rpsMin !== undefined ? { rpsMin: th.rpsMin } : {}), ...(th.perRequest ? { perRequest: th.perRequest } : {}) }, // значения порогов — чтобы merge пересчитал вердикт
-    workers, resource: res, incompleteWorkers, flows: flowReport, targetMetrics, lifecycle: opts.lifecycle || null,
+    workers, resource: res, incompleteWorkers, flows: flowReport, targetMetrics, lifecycle: opts.lifecycle || null, assertResults,
     errorsDetail, degradation, checksSummary, paramImpact, checks, verdict: pass ? 'PASS' : 'FAIL', hints,
     loginFailures: opts.loginFailures || [],
   };
@@ -2315,6 +2393,14 @@ function printReport(rep) {
     L(`  Память: процесс ${r.rssMaxMB}МБ (пик) | свободно в системе ${r.sysFreeMB}МБ из ${r.sysTotalMB}МБ`);
     if (r.saturated && r.saturated.length) L(`  СТАТУС: ⚠ УПЁРЛИСЬ В (${r.saturated.join(', ')}) — цифрам латентности доверять нельзя`);
     else L(`  СТАТУС: OK — генератор не был узким местом`);
+  }
+  if (rep.assertResults && rep.assertResults.length) {
+    L('');
+    L('──────────────── ПРОВЕРКИ КОРРЕКТНОСТИ (assert) ────────');
+    for (const a of rep.assertResults) {
+      const exp = Object.entries(a.expect || {}).map(([k, v]) => `${k}=${v}`).join(',');
+      L(`  ${a.ok ? green('[OK]  ') : red('[FAIL]')} ${a.name}: получено ${JSON.stringify(a.got)} (ожидалось ${exp})${a.err ? red(` — ошибка: ${a.err}`) : ''}`);
+    }
   }
   if (!rep.mode || rep.mode !== 'smoke') {
     const distro = asciiHistogram(rep.hist);
@@ -3291,10 +3377,18 @@ async function cmdRun(positional, flags) {
 
   if (targetMon) targetMetrics = summarizeTargetMetrics(targetMon.stop(), scn.load.warmupSec && !scn.load.stages ? scn.load.warmupSec : 0);
 
+  // assert — проверки КОРРЕКТНОСТИ витрины на пост-нагрузочном состоянии. ДО teardown (он чистит данные).
+  let assertResults = null;
+  if (!smoke && scn._assert && scn._assert.length) {
+    console.log(`\nAssert (${scn._assert.length} проверк.):`);
+    assertResults = await runAssertPhase(scn, scn._resolvedVars || {});
+    for (const a of assertResults) console.log(`  ${a.ok ? '[OK]  ' : '[FAIL]'} ${a.name}: получено ${JSON.stringify(a.got)}${a.err ? ` — ошибка: ${a.err}` : ''}`);
+  }
+
   // teardown — очистка (best-effort, выполняется после нагрузки, даже если она упала/прервана)
   await runTeardownPhase();
 
-  const rep = buildReport(scn, stats, { smoke, loginFailures, resource, incompleteWorkers, targetMetrics, lifecycle });
+  const rep = buildReport(scn, stats, { smoke, loginFailures, resource, incompleteWorkers, targetMetrics, lifecycle, assertResults });
   printReport(rep);
 
   const outFile = flags.out || 'loadgen-result.json';
@@ -3368,7 +3462,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram, resolveSqlDriver, parseSqlChunk, parseKafkaLag };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram, resolveSqlDriver, parseSqlChunk, parseKafkaLag, checkAssertExpect };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

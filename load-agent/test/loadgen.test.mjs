@@ -9,7 +9,7 @@ import {
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
   toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart,
   histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram,
-  resolveSqlDriver, parseSqlChunk, parseKafkaLag,
+  resolveSqlDriver, parseSqlChunk, checkAssertExpect, parseKafkaLag,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -917,4 +917,31 @@ test('validateScenario: monitor.kafka требует command и groups; поро
   assert.ok(typo.errors.some((e) => /нет такой метрики/.test(e)), 'опечатка имени порога = ошибка');
   const ok = validateScenario({ ...base, monitor: { kafka: { command: ['k', '--bootstrap-server', 'x'], groups: ['g1'] }, thresholds: { 'g1 lag': { max: 100 } } } });
   assert.deepEqual(ok.errors, []);
+});
+
+// ─── assert-фаза (проверки корректности после нагрузки) ──
+test('checkAssertExpect: value/minValue/maxValue/minRows/notEmpty', () => {
+  assert.equal(checkAssertExpect('0', 1, { value: '0' }), true);
+  assert.equal(checkAssertExpect('5', 1, { value: '0' }), false);
+  assert.equal(checkAssertExpect('100', 1, { minValue: 50 }), true);
+  assert.equal(checkAssertExpect('40', 1, { minValue: 50 }), false);
+  assert.equal(checkAssertExpect('40', 1, { maxValue: 50 }), true);
+  assert.equal(checkAssertExpect('abc', 1, { minValue: 1 }), false); // не число → провал
+  assert.equal(checkAssertExpect('x', 3, { minRows: 2 }), true);
+  assert.equal(checkAssertExpect('x', 1, { minRows: 2 }), false);
+  assert.equal(checkAssertExpect('v', 1, { notEmpty: true }), true);
+  assert.equal(checkAssertExpect('', 0, { notEmpty: true }), false);
+});
+test('validateScenario: assert требует kind sql/pipeline, sql+expect с РОВНО одним условием', () => {
+  const sqlBase = { kind: 'sql', sql: { driver: 'psql', command: ['psql'] }, requests: [{ name: 'r', sql: 'select 1' }], load: { vus: 1, durationSec: 1 } };
+  const ok = validateScenario({ ...sqlBase, assert: [{ name: 'c', sql: 'select count(*) from t', expect: { minValue: 1 } }] });
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.errors.length, 0);
+  const twoExpect = validateScenario({ ...sqlBase, assert: [{ name: 'c', sql: 'select 1', expect: { value: '0', minValue: 1 } }] });
+  assert.ok(twoExpect.errors.some((e) => /РОВНО ОДНО/.test(e)));
+  const noSql = validateScenario({ ...sqlBase, assert: [{ name: 'c', expect: { value: '0' } }] });
+  assert.ok(noSql.errors.some((e) => /sql/.test(e)));
+  // assert на HTTP = ошибка
+  const http = validateScenario({ baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x' }], load: { vus: 1, durationSec: 1 }, assert: [{ name: 'c', sql: 'select 1', expect: { value: '0' } }] });
+  assert.ok(http.errors.some((e) => /sql.*pipeline|только для/.test(e)));
 });
