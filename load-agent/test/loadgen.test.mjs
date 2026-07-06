@@ -9,7 +9,7 @@ import {
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
   toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart,
   histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram,
-  resolveSqlDriver, parseSqlChunk,
+  resolveSqlDriver, parseSqlChunk, parseKafkaLag,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -837,4 +837,84 @@ test('renderTemplate: общий used согласует list-переменну
   const a = renderTemplate('{{region}}', { region: ['eu', 'us', 'asia', 'af'] }, u);
   const b = renderTemplate('prefix-{{region}}', { region: ['eu', 'us', 'asia', 'af'] }, u);
   assert.equal(b, 'prefix-' + a, 'второй шаблон переиспользует значение из общего used — produce и verify видят одно значение');
+});
+
+// ─── монитор consumer-lag Kafka (monitor.kafka) ──
+test('parseKafkaLag: сумма LAG по партициям из describe-вывода', () => {
+  const out = [
+    'GROUP           TOPIC       PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG   CONSUMER-ID  HOST  CLIENT-ID',
+    'g1              events      0          100             150             50    c1           /1    cid1',
+    'g1              events      1          200             230             30    c1           /1    cid1',
+    'g1              events      2          10              10              0     c1           /1    cid1',
+  ].join('\n');
+  const r = parseKafkaLag(out);
+  assert.equal(r.lag, 80); // 50+30+0
+  assert.equal(r.rows, 3);
+});
+test('parseKafkaLag: нет строк данных (пустая группа/только заголовок) = null', () => {
+  assert.equal(parseKafkaLag('GROUP TOPIC PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG\n'), null);
+  assert.equal(parseKafkaLag('Consumer group g1 has no active members.\n'), null);
+});
+test('summarizeTargetMetrics: растущий consumer-lag помечается risingLag (backpressure)', () => {
+  const rising = summarizeTargetMetrics({ intervalSec: 2, errors: [], samples: [
+    { t: 0, values: { 'svc lag': 10 } }, { t: 2, values: { 'svc lag': 800 } },
+    { t: 4, values: { 'svc lag': 2500 } }, { t: 6, values: { 'svc lag': 5000 } },
+  ] });
+  assert.equal(rising.metrics.find((x) => x.name === 'svc lag').risingLag, true);
+  const stable = summarizeTargetMetrics({ intervalSec: 2, errors: [], samples: [
+    { t: 0, values: { 'svc lag': 100 } }, { t: 2, values: { 'svc lag': 90 } }, { t: 4, values: { 'svc lag': 110 } },
+  ] });
+  assert.equal(stable.metrics.find((x) => x.name === 'svc lag').risingLag, false);
+});
+test('validateScenario: monitor.kafka требует command и groups; порог по "<группа> lag"', () => {
+  const base = { baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x' }], load: { vus: 1, durationSec: 1 } };
+  const noGroups = validateScenario({ ...base, monitor: { kafka: { command: ['kafka-consumer-groups'] } } });
+  assert.ok(noGroups.errors.some((e) => /groups/.test(e)));
+  const ok = validateScenario({ ...base, monitor: { kafka: { command: ['kafka-consumer-groups', '--bootstrap-server', 'x'], groups: ['g1'] }, thresholds: { 'g1 lag': { max: 100 } } } });
+  assert.deepEqual(ok.errors, []);
+  const typo = validateScenario({ ...base, monitor: { kafka: { command: ['k'], groups: ['g1'] }, thresholds: { 'g2 lag': { max: 100 } } } });
+  assert.ok(typo.errors.some((e) => /нет такой метрики/.test(e)));
+});
+
+// ─── монитор consumer-lag Kafka (kind-agnostic monitor.kafka) ──
+test('parseKafkaLag: суммирует LAG по партициям из вывода kafka-consumer-groups --describe', () => {
+  const out = [
+    'GROUP TOPIC PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG CONSUMER-ID HOST CLIENT-ID',
+    'g events 0 100 150 50 consumer-1 /10.0.0.1 c1',
+    'g events 1 200 500 300 consumer-1 /10.0.0.1 c1',
+  ].join('\n');
+  const r = parseKafkaLag(out);
+  assert.equal(r.lag, 350); // 50 + 300
+  assert.equal(r.rows, 2);
+});
+test('parseKafkaLag: оффлайн-консьюмер (CONSUMER-ID=-) с реальным лагом считается; never-committed (LAG=-) пропускается', () => {
+  const offline = parseKafkaLag('g t 0 100 600 500 - - -');
+  assert.equal(offline.lag, 500); // главный backpressure-кейс
+  const nolag = parseKafkaLag('g t 0 - - - - - -');
+  assert.equal(nolag, null); // нет числового LAG → нет данных
+  assert.equal(parseKafkaLag('GROUP TOPIC PARTITION ...\n(warning prose)'), null); // только заголовок/шум
+  assert.equal(parseKafkaLag(''), null);
+});
+test('summarizeTargetMetrics: растущий consumer-lag → risingLag (backpressure); всплеск/стабильный — нет', () => {
+  const rising = summarizeTargetMetrics({ intervalSec: 2, errors: [], samples: [
+    { t: 0, values: { 'svc lag': 10 } }, { t: 2, values: { 'svc lag': 800 } }, { t: 4, values: { 'svc lag': 3000 } }, { t: 6, values: { 'svc lag': 6000 } },
+  ] });
+  assert.equal(rising.metrics.find((x) => x.name === 'svc lag').risingLag, true);
+  const spike = summarizeTargetMetrics({ intervalSec: 2, errors: [], samples: [ // всплеск, потом спал — не backpressure
+    { t: 0, values: { 'svc lag': 10 } }, { t: 2, values: { 'svc lag': 9000 } }, { t: 4, values: { 'svc lag': 20 } },
+  ] });
+  assert.equal(spike.metrics.find((x) => x.name === 'svc lag').risingLag, false);
+  const stable = summarizeTargetMetrics({ intervalSec: 2, errors: [], samples: [
+    { t: 0, values: { 'svc lag': 5000 } }, { t: 2, values: { 'svc lag': 4900 } }, { t: 4, values: { 'svc lag': 5100 } },
+  ] });
+  assert.equal(stable.metrics.find((x) => x.name === 'svc lag').risingLag, false);
+});
+test('validateScenario: monitor.kafka требует command и groups; порог по "<группа> lag" сверяется по имени', () => {
+  const base = { baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x' }], load: { vus: 1, durationSec: 1 } };
+  const noGroups = validateScenario({ ...base, monitor: { kafka: { command: ['kafka-consumer-groups'] } } });
+  assert.ok(noGroups.errors.some((e) => /groups/.test(e)));
+  const typo = validateScenario({ ...base, monitor: { kafka: { command: ['k', '--bootstrap-server', 'x'], groups: ['g1'] }, thresholds: { 'g2 lag': { max: 100 } } } });
+  assert.ok(typo.errors.some((e) => /нет такой метрики/.test(e)), 'опечатка имени порога = ошибка');
+  const ok = validateScenario({ ...base, monitor: { kafka: { command: ['k', '--bootstrap-server', 'x'], groups: ['g1'] }, thresholds: { 'g1 lag': { max: 100 } } } });
+  assert.deepEqual(ok.errors, []);
 });

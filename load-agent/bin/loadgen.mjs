@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.17.0';
+const VERSION = '1.18.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -834,7 +834,16 @@ function validateScenario(scn) {
       push(errors, 'monitor должен быть объектом { docker?: {...}, prometheus?: {...}, intervalSec?: N, thresholds?: {...} }');
     } else {
       if (mo.intervalSec !== undefined && (typeof mo.intervalSec !== 'number' || mo.intervalSec < 1)) push(errors, 'monitor.intervalSec должен быть числом >= 1 (секунды между опросами)');
-      if (!mo.docker && !mo.prometheus) push(errors, 'monitor задан, но пуст — укажите monitor.docker (контейнеры) и/или monitor.prometheus (url+queries)');
+      if (!mo.docker && !mo.prometheus && !mo.kafka) push(errors, 'monitor задан, но пуст — укажите monitor.docker (контейнеры), monitor.prometheus (url+queries) и/или monitor.kafka (consumer-lag групп)');
+      if (mo.kafka !== undefined) {
+        const kf = mo.kafka;
+        if (typeof kf !== 'object' || kf === null || !Array.isArray(kf.command) || !kf.command.length || kf.command.some((x) => typeof x !== 'string')) {
+          push(errors, 'monitor.kafka.command — непустой массив строк: база вызова kafka-consumer-groups (напр. ["kafka-consumer-groups","--bootstrap-server","localhost:9092"] или через docker exec). Инструмент сам добавит --describe --group G');
+        }
+        if (!Array.isArray(kf.groups) || !kf.groups.length || kf.groups.some((g) => typeof g !== 'string' || !g)) {
+          push(errors, 'monitor.kafka.groups — непустой массив имён consumer-групп для замера лага');
+        }
+      }
       if (mo.docker !== undefined) {
         if (typeof mo.docker !== 'object' || mo.docker === null || !Array.isArray(mo.docker.containers) || !mo.docker.containers.length) {
           push(errors, 'monitor.docker должен быть { "containers": ["имя-контейнера", ...] } (метрики через `docker stats`)');
@@ -854,14 +863,15 @@ function validateScenario(scn) {
       if (mo.thresholds !== undefined) {
         if (typeof mo.thresholds !== 'object' || mo.thresholds === null || Array.isArray(mo.thresholds)) push(errors, 'monitor.thresholds должен быть объектом { "имя метрики": { "max": N } }');
         else {
-          // предсказуемые имена метрик: docker → "<контейнер> CPU %" / "<контейнер> MEM МБ"; prometheus → имя запроса
+          // предсказуемые имена метрик: docker → "<контейнер> CPU %" / "<контейнер> MEM МБ"; prometheus → имя запроса; kafka → "<группа> lag"
           const known = new Set();
           if (mo.docker && Array.isArray(mo.docker.containers)) for (const c of mo.docker.containers) { known.add(`${c} CPU %`); known.add(`${c} MEM МБ`); }
           if (mo.prometheus && mo.prometheus.queries && typeof mo.prometheus.queries === 'object') for (const q of Object.keys(mo.prometheus.queries)) known.add(q);
+          if (mo.kafka && Array.isArray(mo.kafka.groups)) for (const g of mo.kafka.groups) known.add(`${g} lag`);
           for (const [k, t] of Object.entries(mo.thresholds)) {
             if (typeof t !== 'object' || t === null || typeof t.max !== 'number') { push(errors, `monitor.thresholds["${k}"] должен быть { "max": число } (порог по метрике войдёт в вердикт)`); continue; }
             // опечатка в имени = ОШИБКА (иначе после целого прогона получили бы ложный FAIL «метрика не собрана»)
-            if (!known.has(k)) push(errors, `monitor.thresholds["${k}"]: нет такой метрики. Доступны: ${[...known].join(', ') || '(нет)'} (docker: "<контейнер> CPU %"/"<контейнер> MEM МБ", prometheus: имя запроса)`);
+            if (!known.has(k)) push(errors, `monitor.thresholds["${k}"]: нет такой метрики. Доступны: ${[...known].join(', ') || '(нет)'} (docker: "<контейнер> CPU %"/"<контейнер> MEM МБ", prometheus: имя запроса, kafka: "<группа> lag")`);
           }
         }
       }
@@ -1549,9 +1559,23 @@ function execCapture(cmd, args, timeoutMs) {
  * Опрашивает метрики ЦЕЛИ во время прогона (на главном потоке, независимо от нагрузки).
  * Возвращает { stop() → { intervalSec, samples:[{t,values}], errors:[] } } или null, если monitor не задан.
  */
+/** Сумма LAG по партициям из вывода `kafka-consumer-groups --describe`. Чистая — тестируемая.
+ *  Строка данных: колонки GROUP TOPIC PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG …; PARTITION — число, LAG — cols[5].
+ *  Возвращает { lag, rows } или null, если строк данных нет (заголовок/предупреждения/пустая группа). */
+function parseKafkaLag(output) {
+  let total = 0, rows = 0;
+  for (const line of String(output).split(/\r?\n/)) {
+    const cols = line.trim().split(/\s+/);
+    if (cols.length < 6 || !/^\d+$/.test(cols[2])) continue;
+    const lag = Number(cols[5]);
+    if (Number.isFinite(lag)) { total += lag; rows++; }
+  }
+  return rows ? { lag: total, rows } : null;
+}
+
 function startTargetMonitor(scn) {
   const m = scn.monitor;
-  if (!m || (!m.docker && !m.prometheus)) return null;
+  if (!m || (!m.docker && !m.prometheus && !m.kafka)) return null;
   const intervalSec = m.intervalSec || 5;
   const t0 = Date.now();
   const samples = [];
@@ -1605,13 +1629,29 @@ function startTargetMonitor(scn) {
     return values;
   };
 
+  // consumer-lag Kafka: для каждой группы `kafka-consumer-groups --describe --group G`, сумма LAG по партициям.
+  // Растущий лаг = консьюмер не успевает (backpressure) — показывает, ГДЕ узкое место конвейера.
+  const pollKafka = async () => {
+    const values = {};
+    await Promise.all(m.kafka.groups.map(async (g) => {
+      try {
+        const [cmd, ...base] = m.kafka.command;
+        const out = await execCapture(cmd, [...base, '--describe', '--group', g], 15000);
+        const parsed = parseKafkaLag(out);
+        if (parsed) values[`${g} lag`] = parsed.lag;
+        else errors.add(`kafka lag "${g}": нет активных партиций/консьюмеров (группа существует? есть назначенные партиции?)`);
+      } catch (e) { errors.add(`kafka lag "${g}": ${errText(e)} (kafka-consumer-groups в PATH/докере? bootstrap верный?)`); }
+    }));
+    return values;
+  };
+
   let inFlight = false;
   const poll = async () => {
     if (stopped || inFlight) return; // не запускаем новый опрос, пока не завершился прошлый (docker stats может быть дольше интервала)
     inFlight = true;
     try {
-      const [d, p] = await Promise.all([m.docker ? pollDocker() : {}, m.prometheus ? pollProm() : {}]);
-      if (!stopped) samples.push({ t: Math.round((Date.now() - t0) / 1000), values: { ...d, ...p } });
+      const [d, p, k] = await Promise.all([m.docker ? pollDocker() : {}, m.prometheus ? pollProm() : {}, m.kafka ? pollKafka() : {}]);
+      if (!stopped) samples.push({ t: Math.round((Date.now() - t0) / 1000), values: { ...d, ...p, ...k } });
     } finally { inFlight = false; }
   };
   poll(); // первый замер сразу
@@ -1649,9 +1689,13 @@ function summarizeTargetMetrics(monitorData, warmupSec = 0) {
       if (max <= 1.5) saturatedCpu = max >= 0.85;
       else if (max <= 100) saturatedCpu = max >= 85;
     }
+    // consumer-lag РАСТЁТ по ходу прогона = консьюмер не успевает (backpressure). Сравниваем конец с началом:
+    // устойчиво выше и заметно вырос (а не разовый всплеск, который потом рассосался).
+    const first = vals[0], last = vals[vals.length - 1];
+    const risingLag = / lag$/.test(name) && last > first + 100 && last > first * 1.5 && last >= max * 0.6;
     metrics.push({
       name, min: Math.min(...vals), avg: Number((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)),
-      max, last: vals[vals.length - 1], peakAtSec, samples: pts.length, saturatedCpu,
+      max, last, peakAtSec, samples: pts.length, saturatedCpu, risingLag,
     });
   }
   return { intervalSec: monitorData.intervalSec, errors: monitorData.errors || [], metrics };
@@ -2001,6 +2045,9 @@ function buildReport(scn, stats, opts = {}) {
     for (const mt of targetCpuBound) {
       hints.push(`⚠ ЦЕЛЬ упёрлась: ${mt.name} достигал ${mt.max}% (пик t=${mt.peakAtSec}с)${genSaturated ? '' : ' — при этом генератор НЕ был узким местом, значит предел упирается в САМ СЕРВИС (нужно оптимизировать/масштабировать цель)'}.`);
     }
+    for (const mt of targetMetrics.metrics.filter((mt) => mt.risingLag)) {
+      hints.push(`⚠ BACKPRESSURE: ${mt.name} рос по ходу прогона (${mt.min}→${mt.last}, макс ${mt.max}) — консьюмер не успевает за продьюсером. Узкое место — обработка на стороне консьюмера/витрины, а не Kafka.`);
+    }
     if (!genSaturated && !targetCpuBound.length && p95 > th.p95Ms && targetMetrics.metrics.length) {
       hints.push(`Латентность выше порога, но ни генератор, ни CPU цели не насыщены — узкое место, вероятно, вне CPU (БД, блокировки, сеть, GC, внешний сервис). Смотрите метрики цели и её зависимостей.`);
     }
@@ -2254,7 +2301,7 @@ function printReport(rep) {
     L('');
     L('──────────────── МЕТРИКИ ЦЕЛИ (во время прогона) ───────');
     for (const mt of rep.targetMetrics.metrics) {
-      L(`  ${mt.name}: сред. ${mt.avg}, макс. ${mt.max} (t=${mt.peakAtSec}с), последн. ${mt.last}${mt.saturatedCpu ? '  ⚠ насыщение' : ''}`);
+      L(`  ${mt.name}: сред. ${mt.avg}, макс. ${mt.max} (t=${mt.peakAtSec}с), последн. ${mt.last}${mt.saturatedCpu ? '  ⚠ насыщение' : ''}${mt.risingLag ? '  ⚠ РАСТЁТ (backpressure — консьюмер не успевает)' : ''}`);
     }
     if (!rep.targetMetrics.metrics.length) L('  (не собрано ни одной метрики — см. ошибки ниже)');
     for (const e of rep.targetMetrics.errors) L(`  (!) ${e}`);
@@ -3044,7 +3091,7 @@ async function cmdRun(positional, flags) {
   let incompleteWorkers = 0;
   // монитор метрик ЦЕЛИ (docker/prometheus) — только для полноценного прогона, не smoke
   const targetMon = !smoke ? startTargetMonitor(scn) : null;
-  if (targetMon) console.log(`Монитор цели: ${scn.monitor.docker ? `docker[${scn.monitor.docker.containers.join(',')}]` : ''}${scn.monitor.docker && scn.monitor.prometheus ? ' + ' : ''}${scn.monitor.prometheus ? `prometheus[${Object.keys(scn.monitor.prometheus.queries).length} запр.]` : ''}`);
+  if (targetMon) { const parts = []; if (scn.monitor.docker) parts.push(`docker[${scn.monitor.docker.containers.join(',')}]`); if (scn.monitor.prometheus) parts.push(`prometheus[${Object.keys(scn.monitor.prometheus.queries).length} запр.]`); if (scn.monitor.kafka) parts.push(`kafka-lag[${scn.monitor.kafka.groups.join(',')}]`); console.log(`Монитор цели: ${parts.join(' + ')}`); }
   let targetMetrics = null;
 
   if (scn.kind === 'pipeline') {
@@ -3321,7 +3368,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram, resolveSqlDriver, parseSqlChunk };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram, resolveSqlDriver, parseSqlChunk, parseKafkaLag };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

@@ -311,17 +311,27 @@ Extract-пути: `content[*].id` (Spring Page), `[*].id` (массив), `data.
       "heap used МБ": "sum(jvm_memory_used_bytes{area=\"heap\"})/1048576"
     }
   },
-  "thresholds": { "dlmm-pool-engine CPU %": { "max": 85 } }           // опц. — войдёт в вердикт
+  "kafka": {                                                          // и/или consumer-lag Kafka
+    "command": ["kafka-consumer-groups", "--bootstrap-server", "localhost:9092"],
+    "groups": ["dlmm-price-oracle-ohlcv", "dlmm-transaction-service-swaps"]
+  },
+  "thresholds": { "dlmm-pool-engine CPU %": { "max": 85 }, "dlmm-price-oracle-ohlcv lag": { "max": 1000 } }
 }
 ```
 
 - **docker** — `docker stats` по контейнерам (CPU %, память), без PromQL, для любой docker-цели.
 - **prometheus** — произвольные PromQL-запросы (агрегируйте до одного значения через `sum()/avg()`).
+- **kafka** — consumer-lag групп: для каждой `kafka-consumer-groups --describe --group G`, сумма LAG
+  по партициям → метрика `«<группа> lag»`. `command` — база вызова (клиент в PATH или через
+  `docker exec`); инструмент сам добавит `--describe --group`. **Растущий по ходу прогона лаг =
+  backpressure** (консьюмер не успевает) → в отчёте «⚠ РАСТЁТ» + подсказка, что узкое место на
+  стороне обработки, а не Kafka. (Метрики кэша Ignite — через `prometheus`, Ignite экспортит JMX.)
 - Отчёт: секция «МЕТРИКИ ЦЕЛИ» с min/avg/max/пиком/последним по каждой метрике.
 - **Корреляция**: если CPU цели дошёл до насыщения, а генератор — нет, инструмент прямо пишет
   «⚠ ЦЕЛЬ упёрлась — предел в самом сервисе». Если ни то, ни другое, а латентность высокая —
   подсказывает искать вне CPU (БД, блокировки, GC, внешний сервис).
-- `monitor.thresholds` (опц.) — порог по метрике цели (например «CPU < 85%») входит в вердикт.
+- `monitor.thresholds` (опц.) — порог по метрике цели (CPU/память/lag) входит в вердикт; имена:
+  docker `«<конт> CPU %»`/`«<конт> MEM МБ»`, prometheus — имя запроса, kafka `«<группа> lag»`.
 
 ## Распределённый прогон с N машин (`merge`)
 
