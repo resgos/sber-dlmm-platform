@@ -33,7 +33,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import os from 'node:os';
 
-const VERSION = '1.19.0';
+const VERSION = '1.20.0';
 const MAX_VUS = 200;
 const MAX_DURATION_SEC = 900;
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -250,7 +250,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const name = a.slice(2);
-      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format', 'baseline', 'max-p95-regression-pct', 'max-error-increase-pp', 'junit', 'md', 'html', 'preset'].includes(name);
+      const needsValue = ['out', 'vus', 'duration', 'base-url', 'max-rps', 'workers', 'top', 'format', 'baseline', 'baseline-dir', 'out-dir', 'max-p95-regression-pct', 'max-error-increase-pp', 'junit', 'md', 'html', 'preset'].includes(name);
       if (needsValue) {
         flags[name] = argv[++i];
         if (flags[name] === undefined) die(1, `Опции --${name} нужно значение. Пример: --${name} <значение>`);
@@ -2974,6 +2974,87 @@ function cmdCompare(positional, flags) {
   process.exit(cmp.verdict === 'REGRESSED' ? 2 : 0);
 }
 
+// ─────────────────────────────────────────────── regress: пачка сценариев как регресс-набор НТ ──
+
+/** Комбинированный JUnit по регресс-набору: один testsuite, по testcase на сценарий (красный = <failure>). */
+function regressJUnit(rows) {
+  const esc = (s) => String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  const failures = rows.filter((r) => r.code !== 0).length;
+  const cases = rows.map((r) => {
+    const body = r.code === 0 ? '' : `<failure message="${esc(r.verdict)}">exit ${r.code}; p95=${r.p95 ?? '?'}ms rps=${r.rps ?? '?'} err=${r.err ?? '?'}%</failure>`;
+    return `    <testcase name="${esc(r.name)}" classname="loadgen.regress"${body ? `>\n      ${body}\n    </testcase>` : ' />'}`;
+  }).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuite name="loadgen-regress" tests="${rows.length}" failures="${failures}">\n${cases}\n</testsuite>\n`;
+}
+
+async function cmdRegress(positional, flags) {
+  if (!positional.length) {
+    die(1, 'Использование: node loadgen.mjs regress <scn1.json> <scn2.json> ... [опции]\n' +
+      '  Прогоняет ПАЧКУ сценариев (регресс-набор НТ) и сводит в одну таблицу PASS/FAIL/REGRESSED.\n' +
+      '  --baseline-dir DIR   папка с эталонами <имя>.json (иначе ищет <имя>.baseline.json рядом со сценарием)\n' +
+      '  --out-dir DIR        куда писать результаты (по умолч. regress-results/)\n' +
+      '  --junit FILE         комбинированный JUnit по всему набору\n' +
+      '  --update-baselines   принять текущие ЗЕЛЁНЫЕ прогоны как новые эталоны\n' +
+      '  --allow-writes / --confirm-external / --vus N / --duration N / --workers N — прокидываются в каждый прогон\n' +
+      '  Exit: 0 = все зелёные, 2 = есть красные. Так НТ-специалист перезапускает набор форматов одной командой.');
+  }
+  const self = fileURLToPath(import.meta.url);
+  const outDir = flags['out-dir'] || 'regress-results';
+  const baselineDir = flags['baseline-dir'] || null;
+  const passthrough = [];
+  for (const f of ['allow-writes', 'confirm-external']) if (flags[f]) passthrough.push('--' + f);
+  for (const f of ['vus', 'duration', 'workers', 'max-rps']) if (flags[f] !== undefined) passthrough.push('--' + f, String(flags[f]));
+  try { mkdirSync(outDir, { recursive: true }); } catch { /* ignore */ }
+
+  console.log(`РЕГРЕСС-НАБОР: ${positional.length} сценариев${baselineDir ? ` | эталоны: ${baselineDir}` : ''}\n`);
+  const rows = [];
+  for (const scn of positional) {
+    const name = basename(scn).replace(/\.json$/i, '');
+    if (!existsSync(scn)) { rows.push({ scn, name, verdict: 'НЕТ ФАЙЛА', code: 1 }); console.log(`  ✗ ${name}: файл не найден (${scn})`); continue; }
+    const resultFile = join(outDir, `${name}.json`);
+    const baseFile = baselineDir ? join(baselineDir, `${name}.json`) : join(dirname(scn) || '.', `${name}.baseline.json`);
+    const hasBase = existsSync(baseFile);
+    const args = ['run', scn, '--out', resultFile, '--quiet', ...passthrough];
+    if (hasBase) args.push('--baseline', baseFile);
+    process.stdout.write(`  ▶ ${name}${hasBase ? ' (vs baseline)' : ''} … `);
+    const code = await new Promise((res) => {
+      const p = spawn(process.execPath, [self, ...args], { stdio: ['ignore', 'ignore', 'ignore'] });
+      p.on('exit', (c) => res(c ?? 1));
+      p.on('error', () => res(1));
+    });
+    let rep = null; try { rep = JSON.parse(readFileSync(resultFile, 'utf8')); } catch { /* нет результата */ }
+    // код выхода run: 0 PASS/STABLE/IMPROVED · 1 конфиг · 2 FAIL/REGRESSED · 3 цель недоступна
+    const verdict = code === 0 ? (hasBase ? 'OK/STABLE' : 'PASS') : code === 2 ? 'FAIL/REGRESS' : code === 3 ? 'UNREACHABLE' : 'CONFIG-ERR';
+    rows.push({ scn, name, verdict, code, p95: rep?.latencyMs?.p95, rps: rep?.rps, err: rep?.errorRatePct, resultFile, baseFile, hasBase });
+    console.log(code === 0 ? green(verdict) : red(verdict));
+    if (flags['update-baselines'] && code === 0 && rep) {
+      try { writeFileSync(baseFile, JSON.stringify(rep, null, 2), 'utf8'); } catch (e) { console.log(`    (!) не удалось обновить эталон ${baseFile}: ${e.message}`); }
+    }
+  }
+
+  // сводная таблица
+  console.log('');
+  console.log('──────────────── РЕГРЕСС: СВОДКА ──────────────────────');
+  const head = ['сценарий', 'вердикт', 'p95мс', 'rps', 'err%'];
+  const table = [head, ...rows.map((r) => [r.name.slice(0, 32), r.verdict, r.p95 ?? '—', r.rps ?? '—', r.err ?? '—'])];
+  const w = head.map((_, c) => Math.max(...table.map((row) => String(row[c]).length)));
+  console.log('  ' + head.map((h, c) => h.padEnd(w[c])).join('  '));
+  for (const r of rows) {
+    const cells = [r.name.slice(0, 32), r.verdict, r.p95 ?? '—', r.rps ?? '—', r.err ?? '—'];
+    const line = '  ' + cells.map((v, c) => String(v).padEnd(w[c])).join('  ');
+    console.log(r.code === 0 ? line : red(line));
+  }
+  const failed = rows.filter((r) => r.code !== 0);
+  console.log('');
+  console.log(`ИТОГ РЕГРЕССА: ${rows.length - failed.length}/${rows.length} зелёных${failed.length ? ` | КРАСНЫЕ: ${failed.map((r) => r.name).join(', ')}` : ''}`);
+  console.log(`VERDICT: ${failed.length ? red(bold('FAIL')) : green(bold('PASS'))}`);
+  if (flags.junit) {
+    try { const d = dirname(flags.junit); if (d && d !== '.') mkdirSync(d, { recursive: true }); writeFileSync(flags.junit, regressJUnit(rows), 'utf8'); console.log(`JUnit: ${flags.junit}`); }
+    catch (e) { console.log(`Не удалось записать ${flags.junit}: ${e.message}`); }
+  }
+  process.exit(failed.length ? 2 : 0);
+}
+
 // ─────────────────────────────────────────────── merge: агрегация прогонов с N машин ──
 
 /** Складывает N результатов (run --out) в один агрегат: гистограммы суммируются → корректные перцентили. */
@@ -3462,7 +3543,7 @@ async function runWorkerSlice() {
 // ─────────────────────────────────────────────── main ──
 
 // Экспорт чистых функций для self-тестов (node:test). При import модуль НЕ запускает CLI.
-export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram, resolveSqlDriver, parseSqlChunk, parseKafkaLag, checkAssertExpect };
+export { extractPath, renderTemplate, parseCsv, normalizePath, isIdSegment, evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt, toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart, histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram, resolveSqlDriver, parseSqlChunk, parseKafkaLag, checkAssertExpect, regressJUnit };
 
 // Запуск CLI только при прямом вызове `node loadgen.mjs ...` (не при import из теста).
 const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
@@ -3523,6 +3604,7 @@ switch (cmd) {
   case 'validate': cmdValidate(positional); break;
   case 'profile': cmdProfile(positional, flags); break;
   case 'compare': cmdCompare(positional, flags); break;
+  case 'regress': await cmdRegress(positional, flags); break;
   case 'merge': cmdMerge(positional, flags); break;
   case 'run': await cmdRun(positional, flags); break;
   case undefined:

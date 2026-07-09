@@ -2,3 +2,4 @@
 loadgen-result.json
 results/*.json
 !results/.gitkeep
+regress-results/

@@ -21,6 +21,7 @@
 | `profile <log\|csv\|json>` | черновик сценария из статистики хитов | 0 / 1 |
 | `run <scn.json>` | нагрузка + вердикт PASS/FAIL | 0 PASS · 1 конфиг · 2 FAIL/регресс · 3 недоступна |
 | `compare <base> <cur>` | регресс p95/p99/ошибок/RPS (сумм. и по запросу) | 0 · 2 REGRESSED |
+| `regress <scn1> <scn2> …` | **пачка сценариев** (регресс-набор НТ) → таблица PASS/FAIL/REGRESSED | 0 все зелёные · 2 есть красные |
 | `merge <r1> <r2> …` | агрегат прогонов с N машин (сумм. RPS + перцентили из гистограмм) | 0 / 2 |
 
 Ключевые флаги `run`: `--smoke --vus N --duration N --workers N --out FILE --baseline FILE --junit FILE --md FILE --html FILE --allow-writes --confirm-external --quiet`.
@@ -466,6 +467,33 @@ node load-agent/bin/loadgen.mjs run scenario.json --out current.json --baseline 
 **Паттерн для CI**: храните `baseline.json` (эталон с main), в пайплайне запускайте
 `run ... --baseline baseline.json` — ненулевой код выхода валит сборку при регрессе.
 Периодически обновляйте базу принятым прогоном.
+
+### Регресс-набор: пачка сценариев одной командой (`regress`)
+
+Когда у НТ-специалиста есть **набор форматов** (папка сценариев) и его надо гонять регулярно —
+`regress` прогоняет их все и сводит в одно табло, не запуская `run` по одному:
+
+```bash
+node bin/loadgen.mjs regress scenarios/*.json --baseline-dir baselines/ --junit regress.xml
+```
+```
+  ▶ count … PASS
+  ▶ now   … PASS
+  ▶ slow  … FAIL/REGRESS
+──────────────── РЕГРЕСС: СВОДКА ──────────────────────
+  сценарий  вердикт       p95мс  rps     err%
+  count     PASS          2      908.7   0
+  slow      FAIL/REGRESS  51     50.4    0
+ИТОГ РЕГРЕССА: 2/3 зелёных | КРАСНЫЕ: slow      VERDICT: FAIL   (exit 2)
+```
+
+- Каждый сценарий гоняется своим `run` (полная изоляция), результат — в `--out-dir` (по умолч.
+  `regress-results/`). Если рядом есть эталон (`<имя>.baseline.json` или в `--baseline-dir`) —
+  автоматически идёт сравнение (PASS/OK-STABLE/FAIL-REGRESS).
+- **Exit 0** — все зелёные, **exit 2** — хоть один красный (валит CI). `--junit` — общий JUnit по набору.
+- `--update-baselines` — принять текущие ЗЕЛЁНЫЕ прогоны как новые эталоны (после согласованного апдейта).
+- Флаги `--allow-writes`/`--confirm-external`/`--vus`/`--duration`/`--workers` прокидываются в каждый прогон.
+- Перезапуск набора = та же команда: НТ-специалист меняет сценарии в папке и гоняет `regress` снова.
 
 ### Отчёты для CI: JUnit XML и Markdown
 

@@ -180,6 +180,8 @@ node LOADGEN compare baseline.json current.json
 или запусти прогон сразу с `--baseline baseline.json`. VERDICT REGRESSED (exit 2) = метрики
 ухудшились сверх порога; перечисли конкретные регрессии из вывода. Пороги настраиваются:
 `--max-p95-regression-pct N`, `--max-error-increase-pp N`.
+Целый НАБОР сценариев разом (регресс-пак): `node LOADGEN regress scn1.json scn2.json ... [--baseline-dir DIR] [--junit FILE]`
+— прогоняет все и сводит в таблицу PASS/FAIL/REGRESSED (exit 2, если есть красные). Для «прогони весь набор/регресс».
 
 ### Шаг 6. Отчёт пользователю — строго в этом порядке
 1. Блок `==== ИТОГ ====` — скопируй ДОСЛОВНО.

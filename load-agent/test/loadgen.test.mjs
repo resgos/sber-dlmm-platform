@@ -9,7 +9,7 @@ import {
   evaluateResponse, applyCaptures, validateScenario, makeStats, mergeStats, serializeStats, compareResults, stageTargetAt,
   toJUnitXml, toMarkdown, parseMemMB, summarizeTargetMetrics, resolveEnvInScenario, encodeForm, buildMultipart,
   histogram, percentileFromHistogram, mergeResults, toHtml, asciiHistogram,
-  resolveSqlDriver, parseSqlChunk, checkAssertExpect, parseKafkaLag,
+  resolveSqlDriver, parseSqlChunk, checkAssertExpect, regressJUnit, parseKafkaLag,
 } from '../bin/loadgen.mjs';
 
 // ─── extractPath ──
@@ -944,4 +944,17 @@ test('validateScenario: assert требует kind sql/pipeline, sql+expect с �
   // assert на HTTP = ошибка
   const http = validateScenario({ baseUrl: 'http://localhost:8080', requests: [{ name: 'r', method: 'GET', path: '/x' }], load: { vus: 1, durationSec: 1 }, assert: [{ name: 'c', sql: 'select 1', expect: { value: '0' } }] });
   assert.ok(http.errors.some((e) => /sql.*pipeline|только для/.test(e)));
+});
+
+// ─── regress: комбинированный JUnit регресс-набора ──
+test('regressJUnit: well-formed XML, зелёные без failure, красные с failure', () => {
+  const xml = regressJUnit([
+    { name: 'count', verdict: 'PASS', code: 0, p95: 2, rps: 900, err: 0 },
+    { name: 'slow', verdict: 'FAIL/REGRESS', code: 2, p95: 51, rps: 50, err: 0 },
+  ]);
+  assert.match(xml, /^<\?xml/);
+  assert.match(xml, /tests="2" failures="1"/);
+  assert.match(xml, /<testcase name="count"[^>]*\/>/); // зелёный — самозакрытый, без failure
+  assert.match(xml, /<testcase name="slow"[\s\S]*?<failure message="FAIL\/REGRESS">/); // красный — с failure
+  assert.ok(!/<script/.test(xml));
 });
