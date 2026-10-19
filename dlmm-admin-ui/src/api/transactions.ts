@@ -29,6 +29,9 @@ export const transactions = {
       // checking today's activity missed the late-UTC evening.
       from: filters?.dateFrom ? utcStartOfLocalDay(filters.dateFrom) : undefined,
       to: filters?.dateTo ? utcEndOfLocalDay(filters.dateTo) : undefined,
+      // 2026-07-06 — investigation cut by pool (BFF forwards to the ledger's
+      // Specification filter, which always supported poolId).
+      poolId: filters?.poolId,
     }
     const response = await apiClient.get<PageResponse<Transaction>>('/admin/transactions', {
       params,

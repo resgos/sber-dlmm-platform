@@ -357,7 +357,7 @@ public class BffProxyClient {
     @CircuitBreaker(name = "transaction-service", fallbackMethod = "getTransactionsFallback")
     @Retry(name = "transaction-service")
     public String getTransactions(int page, int size, String txType, String status,
-                                  String from, String to, String auth) {
+                                  String from, String to, String poolId, String auth) {
         return blocking(transactionServiceClient.get()
                 .uri(u -> {
                     var b = u.path("/api/v1/transactions")
@@ -367,6 +367,7 @@ public class BffProxyClient {
                     if (status != null) b.queryParam("status", status);
                     if (from != null) b.queryParam("from", from);
                     if (to != null) b.queryParam("to", to);
+                    if (poolId != null) b.queryParam("poolId", poolId);
                     return b.build();
                 })
                 .header("Authorization", safe(auth)),
@@ -387,7 +388,7 @@ public class BffProxyClient {
      */
     @SuppressWarnings("unused")
     private String getTransactionsFallback(int page, int size, String txType, String status,
-                                           String from, String to, String auth, Throwable ex) {
+                                           String from, String to, String poolId, String auth, Throwable ex) {
         log.warn("transaction-service /transactions CB OPEN or call failed: {}", ex.toString());
         return EMPTY_PAGE;
     }

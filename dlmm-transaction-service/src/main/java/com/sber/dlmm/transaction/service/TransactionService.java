@@ -372,11 +372,15 @@ public class TransactionService {
                                                                 TransactionStatus status,
                                                                 LocalDateTime from,
                                                                 LocalDateTime to,
+                                                                UUID poolId,
                                                                 int page,
                                                                 int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        // 2026-07-06 — poolId joins the admin feed's filter set (txSpec already
+        // supported it; only the /me endpoint was passing it) so an operator
+        // can scope an investigation to one pool.
         Page<Transaction> transactionPage =
-                transactionRepository.findAll(txSpec(null, type, status, from, to, null), pageRequest);
+                transactionRepository.findAll(txSpec(null, type, status, from, to, poolId), pageRequest);
         return new PageResponse<>(
                 transactionPage.getContent().stream().map(this::toResponse).toList(),
                 transactionPage.getNumber(),

@@ -85,9 +85,10 @@ public class TransactionController {
             @Parameter(description = "Optional filter by transaction status") @RequestParam(required = false) TransactionStatus status,
             @Parameter(description = "Optional inclusive lower bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) LocalDateTime from,
             @Parameter(description = "Optional inclusive upper bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) LocalDateTime to,
+            @Parameter(description = "Optional filter by pool id") @RequestParam(required = false) UUID poolId,
             @Parameter(description = "Zero-based page index") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size") @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(transactionService.getAllTransactions(type, status, from, to, page, size));
+        return ResponseEntity.ok(transactionService.getAllTransactions(type, status, from, to, poolId, page, size));
     }
 
     /**

@@ -170,6 +170,12 @@ export default function TransactionsPage() {
     for (const p of poolPage?.content ?? []) m.set(p.id, `${p.tokenXSymbol}/${p.tokenYSymbol}`)
     return m
   }, [poolPage])
+  // 2026-07-06 — investigation cut by pool: options for the new pool filter
+  // (catalogue is already on the page for the pair column).
+  const poolOptions = useMemo(
+    () => (poolPage?.content ?? []).map((p) => ({ label: `${p.tokenXSymbol}/${p.tokenYSymbol}`, value: p.id })),
+    [poolPage],
+  )
 
   // Sprint 9 — render the last 6 chars of an ID instead of the first 8.
   // The seed leaves identical prefixes ("88000000…" / "a0000000…") which
@@ -422,6 +428,18 @@ export default function TransactionsPage() {
               options={txStatusOptions}
               onChange={(val) => {
                 setFilters((f) => ({ ...f, status: val }))
+                setPage(0)
+              }}
+            />
+            <Select<string>
+              placeholder="Фильтр по пулу"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              style={{ width: 190 }}
+              options={poolOptions}
+              onChange={(val) => {
+                setFilters((f) => ({ ...f, poolId: val }))
                 setPage(0)
               }}
             />

@@ -661,8 +661,9 @@ public class AdminProxyController {
             @Parameter(description = "Optional status filter, e.g. SETTLED, PENDING") @RequestParam(required = false) String status,
             @Parameter(description = "Optional inclusive lower bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) String from,
             @Parameter(description = "Optional inclusive upper bound on createdAt (ISO-8601 local date-time)") @RequestParam(required = false) String to,
+            @Parameter(description = "Optional pool-id filter (2026-07-06 — investigation cut by pool)") @RequestParam(required = false) String poolId,
             @RequestHeader(value = "Authorization", required = false) String auth) {
-        return jsonOk(proxy.getTransactions(page, size, txType, status, from, to, auth));
+        return jsonOk(proxy.getTransactions(page, size, txType, status, from, to, poolId, auth));
     }
 
     /**
