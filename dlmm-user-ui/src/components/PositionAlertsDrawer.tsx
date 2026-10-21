@@ -118,7 +118,7 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
             уведомлений не будет даже если вкладка скрыта.
           </Text>
           <Text style={{ fontSize: 'var(--text-xs)' }} type="secondary">
-            Чтобы включить: нажмите 🔒 / ⓘ слева от адресной строки → «Уведомления» → «Разрешить» → обновите страницу.
+            Чтобы включить: значок слева от адресной строки → «Уведомления» → «Разрешить» → обновите страницу.
           </Text>
         </Space>
       }
@@ -138,7 +138,7 @@ export default function PositionAlertsDrawer({ open, onClose, positions }: Props
       open={open}
       onClose={onClose}
       width={Math.min(window.innerWidth * 0.9, 480)}
-      destroyOnClose
+      destroyOnHidden
     >
       <Tabs
         defaultActiveKey="rules"

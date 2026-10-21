@@ -291,7 +291,7 @@ function CreateOrgModal({ open, onClose, defaultEmail }: { open: boolean; onClos
       }}
       okText="Создать"
       cancelText="Отмена"
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={form} layout="vertical">
         <Form.Item
@@ -336,7 +336,7 @@ function InviteMemberModal({ open, onClose }: { open: boolean; onClose: () => vo
       }}
       okText="Отправить приглашение"
       cancelText="Отмена"
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={form} layout="vertical" initialValues={{ role: 'FINANCE_MGR' }}>
         <Form.Item name="name" label="Имя" rules={[{ required: true }]}>

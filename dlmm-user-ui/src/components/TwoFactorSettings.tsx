@@ -278,7 +278,7 @@ function SetupWizard({ open, onClose }: { open: boolean; onClose: () => void }) 
       onCancel={handleClose}
       footer={null}
       width={520}
-      destroyOnClose
+      destroyOnHidden
     >
       <Steps
         current={step}

@@ -256,7 +256,7 @@ export default function TokenDetailPage() {
                   aria-hidden
                   style={{
                     width: 72, height: 72, borderRadius: 16,
-                    background: accent, color: '#fff',
+                    background: accent, color: '#fff', // brand-hex-ok: текст на цветном аватаре, фон не зависит от темы
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 28, fontWeight: 700,
                     boxShadow: `0 4px 18px ${accent}40`,
@@ -542,7 +542,7 @@ export default function TokenDetailPage() {
         open={modalMode !== null}
         onCancel={handleModalClose}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={modalForm} layout="vertical" onFinish={handleModalSubmit} size="large">
           <Form.Item

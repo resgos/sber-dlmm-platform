@@ -87,7 +87,7 @@ async function renderSwap(opts?: { pools?: typeof POOL[] }) {
 /**
  * Sprint 10: the token picker is the TokenSelect modal, not an AntD Select.
  * Each swap box has one `.sber-tokensel-trigger` button; clicking it opens a
- * modal (portaled to document.body, `destroyOnClose`) whose `.sber-tokensel-list`
+ * modal (portaled to document.body, `destroyOnHidden`) whose `.sber-tokensel-list`
  * holds one `.sber-tokensel-row` per token. Strategy:
  *   1. find the trigger inside the in/out `.sber-swap-box`,
  *   2. click it to open the modal,

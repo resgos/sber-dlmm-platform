@@ -445,7 +445,7 @@ function CreateModal({ open, onClose, onSubmit, submitting }: {
       okText="Создать"
       cancelText="Отмена"
       confirmLoading={submitting}
-      destroyOnClose
+      destroyOnHidden
       width={520}
     >
       {/* Sprint 9-DS-r4 (P2-2) — pasted-UUID Inputs replaced by
@@ -524,7 +524,7 @@ function QuoteModal({ trade, onClose, onSubmit, submitting }: {
       okText="Отправить котировку"
       cancelText="Отмена"
       confirmLoading={submitting}
-      destroyOnClose
+      destroyOnHidden
     >
       {trade && (
         // Sprint 9-DS-r4 (P2-1) — default expiry bumped 30min → 24h.
@@ -572,7 +572,7 @@ function SettleModal({ trade, onClose, onSubmit, submitting }: {
       okText="Зафиксировать расчёт"
       cancelText="Отмена"
       confirmLoading={submitting}
-      destroyOnClose
+      destroyOnHidden
     >
       <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
         Привяжите UUID транзакции, исполнившей этот OTC-расчёт
@@ -607,7 +607,7 @@ function ReasonModal({ rec, onClose, onSubmit, submitting }: {
       okButtonProps={{ danger: true }}
       cancelText="Назад"
       confirmLoading={submitting}
-      destroyOnClose
+      destroyOnHidden
     >
       <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
         Причина будет записана в notes сделки (для compliance-проверки).

@@ -86,7 +86,7 @@ export default function TokenSelect({
         width={420}
         className="sber-tokensel-modal"
         styles={{ body: { padding: 0 } }}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="sber-tokensel-search">
           <Input
