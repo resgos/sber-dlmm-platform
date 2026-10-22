@@ -554,6 +554,13 @@
   "poolDetail": {
     "backToPools": "Back to pool list",
     "txHistory": "Pool transactions",
+    "recentSwaps": {
+      "title": "Recent swaps",
+      "scope": "This pool only",
+      "empty": "No swaps yet",
+      "sell": "Sell",
+      "buy": "Buy"
+    },
     "yieldCalc": {
       "title": "Yield calculator",
       "amountLabel": "Deposit amount",

@@ -11,7 +11,6 @@
   "dlmm-user-ui/src/components/LimitOrdersPanel.tsx": 71,
   "dlmm-user-ui/src/components/OrderBook.tsx": 65,
   "dlmm-user-ui/src/components/PartialFillNotice.tsx": 21,
-  "dlmm-user-ui/src/components/PoolRecentSwapsPanel.tsx": 10,
   "dlmm-user-ui/src/components/PoolZapPanel.tsx": 61,
   "dlmm-user-ui/src/components/PositionAlertsDrawer.tsx": 154,
   "dlmm-user-ui/src/components/SelfRestrictionPanel.tsx": 171,

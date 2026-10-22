@@ -1,6 +1,7 @@
 import { Card, Typography, Space, Tag, Empty, Spin, Tooltip } from 'antd'
 import { HistoryOutlined, ArrowRightOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { transactions } from '@/api/services'
 import type { Pool, Transaction } from '@/api/types'
 import { formatCompact } from '@/lib/format'
@@ -8,15 +9,17 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/ru'
 
+// 2026-10-22 — no global dayjs.locale('ru') here: importing this panel used to
+// flip every dayjs call app-wide to Russian, so EN users saw Russian "x ago".
+// The locale is now applied per-instance from the active i18n language.
 dayjs.extend(relativeTime)
-dayjs.locale('ru')
 
 const { Text } = Typography
 
 /**
  * Sprint 9-DS-r4 (P1-6) — Meteora-style pool-scoped recent SWAP feed.
  *
- * <p>Sits below the bin chart + "Мои позиции" on PoolDetailPage and
+ * <p>Sits below the bin chart + "My positions" on PoolDetailPage and
  * mirrors Meteora's "History" tab at the bottom of the pool page:
  * the last N swaps for THIS pool only, newest first, with direction
  * (X→Y vs Y→X) and human-readable amounts.
@@ -32,6 +35,7 @@ interface PoolRecentSwapsPanelProps {
 }
 
 export default function PoolRecentSwapsPanel({ pool, limit = 20 }: PoolRecentSwapsPanelProps) {
+  const { t } = useTranslation()
   const { data, isLoading } = useQuery<Transaction[]>({
     queryKey: ['poolRecentSwaps', pool.id, limit],
     queryFn: () => transactions.getRecentPoolTransactions(pool.id, limit),
@@ -49,7 +53,7 @@ export default function PoolRecentSwapsPanel({ pool, limit = 20 }: PoolRecentSwa
       title={
         <Space size={8}>
           <HistoryOutlined style={{ color: 'var(--sber-green)' }} />
-          <Text strong>Последние обмены</Text>
+          <Text strong>{t('poolDetail.recentSwaps.title')}</Text>
           {data && data.length > 0 && (
             <Tag style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)' }}>{data.length}</Tag>
           )}
@@ -57,7 +61,7 @@ export default function PoolRecentSwapsPanel({ pool, limit = 20 }: PoolRecentSwa
       }
       extra={
         <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-          Только этот пул
+          {t('poolDetail.recentSwaps.scope')}
         </Text>
       }
       styles={{ body: { padding: 0 } }}
@@ -68,8 +72,8 @@ export default function PoolRecentSwapsPanel({ pool, limit = 20 }: PoolRecentSwa
         </div>
       ) : !data || data.length === 0 ? (
         <Empty
-          description="Пока нет обменов"
-          imageStyle={{ height: 48 }}
+          description={t('poolDetail.recentSwaps.empty')}
+          styles={{ image: { height: 48 } }}
           style={{ padding: '24px 0' }}
         />
       ) : (
@@ -97,6 +101,8 @@ function SwapRow({
   pool: Pool
   isFirst: boolean
 }) {
+  const { t, i18n } = useTranslation()
+  const dayjsLocale = i18n.language?.startsWith('en') ? 'en' : 'ru'
   // Direction: tokenInId === pool.tokenXId means user gave X, received Y.
   const xToY = tx.tokenInId === pool.tokenXId
   const inSym = xToY ? pool.tokenXSymbol : pool.tokenYSymbol
@@ -104,7 +110,7 @@ function SwapRow({
   const inColor = xToY ? '#1677FF' : 'var(--sber-green)'
   const outColor = xToY ? 'var(--sber-green)' : '#1677FF'
 
-  const when = tx.createdAt ? dayjs(tx.createdAt) : null
+  const when = tx.createdAt ? dayjs(tx.createdAt).locale(dayjsLocale) : null
   const whenAbs = when ? when.format('DD.MM.YYYY HH:mm:ss') : '—'
   const whenRel = when ? when.fromNow() : '—'
 
@@ -120,14 +126,14 @@ function SwapRow({
       }}
     >
       <div style={{ minWidth: 0, flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Semantic side (Покупка/Продажа of the base token X) instead of the
+        {/* Semantic side (buy/sell of the base token X) instead of the
             opaque "X→Y" placeholder — the traded pair + amounts are shown in
             the amounts column to the right. xToY = gave X, got Y = sold X. */}
         <Tag
           color={xToY ? 'red' : 'green'}
-          style={{ borderRadius: 'var(--radius-pill)', padding: '1px 8px', margin: 0, fontSize: 10, fontWeight: 600 }}
+          style={{ borderRadius: 'var(--radius-pill)', padding: '1px 8px', margin: 0, fontSize: 'var(--text-xs)', fontWeight: 600 }}
         >
-          {xToY ? 'Продажа' : 'Покупка'}
+          {xToY ? t('poolDetail.recentSwaps.sell') : t('poolDetail.recentSwaps.buy')}
         </Tag>
         <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
           {tx.id.substring(0, 8)}

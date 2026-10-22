@@ -140,7 +140,7 @@ export default function SelfRestrictionPanel() {
               <Space direction="vertical">
                 <Text>
                   Снятие будет доступно <b>{dayjs(latestLiftRequest.effectiveAt).format('DD.MM.YYYY HH:mm')}</b>
-                  {' '}({dayjs(latestLiftRequest.effectiveAt).fromNow()}).
+                  {' '}({dayjs(latestLiftRequest.effectiveAt).locale('ru').fromNow()}).
                 </Text>
                 <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
                   До этого момента самозапрет остаётся активным. Это требование ЦБ РФ для защиты пользователей.

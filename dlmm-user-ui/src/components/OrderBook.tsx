@@ -8,6 +8,7 @@ import {
   ArrowRightOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { pools as poolService, transactions } from '@/api/services'
 import type { BinData, PoolDetail, Transaction } from '@/api/types'
 import { formatCompact } from '@/lib/format'
@@ -15,8 +16,9 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/ru'
 
+// No global dayjs.locale('ru') — it leaked Russian relative times into the EN
+// UI app-wide; TradeRow applies the active i18n language per instance.
 dayjs.extend(relativeTime)
-dayjs.locale('ru')
 
 const { Text } = Typography
 const { useBreakpoint } = Grid
@@ -462,6 +464,8 @@ function RecentTradesFeed({ pool }: { pool: PoolDetail }) {
 }
 
 function TradeRow({ tx, pool }: { tx: Transaction; pool: PoolDetail }) {
+  const { i18n } = useTranslation()
+  const dayjsLocale = i18n.language?.startsWith('en') ? 'en' : 'ru'
   // tokenInId == tokenX → trader gave X, got Y → SELL X (hits a bid).
   // tokenInId == tokenY → trader gave Y, got X → BUY  X (lifts an ask).
   const soldX = tx.tokenInId === pool.tokenXId
@@ -477,7 +481,7 @@ function TradeRow({ tx, pool }: { tx: Transaction; pool: PoolDetail }) {
   const inSym = soldX ? pool.tokenXSymbol : pool.tokenYSymbol
   const outSym = soldX ? pool.tokenYSymbol : pool.tokenXSymbol
 
-  const when = tx.createdAt ? dayjs(tx.createdAt) : null
+  const when = tx.createdAt ? dayjs(tx.createdAt).locale(dayjsLocale) : null
   const whenAbs = when ? when.format('DD.MM.YYYY HH:mm:ss') : '—'
   const whenRel = when ? when.fromNow() : '—'
 

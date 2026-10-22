@@ -29,8 +29,9 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/ru'
 
+// No global dayjs.locale('ru') — it leaked Russian relative times into the EN
+// UI app-wide; the activity feed applies the active language per instance.
 dayjs.extend(relativeTime)
-dayjs.locale('ru')
 
 const { Title, Text } = Typography
 
@@ -324,7 +325,7 @@ export default function ProfilePage() {
             </div>
             {feeSummary && feeSummary.totalUnclaimed > 0 && (
               <Tag color="green" style={{ marginTop: 6, borderRadius: 'var(--radius-pill)' }}>
-                <ThunderboltFilled style={{ fontSize: 10, marginRight: 4 }} />
+                <ThunderboltFilled style={{ fontSize: 'var(--text-xs)', marginRight: 4 }} />
                 {t('profile.summary.toClaim', { amount: formatRub(feeSummary.totalUnclaimed) })}
               </Tag>
             )}
@@ -367,7 +368,7 @@ export default function ProfilePage() {
                       color: 'var(--text-secondary)',
                       fontFamily: 'JetBrains Mono, monospace',
                     }}>
-                      {dayjs(tx.createdAt).fromNow()}
+                      {dayjs(tx.createdAt).locale(i18n.language?.startsWith('en') ? 'en' : 'ru').fromNow()}
                     </div>
                   </div>
                   <Tag
