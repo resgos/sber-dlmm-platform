@@ -1132,6 +1132,14 @@
       "languageHint": "Choose the language for labels and copy",
       "languageRu": "Русский",
       "languageEn": "English"
+    },
+    "theme": {
+      "title": "Appearance",
+      "label": "Interface theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System",
+      "systemHint": "“System” follows your OS setting and updates when it changes."
     }
   },
 

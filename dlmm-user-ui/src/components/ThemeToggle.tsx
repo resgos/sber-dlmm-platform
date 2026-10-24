@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Card, Radio, Space, Typography } from 'antd'
 import { BulbOutlined, BulbFilled, DesktopOutlined } from '@ant-design/icons'
 import { themeStore, type ThemeMode } from '@/store/themeStore'
@@ -12,7 +13,7 @@ const { Text } = Typography
  * themeStore (localStorage). Shown in the Profile page right rail so
  * the user can find it without hunting through nav menus, and stays a
  * Card so the page rhythm matches the other right-rail cards
- * ("Сводка по аккаунту", "Последняя активность").
+ * (account summary, recent activity). Copy lives in profile.theme.*.
  *
  * Why useSyncExternalStore (React 18) rather than useState + effect:
  * the theme can change from outside React — `storage` events from
@@ -20,6 +21,7 @@ const { Text } = Typography
  * the radio reflecting the truth without a manual re-render hook.
  */
 export default function ThemeToggle() {
+  const { t } = useTranslation()
   const mode = useSyncExternalStore(
     themeStore.subscribe,
     themeStore.getMode,
@@ -32,11 +34,11 @@ export default function ThemeToggle() {
   return (
     <Card
       className="sber-card"
-      title={<Text strong>Внешний вид</Text>}
+      title={<Text strong>{t('profile.theme.title')}</Text>}
       styles={{ body: { padding: 18 } }}
     >
       <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 12 }}>
-        Тема интерфейса
+        {t('profile.theme.label')}
       </Text>
       <Radio.Group
         value={mode}
@@ -48,24 +50,24 @@ export default function ThemeToggle() {
         <Radio.Button value="light">
           <Space size={6}>
             <BulbOutlined />
-            Светлая
+            {t('profile.theme.light')}
           </Space>
         </Radio.Button>
         <Radio.Button value="dark">
           <Space size={6}>
             <BulbFilled />
-            Тёмная
+            {t('profile.theme.dark')}
           </Space>
         </Radio.Button>
         <Radio.Button value="system">
           <Space size={6}>
             <DesktopOutlined />
-            Системная
+            {t('profile.theme.system')}
           </Space>
         </Radio.Button>
       </Radio.Group>
       <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginTop: 10 }}>
-        «Системная» подстраивается под настройку ОС и реагирует на её изменение.
+        {t('profile.theme.systemHint')}
       </Text>
     </Card>
   )
