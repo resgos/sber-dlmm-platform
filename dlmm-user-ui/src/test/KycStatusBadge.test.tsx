@@ -1,8 +1,21 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import i18n from '@/i18n'
 import KycStatusBadge from '../components/KycStatusBadge'
 
+afterEach(() => {
+  i18n.changeLanguage('ru')
+})
+
 describe('KycStatusBadge', () => {
+  it('renders English labels in en', async () => {
+    await i18n.changeLanguage('en')
+    render(<KycStatusBadge status="PENDING" />)
+    expect(screen.getByText('Pending verification')).toBeInTheDocument()
+    render(<KycStatusBadge status="UNKNOWN" />)
+    expect(screen.getByText('Not submitted')).toBeInTheDocument()
+  })
+
   it('shows "Верифицирован" for VERIFIED status', () => {
     render(<KycStatusBadge status="VERIFIED" />)
     expect(screen.getByText('Верифицирован')).toBeInTheDocument()

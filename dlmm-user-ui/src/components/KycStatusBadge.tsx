@@ -5,24 +5,27 @@ import {
   CloseCircleOutlined,
   MinusCircleOutlined,
 } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 
-const statusConfig: Record<string, { color: string; text: string; icon: React.ReactNode }> = {
-  VERIFIED: { color: 'success', text: 'Верифицирован', icon: <CheckCircleOutlined /> },
-  PENDING: { color: 'warning', text: 'Ожидание верификации', icon: <ClockCircleOutlined /> },
-  REJECTED: { color: 'error', text: 'Отклонено', icon: <CloseCircleOutlined /> },
-  NOT_SUBMITTED: { color: 'default', text: 'Не подана', icon: <MinusCircleOutlined /> },
-  BLOCKED: { color: 'error', text: 'Заблокирован', icon: <CloseCircleOutlined /> },
+const statusConfig: Record<string, { color: string; icon: React.ReactNode }> = {
+  VERIFIED: { color: 'success', icon: <CheckCircleOutlined /> },
+  PENDING: { color: 'warning', icon: <ClockCircleOutlined /> },
+  REJECTED: { color: 'error', icon: <CloseCircleOutlined /> },
+  NOT_SUBMITTED: { color: 'default', icon: <MinusCircleOutlined /> },
+  BLOCKED: { color: 'error', icon: <CloseCircleOutlined /> },
 }
 
 export default function KycStatusBadge({ status, large }: { status: string; large?: boolean }) {
-  const cfg = statusConfig[status] || statusConfig.NOT_SUBMITTED
+  const { t } = useTranslation()
+  const key = statusConfig[status] ? status : 'NOT_SUBMITTED'
+  const cfg = statusConfig[key]
   return (
     <Tag
       color={cfg.color}
       icon={cfg.icon}
       style={large ? { fontSize: 'var(--text-base)', padding: '4px 16px' } : undefined}
     >
-      {cfg.text}
+      {t(`profile.kyc.status.${key}`)}
     </Tag>
   )
 }

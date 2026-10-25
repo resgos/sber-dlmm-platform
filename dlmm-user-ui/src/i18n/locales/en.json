@@ -1084,7 +1084,14 @@
       "notSubmittedTitle": "Verification not completed",
       "notSubmittedBody": "Complete KYC verification to unlock trading and liquidity management.",
       "rejectedTitle": "Verification rejected",
-      "rejectedBody": "Your verification request was rejected. Please contact support."
+      "rejectedBody": "Your verification request was rejected. Please contact support.",
+      "status": {
+        "VERIFIED": "Verified",
+        "PENDING": "Pending verification",
+        "REJECTED": "Rejected",
+        "NOT_SUBMITTED": "Not submitted",
+        "BLOCKED": "Blocked"
+      }
     },
     "edit": {
       "title": "Edit profile",
