@@ -14,5 +14,8 @@
   нарушение — заменять сдвинутый литерал на токен (`var(--text-xs)` и т.п.), а не переписывать baseline.
 - Перенос статусов в i18n: `t(\`profile.kyc.status.${key}\`)` — `lint:i18n-dead` сам вайтлистит префикс шаблона;
   после очистки файла ужать `scripts/cyrillic-baseline.json` правкой строки (а не `--update` по всему дереву).
+- Причины/подписи из `src/lib/*.ts` (не .tsx) ратчет кириллицы не видит: при i18n компонента отдавать
+  из lib `reasonKey`+`reasonParams` и переводить в компоненте (образец — positionHealth / HealthScoreBadge).
+  `lint:styles` на 2026-10-26: 14 нарушений (SwapPage и др.) — проверять, что своего файла в списке нет.
 - Docker Desktop может быть не запущен (2026-10-21: pipe dockerDesktopLinuxEngine не найден) — тогда
   статическая ветка: mvn/vitest/build без деплоя и curl; стек сам не поднимать.
