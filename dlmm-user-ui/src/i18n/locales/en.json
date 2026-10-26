@@ -782,6 +782,26 @@
       "bandPoor": "0–34 — poor, needs attention",
       "hint": "Hover the score to see what it's made of: how well it fits the pool range, fee yield, and the position's age."
     },
+    "healthBadge": {
+      "title": "Position health: {{total}} / 100",
+      "factorRange": "Range fit",
+      "factorFees": "Fee yield",
+      "factorAge": "Position age",
+      "disclaimer": "Heuristic indicator. Not investment advice.",
+      "rebalance": "Rebalance",
+      "reasons": {
+        "noPool": "No pool data yet, range can't be assessed",
+        "inRangeNarrow": "Current price sits exactly in your single-step range",
+        "inRange": "Current price is inside your range",
+        "outOfRange": "Price is {{count}} price steps outside your range, no fees accrue",
+        "noFees": "No fees accrued yet",
+        "feeYield": "Fee yield ≈ {{apy}}% p.a. (target {{target}}%)",
+        "ageStable": "Position is {{days}} d old, fee sample is stable",
+        "ageGrowing": "Position is {{days}} d old, fee sample is maturing",
+        "ageSmall": "Position is {{days}} d old, fee sample is small",
+        "ageFresh": "Position is less than a day old, score is preliminary"
+      }
+    },
     "title": "My positions",
     "empty": {
       "title": "You don't have any open positions yet",

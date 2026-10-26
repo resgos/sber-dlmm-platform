@@ -1,8 +1,9 @@
 import { Tooltip, Space, Typography, Progress, Popover, Button } from 'antd'
 import { HeartFilled, InfoCircleOutlined, RetweetOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import type { Position, Pool } from '@/api/types'
-import { calculateHealth, bandColor } from '@/lib/positionHealth'
+import { calculateHealth, bandColor, type HealthFactor } from '@/lib/positionHealth'
 
 const { Text } = Typography
 
@@ -30,6 +31,7 @@ interface Props {
  */
 export default function HealthScoreBadge({ position, pool, size = 'small' }: Props) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const health = calculateHealth(position, pool)
   const color = bandColor(health.band)
   // Sprint 12 G-03 — actionable CTA. Если оценка плохая или so-so —
@@ -45,12 +47,12 @@ export default function HealthScoreBadge({ position, pool, size = 'small' }: Pro
 
   const tooltipContent = (
     <Space direction="vertical" size={6} style={{ minWidth: 280 }}>
-      <Text strong style={{ color: 'var(--bg-card)' }}>Здоровье позиции: {health.total} / 100</Text>
-      <FactorRow label="Соответствие диапазону" weight="45%" {...health.factors.rangeFit} />
-      <FactorRow label="Доходность по комиссиям" weight="35%" {...health.factors.feeEarning} />
-      <FactorRow label="Возраст позиции" weight="20%" {...health.factors.age} />
+      <Text strong style={{ color: 'var(--bg-card)' }}>{t('positions.healthBadge.title', { total: health.total })}</Text>
+      <FactorRow label={t('positions.healthBadge.factorRange')} weight="45%" factor={health.factors.rangeFit} />
+      <FactorRow label={t('positions.healthBadge.factorFees')} weight="35%" factor={health.factors.feeEarning} />
+      <FactorRow label={t('positions.healthBadge.factorAge')} weight="20%" factor={health.factors.age} />
       <Text style={{ color: 'var(--bg-card)', fontSize: 'var(--text-xs)', opacity: 0.75, display: 'block', marginTop: 4 }}>
-        Эвристический индикатор. Не является инвестиционной рекомендацией.
+        {t('positions.healthBadge.disclaimer')}
       </Text>
       {/* Sprint 12 G-03 — actionable CTA. */}
       {needsAction && (
@@ -67,7 +69,7 @@ export default function HealthScoreBadge({ position, pool, size = 'small' }: Pro
           }}
           style={{ marginTop: 4, alignSelf: 'flex-start' }}
         >
-          Ребалансировать
+          {t('positions.healthBadge.rebalance')}
         </Button>
       )}
     </Space>
@@ -107,23 +109,25 @@ export default function HealthScoreBadge({ position, pool, size = 'small' }: Pro
   )
 }
 
-function FactorRow({ label, weight, contribution, reason }: {
+function FactorRow({ label, weight, factor }: {
   label: string
   weight: string
-  contribution: number
-  reason: string
+  factor: HealthFactor
 }) {
+  const { t } = useTranslation()
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <Text style={{ color: 'var(--bg-card)', fontSize: 'var(--text-xs)', fontWeight: 500 }}>
-          {label} <span style={{ opacity: 0.6, fontSize: 10 }}>({weight})</span>
+          {label} <span style={{ opacity: 0.6 }}>({weight})</span>
         </Text>
         <Text style={{ color: 'var(--bg-card)', fontSize: 'var(--text-xs)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-          +{contribution}
+          +{factor.contribution}
         </Text>
       </div>
-      <Text style={{ color: 'var(--bg-card)', fontSize: 'var(--text-xs)', opacity: 0.75 }}>{reason}</Text>
+      <Text style={{ color: 'var(--bg-card)', fontSize: 'var(--text-xs)', opacity: 0.75 }}>
+        {t(`positions.healthBadge.reasons.${factor.reasonKey}`, factor.reasonParams)}
+      </Text>
     </div>
   )
 }

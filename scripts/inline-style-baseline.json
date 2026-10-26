@@ -1602,12 +1602,6 @@
     "snippet": "style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, backgr"
   },
   {
-    "file": "dlmm-user-ui/src/components/HealthScoreBadge.tsx",
-    "line": 120,
-    "match": "fontSize: 10",
-    "snippet": "style={{ opacity: 0.6, fontSize: 10 }}>({weight})</span>"
-  },
-  {
     "file": "dlmm-user-ui/src/components/NotificationBell.tsx",
     "line": 88,
     "match": "fontSize: 15",

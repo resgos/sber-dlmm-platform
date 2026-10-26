@@ -54,6 +54,18 @@ describe('calculateHealth (new feature)', () => {
     )
     expect(h.factors.rangeFit.contribution).toBe(0)
     expect(h.factors.rangeFit.reason).toMatch(/вне диапазона/)
+    expect(h.factors.rangeFit.reasonKey).toBe('outOfRange')
+    expect(h.factors.rangeFit.reasonParams).toEqual({ count: 100 })
+  })
+
+  it('exposes i18n reason keys without raw bin ids (badge renders via t())', () => {
+    const h = calculateHealth(mkPosition(), mkPool())
+    expect(h.factors.rangeFit.reasonKey).toBe('inRange')
+    expect(h.factors.rangeFit.reason).not.toMatch(/\d/)
+    expect(h.factors.feeEarning.reasonKey).toBe('noFees')
+    expect(h.factors.age.reasonKey).toBe('ageStable')
+    expect(h.factors.age.reasonParams).toEqual({ days: 30 })
+    expect(calculateHealth(mkPosition(), undefined).factors.rangeFit.reasonKey).toBe('noPool')
   })
 
   it('returns 0 range-fit when activeBin is above the position range', () => {

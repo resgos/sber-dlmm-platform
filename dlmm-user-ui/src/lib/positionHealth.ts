@@ -34,9 +34,18 @@ import type { Position, Pool } from '@/api/types'
 export interface HealthFactor {
   /** 0-100, weight * raw. */
   contribution: number
-  /** Human-readable description shown in the tooltip. */
+  /** Russian fallback description (tests / non-i18n callers). */
   reason: string
+  /** i18n key under `positions.healthBadge.reasons.*` — the badge renders this. */
+  reasonKey: HealthReasonKey
+  /** Interpolation params for {@link reasonKey}. */
+  reasonParams?: Record<string, string | number>
 }
+
+export type HealthReasonKey =
+  | 'noPool' | 'inRangeNarrow' | 'inRange' | 'outOfRange'
+  | 'noFees' | 'feeYield'
+  | 'ageStable' | 'ageGrowing' | 'ageSmall' | 'ageFresh'
 
 export interface HealthScore {
   /** Overall 0-100. Rounded to nearest integer for display. */
@@ -106,6 +115,8 @@ export function calculateHealth(position: Position, pool: Pool | undefined): Hea
   // --- Factor 1: range fit ---
   let rangeFitRaw = 0
   let rangeReason = 'Нет данных о пуле — диапазон оценить невозможно'
+  let rangeKey: HealthReasonKey = 'noPool'
+  let rangeParams: Record<string, number> | undefined
   if (pool) {
     const inRange = isPositionInRange(position, pool) === true
     if (inRange) {
@@ -116,20 +127,25 @@ export function calculateHealth(position: Position, pool: Pool | undefined): Hea
       const span = position.binRangeMax - position.binRangeMin
       if (span <= 0) {
         rangeFitRaw = 1
-        rangeReason = 'Активный бин совпадает с позицией (узкий диапазон)'
+        rangeReason = 'Текущая цена ровно в вашем диапазоне из одного ценового шага'
+        rangeKey = 'inRangeNarrow'
       } else {
         const centre = (position.binRangeMin + position.binRangeMax) / 2
         const distance = Math.abs(pool.activeBinId - centre)
         const normalisedDistance = distance / (span / 2) // 0=centre, 1=edge
         rangeFitRaw = 1 - 0.15 * normalisedDistance
-        rangeReason = `Активный бин ${pool.activeBinId} внутри диапазона [${position.binRangeMin}, ${position.binRangeMax}]`
+        // No raw bin ids here — 8388608-style numbers are jargon for an LP.
+        rangeReason = 'Текущая цена внутри вашего диапазона'
+        rangeKey = 'inRange'
       }
     } else {
       rangeFitRaw = 0
       const distance = pool.activeBinId < position.binRangeMin
         ? position.binRangeMin - pool.activeBinId
         : pool.activeBinId - position.binRangeMax
-      rangeReason = `Активный бин вне диапазона на ${distance} бинов — комиссии не начисляются`
+      rangeReason = `Цена вне диапазона на ${distance} ценовых шагов — комиссии не начисляются`
+      rangeKey = 'outOfRange'
+      rangeParams = { count: distance }
     }
   }
 
@@ -142,6 +158,8 @@ export function calculateHealth(position: Position, pool: Pool | undefined): Hea
   // unclaimed.
   let feeEarningRaw = 0
   let feeReason = 'Комиссии пока не начислены'
+  let feeKey: HealthReasonKey = 'noFees'
+  let feeParams: Record<string, string | number> | undefined
   const initial = (position.initialDepositX ?? 0) + (position.initialDepositY ?? 0)
   const realisedFees = position.unclaimedFeeX + position.unclaimedFeeY
   const ageMs = Date.now() - new Date(position.createdAt).getTime()
@@ -150,26 +168,34 @@ export function calculateHealth(position: Position, pool: Pool | undefined): Hea
     feeEarningRaw = Math.min(1, annualisedYieldPct / TARGET_APY)
     feeReason = `Доходность по комиссиям ≈ ${annualisedYieldPct.toFixed(1)}% годовых ` +
                 `(цель ${TARGET_APY}%)`
+    feeKey = 'feeYield'
+    feeParams = { apy: annualisedYieldPct.toFixed(1), target: TARGET_APY }
   }
 
   // --- Factor 3: age ---
   const ageDays = ageMs / (24 * 60 * 60 * 1000)
   let ageRaw: number
   let ageReason: string
+  let ageKey: HealthReasonKey
+  const ageParams = { days: Math.floor(ageDays) }
   if (ageDays >= 30) {
     ageRaw = 1
     ageReason = `Позиции ${Math.floor(ageDays)} дн — выборка комиссий устойчивая`
+    ageKey = 'ageStable'
   } else if (ageDays >= 7) {
     // Linear: 7 days → 0.7, 30 days → 1.0.
     ageRaw = 0.7 + (ageDays - 7) / (30 - 7) * 0.3
     ageReason = `Позиции ${Math.floor(ageDays)} дн — выборка набирает устойчивость`
+    ageKey = 'ageGrowing'
   } else if (ageDays >= 1) {
     // Linear: 1 day → 0.5, 7 days → 0.7.
     ageRaw = 0.5 + (ageDays - 1) / (7 - 1) * 0.2
     ageReason = `Позиции ${Math.floor(ageDays)} дн — выборка небольшая`
+    ageKey = 'ageSmall'
   } else {
     ageRaw = 0.5
     ageReason = 'Позиции меньше суток — оценка предварительная'
+    ageKey = 'ageFresh'
   }
 
   // --- Combine ---
@@ -188,9 +214,9 @@ export function calculateHealth(position: Position, pool: Pool | undefined): Hea
     total,
     band,
     factors: {
-      rangeFit:   { contribution: Math.round(rangeFitC), reason: rangeReason },
-      feeEarning: { contribution: Math.round(feeEarningC), reason: feeReason },
-      age:        { contribution: Math.round(ageC), reason: ageReason },
+      rangeFit:   { contribution: Math.round(rangeFitC), reason: rangeReason, reasonKey: rangeKey, reasonParams: rangeParams },
+      feeEarning: { contribution: Math.round(feeEarningC), reason: feeReason, reasonKey: feeKey, reasonParams: feeParams },
+      age:        { contribution: Math.round(ageC), reason: ageReason, reasonKey: ageKey, reasonParams: ageParams },
     },
   }
 }
