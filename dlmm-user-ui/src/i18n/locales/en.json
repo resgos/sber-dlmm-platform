@@ -255,6 +255,13 @@
     "available": "Available",
     "max": "MAX",
     "tokenPlaceholder": "Token",
+    "tokenPicker": {
+      "placeholder": "Select token",
+      "title": "Select a token",
+      "search": "Search by ticker or name",
+      "empty": "Nothing found",
+      "tokenAria": "Token {{sym}}"
+    },
     "amountPlaceholder": "0.0",
     "swapDirection": "Flip direction",
     "settings": "Slippage settings",

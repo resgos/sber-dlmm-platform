@@ -16,6 +16,10 @@
   после очистки файла ужать `scripts/cyrillic-baseline.json` правкой строки (а не `--update` по всему дереву).
 - Причины/подписи из `src/lib/*.ts` (не .tsx) ратчет кириллицы не видит: при i18n компонента отдавать
   из lib `reasonKey`+`reasonParams` и переводить в компоненте (образец — positionHealth / HealthScoreBadge).
-  `lint:styles` на 2026-10-26: 14 нарушений (SwapPage и др.) — проверять, что своего файла в списке нет.
+  `lint:styles` на 2026-10-27: 43 «новых» нарушения в 13 файлах (Pools/Transactions/Users/Suspicious и др.,
+  считает оба UI) — проверять `grep -o "src/.*\.tsx" | sort | uniq -c`, что своего файла в списке нет.
+- В компонентах с `const { t } = useTranslation()` не называть параметры колбэков `t` (`tokens.map((t) => …)`)
+  — затеняет функцию перевода; брать `tok`/`item`. Тест i18n-компонента: после `changeLanguage('en')` уже
+  отрендеренное переводится на лету — второй `render` даёт дубль, ждать через `findBy…`.
 - Docker Desktop может быть не запущен (2026-10-21: pipe dockerDesktopLinuxEngine не найден) — тогда
   статическая ветка: mvn/vitest/build без деплоя и curl; стек сам не поднимать.

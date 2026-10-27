@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Modal, Input, Empty } from 'antd'
 import { SearchOutlined, DownOutlined } from '@ant-design/icons'
 import TokenIcon from './TokenIcon'
@@ -22,7 +23,7 @@ export default function TokenSelect({
   onChange,
   tokens,
   excludeId,
-  placeholder = 'Выбрать токен',
+  placeholder: placeholderProp,
   disabled = false,
 }: {
   value?: string | null
@@ -32,20 +33,23 @@ export default function TokenSelect({
   placeholder?: string
   disabled?: boolean
 }) {
+  const { t, i18n } = useTranslation()
+  const numLocale = i18n.language?.startsWith('en') ? 'en-US' : 'ru-RU'
+  const placeholder = placeholderProp ?? t('swap.tokenPicker.placeholder')
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
 
-  const selected = tokens.find((t) => t.id === value)
+  const selected = tokens.find((tok) => tok.id === value)
 
   const list = useMemo(() => {
     const query = q.trim().toLowerCase()
     return tokens
-      .filter((t) => t.id !== excludeId)
+      .filter((tok) => tok.id !== excludeId)
       .filter(
-        (t) =>
+        (tok) =>
           !query ||
-          t.symbol.toLowerCase().includes(query) ||
-          (t.name || '').toLowerCase().includes(query),
+          tok.symbol.toLowerCase().includes(query) ||
+          (tok.name || '').toLowerCase().includes(query),
       )
       .sort(
         (a, b) =>
@@ -65,7 +69,7 @@ export default function TokenSelect({
         className={`sber-tokensel-trigger${selected ? '' : ' sber-tokensel-trigger--empty'}`}
         onClick={() => !disabled && setOpen(true)}
         disabled={disabled}
-        aria-label={selected ? `Токен ${selected.symbol}` : placeholder}
+        aria-label={selected ? t('swap.tokenPicker.tokenAria', { sym: selected.symbol }) : placeholder}
       >
         {selected ? (
           <>
@@ -82,7 +86,7 @@ export default function TokenSelect({
         open={open}
         onCancel={close}
         footer={null}
-        title="Выберите токен"
+        title={t('swap.tokenPicker.title')}
         width={420}
         className="sber-tokensel-modal"
         styles={{ body: { padding: 0 } }}
@@ -93,7 +97,7 @@ export default function TokenSelect({
             autoFocus
             allowClear
             size="large"
-            placeholder="Поиск по тикеру или названию"
+            placeholder={t('swap.tokenPicker.search')}
             prefix={<SearchOutlined style={{ color: 'var(--text-muted)' }} />}
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -101,25 +105,25 @@ export default function TokenSelect({
         </div>
         <div className="sber-tokensel-list">
           {list.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Ничего не найдено" style={{ padding: 24 }} />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('swap.tokenPicker.empty')} style={{ padding: 24 }} />
           ) : (
-            list.map((t) => (
+            list.map((tok) => (
               <button
-                key={t.id}
+                key={tok.id}
                 type="button"
-                className={`sber-tokensel-row${t.id === value ? ' sber-tokensel-row--active' : ''}`}
+                className={`sber-tokensel-row${tok.id === value ? ' sber-tokensel-row--active' : ''}`}
                 onClick={() => {
-                  onChange(t.id)
+                  onChange(tok.id)
                   close()
                 }}
               >
-                <TokenIcon symbol={t.symbol} size={36} decorative />
+                <TokenIcon symbol={tok.symbol} size={36} decorative />
                 <div className="sber-tokensel-row__meta">
-                  <span className="sber-tokensel-row__sym">{t.symbol}</span>
-                  {t.name ? <span className="sber-tokensel-row__name">{t.name}</span> : null}
+                  <span className="sber-tokensel-row__sym">{tok.symbol}</span>
+                  {tok.name ? <span className="sber-tokensel-row__name">{tok.name}</span> : null}
                 </div>
-                {t.available != null && t.available > 0 ? (
-                  <span className="sber-tokensel-row__bal">{t.available.toLocaleString('ru-RU')}</span>
+                {tok.available != null && tok.available > 0 ? (
+                  <span className="sber-tokensel-row__bal">{tok.available.toLocaleString(numLocale)}</span>
                 ) : null}
               </button>
             ))

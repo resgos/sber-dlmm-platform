@@ -257,6 +257,13 @@
     "available": "Доступно",
     "max": "MAX",
     "tokenPlaceholder": "Токен",
+    "tokenPicker": {
+      "placeholder": "Выбрать токен",
+      "title": "Выберите токен",
+      "search": "Поиск по тикеру или названию",
+      "empty": "Ничего не найдено",
+      "tokenAria": "Токен {{sym}}"
+    },
     "amountPlaceholder": "0.0",
     "swapDirection": "Поменять направление",
     "settings": "Настройки проскальзывания",
