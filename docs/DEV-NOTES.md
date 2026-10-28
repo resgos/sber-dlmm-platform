@@ -21,5 +21,8 @@
 - В компонентах с `const { t } = useTranslation()` не называть параметры колбэков `t` (`tokens.map((t) => …)`)
   — затеняет функцию перевода; брать `tok`/`item`. Тест i18n-компонента: после `changeLanguage('en')` уже
   отрендеренное переводится на лету — второй `render` даёт дубль, ждать через `findBy…`.
+- Суммы в ₽ форматировать только через `src/lib/format.ts` (`formatRub`/`formatCompact`, EN: K/M/B);
+  `StatCard.formatRub` с 2026-10-28 — лишь ре-экспорт. Чтобы добавить import, не сдвигая строки под
+  `lint:styles`, его можно поставить внизу файла (ESM-импорты всплывают) — так сделано в StatCard.tsx.
 - Docker Desktop может быть не запущен (2026-10-21: pipe dockerDesktopLinuxEngine не найден) — тогда
   статическая ветка: mvn/vitest/build без деплоя и curl; стек сам не поднимать.
