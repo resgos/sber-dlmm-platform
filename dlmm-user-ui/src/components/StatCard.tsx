@@ -16,13 +16,13 @@ export default function StatCard({ title, value, icon, iconBg, iconColor, format
       ? value
       : formatter
         ? formatter(value)
-        : value.toLocaleString('ru-RU')
+        : formatTokenAmount(value, null, { compact: false })
 
   return (
     <Card
       className="sber-card"
       hoverable
-      style={{ borderRadius: 'var(--radius-md)', border: '1px solid #E5E7EB' }}
+      style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
       styles={{ body: { padding: '20px' } }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
@@ -51,16 +51,9 @@ export default function StatCard({ title, value, icon, iconBg, iconColor, format
   )
 }
 
-// Sprint 9 — added квадриллион + триллион steps. Seed data has
-// inflated reserves (multi-trillion-rouble pools) and the previous
-// version rendered them as "1810439.42 млрд ₽" — а wall of digits
-// that nobody can read. квд/трлн caps keep the headline readable
-// until the seed gets a proper realism pass (tracked separately).
-export function formatRub(value: number): string {
-  if (value >= 1_000_000_000_000_000) return `${(value / 1_000_000_000_000_000).toFixed(2)} квд ₽`
-  if (value >= 1_000_000_000_000) return `${(value / 1_000_000_000_000).toFixed(2)} трлн ₽`
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)} млрд ₽`
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} млн ₽`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)} тыс ₽`
-  return `${value.toLocaleString('ru-RU')} ₽`
-}
+// formatRub used to live here with hardcoded Russian unit suffixes, so the EN
+// UI showed Russian "billion" on Dashboard/Pools/Profile. The locale-aware
+// version (K/M/B in EN) is in lib/format — re-exported so imports keep working.
+// The import sits down here on purpose: lint:styles baselines by line number.
+import { formatTokenAmount } from '@/lib/format'
+export { formatRub } from '@/lib/format'

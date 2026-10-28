@@ -28,7 +28,6 @@
   "dlmm-user-ui/src/components/PoolSwapPanel.tsx": 3,
   "dlmm-user-ui/src/components/SelfRestrictionPanel.tsx": 6,
   "dlmm-user-ui/src/components/SpasiboWidget.tsx": 2,
-  "dlmm-user-ui/src/components/StatCard.tsx": 1,
   "dlmm-user-ui/src/components/UserLayout.tsx": 1,
   "dlmm-user-ui/src/components/sber/KpiTile.tsx": 1,
   "dlmm-user-ui/src/components/sber/TokenPairChip.tsx": 1,
