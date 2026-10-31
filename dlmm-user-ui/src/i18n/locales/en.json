@@ -262,6 +262,10 @@
       "empty": "Nothing found",
       "tokenAria": "Token {{sym}}"
     },
+    "partialFill": {
+      "title": "Limited pool liquidity",
+      "description": "The pool can only take {{fillable}} of {{requested}} — that part will be swapped, the rest won't fit. \"Price impact\" is shown for the fillable amount."
+    },
     "amountPlaceholder": "0.0",
     "swapDirection": "Flip direction",
     "settings": "Slippage settings",

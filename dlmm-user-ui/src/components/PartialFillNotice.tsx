@@ -1,5 +1,6 @@
 import { Alert } from 'antd'
 import type { CSSProperties } from 'react'
+import { useTranslation } from 'react-i18next'
 import { formatTokenAmount } from '@/lib/format'
 
 /**
@@ -39,15 +40,15 @@ export default function PartialFillNotice({
   symbol?: string
   style?: CSSProperties
 }) {
+  const { t } = useTranslation()
   if (!isPartialFill(fillable, requested)) return null
   return (
     <Alert
-      message="Ограниченная ликвидность пула"
-      description={
-        `В пул вмещается только ${formatTokenAmount(fillable!, symbol, { compact: true })} ` +
-        `из ${formatTokenAmount(requested!, symbol, { compact: true })} — обменяется эта часть, ` +
-        `остальное не войдёт. «Влияние на цену» показано для заполняемого объёма.`
-      }
+      message={t('swap.partialFill.title')}
+      description={t('swap.partialFill.description', {
+        fillable: formatTokenAmount(fillable!, symbol, { compact: true }),
+        requested: formatTokenAmount(requested!, symbol, { compact: true }),
+      })}
       type="warning"
       showIcon
       style={{ marginBottom: 12, borderRadius: 'var(--radius-sm)', ...style }}
