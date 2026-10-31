@@ -24,5 +24,7 @@
 - Суммы в ₽ форматировать только через `src/lib/format.ts` (`formatRub`/`formatCompact`, EN: K/M/B);
   `StatCard.formatRub` с 2026-10-28 — лишь ре-экспорт. Чтобы добавить import, не сдвигая строки под
   `lint:styles`, его можно поставить внизу файла (ESM-импорты всплывают) — так сделано в StatCard.tsx.
-- Docker Desktop может быть не запущен (2026-10-21: pipe dockerDesktopLinuxEngine не найден) — тогда
+- Docker Desktop может быть не запущен (2026-10-21, 2026-10-31: pipe dockerDesktopLinuxEngine не найден) — тогда
   статическая ветка: mvn/vitest/build без деплоя и curl; стек сам не поднимать.
+- Baseline-файлы ратчетов (`cyrillic-baseline.json` и др.) лежат в `<W>/scripts/`, а не в `dlmm-user-ui/scripts/`;
+  ключи в них — пути от корня репо (`dlmm-user-ui/src/...`).
