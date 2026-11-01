@@ -44,6 +44,13 @@
     "loadingDots": "Loading…"
   },
 
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "subtitle": "This page failed to load. Refresh it or go back — the rest of the app is still working.",
+    "reload": "Refresh page",
+    "home": "Go to home"
+  },
+
   "brand": {
     "sber": "SBER",
     "product": "DLMM",
