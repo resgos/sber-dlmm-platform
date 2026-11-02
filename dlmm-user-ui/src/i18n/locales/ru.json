@@ -51,6 +51,17 @@
     "home": "На главную"
   },
 
+  "demoBranding": {
+    "tag": "Демо для: {{company}}",
+    "tooltip": "Персонализированная демо-ссылка для {{company}}.",
+    "clear": "Очистить"
+  },
+
+  "tokenIcon": {
+    "ariaLabel": "Токен {{symbol}}",
+    "ariaLabelGeneric": "Токен"
+  },
+
   "brand": {
     "sber": "СБЕР",
     "product": "DLMM",

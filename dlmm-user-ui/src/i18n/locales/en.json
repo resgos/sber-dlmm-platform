@@ -51,6 +51,17 @@
     "home": "Go to home"
   },
 
+  "demoBranding": {
+    "tag": "Demo for: {{company}}",
+    "tooltip": "Personalized demo link for {{company}}.",
+    "clear": "Clear"
+  },
+
+  "tokenIcon": {
+    "ariaLabel": "Token {{symbol}}",
+    "ariaLabelGeneric": "Token"
+  },
+
   "brand": {
     "sber": "SBER",
     "product": "DLMM",

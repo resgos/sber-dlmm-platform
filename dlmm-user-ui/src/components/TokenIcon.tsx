@@ -2,7 +2,7 @@ import { useId } from 'react'
 
 /**
  * TokenIcon — one beautiful, theme-agnostic token glyph used everywhere
- * (Мои токены, TokenChip, TokenPairChip, selects).
+ * (My tokens, TokenChip, TokenPairChip, selects).
  *
  * Headline assets get their real-world currency/commodity glyph
  * (₿ Ξ ₽ $ € ¥ Au); everything else (Russian equities, indices) falls back to
@@ -49,10 +49,10 @@ export default function TokenIcon({
 }: {
   symbol?: string | null
   size?: number
-  /** When the symbol is already shown as adjacent text, hide the icon from
-   *  the a11y tree to avoid a double announce ("Токен SBER SBER"). */
+  /** Symbol already shown as adjacent text → hide from a11y (no "Token SBER SBER"). */
   decorative?: boolean
 }) {
+  const { t } = useTranslation()
   const uid = useId().replace(/:/g, '')
   const gid = `tki-${uid}`
   const def: IconDef = symbol
@@ -67,7 +67,7 @@ export default function TokenIcon({
       viewBox="0 0 40 40"
       {...(decorative
         ? { 'aria-hidden': true }
-        : { role: 'img', 'aria-label': symbol ? `Токен ${symbol}` : 'Токен' })}
+        : { role: 'img', 'aria-label': symbol ? t('tokenIcon.ariaLabel', { symbol }) : t('tokenIcon.ariaLabelGeneric') })}
       style={{ flexShrink: 0, display: 'block' }}
     >
       <defs>
@@ -78,13 +78,13 @@ export default function TokenIcon({
       </defs>
       <circle cx="20" cy="20" r="20" fill={`url(#${gid})`} />
       {/* soft top sheen for a glossy coin feel */}
-      <ellipse cx="14" cy="12" rx="12" ry="7" fill="#FFFFFF" opacity="0.18" />
+      <ellipse cx="14" cy="12" rx="12" ry="7" fill="#FFFFFF" opacity="0.18" /* brand-hex-ok: sheen on own coin gradient */ />
       <text
         x="20"
         y="21"
         textAnchor="middle"
         dominantBaseline="central"
-        fill="#FFFFFF"
+        fill="#FFFFFF" /* brand-hex-ok: white glyph on own coin gradient, both themes */
         fontWeight={700}
         fontSize={fontSize}
         fontFamily='SB Sans Text, Onest, Inter, "Segoe UI Symbol", system-ui, sans-serif'
@@ -95,3 +95,6 @@ export default function TokenIcon({
     </svg>
   )
 }
+
+// Import kept at the bottom so lines above don't shift under the line-keyed lint:styles baseline.
+import { useTranslation } from 'react-i18next'

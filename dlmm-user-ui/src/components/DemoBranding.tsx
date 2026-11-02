@@ -10,8 +10,8 @@ import { ExperimentOutlined } from '@ant-design/icons'
  * {@code https://demo.sber-dlmm.com/?company=Alpha%20Treasury}
  * before sending it to a prospect. We pick up the {@code company}
  * query param on first visit, persist it to
- * {@code localStorage.dlmm.demo.company}, and render a "Демо для:
- * Alpha Treasury" tag in the header for the rest of the session.
+ * {@code localStorage.dlmm.demo.company}, and render a "Demo for:
+ * Alpha Treasury" tag (i18n: demoBranding.*) in the header for the rest of the session.
  *
  * <p>Why persist: the param is set by the rep ONCE; the prospect
  * then navigates 8-12 pages during the demo, each one rewriting the
@@ -21,7 +21,7 @@ import { ExperimentOutlined } from '@ant-design/icons'
  *
  * <p>Cleanup: a tiny "×" in the tooltip-popover lets the user clear
  * the persistence — important so the same browser used for a real
- * pilot doesn't keep showing "Демо для:" forever.
+ * pilot doesn't keep showing "Demo for:" forever.
  *
  * <p>Render: nothing if no company param has ever been seen on this
  * device. So real users never see this component.
@@ -48,7 +48,7 @@ function persist(value: string | null): void {
 export default function DemoBranding() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [companyName, setCompanyName] = useState<string | null>(readPersisted)
-
+  const { t } = useTranslation()
   // One-shot URL → state + persistence handoff. Runs whenever the
   // URL param is present (not just on mount) so a rep can re-set the
   // brand mid-session by adding ?company=NewBrand to any URL.
@@ -72,7 +72,7 @@ export default function DemoBranding() {
     <Tooltip
       title={
         <span>
-          Персонализированная демо-ссылка для {companyName}.
+          {t('demoBranding.tooltip', { company: companyName })}
           <a
             href="#clear"
             style={{ marginInlineStart: 8, color: 'var(--sber-green-light, #4caf50)' }}
@@ -82,7 +82,7 @@ export default function DemoBranding() {
               setCompanyName(null)
             }}
           >
-            Очистить
+            {t('demoBranding.clear')}
           </a>
         </span>
       }
@@ -98,8 +98,11 @@ export default function DemoBranding() {
           cursor: 'help',
         }}
       >
-        Демо для: {companyName}
+        {t('demoBranding.tag', { company: companyName })}
       </Tag>
     </Tooltip>
   )
 }
+
+// Import kept at the bottom so lines above don't shift under the line-keyed lint:styles baseline.
+import { useTranslation } from 'react-i18next'

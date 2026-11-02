@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import i18n from '@/i18n'
 import TokenChip, { pairAccent } from '@/components/TokenChip'
 
 describe('pairAccent', () => {
@@ -56,6 +57,16 @@ describe('TokenChip', () => {
   it('missing symbol still exposes an aria-label', () => {
     render(<TokenChip />)
     expect(screen.getByLabelText('Токен')).toBeInTheDocument()
+  })
+
+  it('aria-label follows the UI language (EN)', async () => {
+    await i18n.changeLanguage('en')
+    try {
+      render(<TokenChip symbol="SUSD" />)
+      expect(screen.getByLabelText('Token SUSD')).toBeInTheDocument()
+    } finally {
+      await i18n.changeLanguage('ru')
+    }
   })
 
   it('size prop sets the SVG box', () => {
