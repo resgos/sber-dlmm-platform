@@ -26,7 +26,9 @@
   `lint:styles`, его можно поставить внизу файла (ESM-импорты всплывают) — так сделано в StatCard.tsx.
 - i18n классового компонента (ErrorBoundary): хук `useTranslation` в классе нельзя — выносить разметку в
   функциональный дочерний компонент (`ErrorFallback`), а не звать `i18n.t` в render (не перерисуется при смене языка).
-- Docker Desktop может быть не запущен (2026-10-21, 2026-10-31, 2026-11-01: pipe dockerDesktopLinuxEngine не найден) — тогда
+- Хук design-guard ловит старый `#FFFFFF` в любом редактируемом файле. Пометка `brand-hex-ok` для SVG-атрибута —
+  JSX-комментарием прямо в строке: `fill="#FFFFFF" /* brand-hex-ok: … */` (строки не сдвигаются, tsc принимает).
+- Docker Desktop может быть не запущен (2026-10-21, 2026-10-31, 2026-11-01, 2026-11-02: pipe dockerDesktopLinuxEngine не найден) — тогда
   статическая ветка: mvn/vitest/build без деплоя и curl; стек сам не поднимать.
 - Baseline-файлы ратчетов (`cyrillic-baseline.json` и др.) лежат в `<W>/scripts/`, а не в `dlmm-user-ui/scripts/`;
   ключи в них — пути от корня репо (`dlmm-user-ui/src/...`).
