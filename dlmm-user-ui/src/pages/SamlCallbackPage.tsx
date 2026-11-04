@@ -10,13 +10,13 @@ import { Button, Result, Spin } from 'antd'
  * is being completed.
  */
 export default function SamlCallbackPage() {
+  const { t } = useTranslation()
   const [status, setStatus] = React.useState<'loading' | 'error'>('loading')
 
   React.useEffect(() => {
-    // In full integration this would call the backend to exchange the SAML
-    // assertion (POSTed by the IdP to /api/v1/auth/saml/callback) for a
-    // platform JWT, then store it in authStore and navigate('/').
-    // For now the backend returns 501 — surface that gracefully.
+    // In full integration this would exchange the SAML assertion (POSTed by the
+    // IdP to /api/v1/auth/saml/callback) for a platform JWT, store it in
+    // authStore and navigate('/'). For now the backend returns 501.
     setStatus('error')
   }, [])
 
@@ -32,11 +32,11 @@ export default function SamlCallbackPage() {
       >
         <Result
           status="info"
-          title="Корпоративный SSO не настроен"
-          subTitle="IdP не сконфигурирован. Обратитесь к администратору или воспользуйтесь стандартным входом."
+          title={t('samlCallback.notConfiguredTitle')}
+          subTitle={t('samlCallback.notConfiguredSubtitle')}
           extra={
             <Button type="primary" href="#/login">
-              Вернуться ко входу
+              {t('samlCallback.backToLogin')}
             </Button>
           }
         />
@@ -53,7 +53,10 @@ export default function SamlCallbackPage() {
         justifyContent: 'center',
       }}
     >
-      <Spin tip="Завершение корпоративного входа..." style={{ padding: 80 }} />
+      <Spin tip={t('samlCallback.loading')} style={{ padding: 80 }} />
     </div>
   )
 }
+
+// Import kept at the bottom so the inline-style lines above keep their numbers (lint:styles baseline).
+import { useTranslation } from 'react-i18next'

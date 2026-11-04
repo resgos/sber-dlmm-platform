@@ -50,6 +50,12 @@
     "reload": "Refresh page",
     "home": "Go to home"
   },
+  "samlCallback": {
+    "notConfiguredTitle": "Corporate SSO is not configured",
+    "notConfiguredSubtitle": "The identity provider is not set up. Contact your administrator or use the standard sign-in.",
+    "backToLogin": "Back to sign-in",
+    "loading": "Completing corporate sign-in..."
+  },
 
   "demoBranding": {
     "tag": "Demo for: {{company}}",
