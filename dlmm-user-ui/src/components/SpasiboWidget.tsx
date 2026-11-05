@@ -17,10 +17,10 @@ const SSPAS_SYMBOL = 'SSPAS'
  * SRUB at the platform-configured rate (default 1:1, zero fee). Calls the
  * convert endpoint shipped in Sprint 5 #5.4.
  *
- * <p>Mounted on DashboardPage (right sidebar / promo card) — visible
- * immediately on login so the conversion path doesn't get buried.
+ * <p>Mounted on DashboardPage (promo card) — visible right on login.
  */
 export default function SpasiboWidget() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [pointsToConvert, setPointsToConvert] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +59,7 @@ export default function SpasiboWidget() {
     },
     onError: (err: unknown) => {
       const e = err as { response?: { data?: { message?: string } } }
-      setError(e?.response?.data?.message || 'Не удалось конвертировать баллы')
+      setError(e?.response?.data?.message || t('spasibo.error'))
     },
   })
 
@@ -83,12 +83,12 @@ export default function SpasiboWidget() {
         <Space align="center">
           <GiftOutlined style={{ fontSize: 'var(--text-lg)', color: 'white' }} />
           <Title level={5} style={{ color: 'white', margin: 0 }}>
-            СберСпасибо
+            {t('spasibo.title')}
           </Title>
         </Space>
 
         <Statistic
-          title={<Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 'var(--text-xs)' }}>Доступно баллов</Text>}
+          title={<Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 'var(--text-xs)' }}>{t('spasibo.available')}</Text>}
           value={available}
           valueStyle={{ color: 'white', fontSize: 26, fontWeight: 700 }}
           groupSeparator=" "
@@ -98,11 +98,11 @@ export default function SpasiboWidget() {
         <Divider style={{ margin: '4px 0', background: 'rgba(255,255,255,0.2)' }} />
 
         <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 'var(--text-xs)' }}>
-          Конвертировать баллы в SRUB по курсу 1:1 (без комиссии)
+          {t('spasibo.hint')}
         </Text>
 
         {success && (
-          <Alert message="Конвертация выполнена" type="success" showIcon
+          <Alert message={t('spasibo.success')} type="success" showIcon
             closable onClose={() => setSuccess(false)}
             style={{ borderRadius: 'var(--radius-sm)' }} />
         )}
@@ -121,7 +121,7 @@ export default function SpasiboWidget() {
             theme-level input/button overrides. */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
           <InputNumber
-            placeholder="Сколько баллов?"
+            placeholder={t('spasibo.placeholder')}
             value={pointsToConvert}
             onChange={setPointsToConvert}
             min={0}
@@ -144,10 +144,13 @@ export default function SpasiboWidget() {
               flexShrink: 0,
             }}
           >
-            В рубли
+            {t('spasibo.convert')}
           </Button>
         </div>
       </Space>
     </Card>
   )
 }
+
+// Kept at the bottom so line-keyed `lint:styles` baseline doesn't shift (ESM imports are hoisted).
+import { useTranslation } from 'react-i18next'

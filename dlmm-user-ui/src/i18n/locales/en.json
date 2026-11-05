@@ -56,6 +56,15 @@
     "backToLogin": "Back to sign-in",
     "loading": "Completing corporate sign-in..."
   },
+  "spasibo": {
+    "title": "SberSpasibo",
+    "available": "Points available",
+    "hint": "Convert points to SRUB at 1:1 (no fee)",
+    "success": "Conversion completed",
+    "error": "Could not convert points",
+    "placeholder": "How many points?",
+    "convert": "To rubles"
+  },
 
   "demoBranding": {
     "tag": "Demo for: {{company}}",

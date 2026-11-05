@@ -9,7 +9,6 @@
   "dlmm-user-ui/src/components/PoolZapPanel.tsx": 61,
   "dlmm-user-ui/src/components/PositionAlertsDrawer.tsx": 154,
   "dlmm-user-ui/src/components/SelfRestrictionPanel.tsx": 171,
-  "dlmm-user-ui/src/components/SpasiboWidget.tsx": 20,
   "dlmm-user-ui/src/components/TwoFactorSettings.tsx": 235,
   "dlmm-user-ui/src/components/UserLayout.tsx": 1,
   "dlmm-user-ui/src/components/sberkot/SberkotAssistant.tsx": 20,
