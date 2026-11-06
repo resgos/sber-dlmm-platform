@@ -65,6 +65,18 @@
     "placeholder": "Сколько баллов?",
     "convert": "В рубли"
   },
+  "addLiquidityPreview": {
+    "title": "Превью добавления",
+    "loading": "Расчёт…",
+    "errorTitle": "Не удалось рассчитать превью",
+    "errorHint": "Проверьте корректность диапазона и сумм",
+    "inRange": "В диапазоне",
+    "outOfRange": "Вне диапазона",
+    "tvlShare": "Доля TVL: {{pct}}%",
+    "priceImpact": "Сдвиг цены: {{pct}}%",
+    "binsUsed": "Бинов задействовано",
+    "feesPerDay": "Оценка комиссий в день"
+  },
 
   "demoBranding": {
     "tag": "Демо для: {{company}}",

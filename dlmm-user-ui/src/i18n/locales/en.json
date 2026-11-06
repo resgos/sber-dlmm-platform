@@ -65,6 +65,18 @@
     "placeholder": "How many points?",
     "convert": "To rubles"
   },
+  "addLiquidityPreview": {
+    "title": "Deposit preview",
+    "loading": "Calculating…",
+    "errorTitle": "Could not calculate the preview",
+    "errorHint": "Check the price range and amounts",
+    "inRange": "In range",
+    "outOfRange": "Out of range",
+    "tvlShare": "TVL share: {{pct}}%",
+    "priceImpact": "Price impact: {{pct}}%",
+    "binsUsed": "Bins used",
+    "feesPerDay": "Estimated fees per day"
+  },
 
   "demoBranding": {
     "tag": "Demo for: {{company}}",

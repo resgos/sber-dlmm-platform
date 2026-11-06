@@ -1,6 +1,7 @@
 import { Card, Tag, Typography, Space, Alert, Spin, Divider } from 'antd'
 import { CheckCircleOutlined, WarningOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { pools } from '@/api/services'
 import type { LiquidityStrategy } from '@/api/types'
 import { formatCompact } from '@/lib/format'
@@ -41,6 +42,7 @@ export default function AddLiquidityPreview({
   strategy,
   tokenYSymbol,
 }: AddLiquidityPreviewProps) {
+  const { t } = useTranslation()
   // Debounce typing — without this, "100000" issues 6 round-trips, one
   // per keystroke. 300ms = fast enough to feel live, slow enough to
   // catch the next keystroke. Strategy doesn't get debounced (one-click
@@ -86,7 +88,7 @@ export default function AddLiquidityPreview({
       title={
         <Space>
           <InfoCircleOutlined />
-          <Text strong>Превью добавления</Text>
+          <Text strong>{t('addLiquidityPreview.title')}</Text>
         </Space>
       }
     >
@@ -94,7 +96,7 @@ export default function AddLiquidityPreview({
         <div style={{ textAlign: 'center', padding: '16px 0' }}>
           <Spin size="small" />
           <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-            Расчёт…
+            {t('addLiquidityPreview.loading')}
           </div>
         </div>
       )}
@@ -102,8 +104,8 @@ export default function AddLiquidityPreview({
         <Alert
           type="error"
           showIcon
-          message="Не удалось рассчитать превью"
-          description="Проверьте корректность диапазона и сумм"
+          message={t('addLiquidityPreview.errorTitle')}
+          description={t('addLiquidityPreview.errorHint')}
         />
       )}
       {data && (
@@ -111,19 +113,21 @@ export default function AddLiquidityPreview({
           <Space size={8} wrap>
             {data.inRange ? (
               <Tag icon={<CheckCircleOutlined />} color="success">
-                В диапазоне
+                {t('addLiquidityPreview.inRange')}
               </Tag>
             ) : (
               <Tag icon={<WarningOutlined />} color="orange">
-                Вне диапазона
+                {t('addLiquidityPreview.outOfRange')}
               </Tag>
             )}
             <Tag color="blue">
-              Доля TVL: {Math.min(100, Math.max(0, Number.isFinite(data.tvlSharePct) ? data.tvlSharePct : 0)).toFixed(2)}%
+              {t('addLiquidityPreview.tvlShare', {
+                pct: Math.min(100, Math.max(0, Number.isFinite(data.tvlSharePct) ? data.tvlSharePct : 0)).toFixed(2),
+              })}
             </Tag>
             {data.priceImpactBps > 0 && (
               <Tag color={data.priceImpactBps > 500 ? 'red' : 'orange'}>
-                Сдвиг цены: {(data.priceImpactBps / 100).toFixed(2)}%
+                {t('addLiquidityPreview.priceImpact', { pct: (data.priceImpactBps / 100).toFixed(2) })}
               </Tag>
             )}
           </Space>
@@ -133,7 +137,7 @@ export default function AddLiquidityPreview({
           <Space direction="vertical" size={4} style={{ width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                Бинов задействовано
+                {t('addLiquidityPreview.binsUsed')}
               </Text>
               <Text style={{ fontVariantNumeric: 'tabular-nums' }}>
                 {data.binAllocations.length}
@@ -141,7 +145,7 @@ export default function AddLiquidityPreview({
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-                Оценка комиссий в день
+                {t('addLiquidityPreview.feesPerDay')}
               </Text>
               <Text style={{ fontVariantNumeric: 'tabular-nums' }}>
                 {data.estimatedFeesPerDayY > 0

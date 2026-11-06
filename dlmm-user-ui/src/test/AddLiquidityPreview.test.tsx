@@ -20,6 +20,7 @@ vi.mock('@/api/services', () => ({
 }))
 
 import AddLiquidityPreview from '../components/AddLiquidityPreview'
+import i18n from '../i18n'
 
 const POOL_ID = 'pool-srub-sber'
 
@@ -188,5 +189,49 @@ describe('AddLiquidityPreview', () => {
     )
 
     expect(await screen.findByText('Не удалось рассчитать превью')).toBeInTheDocument()
+  })
+
+  it('renders chips and labels in English after a language switch', async () => {
+    previewMock.mockResolvedValue({
+      tvlBeforeX: 10_000_000,
+      tvlBeforeY: 10_000_000,
+      tvlAfterX: 10_100_000,
+      tvlAfterY: 10_000_000,
+      tvlSharePct: 0.49,
+      inRange: false,
+      priceImpactBps: 50,
+      depositedX: 100_000,
+      depositedY: 0,
+      binAllocations: [{ binId: 110, amountX: 50_000, amountY: 0, liquidityShares: 50_000 }],
+      estimatedFeesPerDayY: 0,
+      warnings: [],
+    })
+
+    const initialLng = i18n.language
+    await i18n.changeLanguage('en')
+    try {
+      render(
+        withQuery(
+          <AddLiquidityPreview
+            poolId={POOL_ID}
+            amountX={100_000}
+            amountY={100_000}
+            binMin={110}
+            binMax={115}
+            strategy="SPOT"
+            tokenYSymbol="SBER"
+          />,
+        ),
+      )
+
+      expect(await screen.findByText('Out of range')).toBeInTheDocument()
+      expect(screen.getByText('Deposit preview')).toBeInTheDocument()
+      expect(screen.getByText('TVL share: 0.49%')).toBeInTheDocument()
+      expect(screen.getByText('Price impact: 0.50%')).toBeInTheDocument()
+      expect(screen.getByText('Bins used')).toBeInTheDocument()
+      expect(screen.getByText('Estimated fees per day')).toBeInTheDocument()
+    } finally {
+      await i18n.changeLanguage(initialLng)
+    }
   })
 })
