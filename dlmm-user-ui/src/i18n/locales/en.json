@@ -65,6 +65,19 @@
     "placeholder": "How many points?",
     "convert": "To rubles"
   },
+  "sberkot": {
+    "name": "Sberkot",
+    "done": "Done!",
+    "celebrateTitle": "Great job!",
+    "closeHint": "Close hint",
+    "hideHints": "Hide hints",
+    "gotIt": "Got it",
+    "closeMessage": "Close Sberkot message",
+    "pet": "Pet Sberkot",
+    "openHint": "Open Sberkot hint",
+    "petTitle": "Pet me",
+    "fabTitle": "Sberkot, your assistant"
+  },
   "addLiquidityPreview": {
     "title": "Deposit preview",
     "loading": "Calculating…",

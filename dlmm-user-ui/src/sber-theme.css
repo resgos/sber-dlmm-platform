@@ -2836,7 +2836,7 @@ a:focus-visible {
 }
 .sberkot-hearts { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
 .sberkot-hearts span {
-  position: absolute; bottom: 55%; font-size: 18px; opacity: 0;
+  position: absolute; bottom: 55%; font-size: 18px; opacity: 0; color: var(--sber-green);
   animation: sberkotHeart 1.5s ease-out forwards;
 }
 .sberkot-hearts span:nth-child(1) { left: 22%; animation-delay: 0s; }

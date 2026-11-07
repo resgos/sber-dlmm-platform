@@ -65,6 +65,19 @@
     "placeholder": "Сколько баллов?",
     "convert": "В рубли"
   },
+  "sberkot": {
+    "name": "Сберкот",
+    "done": "Готово!",
+    "celebrateTitle": "Отлично!",
+    "closeHint": "Закрыть подсказку",
+    "hideHints": "Скрыть подсказки",
+    "gotIt": "Понятно",
+    "closeMessage": "Закрыть сообщение Сберкота",
+    "pet": "Погладить Сберкота",
+    "openHint": "Открыть подсказку Сберкота",
+    "petTitle": "Погладь меня",
+    "fabTitle": "Сберкот — помощник"
+  },
   "addLiquidityPreview": {
     "title": "Превью добавления",
     "loading": "Расчёт…",

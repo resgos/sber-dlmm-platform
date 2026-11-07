@@ -10,7 +10,6 @@
   "dlmm-user-ui/src/components/SelfRestrictionPanel.tsx": 171,
   "dlmm-user-ui/src/components/TwoFactorSettings.tsx": 235,
   "dlmm-user-ui/src/components/UserLayout.tsx": 1,
-  "dlmm-user-ui/src/components/sberkot/SberkotAssistant.tsx": 20,
   "dlmm-user-ui/src/components/sberkot/SberkotMascot.tsx": 1,
   "dlmm-user-ui/src/pages/HedgePage.tsx": 222,
   "dlmm-user-ui/src/pages/PoolComparePage.tsx": 139,

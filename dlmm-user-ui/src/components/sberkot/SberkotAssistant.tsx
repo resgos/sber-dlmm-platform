@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Button, Typography } from 'antd'
-import { CloseOutlined } from '@ant-design/icons'
+import { CloseOutlined, HeartFilled } from '@ant-design/icons'
 import SberkotMascot from './SberkotMascot'
 import { resolveHint, OFF_KEY, seenKey } from './hints'
 import { SBERKOT_CELEBRATE, type SberkotCelebrateDetail } from './events'
@@ -40,6 +40,7 @@ const PET_KEY = 'dlmm.sberkot.pets'
 
 export default function SberkotAssistant() {
   const { pathname } = useLocation()
+  const { t } = useTranslation()
   const hint = useMemo(() => resolveHint(pathname), [pathname])
   const [open, setOpen] = useState(false)
   const [globallyOff, setGloballyOff] = useState(() => ls.get(OFF_KEY) === '1')
@@ -67,7 +68,7 @@ export default function SberkotAssistant() {
   // SK-01 v2 — listen for celebration events fired from anywhere in the app.
   useEffect(() => {
     const onCelebrate = (e: Event) => {
-      const msg = (e as CustomEvent<SberkotCelebrateDetail>).detail?.message || 'Готово!'
+      const msg = (e as CustomEvent<SberkotCelebrateDetail>).detail?.message || i18n.t('sberkot.done')
       setCelebration(msg)
       setOpen(true)
       if (celebrateTimer.current) window.clearTimeout(celebrateTimer.current)
@@ -83,10 +84,9 @@ export default function SberkotAssistant() {
     }
   }, [])
 
-  // SK-01 v2 — end any in-flight celebration on navigation, so a stale success
-  // bubble (or its pending auto-close timer) never bleeds onto — or closes —
-  // the next route's hint. Firing a celebration is not a route change, so this
-  // never cuts a fresh celebration short.
+  // SK-01 v2 — end any in-flight celebration on navigation, so a stale success bubble (or its
+  // pending auto-close timer) never bleeds onto — or closes — the next route's hint. Firing a
+  // celebration is not a route change, so this never cuts a fresh celebration short.
   useEffect(() => {
     if (celebrateTimer.current) {
       window.clearTimeout(celebrateTimer.current)
@@ -137,7 +137,7 @@ export default function SberkotAssistant() {
   const showingCelebration = !!celebration
   const showingPet = !showingCelebration && open && !!petQuip
   const pose = showingCelebration ? 'celebrate' : showingPet ? 'greet' : hint.pose
-  const title = showingCelebration ? 'Отлично! 🎉' : showingPet ? 'Сберкот 🐾' : hint.title
+  const title = showingCelebration ? t('sberkot.celebrateTitle') : showingPet ? t('sberkot.name') : hint.title
   const text = showingCelebration ? celebration! : showingPet ? petQuip! : hint.text
 
   return (
@@ -147,7 +147,7 @@ export default function SberkotAssistant() {
           <button
             className="sberkot-bubble__close"
             onClick={showingCelebration ? dismissCelebration : dismissHere}
-            aria-label="Закрыть подсказку"
+            aria-label={t('sberkot.closeHint')}
           >
             <CloseOutlined />
           </button>
@@ -160,10 +160,10 @@ export default function SberkotAssistant() {
           {!showingCelebration && !showingPet && (
             <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)', justifyContent: 'flex-end' }}>
               <Button size="small" type="text" onClick={turnOff} style={{ color: 'var(--text-muted)' }}>
-                Скрыть подсказки
+                {t('sberkot.hideHints')}
               </Button>
               <Button size="small" type="primary" onClick={dismissHere}>
-                Понятно
+                {t('sberkot.gotIt')}
               </Button>
             </div>
           )}
@@ -176,14 +176,14 @@ export default function SberkotAssistant() {
           if (open) pet(); else setOpen(true)
         }}
         aria-label={
-          showingCelebration ? 'Закрыть сообщение Сберкота'
-            : open ? 'Погладить Сберкота' : 'Открыть подсказку Сберкота'
+          showingCelebration ? t('sberkot.closeMessage')
+            : open ? t('sberkot.pet') : t('sberkot.openHint')
         }
-        title={open ? 'Погладь меня 🐾' : 'Сберкот — помощник'}
+        title={open ? t('sberkot.petTitle') : t('sberkot.fabTitle')}
       >
         {hearts && (
           <div className="sberkot-hearts" aria-hidden>
-            <span>💚</span><span>🐾</span><span>💚</span>
+            <HeartFilled /><HeartFilled /><HeartFilled />
           </div>
         )}
         <SberkotMascot
@@ -196,3 +196,7 @@ export default function SberkotAssistant() {
     </div>
   )
 }
+
+// Imports kept at the bottom so the line-keyed lint:styles baseline above does not shift (ESM hoists them).
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
