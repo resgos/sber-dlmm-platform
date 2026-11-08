@@ -35,8 +35,8 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<0 | 1 | 2>(0) // 0 idle, 1 swapping, 2 adding
   const [done, setDone] = useState(false)
-  // Tracks whether the swap leg already committed this run, so a post-swap
-  // failure doesn't let a re-click double-swap.
+  const { t } = useTranslation()
+  // Swap leg already committed this run? (a post-swap failure must not let a re-click double-swap)
   const swapDoneRef = useRef(false)
 
   const isDepX = depSide === 'X'
@@ -84,14 +84,14 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
       } catch (addErr) {
         // The swap already went through — be explicit so the user isn't confused.
         throw new Error(
-          `Обмен выполнен, но добавление ликвидности не удалось (${apiErrorMessage(addErr, 'ошибка')}). ` +
-          `Обменянные токены остались на балансе — добавьте ликвидность вручную во вкладке «Добавить».`,
+          t('poolZap.addFailedAfterSwap', { reason: apiErrorMessage(addErr, t('poolZap.errorFallback')) }) +
+          ' ' + t('poolZap.addFailedHint'),
         )
       }
     },
     onSuccess: () => {
       swapDoneRef.current = false
-      celebrateSberkot(`Zap выполнен — вы стали поставщиком ликвидности 🎉`)
+      celebrateSberkot(t('poolZap.celebrate'))
       setDone(true)
       setError(null)
       setAmount(null)
@@ -102,7 +102,7 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
       setTimeout(() => setDone(false), 6000)
     },
     onError: (err: Error) => {
-      setError(err.message === 'no-quote' ? 'Ждём котировку…' : err.message)
+      setError(err.message === 'no-quote' ? t('poolZap.waitingQuote') : err.message)
       // If the swap already executed (the add leg failed), clear the amount so a
       // re-click can't double-swap — the user must re-enter to retry.
       if (swapDoneRef.current) setAmount(null)
@@ -123,11 +123,11 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
   return (
     <>
       <Text type="secondary" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 8 }}>
-        Внесите один токен — половина автоматически обменяется на пару, и обе части добавятся в пул.
+        {t('poolZap.intro')}
       </Text>
 
       {done && (
-        <Alert message="Zap выполнен — позиция открыта" type="success" showIcon closable
+        <Alert message={t('poolZap.done')} type="success" showIcon closable
           onClose={() => setDone(false)} style={{ marginBottom: 12, borderRadius: 'var(--radius-sm)' }} />
       )}
       {error && (
@@ -140,18 +140,18 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
         value={depSide}
         onChange={(v) => { setDepSide(v as 'X' | 'Y'); setAmount(null); setError(null) }}
         options={[
-          { label: `Внести ${pool.tokenXSymbol}`, value: 'X' },
-          { label: `Внести ${pool.tokenYSymbol}`, value: 'Y' },
+          { label: t('poolZap.deposit', { symbol: pool.tokenXSymbol }), value: 'X' },
+          { label: t('poolZap.deposit', { symbol: pool.tokenYSymbol }), value: 'Y' },
         ]}
         style={{ marginBottom: 12 }}
       />
 
       <div style={{ background: 'var(--surface-1)', borderRadius: 'var(--radius-md)', padding: 14, marginBottom: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Сумма</Text>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('poolZap.amount')}</Text>
           {depBalance && (
             <Space size={4}>
-              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Доступно: {formatCompact(depBalance.available)}</Text>
+              <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('poolZap.available', { amount: formatCompact(depBalance.available) })}</Text>
               <Button type="link" size="small" style={{ padding: '0 4px', fontSize: 'var(--text-xs)', height: 18, fontWeight: 600 }}
                 onClick={() => setAmount(depBalance.available)}>MAX</Button>
             </Space>
@@ -172,13 +172,13 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
       {/* Preview of the resulting balanced add */}
       <div style={{ padding: '8px 14px', marginBottom: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Обмен</Text>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('poolZap.stepSwap')}</Text>
           <Text style={{ fontSize: 'var(--text-xs)' }}>
             {half > 0 ? `${formatTokenAmount(half, dep.sym, { compact: true })} → ${quoteLoading ? '…' : formatTokenAmount(quote?.amountOut, other.sym, { compact: true })}` : '—'}
           </Text>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>Добавится в пул ≈</Text>
+          <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>{t('poolZap.willAdd')}</Text>
           <Text strong style={{ fontSize: 'var(--text-xs)', fontVariantNumeric: 'tabular-nums' }}>
             {quoteLoading ? <Spin size="small" /> : (estLine ?? '—')}
           </Text>
@@ -186,14 +186,14 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
       </div>
 
       {insufficient && (
-        <Alert message={`Недостаточно ${dep.sym} — доступно ${formatCompact(depBalance?.available ?? 0)}`}
+        <Alert message={t('poolZap.insufficientDetail', { symbol: dep.sym, amount: formatCompact(depBalance?.available ?? 0) })}
           type="warning" showIcon style={{ marginBottom: 12, borderRadius: 'var(--radius-sm)' }} />
       )}
 
       {busy && (
         <Steps
           size="small" current={step - 1} style={{ marginBottom: 12 }}
-          items={[{ title: 'Обмен' }, { title: 'Добавление' }]}
+          items={[{ title: t('poolZap.stepSwap') }, { title: t('poolZap.stepAdd') }]}
         />
       )}
 
@@ -203,12 +203,14 @@ export default function PoolZapPanel({ pool }: { pool: Pool }) {
         disabled={!amount || amount <= 0 || !quote || insufficient || busy}
         onClick={() => zap.mutate()}
       >
-        {!amount ? 'Введите сумму'
-          : quoteLoading ? 'Расчёт…'
-          : !quote ? 'Ждём котировку…'
-          : insufficient ? `Недостаточно ${dep.sym}`
+        {!amount ? t('poolZap.enterAmount')
+          : quoteLoading ? t('poolZap.calculating')
+          : !quote ? t('poolZap.waitingQuote')
+          : insufficient ? t('poolZap.insufficient', { symbol: dep.sym })
           : `Zap ${formatTokenAmount(amount, dep.sym, { compact: true })}`}
       </Button>
     </>
   )
 }
+
+import { useTranslation } from 'react-i18next'

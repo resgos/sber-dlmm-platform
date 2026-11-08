@@ -90,6 +90,25 @@
     "binsUsed": "Bins used",
     "feesPerDay": "Estimated fees per day"
   },
+  "poolZap": {
+    "intro": "Deposit a single token: half is swapped into the pair automatically and both parts are added to the pool.",
+    "done": "Zap completed: position opened",
+    "celebrate": "Zap completed: you are now a liquidity provider",
+    "deposit": "Deposit {{symbol}}",
+    "amount": "Amount",
+    "available": "Available: {{amount}}",
+    "stepSwap": "Swap",
+    "stepAdd": "Adding",
+    "willAdd": "Will be added to the pool ≈",
+    "insufficient": "Insufficient {{symbol}}",
+    "insufficientDetail": "Insufficient {{symbol}}: {{amount}} available",
+    "enterAmount": "Enter an amount",
+    "calculating": "Calculating…",
+    "waitingQuote": "Waiting for a quote…",
+    "errorFallback": "error",
+    "addFailedAfterSwap": "The swap went through, but adding liquidity failed ({{reason}}).",
+    "addFailedHint": "The swapped tokens stay on your balance: add liquidity manually in the «Add» tab."
+  },
 
   "demoBranding": {
     "tag": "Demo for: {{company}}",
