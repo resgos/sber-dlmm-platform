@@ -23,6 +23,9 @@ dayjs.extend(relativeTime)
 const { Text } = Typography
 const { useBreakpoint } = Grid
 
+/** Number locale for toLocaleString — follows the active UI language. */
+const numLocale = (lng: string | undefined) => (lng?.startsWith('en') ? 'en-US' : 'ru-RU')
+
 /**
  * OB-01 (FEATURE-BATCH-PLAN-2026-05-29) — order book / «стакан» built
  * entirely on OUR DLMM bin liquidity. No external market data.
@@ -124,6 +127,8 @@ function buildLadder(
 }
 
 export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBookProps) {
+  const { t, i18n } = useTranslation()
+  const loc = numLocale(i18n.language)
   const screens = useBreakpoint()
   const isMobile = !screens.md
   // Mobile: collapse to one section at a time to save vertical space.
@@ -165,7 +170,7 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
   if (error || !pool) {
     return (
       <Card className="sber-card sber-orderbook" title={<OrderBookTitle />}>
-        <Empty description="Не удалось загрузить стакан" />
+        <Empty description={t('orderBook.loadError')} />
       </Card>
     )
   }
@@ -216,9 +221,9 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
       <LadderHeader xSym={xSym} ySym={ySym} />
 
       {/* Asks — above the spread, descending toward the mid. */}
-      <div className="sber-orderbook__side" role="rowgroup" aria-label="Заявки на продажу">
+      <div className="sber-orderbook__side" role="rowgroup" aria-label={t('orderBook.asksAria')}>
         {!hasLadder || ladder!.asks.length === 0 ? (
-          <div className="sber-orderbook__empty-side">нет заявок на продажу</div>
+          <div className="sber-orderbook__empty-side">{t('orderBook.noAsks')}</div>
         ) : (
           ladder!.asks.map((l) => (
             <LadderRow key={`ask-${l.binId}`} level={l} maxCum={maxAskCum} onPickPrice={onPickPrice} />
@@ -230,7 +235,7 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
       <div className="sber-orderbook__mid">
         <Space size={6} align="center" wrap>
           <Text strong className="sber-orderbook__mid-price">
-            {mid.toLocaleString('ru-RU', { maximumFractionDigits: 6 })}
+            {mid.toLocaleString(loc, { maximumFractionDigits: 6 })}
           </Text>
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             {ySym}/{xSym}
@@ -239,12 +244,12 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
             <Tooltip
               title={
                 spreadAbs != null
-                  ? `Спред: ${spreadAbs.toLocaleString('ru-RU', { maximumFractionDigits: 6 })} ${ySym}`
+                  ? t('orderBook.spreadHint', { value: spreadAbs.toLocaleString(loc, { maximumFractionDigits: 6 }), sym: ySym })
                   : undefined
               }
             >
               <span className="sber-orderbook__spread">
-                спред {spreadPct < 0.01 ? '< 0,01' : spreadPct.toFixed(2)}%
+                {t('orderBook.spread', { pct: spreadPct < 0.01 ? t('orderBook.spreadTiny') : spreadPct.toFixed(2) })}
               </span>
             </Tooltip>
           )}
@@ -252,9 +257,9 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
       </div>
 
       {/* Bids — below the spread, descending in price. */}
-      <div className="sber-orderbook__side" role="rowgroup" aria-label="Заявки на покупку">
+      <div className="sber-orderbook__side" role="rowgroup" aria-label={t('orderBook.bidsAria')}>
         {!hasLadder || ladder!.bids.length === 0 ? (
-          <div className="sber-orderbook__empty-side">нет заявок на покупку</div>
+          <div className="sber-orderbook__empty-side">{t('orderBook.noBids')}</div>
         ) : (
           ladder!.bids.map((l) => (
             <LadderRow key={`bid-${l.binId}`} level={l} maxCum={maxBidCum} onPickPrice={onPickPrice} />
@@ -265,15 +270,15 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
       {/* Depth totals — reconcile against the pool's reserve side-totals
           so the ladder is visibly self-consistent. */}
       <div className="sber-orderbook__totals">
-        <Tooltip title={`Сумма заявок на покупку (Y), резерв пула ${ySym}: ${formatCompact(pool.totalTvlY)}`}>
+        <Tooltip title={t('orderBook.buyTotalHint', { sym: ySym, reserve: formatCompact(pool.totalTvlY) })}>
           <span>
-            <span className="sber-orderbook__trade-buy">●</span> покупка{' '}
+            <span className="sber-orderbook__trade-buy">●</span> {t('orderBook.buyTotal')}{' '}
             {formatCompact(bidDepthY)} {ySym}
           </span>
         </Tooltip>
-        <Tooltip title={`Сумма заявок на продажу (X), резерв пула ${xSym}: ${formatCompact(pool.totalTvlX)}`}>
+        <Tooltip title={t('orderBook.sellTotalHint', { sym: xSym, reserve: formatCompact(pool.totalTvlX) })}>
           <span>
-            <span className="sber-orderbook__trade-sell">●</span> продажа{' '}
+            <span className="sber-orderbook__trade-sell">●</span> {t('orderBook.sellTotal')}{' '}
             {formatCompact(askDepthX)} {xSym}
           </span>
         </Tooltip>
@@ -289,9 +294,9 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
       style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}
       title={<OrderBookTitle />}
       extra={
-        <Tooltip title="Синтезирован из ликвидности по бинам — это и есть стакан DLMM">
+        <Tooltip title={t('orderBook.fromBinsHint')}>
           <Text type="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-            из бинов пула
+            {t('orderBook.fromBins')}
           </Text>
         </Tooltip>
       }
@@ -306,8 +311,8 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
               value={mobileView}
               onChange={(v) => setMobileView(v as 'book' | 'trades')}
               options={[
-                { label: 'Стакан', value: 'book', icon: <BookOutlined /> },
-                { label: 'Сделки', value: 'trades', icon: <HistoryOutlined /> },
+                { label: t('orderBook.tabBook'), value: 'book', icon: <BookOutlined /> },
+                { label: t('orderBook.tabTrades'), value: 'trades', icon: <HistoryOutlined /> },
               ]}
             />
           </div>
@@ -325,20 +330,22 @@ export default function OrderBook({ poolId, onPickPrice, depth = 12 }: OrderBook
 }
 
 function OrderBookTitle() {
+  const { t } = useTranslation()
   return (
     <Space size={8}>
       <BookOutlined style={{ color: 'var(--brand-primary)' }} />
-      <Text strong>Стакан</Text>
+      <Text strong>{t('orderBook.title')}</Text>
     </Space>
   )
 }
 
 function LadderHeader({ xSym, ySym }: { xSym: string; ySym: string }) {
+  const { t } = useTranslation()
   return (
     <div className="sber-orderbook__row sber-orderbook__row--head" role="row">
-      <span className="sber-orderbook__col sber-orderbook__col--price">Цена ({ySym})</span>
-      <span className="sber-orderbook__col sber-orderbook__col--size">Объём ({xSym}/{ySym})</span>
-      <span className="sber-orderbook__col sber-orderbook__col--cum">Накопл.</span>
+      <span className="sber-orderbook__col sber-orderbook__col--price">{t('orderBook.colPrice', { sym: ySym })}</span>
+      <span className="sber-orderbook__col sber-orderbook__col--size">{t('orderBook.colSize', { x: xSym, y: ySym })}</span>
+      <span className="sber-orderbook__col sber-orderbook__col--cum">{t('orderBook.colCum')}</span>
     </div>
   )
 }
@@ -352,6 +359,8 @@ function LadderRow({
   maxCum: number
   onPickPrice?: (price: number, side: 'bid' | 'ask') => void
 }) {
+  const { t, i18n } = useTranslation()
+  const loc = numLocale(i18n.language)
   const isAsk = level.side === 'ask'
   const depthPct = Math.min(100, (level.cumulative / maxCum) * 100)
   const clickable = !!onPickPrice
@@ -375,7 +384,7 @@ function LadderRow({
             }
           : undefined
       }
-      title={clickable ? `Подставить цену ${level.price.toLocaleString('ru-RU', { maximumFractionDigits: 6 })}` : undefined}
+      title={clickable ? t('orderBook.pickPrice', { price: level.price.toLocaleString(loc, { maximumFractionDigits: 6 }) }) : undefined}
     >
       {/* Depth bar — grows from the spread side, proportional to
           cumulative size, using the soft viz fill. Asks fill from the
@@ -387,14 +396,14 @@ function LadderRow({
       />
       <span className="sber-orderbook__col sber-orderbook__col--price">
         <Caret className="sber-orderbook__caret" />
-        {level.price.toLocaleString('ru-RU', { maximumFractionDigits: 6 })}
+        {level.price.toLocaleString(loc, { maximumFractionDigits: 6 })}
       </span>
-      <Tooltip title={`${level.size.toLocaleString('ru-RU', { maximumFractionDigits: 4 })} ${level.unit}`}>
+      <Tooltip title={`${level.size.toLocaleString(loc, { maximumFractionDigits: 4 })} ${level.unit}`}>
         <span className="sber-orderbook__col sber-orderbook__col--size">
           {formatCompact(level.size)}
         </span>
       </Tooltip>
-      <Tooltip title={`Накоплено: ${level.cumulative.toLocaleString('ru-RU', { maximumFractionDigits: 4 })} ${level.unit}`}>
+      <Tooltip title={t('orderBook.cumulativeHint', { value: level.cumulative.toLocaleString(loc, { maximumFractionDigits: 4 }), unit: level.unit })}>
         <span className="sber-orderbook__col sber-orderbook__col--cum">
           {formatCompact(level.cumulative)}
         </span>
@@ -411,6 +420,7 @@ function LadderRow({
  * they bought X with Y → a BUY (lifts the ask).
  */
 function RecentTradesFeed({ pool }: { pool: PoolDetail }) {
+  const { t } = useTranslation()
   const { data, isLoading } = useQuery<Transaction[]>({
     queryKey: ['poolRecentSwaps', pool.id, 20],
     queryFn: () => transactions.getRecentPoolTransactions(pool.id, 20),
@@ -421,7 +431,7 @@ function RecentTradesFeed({ pool }: { pool: PoolDetail }) {
   // Defensive: the endpoint is pool-scoped + SWAP-only, but guard in
   // case it ever returns mixed types.
   const swaps = useMemo(
-    () => (data ?? []).filter((t) => t.txType === 'SWAP'),
+    () => (data ?? []).filter((tx) => tx.txType === 'SWAP'),
     [data],
   )
 
@@ -431,7 +441,7 @@ function RecentTradesFeed({ pool }: { pool: PoolDetail }) {
         <Space size={8}>
           <HistoryOutlined style={{ color: 'var(--text-secondary)' }} />
           <Text strong style={{ fontSize: 'var(--text-sm)' }}>
-            Последние сделки
+            {t('orderBook.recentTrades')}
           </Text>
           {swaps.length > 0 && (
             <Tag style={{ borderRadius: 'var(--radius-pill)', fontSize: 'var(--text-xs)', margin: 0 }}>
@@ -446,16 +456,16 @@ function RecentTradesFeed({ pool }: { pool: PoolDetail }) {
           <Spin size="small" />
         </div>
       ) : swaps.length === 0 ? (
-        <Empty description="Пока нет сделок" imageStyle={{ height: 40 }} style={{ padding: 'var(--space-5) 0' }} />
+        <Empty description={t('orderBook.noTrades')} imageStyle={{ height: 40 }} style={{ padding: 'var(--space-5) 0' }} />
       ) : (
         <div className="sber-orderbook__trades-list">
           <div className="sber-orderbook__trade-row sber-orderbook__trade-row--head" role="row">
-            <span className="sber-orderbook__trade-col sber-orderbook__trade-col--time">Время</span>
-            <span className="sber-orderbook__trade-col sber-orderbook__trade-col--side">Сторона</span>
-            <span className="sber-orderbook__trade-col sber-orderbook__trade-col--vol">Объём</span>
+            <span className="sber-orderbook__trade-col sber-orderbook__trade-col--time">{t('orderBook.colTime')}</span>
+            <span className="sber-orderbook__trade-col sber-orderbook__trade-col--side">{t('orderBook.colSide')}</span>
+            <span className="sber-orderbook__trade-col sber-orderbook__trade-col--vol">{t('orderBook.colVolume')}</span>
           </div>
-          {swaps.map((t) => (
-            <TradeRow key={t.id} tx={t} pool={pool} />
+          {swaps.map((tx) => (
+            <TradeRow key={tx.id} tx={tx} pool={pool} />
           ))}
         </div>
       )}
@@ -464,13 +474,13 @@ function RecentTradesFeed({ pool }: { pool: PoolDetail }) {
 }
 
 function TradeRow({ tx, pool }: { tx: Transaction; pool: PoolDetail }) {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const dayjsLocale = i18n.language?.startsWith('en') ? 'en' : 'ru'
   // tokenInId == tokenX → trader gave X, got Y → SELL X (hits a bid).
   // tokenInId == tokenY → trader gave Y, got X → BUY  X (lifts an ask).
   const soldX = tx.tokenInId === pool.tokenXId
   const isBuy = !soldX
-  const sideLabel = isBuy ? 'Покупка' : 'Продажа'
+  const sideLabel = isBuy ? t('orderBook.sideBuy') : t('orderBook.sideSell')
   const sideClass = isBuy ? 'sber-orderbook__trade-buy' : 'sber-orderbook__trade-sell'
   const Caret = isBuy ? CaretUpOutlined : CaretDownOutlined
 
