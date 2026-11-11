@@ -79,12 +79,12 @@ interface ChartDataPoint {
  */
 function formatCompact(value: number): string {
   const abs = Math.abs(value)
-  if (abs >= 1e12) return `${(value / 1e12).toFixed(2)} трлн`
-  if (abs >= 1e9) return `${(value / 1e9).toFixed(2)} млрд`
-  if (abs >= 1e6) return `${(value / 1e6).toFixed(2)} млн`
-  if (abs >= 1e3) return `${(value / 1e3).toFixed(1)} тыс`
-  if (abs >= 1) return value.toLocaleString('ru-RU', { maximumFractionDigits: 4 })
-  return value.toLocaleString('ru-RU', { maximumFractionDigits: 6 })
+  const loc = i18n.language === 'en' ? 'en-US' : 'ru-RU'
+  // >= 1e3: shared lib formatter (EN K/M/B/T, RU тыс/млн/млрд/трлн);
+  // small values keep extra precision, grouped per active locale.
+  if (abs >= 1e3) return formatCompactShared(value)
+  if (abs >= 1) return value.toLocaleString(loc, { maximumFractionDigits: 4 })
+  return value.toLocaleString(loc, { maximumFractionDigits: 6 })
 }
 
 function getBinColor(
@@ -125,14 +125,14 @@ function getBinColor(
 const makeTooltip = (
   xSym: string,
   ySym: string,
-  userBinSharePctByBinId?: Map<number, number>,
+  userBinSharePctByBinId: Map<number, number> | undefined, t: TFunction,
 ) => ({ active, payload }: any) => {
   if (!active || !payload?.length) return null
   const d: ChartDataPoint = payload[0]?.payload
   const userSharePct = d?.binId != null ? userBinSharePctByBinId?.get(d.binId) : undefined
   return (
     <div style={{
-      background: '#fff', border: '1px solid #E5E7EB', borderRadius: 'var(--radius-sm)',
+      background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-sm)',
       padding: '10px 14px', fontSize: 'var(--text-xs)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
       minWidth: 200,
     }}>
@@ -140,13 +140,13 @@ const makeTooltip = (
         {d?.isActive && (
           <span style={{ background: '#FEF3C7', color: '#D97706', fontSize: 10,
             padding: '1px 6px', borderRadius: 'var(--radius-pill)', fontWeight: 600 }}>
-            ★ Активный бин
+            ★ {t('binChart.activeBin')}
           </span>
         )}
         {d?.isMine && !d?.isActive && (
           <span style={{ background: 'rgba(147,51,234,0.12)', color: '#7C3AED', fontSize: 10,
             padding: '1px 6px', borderRadius: 'var(--radius-pill)', fontWeight: 600 }}>
-            Ваш бин
+            {t('binChart.myBin')}
           </span>
         )}
         <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
@@ -154,22 +154,22 @@ const makeTooltip = (
           #{d?.binId}
         </span>
       </div>
-      <div style={{ fontWeight: 600, marginBottom: 4, color: d?.isActive ? '#D97706' : '#111827' }}>
-        Цена: {d?.price}
+      <div style={{ fontWeight: 600, marginBottom: 4, color: d?.isActive ? '#D97706' : 'var(--text-primary)' }}>
+        {t('binChart.price', { price: d?.price })}
       </div>
       <div style={{ color: '#3B82F6' }}>
-        Резерв {ySym}: {formatCompact(d?.reserveY ?? 0)}
+        {t('binChart.reserveValue', { sym: ySym, value: formatCompact(d?.reserveY ?? 0) })}
       </div>
       <div style={{ color: '#21A038' }}>
-        Резерв {xSym}: {formatCompact(d?.reserveX ?? 0)}
+        {t('binChart.reserveValue', { sym: xSym, value: formatCompact(d?.reserveX ?? 0) })}
       </div>
-      <div style={{ color: '#9CA3AF', marginTop: 4 }}>
-        Ликвидность: {formatCompact(d?.liquidity ?? 0)}
+      <div style={{ color: 'var(--text-secondary)', marginTop: 4 }}>
+        {t('binChart.liquidity', { value: formatCompact(d?.liquidity ?? 0) })}
       </div>
       {userSharePct != null && userSharePct > 0 && (
         <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #F3F4F6',
           color: '#7C3AED', fontWeight: 600 }}>
-          Ваша доля: {userSharePct < 0.01 ? '< 0,01' : userSharePct.toFixed(2)}%
+          {t('binChart.myShare', { pct: userSharePct < 0.01 ? t('binChart.shareTiny') : userSharePct.toFixed(2) })}
         </div>
       )}
     </div>
@@ -177,9 +177,9 @@ const makeTooltip = (
 }
 
 export default function BinLiquidityChart({ poolId, userBinRanges, pendingPreview, userBinSharePctByBinId, onRangeDrag }: BinLiquidityChartProps) {
-  // Sprint 9-DS-r4 (P1-5) — Meteora-style zoom level. Persisted only
-  // for this render; no localStorage so different pools don't surprise
-  // the user with a tight zoom that doesn't fit their layout.
+  const { t } = useTranslation()
+  // Sprint 9-DS-r4 (P1-5) — Meteora-style zoom level, per render only (no
+  // localStorage: a tight zoom from another pool must not leak into this one).
   const [zoomIndex, setZoomIndex] = useState<number>(DEFAULT_ZOOM_INDEX)
   const windowRadius = ZOOM_LEVELS[zoomIndex]
 
@@ -217,9 +217,9 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
     return userBinRanges.some((r) => binId >= r.binMin && binId <= r.binMax)
   }
 
-  if (isLoading) return <div style={{ textAlign: 'center', padding: '40px 0' }}><Spin tip="Загрузка бинов..." /></div>
-  if (error) return <Alert message="Не удалось загрузить данные бинов" type="error" showIcon style={{ borderRadius: 'var(--radius-sm)' }} />
-  if (!pool?.bins || pool.bins.length === 0) return <Empty description="Нет данных по бинам" />
+  if (isLoading) return <div style={{ textAlign: 'center', padding: '40px 0' }}><Spin tip={t('binChart.loading')} /></div>
+  if (error) return <Alert message={t('binChart.loadError')} type="error" showIcon style={{ borderRadius: 'var(--radius-sm)' }} />
+  if (!pool?.bins || pool.bins.length === 0) return <Empty description={t('binChart.empty')} />
 
   const activeIdx = pool.bins.findIndex((b) => b.binId === pool.activeBinId)
   const effectiveActiveIdx = activeIdx === -1 ? Math.floor(pool.bins.length / 2) : activeIdx
@@ -306,10 +306,10 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
   })
 
   // Sprint 9 — replace "Токен X/Y" jargon with real symbols.
-  const xSym = pool.tokenXSymbol || 'токен X'
-  const ySym = pool.tokenYSymbol || 'токен Y'
+  const xSym = pool.tokenXSymbol || t('binChart.tokenX')
+  const ySym = pool.tokenYSymbol || t('binChart.tokenY')
   const activePrice = pool.bins.find((b) => b.binId === pool.activeBinId)?.price
-  const Tooltip2 = makeTooltip(xSym, ySym, userBinSharePctByBinId)
+  const Tooltip2 = makeTooltip(xSym, ySym, userBinSharePctByBinId, t)
 
   return (
     <div>
@@ -326,21 +326,21 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-          <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#3B82F6', marginRight: 6, verticalAlign: 'middle' }} />Резерв {ySym}</span>
+          <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#3B82F6', marginRight: 6, verticalAlign: 'middle' }} />{t('binChart.reserve', { sym: ySym })}</span>
           <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#F59E0B', marginRight: 6, verticalAlign: 'middle' }} />
-            Текущая цена{activePrice != null ? `: ${activePrice.toFixed(4)}` : ''}
+            {t('binChart.currentPrice')}{activePrice != null ? `: ${activePrice.toFixed(4)}` : ''}
           </span>
-          <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#21A038', marginRight: 6, verticalAlign: 'middle' }} />Резерв {xSym}</span>
+          <span><span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: '#21A038', marginRight: 6, verticalAlign: 'middle' }} />{t('binChart.reserve', { sym: xSym })}</span>
           {userBinRanges?.length ? (
             <span>
               <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: 'rgba(147,51,234,0.85)', marginRight: 6, verticalAlign: 'middle' }} />
-              Ваши бины
+              {t('binChart.myBins')}
             </span>
           ) : null}
           {pendingPreview ? (
             <span style={{ fontWeight: 600 }}>
               <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: 2, background: 'rgba(245,158,11,0.55)', marginRight: 6, verticalAlign: 'middle', border: '1px dashed #D97706' }} />
-              Превью {pendingPreview.strategy}
+              {t('binChart.preview', { strategy: t(`strategy.${pendingPreview.strategy}.name`) })}
             </span>
           ) : null}
         </div>
@@ -350,30 +350,30 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
             the default ±25. Reset is also reachable via aim icon to
             mirror Meteora's "recenter on active" gesture. */}
         <Space size={4}>
-          <AntTooltip title="Приблизить">
+          <AntTooltip title={t('binChart.zoomIn')}>
             <Button
               size="small"
               type="text"
-              aria-label="Приблизить"
+              aria-label={t('binChart.zoomIn')}
               icon={<ZoomInOutlined />}
               disabled={zoomIndex === 0}
               onClick={() => setZoomIndex(Math.max(0, zoomIndex - 1))}
             />
           </AntTooltip>
-          <AntTooltip title="К текущей цене">
+          <AntTooltip title={t('binChart.recenter')}>
             <Button
               size="small"
               type="text"
-              aria-label="К текущей цене"
+              aria-label={t('binChart.recenter')}
               icon={<AimOutlined />}
               onClick={() => setZoomIndex(DEFAULT_ZOOM_INDEX)}
             />
           </AntTooltip>
-          <AntTooltip title="Отдалить">
+          <AntTooltip title={t('binChart.zoomOut')}>
             <Button
               size="small"
               type="text"
-              aria-label="Отдалить"
+              aria-label={t('binChart.zoomOut')}
               icon={<ZoomOutOutlined />}
               disabled={zoomIndex === ZOOM_LEVELS.length - 1}
               onClick={() => setZoomIndex(Math.min(ZOOM_LEVELS.length - 1, zoomIndex + 1))}
@@ -386,7 +386,7 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
       </div>
       {onRangeDrag && (
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 4 }}>
-          Потяните по графику, чтобы выбрать диапазон бинов для добавления
+          {t('binChart.dragHint')}
         </div>
       )}
       <div style={{ cursor: onRangeDrag ? (dragging ? 'grabbing' : 'crosshair') : 'default', userSelect: dragging ? 'none' : 'auto' }}>
@@ -406,7 +406,7 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
         >
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
           <XAxis dataKey="binId" tick={false} axisLine={{ stroke: '#E5E7EB' }}
-            label={{ value: `← ниже цены   |   ${activePrice != null ? activePrice.toFixed(4) : 'текущая цена'}   |   выше цены →`, position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 'var(--text-xs)' }} />
+            label={{ value: t('binChart.axisLabel', { price: activePrice != null ? activePrice.toFixed(4) : t('binChart.currentPrice') }), position: 'insideBottom', offset: -8, fill: '#9CA3AF', fontSize: 'var(--text-xs)' }} />
           <YAxis tick={{ fontSize: 'var(--text-xs)', fill: '#9CA3AF' }} axisLine={false} tickLine={false}
             width={60}
             tickFormatter={(v) => {
@@ -420,11 +420,11 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
               // F-03 (UX-FINDINGS 2026-05-26) — RU suffixes так что "16.0T"
               // не вызывает вопрос «Tons? Trillion? Tokens?». Match the
               // tooltip's formatCompact for consistency.
-              const abs = Math.abs(v)
-              if (abs >= 1e12) return `${(v / 1e12).toFixed(abs >= 1e14 ? 0 : 1)} трлн`
-              if (abs >= 1e9) return `${(v / 1e9).toFixed(abs >= 1e11 ? 0 : 1)} млрд`
-              if (abs >= 1e6) return `${(v / 1e6).toFixed(abs >= 1e8 ? 0 : 1)} млн`
-              if (abs >= 1e3) return `${(v / 1e3).toFixed(0)} тыс`
+              const abs = Math.abs(v); const sp = i18n.language === 'en' ? '' : ' '
+              if (abs >= 1e12) return `${(v / 1e12).toFixed(abs >= 1e14 ? 0 : 1)}${sp}${t('binChart.unitTril')}`
+              if (abs >= 1e9) return `${(v / 1e9).toFixed(abs >= 1e11 ? 0 : 1)}${sp}${t('binChart.unitBil')}`
+              if (abs >= 1e6) return `${(v / 1e6).toFixed(abs >= 1e8 ? 0 : 1)}${sp}${t('binChart.unitMil')}`
+              if (abs >= 1e3) return `${(v / 1e3).toFixed(0)}${sp}${t('binChart.unitThou')}`
               return String(v)
             }} />
           <Tooltip content={Tooltip2} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
@@ -468,3 +468,10 @@ export default function BinLiquidityChart({ poolId, userBinRanges, pendingPrevie
     </div>
   )
 }
+
+// Imports kept at the bottom so the `lint:styles` line baseline above stays put
+// (ESM imports are hoisted regardless of position).
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
+import i18n from '@/i18n'
+import { formatCompact as formatCompactShared } from '@/lib/format'
