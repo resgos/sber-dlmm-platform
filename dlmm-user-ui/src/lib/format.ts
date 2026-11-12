@@ -155,3 +155,14 @@ export function shortId(id: string | null | undefined): string {
   if (!id) return '—'
   return `…${id.slice(-6)}`
 }
+
+/**
+ * Обратная операция к `toLocaleString(locale)` для полей ввода сумм: убирает разделители
+ * разрядов и приводит десятичный разделитель к точке. ru-RU: «1 234,5» → 1234.5;
+ * en-US: «1,234.5» → 1234.5. Пустая строка → 0, мусор → NaN (как у `Number`).
+ */
+export function parseLocaleNumber(input: string | number | null | undefined, locale: string): number {
+  const raw = (input ?? '').toString().replace(/\s/g, '')
+  if (raw === '') return 0
+  return Number(locale.startsWith('en') ? raw.replace(/,/g, '') : raw.replace(',', '.'))
+}
