@@ -1473,7 +1473,29 @@
 
   "reviews": {
     "title": "Customer reviews",
-    "subtitle": "Feedback from pilot users of the DLMM platform"
+    "subtitle": "Feedback from pilot users of the DLMM platform",
+    "items": {
+      "treasurer": {
+        "name": "Alexey Morozov",
+        "role": "Treasurer, RosMetall PJSC",
+        "text": "The platform has made managing FX liquidity much simpler. Automatic fee collection saves our treasury 2–3 hours of work a day."
+      },
+      "cfo": {
+        "name": "Natalia Sokolova",
+        "role": "CFO, Agrotorg LLC",
+        "text": "Transparent pricing and an intuitive interface. We especially value range control and real-time position analytics."
+      },
+      "risk": {
+        "name": "Dmitry Kovalev",
+        "role": "Risk Manager, TechnoSnab JSC",
+        "text": "Easy integration via the API. Position health monitoring and the alert system are exactly what our team needs to react quickly."
+      },
+      "accountant": {
+        "name": "Irina Belova",
+        "role": "Chief Accountant, SibirEnergo PJSC",
+        "text": "Two-factor authentication and solid data protection are critical in our industry. We recommend the platform as a reliable liquidity management partner."
+      }
+    }
   },
 
   "poolCompare": {
